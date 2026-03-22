@@ -1,1 +1,18 @@
-{}
+{
+	"java.import.exclusions": [
+		"**/node_modules/**",
+		"**/.expo/**",
+		"**/android/app/build/**"
+	],
+	"java.project.resourceFilters": [
+		"node_modules",
+		".git",
+		".gradle",
+		"target",
+		"build",
+		".expo"
+	],
+	"java.import.gradle.enabled": false,
+	"java.project.importOnFirstTimeStartup": "disabled",
+	"java.server.launchMode": "LightWeight"
+}
