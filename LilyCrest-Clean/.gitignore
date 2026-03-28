@@ -1,0 +1,60 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Node / package managers
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+
+# Env
+.env
+.env.*
+*.env
+*.env.*
+firebase-credentials.json
+backend/firebase-credentials.json
+*.pem
+*.key
+*.p12
+adb.exe
+
+# Android / IntelliJ
+.idea
+.gradle
+local.properties
+*.iml
+*.hprof
+.cxx/
+
+# Android build outputs
+frontend/android/build/
+frontend/android/app/build/
+
+# Expo / Metro
+.expo/
+.expo-shared/
+.expo/web/
+.metro-cache/
+
+# React Native
+*.jsbundle
+*.packager
+
+# Logs
+logs/
+*.log
+
+# Build / dist
+build/
+dist/
+.cache/
+.tmp/
+.eslintcache
+
+# Coverage
+coverage/
+.nyc_output/

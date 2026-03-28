@@ -1,0 +1,13 @@
+{
+  "name": "lilycrest-dorm",
+  "version": "1.0.0",
+  "description": "LilyCrest Dormitory Management System",
+  "scripts": {
+    "backend": "cd backend && npm start",
+    "backend:dev": "cd backend && npm run dev",
+    "frontend": "cd frontend && npm start"
+  },
+  "keywords": ["dormitory", "management", "system"],
+  "author": "",
+  "license": "ISC"
+}
