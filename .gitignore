@@ -1,0 +1,87 @@
+# ========================================
+# Sensitive / Secret files
+# ========================================
+# Environment variables (all .env files everywhere)
+.env
+.env.*
+*.env
+*.env.*
+!.env.example
+
+# Firebase credentials
+google-services.json
+firebase-credentials.json
+GoogleService-Info.plist
+*.pem
+*.key
+*.p12
+
+# ========================================
+# OS
+# ========================================
+.DS_Store
+Thumbs.db
+
+# ========================================
+# Node / package managers
+# ========================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+package-lock.json
+
+# ========================================
+# Android / IntelliJ
+# ========================================
+.idea/
+.gradle/
+local.properties
+*.iml
+*.hprof
+.cxx/
+
+# Android build outputs
+**/android/build/
+**/android/app/build/
+
+# ========================================
+# Expo / Metro
+# ========================================
+.expo/
+.expo-shared/
+.metro-cache/
+
+# ========================================
+# React Native
+# ========================================
+*.jsbundle
+*.packager
+
+# ========================================
+# iOS
+# ========================================
+ios/build/
+ios/Pods/
+
+# ========================================
+# Logs
+# ========================================
+logs/
+*.log
+
+# ========================================
+# Build / dist / cache
+# ========================================
+build/
+dist/
+.cache/
+.tmp/
+.eslintcache
+
+# ========================================
+# Tests / coverage
+# ========================================
+coverage/
+.nyc_output/
