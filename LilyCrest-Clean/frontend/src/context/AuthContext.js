@@ -92,8 +92,19 @@ export function AuthProvider({ children }) {
   const loginWithEmail = async (email, password) => {
     try {
       const response = await api.post('/auth/login', { email, password });
-      const { user: userData, session_token } = response.data;
+      const data = response.data;
 
+      // OTP step — backend verified credentials, waiting for email code
+      if (data.otp_required) {
+        return {
+          success: false,
+          otpRequired: true,
+          otpToken: data.otp_token,
+          maskedEmail: data.masked_email,
+        };
+      }
+
+      const { user: userData, session_token } = data;
       await AsyncStorage.setItem('session_token', session_token);
       setUser(userData);
       setAuthStatus('authenticated');
@@ -124,6 +135,26 @@ export function AuthProvider({ children }) {
         return { success: false, status, error: 'A server error occurred. Please try again in a moment.' };
       }
       return { success: false, status: 0, error: 'Unable to connect. Please check your internet connection.' };
+    }
+  };
+
+  // ── Verify Login OTP ──
+  const verifyLoginOtp = async (otpToken, otpCode) => {
+    try {
+      const response = await api.post('/auth/login/verify-otp', { otp_token: otpToken, otp_code: otpCode });
+      const { user: userData, session_token } = response.data;
+
+      await AsyncStorage.setItem('session_token', session_token);
+      setUser(userData);
+      setAuthStatus('authenticated');
+
+      registerForPushNotifications().then(savePushTokenToServer).catch(() => {});
+      return { success: true };
+    } catch (error) {
+      const status = error.response?.status;
+      const detail = error.response?.data?.detail;
+      const attemptsRemaining = error.response?.data?.attempts_remaining;
+      return { success: false, status, error: detail || 'Invalid code. Please try again.', attemptsRemaining };
     }
   };
 
@@ -261,6 +292,7 @@ export function AuthProvider({ children }) {
         authStatus,
         login,
         loginWithEmail,
+        verifyLoginOtp,
         registerWithEmail,
         logout,
         checkAuth,

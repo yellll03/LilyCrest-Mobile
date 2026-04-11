@@ -71,8 +71,10 @@ export default function AnnouncementsScreen() {
       marginRight: 4, gap: 5,
     },
     categoryChipActive: { backgroundColor: '#1E3A5F' },
+    urgentChipActive: { backgroundColor: '#EF4444' },
     categoryChipText: { fontSize: 12, fontWeight: '600', color: c.textSecondary },
     categoryChipTextActive: { color: '#FFFFFF' },
+    chipDivider: { width: 1, height: 20, backgroundColor: c.border, alignSelf: 'center', marginHorizontal: 2 },
     chipCountWrap: {
       backgroundColor: 'rgba(0,0,0,0.08)',
       borderRadius: 8,
@@ -91,6 +93,7 @@ export default function AnnouncementsScreen() {
     chipCountActive: {
       color: '#FFFFFF',
     },
+
 
     // ── Cards ──
     scrollView: { flex: 1 },
@@ -162,6 +165,7 @@ export default function AnnouncementsScreen() {
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null);
+  const [urgentOnly, setUrgentOnly] = useState(false);
 
   const MOCK_ANNOUNCEMENTS = [
     {
@@ -282,13 +286,25 @@ export default function AnnouncementsScreen() {
   };
 
   const categories = ['All', ...new Set(announcements.map((a) => a.category || 'General'))];
-  const filteredAnnouncements = selectedCategory && selectedCategory !== 'All' ? announcements.filter((a) => (a.category || 'General') === selectedCategory) : announcements;
 
-  // Count per category for pill badges
+  const filteredAnnouncements = announcements.filter((a) => {
+    const catMatch = !selectedCategory || selectedCategory === 'All' || (a.category || 'General') === selectedCategory;
+    const urgentMatch = !urgentOnly || a.priority === 'high';
+    return catMatch && urgentMatch;
+  });
+
   const getCategoryCount = (cat) => {
-    if (cat === 'All') return announcements.length;
-    return announcements.filter((a) => (a.category || 'General') === cat).length;
+    return announcements.filter((a) => {
+      const catMatch = cat === 'All' || (a.category || 'General') === cat;
+      const urgentMatch = !urgentOnly || a.priority === 'high';
+      return catMatch && urgentMatch;
+    }).length;
   };
+
+  const urgentCount = announcements.filter((a) => {
+    const catMatch = !selectedCategory || selectedCategory === 'All' || (a.category || 'General') === selectedCategory;
+    return catMatch && a.priority === 'high';
+  }).length;
 
   if (isLoading) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color={colors.primary} /></View>;
 
@@ -300,7 +316,7 @@ export default function AnnouncementsScreen() {
           <View style={styles.headerLeft}>
             <Text style={styles.headerTitle}>Announcements</Text>
             <Text style={styles.headerSubtitle}>
-              {announcements.length} notice{announcements.length !== 1 ? 's' : ''} from management
+              {filteredAnnouncements.length} of {announcements.length} notice{announcements.length !== 1 ? 's' : ''} from management
             </Text>
           </View>
           <TouchableOpacity
@@ -317,7 +333,7 @@ export default function AnnouncementsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* ── Category Pills ── */}
+        {/* ── Filter Pills ── */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryFilter} contentContainerStyle={styles.categoryFilterContent}>
           {categories.map((category) => {
             const isActive = selectedCategory === category || (!selectedCategory && category === 'All');
@@ -340,6 +356,19 @@ export default function AnnouncementsScreen() {
               </TouchableOpacity>
             );
           })}
+
+          {/* Divider + Urgent toggle */}
+          <View style={styles.chipDivider} />
+          <TouchableOpacity
+            style={[styles.categoryChip, urgentOnly && styles.urgentChipActive]}
+            onPress={() => setUrgentOnly((prev) => !prev)}
+          >
+            <Ionicons name="alert-circle" size={13} color={urgentOnly ? '#FFFFFF' : '#EF4444'} />
+            <Text style={[styles.categoryChipText, urgentOnly && styles.categoryChipTextActive]}>Urgent</Text>
+            <View style={[styles.chipCountWrap, urgentOnly && styles.chipCountWrapActive]}>
+              <Text style={[styles.chipCount, urgentOnly && styles.chipCountActive]}>{urgentCount}</Text>
+            </View>
+          </TouchableOpacity>
         </ScrollView>
       </View>
 

@@ -46,7 +46,7 @@ const validatePassword = (password) => {
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { loginWithEmail, signInWithGoogle, checkAuth, isLoading } = useAuth();
+  const { loginWithEmail, signInWithGoogle, checkAuth, isLoading, verifyLoginOtp } = useAuth();
   const { signInWithGoogle: googleSignIn } = useGoogleSignIn();
   const { colors } = useTheme();
   const { showAlert } = useAlert();
@@ -136,6 +136,22 @@ export default function LoginScreen() {
 
     try {
       const result = await loginWithEmail(normalizedEmail, normalizedPassword);
+
+      // OTP required — credentials were valid, navigate to verification screen
+      if (result.otpRequired) {
+        router.push({
+          pathname: '/otp-verify',
+          params: {
+            otp_token: result.otpToken,
+            masked_email: result.maskedEmail,
+            remember_me: rememberMe ? 'true' : 'false',
+            email: normalizedEmail,
+            password: normalizedPassword,
+          },
+        });
+        return;
+      }
+
       if (!result.success) {
         const { status } = result;
         if (status === 400) {

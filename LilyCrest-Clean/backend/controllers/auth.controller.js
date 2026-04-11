@@ -247,14 +247,118 @@ async function login(req, res) {
     }
   }
 
-  // Step 4: Create session
-  const session = await createSession(db, tenant.user_id);
+  // Step 4: Generate OTP and send to email
+  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const otpToken = uuidv4();
+  const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+  // Clear any existing OTP for this user
+  await db.collection('otp_store').deleteMany({ user_id: tenant.user_id });
+  await db.collection('otp_store').insertOne({
+    otp_token: otpToken,
+    otp_code: otpCode,
+    user_id: tenant.user_id,
+    email: emailRaw,
+    attempts: 0,
+    expires_at: otpExpiry,
+    created_at: new Date(),
+  });
+
+  const { sendLoginOtpEmail } = require('../services/emailService');
+  const emailSent = await sendLoginOtpEmail(emailRaw, tenant.name || 'Tenant', otpCode);
+  if (!emailSent) {
+    console.warn(`[Login] OTP email failed for user_id=${tenant.user_id} — proceeding anyway`);
+  }
+
+  logAttempt(db, emailRaw, true, 'otp_sent', req);
+  console.log(`[Login] OTP sent for user_id=${tenant.user_id} email=${maskEmail(emailRaw)}`);
+  res.json({
+    otp_required: true,
+    otp_token: otpToken,
+    masked_email: maskEmail(emailRaw),
+  });
+}
+
+// ─── VERIFY LOGIN OTP ───────────────────────────────────────────────────────
+
+async function verifyOtp(req, res) {
+  const { otp_token, otp_code } = req.body;
+
+  if (!otp_token || !otp_code) {
+    return res.status(400).json({ detail: 'Verification token and code are required.' });
+  }
+
+  const db = getDb();
+  const record = await db.collection('otp_store').findOne({ otp_token });
+
+  if (!record) {
+    return res.status(400).json({ detail: 'Invalid or expired session. Please log in again.' });
+  }
+
+  if (new Date() > record.expires_at) {
+    await db.collection('otp_store').deleteOne({ otp_token });
+    return res.status(400).json({ detail: 'Verification code has expired. Please log in again.' });
+  }
+
+  if (record.attempts >= 3) {
+    await db.collection('otp_store').deleteOne({ otp_token });
+    return res.status(400).json({ detail: 'Too many incorrect attempts. Please log in again.' });
+  }
+
+  if (record.otp_code !== otp_code.trim()) {
+    await db.collection('otp_store').updateOne({ otp_token }, { $inc: { attempts: 1 } });
+    const remaining = 3 - (record.attempts + 1);
+    const detail = remaining > 0
+      ? `Incorrect code. ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining.`
+      : 'Too many incorrect attempts. Please log in again.';
+    if (remaining <= 0) await db.collection('otp_store').deleteOne({ otp_token });
+    return res.status(400).json({ detail, attempts_remaining: remaining });
+  }
+
+  // Valid — delete OTP and create session
+  await db.collection('otp_store').deleteOne({ otp_token });
+
+  const session = await createSession(db, record.user_id);
   res.cookie('session_token', session.session_token, cookieOptions());
 
-  const user = await getCleanUser(db, tenant.user_id);
-  logAttempt(db, emailRaw, true, 'success', req);
-  console.log(`[Login] ✓ user_id=${tenant.user_id} email=${user?.email} name=${user?.name}`);
+  const user = await getCleanUser(db, record.user_id);
+  logAttempt(db, record.email, true, 'success', req);
+  console.log(`[VerifyOtp] ✓ user_id=${record.user_id}`);
   res.json({ user, session_token: session.session_token });
+}
+
+// ─── RESEND LOGIN OTP ───────────────────────────────────────────────────────
+
+async function resendOtp(req, res) {
+  const { otp_token } = req.body;
+
+  if (!otp_token) {
+    return res.status(400).json({ detail: 'OTP token is required.' });
+  }
+
+  const db = getDb();
+  const record = await db.collection('otp_store').findOne({ otp_token });
+
+  if (!record || new Date() > record.expires_at) {
+    return res.status(400).json({ detail: 'Session expired. Please log in again.' });
+  }
+
+  const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const newExpiry = new Date(Date.now() + 10 * 60 * 1000);
+
+  await db.collection('otp_store').updateOne(
+    { otp_token },
+    { $set: { otp_code: newCode, attempts: 0, expires_at: newExpiry } },
+  );
+
+  const { sendLoginOtpEmail } = require('../services/emailService');
+  const sent = await sendLoginOtpEmail(record.email, 'Tenant', newCode);
+  if (!sent) {
+    return res.status(500).json({ detail: 'Failed to send verification code. Please try again.' });
+  }
+
+  console.log(`[ResendOtp] New OTP sent for user_id=${record.user_id}`);
+  res.json({ message: 'A new verification code has been sent to your email.' });
 }
 
 // ─── GOOGLE SIGN-IN ─────────────────────────────────────────────────────────
@@ -689,6 +793,8 @@ module.exports = {
   googleSignIn,
   register,
   login,
+  verifyOtp,
+  resendOtp,
   getMe,
   logout,
   changePassword,

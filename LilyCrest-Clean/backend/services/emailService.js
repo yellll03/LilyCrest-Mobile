@@ -199,8 +199,73 @@ function escapeHtml(str = '') {
     .replace(/"/g, '&quot;');
 }
 
+// ─── LOGIN OTP EMAIL ────────────────────────────────────────────────────────
+
+/**
+ * Send a login OTP verification email.
+ *
+ * @param {string} toEmail   Recipient email
+ * @param {string} userName  Display name
+ * @param {string} otpCode   6-digit OTP code
+ * @returns {Promise<boolean>}
+ */
+async function sendLoginOtpEmail(toEmail, userName = 'Tenant', otpCode) {
+  const transporter = getTransporter();
+  if (!transporter) return false;
+
+  const maskedEmail = maskEmail(toEmail);
+
+  const bodyHtml = `
+    <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">
+      Hi <strong>${escapeHtml(userName)}</strong>,
+    </p>
+    <p style="margin:0 0 24px;color:#374151;font-size:15px;line-height:1.6;">
+      Use the verification code below to complete your sign-in to LilyCrest Tenant Portal.
+    </p>
+
+    <div style="text-align:center;margin:0 0 24px;">
+      <div style="display:inline-block;background:#1E3A5F;border-radius:16px;padding:24px 40px;">
+        <p style="margin:0 0 6px;color:rgba(255,255,255,0.7);font-size:12px;letter-spacing:1px;text-transform:uppercase;">Verification Code</p>
+        <p style="margin:0;color:#FFFFFF;font-size:40px;font-weight:700;letter-spacing:10px;">${escapeHtml(otpCode)}</p>
+      </div>
+    </div>
+
+    <div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:12px;padding:14px 20px;margin-bottom:8px;">
+      <p style="margin:0;color:#92400E;font-size:13px;line-height:1.5;">
+        ⏱ This code expires in <strong>10 minutes</strong>. Do not share it with anyone.
+      </p>
+    </div>
+
+    <p style="margin:16px 0 0;color:#6B7280;font-size:13px;line-height:1.5;">
+      If you did not attempt to sign in, you can safely ignore this email. Your account remains secure.
+    </p>
+  `;
+
+  const html = brandedHtml({
+    title: 'Log-In Verification — LilyCrest',
+    heading: '🔐 Your Log-In Code',
+    bodyHtml,
+    footerNote: `You're receiving this because a log-in was attempted on the LilyCrest Tenant Portal for ${maskedEmail}.`,
+  });
+
+  try {
+    await transporter.sendMail({
+      from: senderAddress(),
+      to: toEmail,
+      subject: `${otpCode} is your LilyCrest log-in code`,
+      html,
+    });
+    console.log(`[Email] Login OTP sent to ${maskedEmail}`);
+    return true;
+  } catch (err) {
+    console.warn(`[Email] Failed to send OTP email to ${maskedEmail}:`, err?.message);
+    return false;
+  }
+}
+
 // ─── EXPORTS ────────────────────────────────────────────────────────────────
 
 module.exports = {
   sendPasswordChangedEmail,
+  sendLoginOtpEmail,
 };

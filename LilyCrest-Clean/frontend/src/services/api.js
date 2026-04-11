@@ -202,4 +202,8 @@ export const apiService = {
       notify_app: options.notifyApp ?? true,
       notify_email: options.notifyEmail ?? true,
     }),
+  verifyLoginOtp: (otpToken, otpCode) =>
+    api.post('/auth/login/verify-otp', { otp_token: otpToken, otp_code: otpCode }),
+  resendLoginOtp: (otpToken) =>
+    api.post('/auth/login/resend-otp', { otp_token: otpToken }),
 };
