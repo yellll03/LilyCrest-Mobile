@@ -4,7 +4,6 @@ import { Link, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
-    Alert,
     Image,
     KeyboardAvoidingView,
     Modal,
@@ -20,6 +19,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import LilyFlowerIcon from '../../src/components/assistant/LilyFlowerIcon';
 import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
+import { useAlert } from '../../src/context/AlertContext';
 import { apiService } from '../../src/services/api';
 import { pickFromCamera, pickFromLibrary } from '../../src/utils/attachmentPicker';
 
@@ -59,6 +59,7 @@ const STATUS_STEPS = ['pending', 'in_progress', 'resolved'];
 export default function ServicesScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const { showAlert } = useAlert();
   const styles = useThemedStyles((c) => StyleSheet.create({
     container: { flex: 1, backgroundColor: c.background },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: c.background },
@@ -275,7 +276,7 @@ export default function ServicesScreen() {
       const file = await pickerFn();
       if (file) setAttachments((prev) => [...prev, file]);
     } catch (err) {
-      Alert.alert('Attachment Failed', err?.message || 'Unable to add attachment.');
+      showAlert({ title: 'Attachment Failed', message: err?.message || 'Unable to add attachment.', type: 'error' });
     }
   };
 
@@ -317,7 +318,7 @@ export default function ServicesScreen() {
 
   const saveEdit = async () => {
     if (!editDescription.trim() || editDescription.trim().length < 10) {
-      Alert.alert('Validation', 'Description must be at least 10 characters.');
+      showAlert({ title: 'Validation', message: 'Description must be at least 10 characters.', type: 'warning' });
       return;
     }
     setSaving(true);
@@ -333,7 +334,7 @@ export default function ServicesScreen() {
       fetchRequests();
     } catch (e) {
       const msg = e?.response?.data?.detail || 'Failed to update request.';
-      Alert.alert('Error', msg);
+      showAlert({ title: 'Error', message: msg, type: 'error' });
     } finally {
       setSaving(false);
       setTimeout(() => setBanner(null), 3200);
@@ -350,7 +351,7 @@ export default function ServicesScreen() {
       fetchRequests();
     } catch (e) {
       const msg = e?.response?.data?.detail || 'Failed to cancel request.';
-      Alert.alert('Error', msg);
+      showAlert({ title: 'Error', message: msg, type: 'error' });
     } finally {
       setSaving(false);
       setTimeout(() => setBanner(null), 3200);
@@ -368,7 +369,7 @@ export default function ServicesScreen() {
       fetchRequests();
     } catch (e) {
       const msg = e?.response?.data?.detail || 'Failed to reopen request.';
-      Alert.alert('Error', msg);
+      showAlert({ title: 'Error', message: msg, type: 'error' });
     } finally {
       setSaving(false);
       setTimeout(() => setBanner(null), 3200);

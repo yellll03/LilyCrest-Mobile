@@ -51,6 +51,7 @@ module.exports = {
       'expo-router',
       'expo-dev-client',
       'expo-notifications',
+      'expo-secure-store',
       [
         'expo-splash-screen',
         {

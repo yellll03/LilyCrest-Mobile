@@ -13,6 +13,18 @@ async function getAllFaqs(req, res) {
   }
 }
 
+// Get distinct FAQ categories
+async function getFAQCategories(req, res) {
+  try {
+    const db = getDb();
+    const categories = await db.collection('faqs').distinct('category');
+    res.json({ categories: categories.filter(Boolean).sort() });
+  } catch (error) {
+    res.status(500).json({ detail: 'Failed to fetch FAQ categories' });
+  }
+}
+
 module.exports = {
-  getAllFaqs
+  getAllFaqs,
+  getFAQCategories,
 };

@@ -1,0 +1,7211 @@
+%PDF-1.4
+999 0 obj
+<< /Type /Pages /Kids [4 0 R 6 0 R 8 0 R 10 0 R 12 0 R 14 0 R 16 0 R 18 0 R 20 0 R 22 0 R] /Count 10 >>
+endobj
+1 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+2 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>
+endobj
+3 0 obj
+<< /Length 6029 >>
+stream
+0.078 0.212 0.353 rg
+0 720 612 72 re f
+0.831 0.408 0.165 rg
+0 717 612 3 re f
+0.831 0.408 0.165 rg
+58 776 m 68 766 l 58 756 l 48 766 l f
+0.078 0.212 0.353 rg
+58 771 m 63 766 l 58 761 l 53 766 l f
+BT
+1.000 1.000 1.000 rg
+/F2 15 Tf
+76 762 Td
+(LilyCrest) Tj
+ET
+BT
+0.65 0.65 0.65 rg
+/F1 7 Tf
+76 752 Td
+(DORMITORY MANAGEMENT SYSTEM) Tj
+ET
+BT
+1.000 1.000 1.000 rg
+/F2 9 Tf
+414.24 765 Td
+(MOBILE APP - SYSTEM PROCESS FLOW) Tj
+ET
+BT
+0.65 0.65 0.65 rg
+/F1 7 Tf
+473 754 Td
+(Generated: April 10, 2026) Tj
+ET
+0.961 0.969 0.980 rg
+48 606 516 90 re f
+0.078 0.212 0.353 rg
+48 606 4 90 re f
+BT
+0.078 0.212 0.353 rg
+/F2 20 Tf
+66 670 Td
+(Mobile Application) Tj
+ET
+BT
+0.078 0.212 0.353 rg
+/F2 14 Tf
+66 650 Td
+(System Process Flow Document) Tj
+ET
+BT
+0.450 0.450 0.450 rg
+/F1 9 Tf
+66 634 Td
+(Step-by-step processes for all tenant features ? from app launch to sign out) Tj
+ET
+BT
+0.450 0.450 0.450 rg
+/F1 8 Tf
+66 618 Td
+(April 10, 2026  |  Tenant-Facing Mobile App  |  React Native / Expo) Tj
+ET
+BT
+0.078 0.212 0.353 rg
+/F2 9 Tf
+48 578 Td
+(STEP TYPE LEGEND) Tj
+ET
+0.831 0.408 0.165 rg
+48 576 516 1 re f
+0.094 0.443 0.824 rg
+48 560 52 13 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+63.86 564 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 8 Tf
+106 564 Td
+(Action performed by the tenant) Tj
+ET
+0.000 0.502 0.502 rg
+306 560 52 13 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+321.86 564 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 8 Tf
+364 564 Td
+(App-side processing or state change) Tj
+ET
+0.831 0.408 0.165 rg
+48 544 52 13 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+60.480000000000004 548 Td
+(API CALL) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 8 Tf
+106 548 Td
+(Network request to the backend API) Tj
+ET
+0.800 0.600 0.000 rg
+306 544 52 13 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+321.86 548 Td
+(BRANCH) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 8 Tf
+364 548 Td
+(Conditional logic or decision point) Tj
+ET
+0.133 0.545 0.133 rg
+48 528 52 13 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+62.17 532 Td
+(SUCCESS) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 8 Tf
+106 532 Td
+(Positive outcome or confirmation) Tj
+ET
+0.753 0.114 0.114 rg
+306 528 52 13 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+323.55 532 Td
+(ERROR) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 8 Tf
+364 532 Td
+(Failure path or error handling) Tj
+ET
+0.502 0.251 0.502 rg
+48 512 52 13 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+67.24000000000001 516 Td
+(NOTE) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 8 Tf
+106 516 Td
+(Prerequisite or important context) Tj
+ET
+0.961 0.969 0.980 rg
+48 442 516 48 re f
+0.878 0.878 0.878 RG
+0.5 w
+48 442 516 48 re S
+BT
+0.078 0.212 0.353 rg
+/F2 20 Tf
+123.6 466 Td
+(20) Tj
+ET
+BT
+0.450 0.450 0.450 rg
+/F1 8 Tf
+111.12 452 Td
+(Total Flows) Tj
+ET
+BT
+0.831 0.408 0.165 rg
+/F2 20 Tf
+290.4 466 Td
+(183) Tj
+ET
+BT
+0.450 0.450 0.450 rg
+/F1 8 Tf
+283.12 452 Td
+(Total Steps) Tj
+ET
+BT
+0.000 0.502 0.502 rg
+/F2 10 Tf
+446.8 466 Td
+(React Native) Tj
+ET
+BT
+0.450 0.450 0.450 rg
+/F1 8 Tf
+453.04 452 Td
+(App Platform) Tj
+ET
+0.078 0.212 0.353 rg
+48 394 516 34 re f
+0.831 0.408 0.165 rg
+54 401 28 21 re f
+BT
+1.000 1.000 1.000 rg
+/F2 9 Tf
+63.32 408 Td
+(01) Tj
+ET
+BT
+1.000 1.000 1.000 rg
+/F2 10 Tf
+90 412 Td
+(App Launch & Session Verification) Tj
+ET
+BT
+0.70 0.70 0.70 rg
+/F1 8 Tf
+90 400 Td
+(Initial sequence every time the tenant opens the LilyCrest app) Tj
+ET
+0.000 0.502 0.502 rg
+48 370 3 22 re f
+0.078 0.212 0.353 rg
+55 373 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 377 Td
+(01) Tj
+ET
+0.000 0.502 0.502 rg
+80 374 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 378 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 378 Td
+(App launches ? LilyCrest splash screen displayed with logo) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 370 m 564 370 l S
+0.945 0.945 0.945 rg
+48 348 516 22 re f
+0.000 0.502 0.502 rg
+48 348 3 22 re f
+0.078 0.212 0.353 rg
+55 351 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 355 Td
+(02) Tj
+ET
+0.000 0.502 0.502 rg
+80 352 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 356 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 356 Td
+(AuthContext initializes and reads session_token from AsyncStorage) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 348 m 564 348 l S
+0.800 0.600 0.000 rg
+48 326 3 22 re f
+0.078 0.212 0.353 rg
+55 329 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 333 Td
+(03) Tj
+ET
+0.800 0.600 0.000 rg
+80 330 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 334 Td
+(BRANCH) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 334 Td
+(No token found ? user redirected immediately to the Login screen) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 326 m 564 326 l S
+0.945 0.945 0.945 rg
+48 304 516 22 re f
+0.831 0.408 0.165 rg
+48 304 3 22 re f
+0.078 0.212 0.353 rg
+55 307 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 311 Td
+(04) Tj
+ET
+0.831 0.408 0.165 rg
+80 308 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+93.48 312 Td
+(API CALL) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 312 Td
+(Token found ? GET /auth/me called with Bearer token to validate session) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 304 m 564 304 l S
+0.133 0.545 0.133 rg
+48 282 3 22 re f
+0.078 0.212 0.353 rg
+55 285 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 289 Td
+(05) Tj
+ET
+0.133 0.545 0.133 rg
+80 286 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+95.17 290 Td
+(SUCCESS) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 290 Td
+(Valid response \(200\) ? user profile loaded into context, Home dashboard opened) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 282 m 564 282 l S
+0.945 0.945 0.945 rg
+48 260 516 22 re f
+0.753 0.114 0.114 rg
+48 260 3 22 re f
+0.078 0.212 0.353 rg
+55 263 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 267 Td
+(06) Tj
+ET
+0.753 0.114 0.114 rg
+80 264 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+98.55 268 Td
+(ERROR) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 268 Td
+(401 Unauthorized ? token removed from AsyncStorage, user sent to Login) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 260 m 564 260 l S
+0.831 0.408 0.165 rg
+0 32 612 2 re f
+BT
+0.450 0.450 0.450 rg
+/F1 8 Tf
+48 18 Td
+(LilyCrest Dormitory Management System - Mobile Application) Tj
+ET
+BT
+0.450 0.450 0.450 rg
+/F1 8 Tf
+539.04 18 Td
+(Page 1) Tj
+ET
+0.878 0.878 0.878 rg
+48 32 516 0.5 re f
+endstream
+endobj
+4 0 obj
+<< /Type /Page /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 3 0 R /Parent 999 0 R >>
+endobj
+5 0 obj
+<< /Length 11340 >>
+stream
+0.078 0.212 0.353 rg
+0 720 612 72 re f
+0.831 0.408 0.165 rg
+0 717 612 3 re f
+0.831 0.408 0.165 rg
+58 776 m 68 766 l 58 756 l 48 766 l f
+0.078 0.212 0.353 rg
+58 771 m 63 766 l 58 761 l 53 766 l f
+BT
+1.000 1.000 1.000 rg
+/F2 15 Tf
+76 762 Td
+(LilyCrest) Tj
+ET
+BT
+0.65 0.65 0.65 rg
+/F1 7 Tf
+76 752 Td
+(DORMITORY MANAGEMENT SYSTEM) Tj
+ET
+0.078 0.212 0.353 rg
+48 670 516 34 re f
+0.831 0.408 0.165 rg
+54 677 28 21 re f
+BT
+1.000 1.000 1.000 rg
+/F2 9 Tf
+63.32 684 Td
+(02) Tj
+ET
+BT
+1.000 1.000 1.000 rg
+/F2 10 Tf
+90 688 Td
+(Login ? Email & Password) Tj
+ET
+BT
+0.70 0.70 0.70 rg
+/F1 8 Tf
+90 676 Td
+(Standard credential-based authentication using email and password) Tj
+ET
+0.000 0.502 0.502 rg
+48 646 3 22 re f
+0.078 0.212 0.353 rg
+55 649 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 653 Td
+(01) Tj
+ET
+0.000 0.502 0.502 rg
+80 650 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 654 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 654 Td
+(Login screen loads ? email pre-filled if Remember Me was set on last visit) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 646 m 564 646 l S
+0.945 0.945 0.945 rg
+48 624 516 22 re f
+0.094 0.443 0.824 rg
+48 624 3 22 re f
+0.078 0.212 0.353 rg
+55 627 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 631 Td
+(02) Tj
+ET
+0.094 0.443 0.824 rg
+80 628 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 632 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 632 Td
+(User types email address \(auto-trimmed, forced lowercase, no spaces allowed\)) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 624 m 564 624 l S
+0.094 0.443 0.824 rg
+48 602 3 22 re f
+0.078 0.212 0.353 rg
+55 605 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 609 Td
+(03) Tj
+ET
+0.094 0.443 0.824 rg
+80 606 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 610 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 610 Td
+(User types password \(minimum 6 characters, max 128\)) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 602 m 564 602 l S
+0.945 0.945 0.945 rg
+48 580 516 22 re f
+0.094 0.443 0.824 rg
+48 580 3 22 re f
+0.078 0.212 0.353 rg
+55 583 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 587 Td
+(04) Tj
+ET
+0.094 0.443 0.824 rg
+80 584 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 588 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 588 Td
+(\(Optional\) User checks "Remember Me" ? email will be pre-filled next visit) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 580 m 564 580 l S
+0.094 0.443 0.824 rg
+48 558 3 22 re f
+0.078 0.212 0.353 rg
+55 561 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 565 Td
+(05) Tj
+ET
+0.094 0.443 0.824 rg
+80 562 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 566 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 566 Td
+(User taps "Sign In" button) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 558 m 564 558 l S
+0.945 0.945 0.945 rg
+48 536 516 22 re f
+0.000 0.502 0.502 rg
+48 536 3 22 re f
+0.078 0.212 0.353 rg
+55 539 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 543 Td
+(06) Tj
+ET
+0.000 0.502 0.502 rg
+80 540 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 544 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 544 Td
+(Local validation runs: email format check, password length check) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 536 m 564 536 l S
+0.800 0.600 0.000 rg
+48 514 3 22 re f
+0.078 0.212 0.353 rg
+55 517 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 521 Td
+(07) Tj
+ET
+0.800 0.600 0.000 rg
+80 518 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 522 Td
+(BRANCH) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 522 Td
+(Invalid fields ? inline error messages shown below fields, submission blocked) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 514 m 564 514 l S
+0.945 0.945 0.945 rg
+48 492 516 22 re f
+0.831 0.408 0.165 rg
+48 492 3 22 re f
+0.078 0.212 0.353 rg
+55 495 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 499 Td
+(08) Tj
+ET
+0.831 0.408 0.165 rg
+80 496 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+93.48 500 Td
+(API CALL) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 500 Td
+(POST /auth/login ? sends { email, password } to backend) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 492 m 564 492 l S
+0.133 0.545 0.133 rg
+48 470 3 22 re f
+0.078 0.212 0.353 rg
+55 473 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 477 Td
+(09) Tj
+ET
+0.133 0.545 0.133 rg
+80 474 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+95.17 478 Td
+(SUCCESS) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 478 Td
+(200 OK ? session_token saved to AsyncStorage, user navigated to Home) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 470 m 564 470 l S
+0.945 0.945 0.945 rg
+48 448 516 22 re f
+0.800 0.600 0.000 rg
+48 448 3 22 re f
+0.078 0.212 0.353 rg
+55 451 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 455 Td
+(10) Tj
+ET
+0.800 0.600 0.000 rg
+80 452 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 456 Td
+(BRANCH) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 456 Td
+(400 / 401 ? red banner: "Invalid email or password. Please try again.") Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 448 m 564 448 l S
+0.800 0.600 0.000 rg
+48 426 3 22 re f
+0.078 0.212 0.353 rg
+55 429 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 433 Td
+(11) Tj
+ET
+0.800 0.600 0.000 rg
+80 430 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 434 Td
+(BRANCH) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 434 Td
+(403 ? orange banner: account not registered as an active tenant) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 426 m 564 426 l S
+0.945 0.945 0.945 rg
+48 404 516 22 re f
+0.800 0.600 0.000 rg
+48 404 3 22 re f
+0.078 0.212 0.353 rg
+55 407 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 411 Td
+(12) Tj
+ET
+0.800 0.600 0.000 rg
+80 408 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 412 Td
+(BRANCH) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 412 Td
+(429 ? yellow banner: too many failed attempts, please wait before retrying) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 404 m 564 404 l S
+0.753 0.114 0.114 rg
+48 382 3 22 re f
+0.078 0.212 0.353 rg
+55 385 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 389 Td
+(13) Tj
+ET
+0.753 0.114 0.114 rg
+80 386 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+98.55 390 Td
+(ERROR) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 390 Td
+(Network error ? blue banner: unable to connect, check internet connection) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 382 m 564 382 l S
+0.945 0.945 0.945 rg
+48 360 516 22 re f
+0.000 0.502 0.502 rg
+48 360 3 22 re f
+0.078 0.212 0.353 rg
+55 363 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 367 Td
+(14) Tj
+ET
+0.000 0.502 0.502 rg
+80 364 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 368 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 368 Td
+(On success: if biometric hardware available and not previously enrolled ?) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 360 m 564 360 l S
+0.502 0.251 0.502 rg
+48 338 3 22 re f
+0.078 0.212 0.353 rg
+55 341 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 345 Td
+(15) Tj
+ET
+0.502 0.251 0.502 rg
+80 342 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+100.24000000000001 346 Td
+(NOTE) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 346 Td
+(Alert shown: "Enable Biometric Login?" with [Not Now] / [Enable] options) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 338 m 564 338 l S
+0.078 0.212 0.353 rg
+48 292 516 34 re f
+0.831 0.408 0.165 rg
+54 299 28 21 re f
+BT
+1.000 1.000 1.000 rg
+/F2 9 Tf
+63.32 306 Td
+(03) Tj
+ET
+BT
+1.000 1.000 1.000 rg
+/F2 10 Tf
+90 310 Td
+(Login ? Google Sign-In) Tj
+ET
+BT
+0.70 0.70 0.70 rg
+/F1 8 Tf
+90 298 Td
+(OAuth-based authentication via Firebase using a Google account) Tj
+ET
+0.094 0.443 0.824 rg
+48 268 3 22 re f
+0.078 0.212 0.353 rg
+55 271 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 275 Td
+(01) Tj
+ET
+0.094 0.443 0.824 rg
+80 272 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 276 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 276 Td
+(User taps "Continue with Google" button) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 268 m 564 268 l S
+0.945 0.945 0.945 rg
+48 246 516 22 re f
+0.000 0.502 0.502 rg
+48 246 3 22 re f
+0.078 0.212 0.353 rg
+55 249 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 253 Td
+(02) Tj
+ET
+0.000 0.502 0.502 rg
+80 250 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 254 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 254 Td
+(Google OAuth consent screen opens via Firebase \(expo-auth-session\)) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 246 m 564 246 l S
+0.094 0.443 0.824 rg
+48 224 3 22 re f
+0.078 0.212 0.353 rg
+55 227 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 231 Td
+(03) Tj
+ET
+0.094 0.443 0.824 rg
+80 228 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 232 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 232 Td
+(User selects their Google account and grants permission) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 224 m 564 224 l S
+0.945 0.945 0.945 rg
+48 202 516 22 re f
+0.000 0.502 0.502 rg
+48 202 3 22 re f
+0.078 0.212 0.353 rg
+55 205 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 209 Td
+(04) Tj
+ET
+0.000 0.502 0.502 rg
+80 206 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 210 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 210 Td
+(Firebase ID token retrieved from the authenticated Google session) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 202 m 564 202 l S
+0.831 0.408 0.165 rg
+48 180 3 22 re f
+0.078 0.212 0.353 rg
+55 183 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 187 Td
+(05) Tj
+ET
+0.831 0.408 0.165 rg
+80 184 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+93.48 188 Td
+(API CALL) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 188 Td
+(POST /auth/google ? sends { idToken } to backend for tenant verification) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 180 m 564 180 l S
+0.945 0.945 0.945 rg
+48 158 516 22 re f
+0.133 0.545 0.133 rg
+48 158 3 22 re f
+0.078 0.212 0.353 rg
+55 161 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 165 Td
+(06) Tj
+ET
+0.133 0.545 0.133 rg
+80 162 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+95.17 166 Td
+(SUCCESS) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 166 Td
+(200 OK ? session_token saved, user navigated to Home dashboard) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 158 m 564 158 l S
+0.800 0.600 0.000 rg
+48 136 3 22 re f
+0.078 0.212 0.353 rg
+55 139 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 143 Td
+(07) Tj
+ET
+0.800 0.600 0.000 rg
+80 140 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 144 Td
+(BRANCH) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 144 Td
+(403 ? orange banner: Google account is not registered as an active tenant) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 136 m 564 136 l S
+0.945 0.945 0.945 rg
+48 114 516 22 re f
+0.800 0.600 0.000 rg
+48 114 3 22 re f
+0.078 0.212 0.353 rg
+55 117 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 121 Td
+(08) Tj
+ET
+0.800 0.600 0.000 rg
+80 118 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 122 Td
+(BRANCH) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 122 Td
+(User cancels Google prompt ? no error shown, login form remains visible) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 114 m 564 114 l S
+0.753 0.114 0.114 rg
+48 92 3 22 re f
+0.078 0.212 0.353 rg
+55 95 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 99 Td
+(09) Tj
+ET
+0.753 0.114 0.114 rg
+80 96 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+98.55 100 Td
+(ERROR) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 100 Td
+(Token failure ? blue banner: authentication failed, try again or use email) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 92 m 564 92 l S
+0.831 0.408 0.165 rg
+0 32 612 2 re f
+BT
+0.450 0.450 0.450 rg
+/F1 8 Tf
+48 18 Td
+(LilyCrest Dormitory Management System - Mobile Application) Tj
+ET
+BT
+0.450 0.450 0.450 rg
+/F1 8 Tf
+539.04 18 Td
+(Page 2) Tj
+ET
+0.878 0.878 0.878 rg
+48 32 516 0.5 re f
+endstream
+endobj
+6 0 obj
+<< /Type /Page /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 5 0 R /Parent 999 0 R >>
+endobj
+7 0 obj
+<< /Length 9338 >>
+stream
+0.078 0.212 0.353 rg
+0 720 612 72 re f
+0.831 0.408 0.165 rg
+0 717 612 3 re f
+0.831 0.408 0.165 rg
+58 776 m 68 766 l 58 756 l 48 766 l f
+0.078 0.212 0.353 rg
+58 771 m 63 766 l 58 761 l 53 766 l f
+BT
+1.000 1.000 1.000 rg
+/F2 15 Tf
+76 762 Td
+(LilyCrest) Tj
+ET
+BT
+0.65 0.65 0.65 rg
+/F1 7 Tf
+76 752 Td
+(DORMITORY MANAGEMENT SYSTEM) Tj
+ET
+0.078 0.212 0.353 rg
+48 670 516 34 re f
+0.831 0.408 0.165 rg
+54 677 28 21 re f
+BT
+1.000 1.000 1.000 rg
+/F2 9 Tf
+63.32 684 Td
+(04) Tj
+ET
+BT
+1.000 1.000 1.000 rg
+/F2 10 Tf
+90 688 Td
+(Login ? Biometric Authentication) Tj
+ET
+BT
+0.70 0.70 0.70 rg
+/F1 8 Tf
+90 676 Td
+(Fingerprint or Face ID sign-in using securely stored credentials) Tj
+ET
+0.502 0.251 0.502 rg
+48 646 3 22 re f
+0.078 0.212 0.353 rg
+55 649 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 653 Td
+(01) Tj
+ET
+0.502 0.251 0.502 rg
+80 650 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+100.24000000000001 654 Td
+(NOTE) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 654 Td
+(Prerequisite: biometric hardware enrolled and credentials saved via prior login) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 646 m 564 646 l S
+0.945 0.945 0.945 rg
+48 624 516 22 re f
+0.094 0.443 0.824 rg
+48 624 3 22 re f
+0.078 0.212 0.353 rg
+55 627 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 631 Td
+(02) Tj
+ET
+0.094 0.443 0.824 rg
+80 628 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 632 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 632 Td
+(User taps "Sign in with biometrics" button on the Login screen) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 624 m 564 624 l S
+0.000 0.502 0.502 rg
+48 602 3 22 re f
+0.078 0.212 0.353 rg
+55 605 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 609 Td
+(03) Tj
+ET
+0.000 0.502 0.502 rg
+80 606 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 610 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 610 Td
+(Device biometric prompt displayed \(fingerprint scanner or Face ID dialog\)) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 602 m 564 602 l S
+0.945 0.945 0.945 rg
+48 580 516 22 re f
+0.800 0.600 0.000 rg
+48 580 3 22 re f
+0.078 0.212 0.353 rg
+55 583 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 587 Td
+(04) Tj
+ET
+0.800 0.600 0.000 rg
+80 584 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 588 Td
+(BRANCH) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 588 Td
+(Biometric verification failed ? red banner shown, user can retry or use password) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 580 m 564 580 l S
+0.000 0.502 0.502 rg
+48 558 3 22 re f
+0.078 0.212 0.353 rg
+55 561 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 565 Td
+(05) Tj
+ET
+0.000 0.502 0.502 rg
+80 562 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 566 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 566 Td
+(Success ? stored credentials retrieved from SecureStore \(Keychain / Keystore\)) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 558 m 564 558 l S
+0.945 0.945 0.945 rg
+48 536 516 22 re f
+0.831 0.408 0.165 rg
+48 536 3 22 re f
+0.078 0.212 0.353 rg
+55 539 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 543 Td
+(06) Tj
+ET
+0.831 0.408 0.165 rg
+80 540 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+93.48 544 Td
+(API CALL) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 544 Td
+(POST /auth/login called silently in background with stored email and password) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 536 m 564 536 l S
+0.133 0.545 0.133 rg
+48 514 3 22 re f
+0.078 0.212 0.353 rg
+55 517 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 521 Td
+(07) Tj
+ET
+0.133 0.545 0.133 rg
+80 518 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+95.17 522 Td
+(SUCCESS) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 522 Td
+(200 OK ? session established, user navigated to Home dashboard seamlessly) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 514 m 564 514 l S
+0.945 0.945 0.945 rg
+48 492 516 22 re f
+0.753 0.114 0.114 rg
+48 492 3 22 re f
+0.078 0.212 0.353 rg
+55 495 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 499 Td
+(08) Tj
+ET
+0.753 0.114 0.114 rg
+80 496 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+98.55 500 Td
+(ERROR) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 500 Td
+(401 ? password changed elsewhere ? SecureStore cleared, orange banner shown) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 492 m 564 492 l S
+0.078 0.212 0.353 rg
+48 446 516 34 re f
+0.831 0.408 0.165 rg
+54 453 28 21 re f
+BT
+1.000 1.000 1.000 rg
+/F2 9 Tf
+63.32 460 Td
+(05) Tj
+ET
+BT
+1.000 1.000 1.000 rg
+/F2 10 Tf
+90 464 Td
+(Forgot Password & Reset Flow) Tj
+ET
+BT
+0.70 0.70 0.70 rg
+/F1 8 Tf
+90 452 Td
+(Email-based password reset from request submission to successful re-login) Tj
+ET
+0.094 0.443 0.824 rg
+48 422 3 22 re f
+0.078 0.212 0.353 rg
+55 425 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 429 Td
+(01) Tj
+ET
+0.094 0.443 0.824 rg
+80 426 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 430 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 430 Td
+(User taps "Forgot password?" link on the Login screen) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 422 m 564 422 l S
+0.945 0.945 0.945 rg
+48 400 516 22 re f
+0.094 0.443 0.824 rg
+48 400 3 22 re f
+0.078 0.212 0.353 rg
+55 403 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 407 Td
+(02) Tj
+ET
+0.094 0.443 0.824 rg
+80 404 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 408 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 408 Td
+(Forgot Password screen: user types their registered email address) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 400 m 564 400 l S
+0.831 0.408 0.165 rg
+48 378 3 22 re f
+0.078 0.212 0.353 rg
+55 381 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 385 Td
+(03) Tj
+ET
+0.831 0.408 0.165 rg
+80 382 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+93.48 386 Td
+(API CALL) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 386 Td
+(POST /auth/forgot-password ? backend sends reset link to that email address) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 378 m 564 378 l S
+0.945 0.945 0.945 rg
+48 356 516 22 re f
+0.094 0.443 0.824 rg
+48 356 3 22 re f
+0.078 0.212 0.353 rg
+55 359 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 363 Td
+(04) Tj
+ET
+0.094 0.443 0.824 rg
+80 360 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 364 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 364 Td
+(User opens email inbox and taps the password reset link) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 356 m 564 356 l S
+0.000 0.502 0.502 rg
+48 334 3 22 re f
+0.078 0.212 0.353 rg
+55 337 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 341 Td
+(05) Tj
+ET
+0.000 0.502 0.502 rg
+80 338 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 342 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 342 Td
+(System browser or WebView opens the password reset form page) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 334 m 564 334 l S
+0.945 0.945 0.945 rg
+48 312 516 22 re f
+0.094 0.443 0.824 rg
+48 312 3 22 re f
+0.078 0.212 0.353 rg
+55 315 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 319 Td
+(06) Tj
+ET
+0.094 0.443 0.824 rg
+80 316 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 320 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 320 Td
+(User types new password \(8+ chars, uppercase, lowercase, number, special char\)) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 312 m 564 312 l S
+0.094 0.443 0.824 rg
+48 290 3 22 re f
+0.078 0.212 0.353 rg
+55 293 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 297 Td
+(07) Tj
+ET
+0.094 0.443 0.824 rg
+80 294 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 298 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 298 Td
+(User submits the reset form) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 290 m 564 290 l S
+0.945 0.945 0.945 rg
+48 268 516 22 re f
+0.831 0.408 0.165 rg
+48 268 3 22 re f
+0.078 0.212 0.353 rg
+55 271 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 275 Td
+(08) Tj
+ET
+0.831 0.408 0.165 rg
+80 272 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+93.48 276 Td
+(API CALL) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 276 Td
+(Backend validates reset token, updates password in MongoDB, returns confirmation) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 268 m 564 268 l S
+0.000 0.502 0.502 rg
+48 246 3 22 re f
+0.078 0.212 0.353 rg
+55 249 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 253 Td
+(09) Tj
+ET
+0.000 0.502 0.502 rg
+80 250 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 254 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 254 Td
+(All active sessions deleted from user_sessions collection in database) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 246 m 564 246 l S
+0.945 0.945 0.945 rg
+48 224 516 22 re f
+0.000 0.502 0.502 rg
+48 224 3 22 re f
+0.078 0.212 0.353 rg
+55 227 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 231 Td
+(10) Tj
+ET
+0.000 0.502 0.502 rg
+80 228 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 232 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 232 Td
+(Biometric credentials cleared from SecureStore \(old password now invalid\)) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 224 m 564 224 l S
+0.094 0.443 0.824 rg
+48 202 3 22 re f
+0.078 0.212 0.353 rg
+55 205 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 209 Td
+(11) Tj
+ET
+0.094 0.443 0.824 rg
+80 206 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 210 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 210 Td
+(User returns to the LilyCrest app and logs in with the new password) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 202 m 564 202 l S
+0.831 0.408 0.165 rg
+0 32 612 2 re f
+BT
+0.450 0.450 0.450 rg
+/F1 8 Tf
+48 18 Td
+(LilyCrest Dormitory Management System - Mobile Application) Tj
+ET
+BT
+0.450 0.450 0.450 rg
+/F1 8 Tf
+539.04 18 Td
+(Page 3) Tj
+ET
+0.878 0.878 0.878 rg
+48 32 516 0.5 re f
+endstream
+endobj
+8 0 obj
+<< /Type /Page /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 7 0 R /Parent 999 0 R >>
+endobj
+9 0 obj
+<< /Length 8884 >>
+stream
+0.078 0.212 0.353 rg
+0 720 612 72 re f
+0.831 0.408 0.165 rg
+0 717 612 3 re f
+0.831 0.408 0.165 rg
+58 776 m 68 766 l 58 756 l 48 766 l f
+0.078 0.212 0.353 rg
+58 771 m 63 766 l 58 761 l 53 766 l f
+BT
+1.000 1.000 1.000 rg
+/F2 15 Tf
+76 762 Td
+(LilyCrest) Tj
+ET
+BT
+0.65 0.65 0.65 rg
+/F1 7 Tf
+76 752 Td
+(DORMITORY MANAGEMENT SYSTEM) Tj
+ET
+0.078 0.212 0.353 rg
+48 670 516 34 re f
+0.831 0.408 0.165 rg
+54 677 28 21 re f
+BT
+1.000 1.000 1.000 rg
+/F2 9 Tf
+63.32 684 Td
+(06) Tj
+ET
+BT
+1.000 1.000 1.000 rg
+/F2 10 Tf
+90 688 Td
+(Enable Biometric Login \(Post-Login Setup\)) Tj
+ET
+BT
+0.70 0.70 0.70 rg
+/F1 8 Tf
+90 676 Td
+(First-time biometric enrollment triggered automatically after successful login) Tj
+ET
+0.000 0.502 0.502 rg
+48 646 3 22 re f
+0.078 0.212 0.353 rg
+55 649 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 653 Td
+(01) Tj
+ET
+0.000 0.502 0.502 rg
+80 650 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 654 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 654 Td
+(After successful email/password login, app checks biometric availability) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 646 m 564 646 l S
+0.945 0.945 0.945 rg
+48 624 516 22 re f
+0.800 0.600 0.000 rg
+48 624 3 22 re f
+0.078 0.212 0.353 rg
+55 627 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 631 Td
+(02) Tj
+ET
+0.800 0.600 0.000 rg
+80 628 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 632 Td
+(BRANCH) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 632 Td
+(No biometric hardware ? skip silently, navigate to Home directly) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 624 m 564 624 l S
+0.800 0.600 0.000 rg
+48 602 3 22 re f
+0.078 0.212 0.353 rg
+55 605 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 609 Td
+(03) Tj
+ET
+0.800 0.600 0.000 rg
+80 606 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 610 Td
+(BRANCH) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 610 Td
+(Biometric previously enabled ? refresh stored credentials silently, go to Home) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 602 m 564 602 l S
+0.945 0.945 0.945 rg
+48 580 516 22 re f
+0.000 0.502 0.502 rg
+48 580 3 22 re f
+0.078 0.212 0.353 rg
+55 583 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 587 Td
+(04) Tj
+ET
+0.000 0.502 0.502 rg
+80 584 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 588 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 588 Td
+(First time: Alert shown ? "Enable Biometric Login?" with [Not Now] / [Enable]) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 580 m 564 580 l S
+0.094 0.443 0.824 rg
+48 558 3 22 re f
+0.078 0.212 0.353 rg
+55 561 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 565 Td
+(05) Tj
+ET
+0.094 0.443 0.824 rg
+80 562 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 566 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 566 Td
+(User taps [Not Now] ? navigated to Home, biometric login remains disabled) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 558 m 564 558 l S
+0.945 0.945 0.945 rg
+48 536 516 22 re f
+0.094 0.443 0.824 rg
+48 536 3 22 re f
+0.078 0.212 0.353 rg
+55 539 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 543 Td
+(06) Tj
+ET
+0.094 0.443 0.824 rg
+80 540 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 544 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 544 Td
+(User taps [Enable] ? device biometric prompt shown to confirm identity) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 536 m 564 536 l S
+0.000 0.502 0.502 rg
+48 514 3 22 re f
+0.078 0.212 0.353 rg
+55 517 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 521 Td
+(07) Tj
+ET
+0.000 0.502 0.502 rg
+80 518 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 522 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 522 Td
+(Biometric success ? email + password saved to SecureStore \(Keychain/Keystore\)) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 514 m 564 514 l S
+0.945 0.945 0.945 rg
+48 492 516 22 re f
+0.000 0.502 0.502 rg
+48 492 3 22 re f
+0.078 0.212 0.353 rg
+55 495 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 499 Td
+(08) Tj
+ET
+0.000 0.502 0.502 rg
+80 496 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 500 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 500 Td
+(biometricLogin flag set to "true" in AsyncStorage) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 492 m 564 492 l S
+0.133 0.545 0.133 rg
+48 470 3 22 re f
+0.078 0.212 0.353 rg
+55 473 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 477 Td
+(09) Tj
+ET
+0.133 0.545 0.133 rg
+80 474 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+95.17 478 Td
+(SUCCESS) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 478 Td
+("Sign in with biometrics" button now appears on Login screen for future visits) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 470 m 564 470 l S
+0.078 0.212 0.353 rg
+48 424 516 34 re f
+0.831 0.408 0.165 rg
+54 431 28 21 re f
+BT
+1.000 1.000 1.000 rg
+/F2 9 Tf
+63.32 438 Td
+(07) Tj
+ET
+BT
+1.000 1.000 1.000 rg
+/F2 10 Tf
+90 442 Td
+(Home Dashboard) Tj
+ET
+BT
+0.70 0.70 0.70 rg
+/F1 8 Tf
+90 430 Td
+(Main screen after login ? overview of tenant status and recent activity) Tj
+ET
+0.000 0.502 0.502 rg
+48 400 3 22 re f
+0.078 0.212 0.353 rg
+55 403 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 407 Td
+(01) Tj
+ET
+0.000 0.502 0.502 rg
+80 404 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 408 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 408 Td
+(Home screen mounts ? three concurrent data requests initiated) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 400 m 564 400 l S
+0.945 0.945 0.945 rg
+48 378 516 22 re f
+0.831 0.408 0.165 rg
+48 378 3 22 re f
+0.078 0.212 0.353 rg
+55 381 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 385 Td
+(02) Tj
+ET
+0.831 0.408 0.165 rg
+80 382 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+93.48 386 Td
+(API CALL) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 386 Td
+(GET /auth/me ? verify session and refresh current user profile data) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 378 m 564 378 l S
+0.831 0.408 0.165 rg
+48 356 3 22 re f
+0.078 0.212 0.353 rg
+55 359 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 363 Td
+(03) Tj
+ET
+0.831 0.408 0.165 rg
+80 360 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+93.48 364 Td
+(API CALL) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 364 Td
+(GET /billing/current-bill ? fetch the most recent billing statement) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 356 m 564 356 l S
+0.945 0.945 0.945 rg
+48 334 516 22 re f
+0.831 0.408 0.165 rg
+48 334 3 22 re f
+0.078 0.212 0.353 rg
+55 337 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 341 Td
+(04) Tj
+ET
+0.831 0.408 0.165 rg
+80 338 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+93.48 342 Td
+(API CALL) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 342 Td
+(GET /announcements ? fetch recent dormitory announcements) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 334 m 564 334 l S
+0.000 0.502 0.502 rg
+48 312 3 22 re f
+0.078 0.212 0.353 rg
+55 315 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 319 Td
+(05) Tj
+ET
+0.000 0.502 0.502 rg
+80 316 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 320 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 320 Td
+(Welcome banner displayed with tenant name and Active Tenant badge) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 312 m 564 312 l S
+0.945 0.945 0.945 rg
+48 290 516 22 re f
+0.000 0.502 0.502 rg
+48 290 3 22 re f
+0.078 0.212 0.353 rg
+55 293 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 297 Td
+(06) Tj
+ET
+0.000 0.502 0.502 rg
+80 294 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 298 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 298 Td
+(Current bill card shown: total amount due, due date, payment status badge) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 290 m 564 290 l S
+0.000 0.502 0.502 rg
+48 268 3 22 re f
+0.078 0.212 0.353 rg
+55 271 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 275 Td
+(07) Tj
+ET
+0.000 0.502 0.502 rg
+80 272 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 276 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 276 Td
+(Announcements strip shows up to 3 latest items with priority badges) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 268 m 564 268 l S
+0.945 0.945 0.945 rg
+48 246 516 22 re f
+0.094 0.443 0.824 rg
+48 246 3 22 re f
+0.078 0.212 0.353 rg
+55 249 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 253 Td
+(08) Tj
+ET
+0.094 0.443 0.824 rg
+80 250 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 254 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 254 Td
+(User pulls down to refresh all sections simultaneously) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 246 m 564 246 l S
+0.094 0.443 0.824 rg
+48 224 3 22 re f
+0.078 0.212 0.353 rg
+55 227 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 231 Td
+(09) Tj
+ET
+0.094 0.443 0.824 rg
+80 228 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 232 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 232 Td
+(Quick-action buttons: Pay Bill ? Billing | Services ? Requests | Lily ? AI Chat) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 224 m 564 224 l S
+0.831 0.408 0.165 rg
+0 32 612 2 re f
+BT
+0.450 0.450 0.450 rg
+/F1 8 Tf
+48 18 Td
+(LilyCrest Dormitory Management System - Mobile Application) Tj
+ET
+BT
+0.450 0.450 0.450 rg
+/F1 8 Tf
+539.04 18 Td
+(Page 4) Tj
+ET
+0.878 0.878 0.878 rg
+48 32 516 0.5 re f
+endstream
+endobj
+10 0 obj
+<< /Type /Page /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 9 0 R /Parent 999 0 R >>
+endobj
+11 0 obj
+<< /Length 9710 >>
+stream
+0.078 0.212 0.353 rg
+0 720 612 72 re f
+0.831 0.408 0.165 rg
+0 717 612 3 re f
+0.831 0.408 0.165 rg
+58 776 m 68 766 l 58 756 l 48 766 l f
+0.078 0.212 0.353 rg
+58 771 m 63 766 l 58 761 l 53 766 l f
+BT
+1.000 1.000 1.000 rg
+/F2 15 Tf
+76 762 Td
+(LilyCrest) Tj
+ET
+BT
+0.65 0.65 0.65 rg
+/F1 7 Tf
+76 752 Td
+(DORMITORY MANAGEMENT SYSTEM) Tj
+ET
+0.078 0.212 0.353 rg
+48 670 516 34 re f
+0.831 0.408 0.165 rg
+54 677 28 21 re f
+BT
+1.000 1.000 1.000 rg
+/F2 9 Tf
+63.32 684 Td
+(08) Tj
+ET
+BT
+1.000 1.000 1.000 rg
+/F2 10 Tf
+90 688 Td
+(Billing ? View History & Bill Details) Tj
+ET
+BT
+0.70 0.70 0.70 rg
+/F1 8 Tf
+90 676 Td
+(Browsing all billing statements and reading detailed charge breakdowns) Tj
+ET
+0.094 0.443 0.824 rg
+48 646 3 22 re f
+0.078 0.212 0.353 rg
+55 649 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 653 Td
+(01) Tj
+ET
+0.094 0.443 0.824 rg
+80 650 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 654 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 654 Td
+(User navigates to the Billing tab from the bottom navigation bar) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 646 m 564 646 l S
+0.945 0.945 0.945 rg
+48 624 516 22 re f
+0.831 0.408 0.165 rg
+48 624 3 22 re f
+0.078 0.212 0.353 rg
+55 627 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 631 Td
+(02) Tj
+ET
+0.831 0.408 0.165 rg
+80 628 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+93.48 632 Td
+(API CALL) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 632 Td
+(GET /billing/history ? full billing history fetched with auth token) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 624 m 564 624 l S
+0.000 0.502 0.502 rg
+48 602 3 22 re f
+0.078 0.212 0.353 rg
+55 605 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 609 Td
+(03) Tj
+ET
+0.000 0.502 0.502 rg
+80 606 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 610 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 610 Td
+(Bills displayed as cards sorted by date, newest first) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 602 m 564 602 l S
+0.945 0.945 0.945 rg
+48 580 516 22 re f
+0.094 0.443 0.824 rg
+48 580 3 22 re f
+0.078 0.212 0.353 rg
+55 583 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 587 Td
+(04) Tj
+ET
+0.094 0.443 0.824 rg
+80 584 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 588 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 588 Td
+(User filters by status using tab buttons: All | Pending | Overdue | Paid) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 580 m 564 580 l S
+0.094 0.443 0.824 rg
+48 558 3 22 re f
+0.078 0.212 0.353 rg
+55 561 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 565 Td
+(05) Tj
+ET
+0.094 0.443 0.824 rg
+80 562 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 566 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 566 Td
+(User taps a bill card to open the Bill Details screen) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 558 m 564 558 l S
+0.945 0.945 0.945 rg
+48 536 516 22 re f
+0.000 0.502 0.502 rg
+48 536 3 22 re f
+0.078 0.212 0.353 rg
+55 539 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 543 Td
+(06) Tj
+ET
+0.000 0.502 0.502 rg
+80 540 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 544 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 544 Td
+(Charge breakdown rendered: monthly rent, electricity, water, penalties, total) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 536 m 564 536 l S
+0.000 0.502 0.502 rg
+48 514 3 22 re f
+0.078 0.212 0.353 rg
+55 517 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 521 Td
+(07) Tj
+ET
+0.000 0.502 0.502 rg
+80 518 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 522 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 522 Td
+(Electricity: previous reading, current reading, kWh consumed, rate, amount) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 514 m 564 514 l S
+0.945 0.945 0.945 rg
+48 492 516 22 re f
+0.000 0.502 0.502 rg
+48 492 3 22 re f
+0.078 0.212 0.353 rg
+55 495 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 499 Td
+(08) Tj
+ET
+0.000 0.502 0.502 rg
+80 496 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 500 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 500 Td
+(Water: cubic meters consumed, rate per cubic meter, computed amount) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 492 m 564 492 l S
+0.000 0.502 0.502 rg
+48 470 3 22 re f
+0.078 0.212 0.353 rg
+55 473 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 477 Td
+(09) Tj
+ET
+0.000 0.502 0.502 rg
+80 474 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 478 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 478 Td
+(Status badge: Pending \(yellow\) | Overdue \(red\) | Paid \(green\)) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 470 m 564 470 l S
+0.945 0.945 0.945 rg
+48 448 516 22 re f
+0.000 0.502 0.502 rg
+48 448 3 22 re f
+0.078 0.212 0.353 rg
+55 451 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 455 Td
+(10) Tj
+ET
+0.000 0.502 0.502 rg
+80 452 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 456 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 456 Td
+(Paid bills also display payment date and PayMongo reference number) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 448 m 564 448 l S
+0.078 0.212 0.353 rg
+48 402 516 34 re f
+0.831 0.408 0.165 rg
+54 409 28 21 re f
+BT
+1.000 1.000 1.000 rg
+/F2 9 Tf
+63.32 416 Td
+(09) Tj
+ET
+BT
+1.000 1.000 1.000 rg
+/F2 10 Tf
+90 420 Td
+(Billing ? Pay Bill Online via PayMongo) Tj
+ET
+BT
+0.70 0.70 0.70 rg
+/F1 8 Tf
+90 408 Td
+(End-to-end online payment from bill selection to payment confirmation) Tj
+ET
+0.094 0.443 0.824 rg
+48 378 3 22 re f
+0.078 0.212 0.353 rg
+55 381 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 385 Td
+(01) Tj
+ET
+0.094 0.443 0.824 rg
+80 382 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 386 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 386 Td
+(User taps "Pay Now" on a Pending or Overdue bill) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 378 m 564 378 l S
+0.945 0.945 0.945 rg
+48 356 516 22 re f
+0.000 0.502 0.502 rg
+48 356 3 22 re f
+0.078 0.212 0.353 rg
+55 359 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 363 Td
+(02) Tj
+ET
+0.000 0.502 0.502 rg
+80 360 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 364 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 364 Td
+(Payment screen opens ? bill summary and total amount displayed) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 356 m 564 356 l S
+0.094 0.443 0.824 rg
+48 334 3 22 re f
+0.078 0.212 0.353 rg
+55 337 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 341 Td
+(03) Tj
+ET
+0.094 0.443 0.824 rg
+80 338 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 342 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 342 Td
+(User selects payment method: GCash | Maya | GrabPay | Credit / Debit Card) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 334 m 564 334 l S
+0.945 0.945 0.945 rg
+48 312 516 22 re f
+0.094 0.443 0.824 rg
+48 312 3 22 re f
+0.078 0.212 0.353 rg
+55 315 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 319 Td
+(04) Tj
+ET
+0.094 0.443 0.824 rg
+80 316 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 320 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 320 Td
+(User taps "Proceed to Payment") Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 312 m 564 312 l S
+0.831 0.408 0.165 rg
+48 290 3 22 re f
+0.078 0.212 0.353 rg
+55 293 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 297 Td
+(05) Tj
+ET
+0.831 0.408 0.165 rg
+80 294 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+93.48 298 Td
+(API CALL) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 298 Td
+(POST /paymongo/checkout ? backend creates a PayMongo checkout session) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 290 m 564 290 l S
+0.945 0.945 0.945 rg
+48 268 516 22 re f
+0.000 0.502 0.502 rg
+48 268 3 22 re f
+0.078 0.212 0.353 rg
+55 271 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 275 Td
+(06) Tj
+ET
+0.000 0.502 0.502 rg
+80 272 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 276 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 276 Td
+(Checkout URL returned ? app opens PayMongo secure payment page in browser) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 268 m 564 268 l S
+0.094 0.443 0.824 rg
+48 246 3 22 re f
+0.078 0.212 0.353 rg
+55 249 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 253 Td
+(07) Tj
+ET
+0.094 0.443 0.824 rg
+80 250 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 254 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 254 Td
+(User completes payment \(OTP verification, card entry, or e-wallet auth\)) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 246 m 564 246 l S
+0.945 0.945 0.945 rg
+48 224 516 22 re f
+0.000 0.502 0.502 rg
+48 224 3 22 re f
+0.078 0.212 0.353 rg
+55 227 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 231 Td
+(08) Tj
+ET
+0.000 0.502 0.502 rg
+80 228 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 232 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 232 Td
+(PayMongo redirects back to app via deep link after payment completion) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 224 m 564 224 l S
+0.831 0.408 0.165 rg
+48 202 3 22 re f
+0.078 0.212 0.353 rg
+55 205 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 209 Td
+(09) Tj
+ET
+0.831 0.408 0.165 rg
+80 206 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+93.48 210 Td
+(API CALL) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 210 Td
+(Backend receives PayMongo webhook ? updates bill status to Paid in database) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 202 m 564 202 l S
+0.945 0.945 0.945 rg
+48 180 516 22 re f
+0.133 0.545 0.133 rg
+48 180 3 22 re f
+0.078 0.212 0.353 rg
+55 183 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 187 Td
+(10) Tj
+ET
+0.133 0.545 0.133 rg
+80 184 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+95.17 188 Td
+(SUCCESS) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 188 Td
+(App refreshes bill list ? paid bill now shows green Paid badge) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 180 m 564 180 l S
+0.831 0.408 0.165 rg
+0 32 612 2 re f
+BT
+0.450 0.450 0.450 rg
+/F1 8 Tf
+48 18 Td
+(LilyCrest Dormitory Management System - Mobile Application) Tj
+ET
+BT
+0.450 0.450 0.450 rg
+/F1 8 Tf
+539.04 18 Td
+(Page 5) Tj
+ET
+0.878 0.878 0.878 rg
+48 32 516 0.5 re f
+endstream
+endobj
+12 0 obj
+<< /Type /Page /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 11 0 R /Parent 999 0 R >>
+endobj
+13 0 obj
+<< /Length 10947 >>
+stream
+0.078 0.212 0.353 rg
+0 720 612 72 re f
+0.831 0.408 0.165 rg
+0 717 612 3 re f
+0.831 0.408 0.165 rg
+58 776 m 68 766 l 58 756 l 48 766 l f
+0.078 0.212 0.353 rg
+58 771 m 63 766 l 58 761 l 53 766 l f
+BT
+1.000 1.000 1.000 rg
+/F2 15 Tf
+76 762 Td
+(LilyCrest) Tj
+ET
+BT
+0.65 0.65 0.65 rg
+/F1 7 Tf
+76 752 Td
+(DORMITORY MANAGEMENT SYSTEM) Tj
+ET
+0.078 0.212 0.353 rg
+48 670 516 34 re f
+0.831 0.408 0.165 rg
+54 677 28 21 re f
+BT
+1.000 1.000 1.000 rg
+/F2 9 Tf
+63.32 684 Td
+(10) Tj
+ET
+BT
+1.000 1.000 1.000 rg
+/F2 10 Tf
+90 688 Td
+(Billing ? Download PDF Receipt) Tj
+ET
+BT
+0.70 0.70 0.70 rg
+/F1 8 Tf
+90 676 Td
+(Generating and saving a branded PDF bill receipt to the device) Tj
+ET
+0.094 0.443 0.824 rg
+48 646 3 22 re f
+0.078 0.212 0.353 rg
+55 649 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 653 Td
+(01) Tj
+ET
+0.094 0.443 0.824 rg
+80 650 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 654 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 654 Td
+(User taps "Download Receipt" on a paid bill in the Bill Details screen) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 646 m 564 646 l S
+0.945 0.945 0.945 rg
+48 624 516 22 re f
+0.000 0.502 0.502 rg
+48 624 3 22 re f
+0.078 0.212 0.353 rg
+55 627 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 631 Td
+(02) Tj
+ET
+0.000 0.502 0.502 rg
+80 628 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 632 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 632 Td
+(App retrieves current session_token from AsyncStorage) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 624 m 564 624 l S
+0.831 0.408 0.165 rg
+48 602 3 22 re f
+0.078 0.212 0.353 rg
+55 605 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 609 Td
+(03) Tj
+ET
+0.831 0.408 0.165 rg
+80 606 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+93.48 610 Td
+(API CALL) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 610 Td
+(GET /billing/download/:billId ? authenticated request to backend) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 602 m 564 602 l S
+0.945 0.945 0.945 rg
+48 580 516 22 re f
+0.000 0.502 0.502 rg
+48 580 3 22 re f
+0.078 0.212 0.353 rg
+55 583 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 587 Td
+(04) Tj
+ET
+0.000 0.502 0.502 rg
+80 584 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 588 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 588 Td
+(Backend generates branded LilyCrest PDF with full charge breakdown) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 580 m 564 580 l S
+0.000 0.502 0.502 rg
+48 558 3 22 re f
+0.078 0.212 0.353 rg
+55 561 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 565 Td
+(05) Tj
+ET
+0.000 0.502 0.502 rg
+80 562 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 566 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 566 Td
+(PDF binary stream written to device cache directory via expo-file-system) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 558 m 564 558 l S
+0.945 0.945 0.945 rg
+48 536 516 22 re f
+0.133 0.545 0.133 rg
+48 536 3 22 re f
+0.078 0.212 0.353 rg
+55 539 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 543 Td
+(06) Tj
+ET
+0.133 0.545 0.133 rg
+80 540 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+95.17 544 Td
+(SUCCESS) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 544 Td
+(Native share sheet opens ? user saves to Files, shares via messaging, etc.) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 536 m 564 536 l S
+0.753 0.114 0.114 rg
+48 514 3 22 re f
+0.078 0.212 0.353 rg
+55 517 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 521 Td
+(07) Tj
+ET
+0.753 0.114 0.114 rg
+80 518 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+98.55 522 Td
+(ERROR) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 522 Td
+(On failure: error message shown, cached file cleared for clean next attempt) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 514 m 564 514 l S
+0.078 0.212 0.353 rg
+48 468 516 34 re f
+0.831 0.408 0.165 rg
+54 475 28 21 re f
+BT
+1.000 1.000 1.000 rg
+/F2 9 Tf
+63.32 482 Td
+(11) Tj
+ET
+BT
+1.000 1.000 1.000 rg
+/F2 10 Tf
+90 486 Td
+(Room & Bed Management) Tj
+ET
+BT
+0.70 0.70 0.70 rg
+/F1 8 Tf
+90 474 Td
+(Viewing assigned room, bed position, and tenancy details \(view only\)) Tj
+ET
+0.094 0.443 0.824 rg
+48 444 3 22 re f
+0.078 0.212 0.353 rg
+55 447 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 451 Td
+(01) Tj
+ET
+0.094 0.443 0.824 rg
+80 448 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 452 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 452 Td
+(User navigates to the Profile tab or Room section within the app) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 444 m 564 444 l S
+0.945 0.945 0.945 rg
+48 422 516 22 re f
+0.831 0.408 0.165 rg
+48 422 3 22 re f
+0.078 0.212 0.353 rg
+55 425 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 429 Td
+(02) Tj
+ET
+0.831 0.408 0.165 rg
+80 426 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+93.48 430 Td
+(API CALL) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 430 Td
+(GET /user/assignment ? fetches room assignment data for the tenant account) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 422 m 564 422 l S
+0.000 0.502 0.502 rg
+48 400 3 22 re f
+0.078 0.212 0.353 rg
+55 403 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 407 Td
+(03) Tj
+ET
+0.000 0.502 0.502 rg
+80 404 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 408 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 408 Td
+(Room card: room number, floor level, room type \(Quad / Double / Private\)) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 400 m 564 400 l S
+0.945 0.945 0.945 rg
+48 378 516 22 re f
+0.000 0.502 0.502 rg
+48 378 3 22 re f
+0.078 0.212 0.353 rg
+55 381 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 385 Td
+(04) Tj
+ET
+0.000 0.502 0.502 rg
+80 382 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 386 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 386 Td
+(Bed card: bed position \(Upper / Lower\), number of current occupants \(pax\)) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 378 m 564 378 l S
+0.000 0.502 0.502 rg
+48 356 3 22 re f
+0.078 0.212 0.353 rg
+55 359 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 363 Td
+(05) Tj
+ET
+0.000 0.502 0.502 rg
+80 360 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 364 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 364 Td
+(Tenancy dates: move-in date and scheduled move-out date) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 356 m 564 356 l S
+0.945 0.945 0.945 rg
+48 334 516 22 re f
+0.000 0.502 0.502 rg
+48 334 3 22 re f
+0.078 0.212 0.353 rg
+55 337 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 341 Td
+(06) Tj
+ET
+0.000 0.502 0.502 rg
+80 338 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 342 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 342 Td
+(Active Tenant badge shown when current date is within tenancy period) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 334 m 564 334 l S
+0.094 0.443 0.824 rg
+48 312 3 22 re f
+0.078 0.212 0.353 rg
+55 315 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 319 Td
+(07) Tj
+ET
+0.094 0.443 0.824 rg
+80 316 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 320 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 320 Td
+(User taps "Submit Service Request" shortcut to report a room or bed concern) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 312 m 564 312 l S
+0.078 0.212 0.353 rg
+48 266 516 34 re f
+0.831 0.408 0.165 rg
+54 273 28 21 re f
+BT
+1.000 1.000 1.000 rg
+/F2 9 Tf
+63.32 280 Td
+(12) Tj
+ET
+BT
+1.000 1.000 1.000 rg
+/F2 10 Tf
+90 284 Td
+(Maintenance & Service Requests ? Submit) Tj
+ET
+BT
+0.70 0.70 0.70 rg
+/F1 8 Tf
+90 272 Td
+(Creating a new maintenance or service request for admin review and action) Tj
+ET
+0.094 0.443 0.824 rg
+48 242 3 22 re f
+0.078 0.212 0.353 rg
+55 245 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 249 Td
+(01) Tj
+ET
+0.094 0.443 0.824 rg
+80 246 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 250 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 250 Td
+(User navigates to the Services tab and taps "New Request") Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 242 m 564 242 l S
+0.945 0.945 0.945 rg
+48 208 516 34 re f
+0.094 0.443 0.824 rg
+48 208 3 34 re f
+0.078 0.212 0.353 rg
+55 217 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 221 Td
+(02) Tj
+ET
+0.094 0.443 0.824 rg
+80 218 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 222 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 232 Td
+(User selects type: Maintenance | Plumbing | Electrical | Aircon | Cleaning |) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 220 Td
+(Pest | Furniture) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 208 m 564 208 l S
+0.094 0.443 0.824 rg
+48 186 3 22 re f
+0.078 0.212 0.353 rg
+55 189 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 193 Td
+(03) Tj
+ET
+0.094 0.443 0.824 rg
+80 190 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 194 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 194 Td
+(User sets urgency: Low \(72 hr SLA\) | Normal \(48 hr SLA\) | Urgent \(24 hr SLA\)) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 186 m 564 186 l S
+0.945 0.945 0.945 rg
+48 164 516 22 re f
+0.094 0.443 0.824 rg
+48 164 3 22 re f
+0.078 0.212 0.353 rg
+55 167 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 171 Td
+(04) Tj
+ET
+0.094 0.443 0.824 rg
+80 168 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 172 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 172 Td
+(User writes a clear description of the problem or concern) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 164 m 564 164 l S
+0.094 0.443 0.824 rg
+48 142 3 22 re f
+0.078 0.212 0.353 rg
+55 145 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 149 Td
+(05) Tj
+ET
+0.094 0.443 0.824 rg
+80 146 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 150 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 150 Td
+(\(Optional\) User attaches photos or files from device gallery or camera) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 142 m 564 142 l S
+0.945 0.945 0.945 rg
+48 120 516 22 re f
+0.094 0.443 0.824 rg
+48 120 3 22 re f
+0.078 0.212 0.353 rg
+55 123 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 127 Td
+(06) Tj
+ET
+0.094 0.443 0.824 rg
+80 124 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 128 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 128 Td
+(User taps "Submit Request") Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 120 m 564 120 l S
+0.831 0.408 0.165 rg
+48 98 3 22 re f
+0.078 0.212 0.353 rg
+55 101 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 105 Td
+(07) Tj
+ET
+0.831 0.408 0.165 rg
+80 102 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+93.48 106 Td
+(API CALL) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 106 Td
+(POST /service-requests ? request created with Pending status in database) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 98 m 564 98 l S
+0.945 0.945 0.945 rg
+48 76 516 22 re f
+0.133 0.545 0.133 rg
+48 76 3 22 re f
+0.078 0.212 0.353 rg
+55 79 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 83 Td
+(08) Tj
+ET
+0.133 0.545 0.133 rg
+80 80 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+95.17 84 Td
+(SUCCESS) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 84 Td
+(Request appears in list with Pending badge and estimated resolution time shown) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 76 m 564 76 l S
+0.831 0.408 0.165 rg
+0 32 612 2 re f
+BT
+0.450 0.450 0.450 rg
+/F1 8 Tf
+48 18 Td
+(LilyCrest Dormitory Management System - Mobile Application) Tj
+ET
+BT
+0.450 0.450 0.450 rg
+/F1 8 Tf
+539.04 18 Td
+(Page 6) Tj
+ET
+0.878 0.878 0.878 rg
+48 32 516 0.5 re f
+endstream
+endobj
+14 0 obj
+<< /Type /Page /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 13 0 R /Parent 999 0 R >>
+endobj
+15 0 obj
+<< /Length 8896 >>
+stream
+0.078 0.212 0.353 rg
+0 720 612 72 re f
+0.831 0.408 0.165 rg
+0 717 612 3 re f
+0.831 0.408 0.165 rg
+58 776 m 68 766 l 58 756 l 48 766 l f
+0.078 0.212 0.353 rg
+58 771 m 63 766 l 58 761 l 53 766 l f
+BT
+1.000 1.000 1.000 rg
+/F2 15 Tf
+76 762 Td
+(LilyCrest) Tj
+ET
+BT
+0.65 0.65 0.65 rg
+/F1 7 Tf
+76 752 Td
+(DORMITORY MANAGEMENT SYSTEM) Tj
+ET
+0.078 0.212 0.353 rg
+48 670 516 34 re f
+0.831 0.408 0.165 rg
+54 677 28 21 re f
+BT
+1.000 1.000 1.000 rg
+/F2 9 Tf
+63.32 684 Td
+(13) Tj
+ET
+BT
+1.000 1.000 1.000 rg
+/F2 10 Tf
+90 688 Td
+(Maintenance & Service Requests ? Track & Manage) Tj
+ET
+BT
+0.70 0.70 0.70 rg
+/F1 8 Tf
+90 676 Td
+(Monitoring request progress, viewing admin responses, cancelling or reopening) Tj
+ET
+0.831 0.408 0.165 rg
+48 646 3 22 re f
+0.078 0.212 0.353 rg
+55 649 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 653 Td
+(01) Tj
+ET
+0.831 0.408 0.165 rg
+80 650 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+93.48 654 Td
+(API CALL) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 654 Td
+(GET /service-requests ? all tenant requests loaded when Services screen opens) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 646 m 564 646 l S
+0.945 0.945 0.945 rg
+48 624 516 22 re f
+0.000 0.502 0.502 rg
+48 624 3 22 re f
+0.078 0.212 0.353 rg
+55 627 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 631 Td
+(02) Tj
+ET
+0.000 0.502 0.502 rg
+80 628 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 632 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 632 Td
+(Each request card shows: type icon, urgency badge, status, and submission date) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 624 m 564 624 l S
+0.094 0.443 0.824 rg
+48 602 3 22 re f
+0.078 0.212 0.353 rg
+55 605 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 609 Td
+(03) Tj
+ET
+0.094 0.443 0.824 rg
+80 606 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 610 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 610 Td
+(User taps a request card to view full details) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 602 m 564 602 l S
+0.945 0.945 0.945 rg
+48 580 516 22 re f
+0.000 0.502 0.502 rg
+48 580 3 22 re f
+0.078 0.212 0.353 rg
+55 583 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 587 Td
+(04) Tj
+ET
+0.000 0.502 0.502 rg
+80 584 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 588 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 588 Td
+(Detail screen: full description, attached photos, status timeline, admin replies) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 580 m 564 580 l S
+0.000 0.502 0.502 rg
+48 558 3 22 re f
+0.078 0.212 0.353 rg
+55 561 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 565 Td
+(05) Tj
+ET
+0.000 0.502 0.502 rg
+80 562 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 566 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 566 Td
+(Estimated resolution time: Urgent = 24 hrs | Normal = 48 hrs | Low = 72 hrs) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 558 m 564 558 l S
+0.945 0.945 0.945 rg
+48 536 516 22 re f
+0.094 0.443 0.824 rg
+48 536 3 22 re f
+0.078 0.212 0.353 rg
+55 539 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 543 Td
+(06) Tj
+ET
+0.094 0.443 0.824 rg
+80 540 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 544 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 544 Td
+(On a Pending request: user taps "Cancel Request" to withdraw it) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 536 m 564 536 l S
+0.831 0.408 0.165 rg
+48 514 3 22 re f
+0.078 0.212 0.353 rg
+55 517 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 521 Td
+(07) Tj
+ET
+0.831 0.408 0.165 rg
+80 518 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+93.48 522 Td
+(API CALL) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 522 Td
+(PUT /service-requests/:id ? status updated to Cancelled in database) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 514 m 564 514 l S
+0.945 0.945 0.945 rg
+48 492 516 22 re f
+0.094 0.443 0.824 rg
+48 492 3 22 re f
+0.078 0.212 0.353 rg
+55 495 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 499 Td
+(08) Tj
+ET
+0.094 0.443 0.824 rg
+80 496 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 500 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 500 Td
+(On a Resolved request: user taps "Reopen Request" for follow-up action) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 492 m 564 492 l S
+0.831 0.408 0.165 rg
+48 470 3 22 re f
+0.078 0.212 0.353 rg
+55 473 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 477 Td
+(09) Tj
+ET
+0.831 0.408 0.165 rg
+80 474 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+93.48 478 Td
+(API CALL) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 478 Td
+(PUT /service-requests/:id ? status reset to Pending for admin re-review) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 470 m 564 470 l S
+0.078 0.212 0.353 rg
+48 424 516 34 re f
+0.831 0.408 0.165 rg
+54 431 28 21 re f
+BT
+1.000 1.000 1.000 rg
+/F2 9 Tf
+63.32 438 Td
+(14) Tj
+ET
+BT
+1.000 1.000 1.000 rg
+/F2 10 Tf
+90 442 Td
+(Announcements & Dormitory Policies) Tj
+ET
+BT
+0.70 0.70 0.70 rg
+/F1 8 Tf
+90 430 Td
+(Viewing official notices, dorm rules, and tenant documents) Tj
+ET
+0.094 0.443 0.824 rg
+48 400 3 22 re f
+0.078 0.212 0.353 rg
+55 403 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 407 Td
+(01) Tj
+ET
+0.094 0.443 0.824 rg
+80 404 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 408 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 408 Td
+(User navigates to the Announcements tab) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 400 m 564 400 l S
+0.945 0.945 0.945 rg
+48 378 516 22 re f
+0.831 0.408 0.165 rg
+48 378 3 22 re f
+0.078 0.212 0.353 rg
+55 381 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 385 Td
+(02) Tj
+ET
+0.831 0.408 0.165 rg
+80 382 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+93.48 386 Td
+(API CALL) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 386 Td
+(GET /announcements ? fetches all active announcements from the backend) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 378 m 564 378 l S
+0.000 0.502 0.502 rg
+48 356 3 22 re f
+0.078 0.212 0.353 rg
+55 359 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 363 Td
+(03) Tj
+ET
+0.000 0.502 0.502 rg
+80 360 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 364 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 364 Td
+(Announcements listed by date; each card shows title, category, priority, date) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 356 m 564 356 l S
+0.945 0.945 0.945 rg
+48 334 516 22 re f
+0.094 0.443 0.824 rg
+48 334 3 22 re f
+0.078 0.212 0.353 rg
+55 337 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 341 Td
+(04) Tj
+ET
+0.094 0.443 0.824 rg
+80 338 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 342 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 342 Td
+(User filters by category: All | Billing | Maintenance | Rules | Promo | General) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 334 m 564 334 l S
+0.000 0.502 0.502 rg
+48 312 3 22 re f
+0.078 0.212 0.353 rg
+55 315 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 319 Td
+(05) Tj
+ET
+0.000 0.502 0.502 rg
+80 316 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 320 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 320 Td
+(Priority badges: Urgent \(red\) | Normal \(blue\) | Low \(gray\)) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 312 m 564 312 l S
+0.945 0.945 0.945 rg
+48 290 516 22 re f
+0.094 0.443 0.824 rg
+48 290 3 22 re f
+0.078 0.212 0.353 rg
+55 293 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 297 Td
+(06) Tj
+ET
+0.094 0.443 0.824 rg
+80 294 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 298 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 298 Td
+(User navigates to Policies section \(in Profile\) for official dorm documents) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 290 m 564 290 l S
+0.000 0.502 0.502 rg
+48 268 3 22 re f
+0.078 0.212 0.353 rg
+55 271 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 275 Td
+(07) Tj
+ET
+0.000 0.502 0.502 rg
+80 272 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 276 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 276 Td
+(Policy documents: House Rules, Privacy Policy, Terms of Service) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 268 m 564 268 l S
+0.945 0.945 0.945 rg
+48 246 516 22 re f
+0.000 0.502 0.502 rg
+48 246 3 22 re f
+0.078 0.212 0.353 rg
+55 249 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 253 Td
+(08) Tj
+ET
+0.000 0.502 0.502 rg
+80 250 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 254 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 254 Td
+(Dorm contracts: Lease Contract, Curfew Policy, Visitor Policy) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 246 m 564 246 l S
+0.094 0.443 0.824 rg
+48 224 3 22 re f
+0.078 0.212 0.353 rg
+55 227 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 231 Td
+(09) Tj
+ET
+0.094 0.443 0.824 rg
+80 228 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 232 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 232 Td
+(User can view and upload personal documents: government IDs, personal files) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 224 m 564 224 l S
+0.831 0.408 0.165 rg
+0 32 612 2 re f
+BT
+0.450 0.450 0.450 rg
+/F1 8 Tf
+48 18 Td
+(LilyCrest Dormitory Management System - Mobile Application) Tj
+ET
+BT
+0.450 0.450 0.450 rg
+/F1 8 Tf
+539.04 18 Td
+(Page 7) Tj
+ET
+0.878 0.878 0.878 rg
+48 32 516 0.5 re f
+endstream
+endobj
+16 0 obj
+<< /Type /Page /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 15 0 R /Parent 999 0 R >>
+endobj
+17 0 obj
+<< /Length 9252 >>
+stream
+0.078 0.212 0.353 rg
+0 720 612 72 re f
+0.831 0.408 0.165 rg
+0 717 612 3 re f
+0.831 0.408 0.165 rg
+58 776 m 68 766 l 58 756 l 48 766 l f
+0.078 0.212 0.353 rg
+58 771 m 63 766 l 58 761 l 53 766 l f
+BT
+1.000 1.000 1.000 rg
+/F2 15 Tf
+76 762 Td
+(LilyCrest) Tj
+ET
+BT
+0.65 0.65 0.65 rg
+/F1 7 Tf
+76 752 Td
+(DORMITORY MANAGEMENT SYSTEM) Tj
+ET
+0.078 0.212 0.353 rg
+48 670 516 34 re f
+0.831 0.408 0.165 rg
+54 677 28 21 re f
+BT
+1.000 1.000 1.000 rg
+/F2 9 Tf
+63.32 684 Td
+(15) Tj
+ET
+BT
+1.000 1.000 1.000 rg
+/F2 10 Tf
+90 688 Td
+(Profile ? Edit Information) Tj
+ET
+BT
+0.70 0.70 0.70 rg
+/F1 8 Tf
+90 676 Td
+(Updating personal profile details such as name, phone, and photo) Tj
+ET
+0.094 0.443 0.824 rg
+48 646 3 22 re f
+0.078 0.212 0.353 rg
+55 649 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 653 Td
+(01) Tj
+ET
+0.094 0.443 0.824 rg
+80 650 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 654 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 654 Td
+(User navigates to the Profile tab) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 646 m 564 646 l S
+0.945 0.945 0.945 rg
+48 624 516 22 re f
+0.831 0.408 0.165 rg
+48 624 3 22 re f
+0.078 0.212 0.353 rg
+55 627 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 631 Td
+(02) Tj
+ET
+0.831 0.408 0.165 rg
+80 628 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+93.48 632 Td
+(API CALL) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 632 Td
+(GET /auth/me ? profile data loaded: name, email, phone number, profile photo) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 624 m 564 624 l S
+0.000 0.502 0.502 rg
+48 602 3 22 re f
+0.078 0.212 0.353 rg
+55 605 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 609 Td
+(03) Tj
+ET
+0.000 0.502 0.502 rg
+80 606 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 610 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 610 Td
+(Profile screen displays all tenant info with an Edit button in the top right) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 602 m 564 602 l S
+0.945 0.945 0.945 rg
+48 580 516 22 re f
+0.094 0.443 0.824 rg
+48 580 3 22 re f
+0.078 0.212 0.353 rg
+55 583 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 587 Td
+(04) Tj
+ET
+0.094 0.443 0.824 rg
+80 584 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 588 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 588 Td
+(User taps "Edit Profile" ? name, phone, and photo fields become editable) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 580 m 564 580 l S
+0.094 0.443 0.824 rg
+48 558 3 22 re f
+0.078 0.212 0.353 rg
+55 561 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 565 Td
+(05) Tj
+ET
+0.094 0.443 0.824 rg
+80 562 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 566 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 566 Td
+(User updates desired fields \(email cannot be changed after registration\)) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 558 m 564 558 l S
+0.945 0.945 0.945 rg
+48 536 516 22 re f
+0.094 0.443 0.824 rg
+48 536 3 22 re f
+0.078 0.212 0.353 rg
+55 539 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 543 Td
+(06) Tj
+ET
+0.094 0.443 0.824 rg
+80 540 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 544 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 544 Td
+(User taps "Save Changes") Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 536 m 564 536 l S
+0.831 0.408 0.165 rg
+48 514 3 22 re f
+0.078 0.212 0.353 rg
+55 517 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 521 Td
+(07) Tj
+ET
+0.831 0.408 0.165 rg
+80 518 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+93.48 522 Td
+(API CALL) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 522 Td
+(PUT /user/profile ? updated profile sent to backend and persisted in database) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 514 m 564 514 l S
+0.945 0.945 0.945 rg
+48 492 516 22 re f
+0.133 0.545 0.133 rg
+48 492 3 22 re f
+0.078 0.212 0.353 rg
+55 495 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 499 Td
+(08) Tj
+ET
+0.133 0.545 0.133 rg
+80 496 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+95.17 500 Td
+(SUCCESS) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 500 Td
+(Profile refreshed immediately with updated values ? no page reload needed) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 492 m 564 492 l S
+0.078 0.212 0.353 rg
+48 446 516 34 re f
+0.831 0.408 0.165 rg
+54 453 28 21 re f
+BT
+1.000 1.000 1.000 rg
+/F2 9 Tf
+63.32 460 Td
+(16) Tj
+ET
+BT
+1.000 1.000 1.000 rg
+/F2 10 Tf
+90 464 Td
+(Profile ? Change Password) Tj
+ET
+BT
+0.70 0.70 0.70 rg
+/F1 8 Tf
+90 452 Td
+(Securely updating account password with immediate session invalidation) Tj
+ET
+0.094 0.443 0.824 rg
+48 422 3 22 re f
+0.078 0.212 0.353 rg
+55 425 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 429 Td
+(01) Tj
+ET
+0.094 0.443 0.824 rg
+80 426 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 430 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 430 Td
+(User taps "Change Password" in the Profile screen) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 422 m 564 422 l S
+0.945 0.945 0.945 rg
+48 400 516 22 re f
+0.094 0.443 0.824 rg
+48 400 3 22 re f
+0.078 0.212 0.353 rg
+55 403 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 407 Td
+(02) Tj
+ET
+0.094 0.443 0.824 rg
+80 404 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 408 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 408 Td
+(User enters current password in the first field) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 400 m 564 400 l S
+0.094 0.443 0.824 rg
+48 378 3 22 re f
+0.078 0.212 0.353 rg
+55 381 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 385 Td
+(03) Tj
+ET
+0.094 0.443 0.824 rg
+80 382 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 386 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 386 Td
+(User enters new password ? live checklist validates all 5 requirements) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 378 m 564 378 l S
+0.945 0.945 0.945 rg
+48 356 516 22 re f
+0.000 0.502 0.502 rg
+48 356 3 22 re f
+0.078 0.212 0.353 rg
+55 359 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 363 Td
+(04) Tj
+ET
+0.000 0.502 0.502 rg
+80 360 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 364 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 364 Td
+(Requirements: 8+ characters, uppercase, lowercase, number, special character) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 356 m 564 356 l S
+0.094 0.443 0.824 rg
+48 334 3 22 re f
+0.078 0.212 0.353 rg
+55 337 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 341 Td
+(05) Tj
+ET
+0.094 0.443 0.824 rg
+80 338 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 342 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 342 Td
+(User confirms new password ? green "Passwords match" indicator shown) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 334 m 564 334 l S
+0.945 0.945 0.945 rg
+48 312 516 22 re f
+0.094 0.443 0.824 rg
+48 312 3 22 re f
+0.078 0.212 0.353 rg
+55 315 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 319 Td
+(06) Tj
+ET
+0.094 0.443 0.824 rg
+80 316 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 320 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 320 Td
+(User taps "Update Password" \(button enabled only when all checks pass\)) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 312 m 564 312 l S
+0.831 0.408 0.165 rg
+48 290 3 22 re f
+0.078 0.212 0.353 rg
+55 293 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 297 Td
+(07) Tj
+ET
+0.831 0.408 0.165 rg
+80 294 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+93.48 298 Td
+(API CALL) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 298 Td
+(POST /auth/change-password ? validated and updated in MongoDB) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 290 m 564 290 l S
+0.945 0.945 0.945 rg
+48 268 516 22 re f
+0.000 0.502 0.502 rg
+48 268 3 22 re f
+0.078 0.212 0.353 rg
+55 271 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 275 Td
+(08) Tj
+ET
+0.000 0.502 0.502 rg
+80 272 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 276 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 276 Td
+(Backend deletes all rows from user_sessions collection \(all devices signed out\)) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 268 m 564 268 l S
+0.000 0.502 0.502 rg
+48 246 3 22 re f
+0.078 0.212 0.353 rg
+55 249 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 253 Td
+(09) Tj
+ET
+0.000 0.502 0.502 rg
+80 250 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 254 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 254 Td
+(Biometric credentials cleared from SecureStore \(old password now invalid\)) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 246 m 564 246 l S
+0.945 0.945 0.945 rg
+48 224 516 22 re f
+0.000 0.502 0.502 rg
+48 224 3 22 re f
+0.078 0.212 0.353 rg
+55 227 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 231 Td
+(10) Tj
+ET
+0.000 0.502 0.502 rg
+80 228 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 232 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 232 Td
+(Confirmation email sent to tenant's registered email address) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 224 m 564 224 l S
+0.133 0.545 0.133 rg
+48 202 3 22 re f
+0.078 0.212 0.353 rg
+55 205 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 209 Td
+(11) Tj
+ET
+0.133 0.545 0.133 rg
+80 206 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+95.17 210 Td
+(SUCCESS) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 210 Td
+(Alert shown ? user taps "Sign In Again" ? logout ? redirected to Login screen) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 202 m 564 202 l S
+0.831 0.408 0.165 rg
+0 32 612 2 re f
+BT
+0.450 0.450 0.450 rg
+/F1 8 Tf
+48 18 Td
+(LilyCrest Dormitory Management System - Mobile Application) Tj
+ET
+BT
+0.450 0.450 0.450 rg
+/F1 8 Tf
+539.04 18 Td
+(Page 8) Tj
+ET
+0.878 0.878 0.878 rg
+48 32 516 0.5 re f
+endstream
+endobj
+18 0 obj
+<< /Type /Page /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 17 0 R /Parent 999 0 R >>
+endobj
+19 0 obj
+<< /Length 9453 >>
+stream
+0.078 0.212 0.353 rg
+0 720 612 72 re f
+0.831 0.408 0.165 rg
+0 717 612 3 re f
+0.831 0.408 0.165 rg
+58 776 m 68 766 l 58 756 l 48 766 l f
+0.078 0.212 0.353 rg
+58 771 m 63 766 l 58 761 l 53 766 l f
+BT
+1.000 1.000 1.000 rg
+/F2 15 Tf
+76 762 Td
+(LilyCrest) Tj
+ET
+BT
+0.65 0.65 0.65 rg
+/F1 7 Tf
+76 752 Td
+(DORMITORY MANAGEMENT SYSTEM) Tj
+ET
+0.078 0.212 0.353 rg
+48 670 516 34 re f
+0.831 0.408 0.165 rg
+54 677 28 21 re f
+BT
+1.000 1.000 1.000 rg
+/F2 9 Tf
+63.32 684 Td
+(17) Tj
+ET
+BT
+1.000 1.000 1.000 rg
+/F2 10 Tf
+90 688 Td
+(Settings ? Preferences & Biometric Management) Tj
+ET
+BT
+0.70 0.70 0.70 rg
+/F1 8 Tf
+90 676 Td
+(Managing app theme, notifications, and biometric login settings) Tj
+ET
+0.094 0.443 0.824 rg
+48 646 3 22 re f
+0.078 0.212 0.353 rg
+55 649 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 653 Td
+(01) Tj
+ET
+0.094 0.443 0.824 rg
+80 650 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 654 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 654 Td
+(User navigates to the Settings screen from the Profile tab) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 646 m 564 646 l S
+0.945 0.945 0.945 rg
+48 624 516 22 re f
+0.000 0.502 0.502 rg
+48 624 3 22 re f
+0.078 0.212 0.353 rg
+55 627 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 631 Td
+(02) Tj
+ET
+0.000 0.502 0.502 rg
+80 628 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 632 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 632 Td
+(Current settings loaded: dark mode state, notifications, biometric status) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 624 m 564 624 l S
+0.094 0.443 0.824 rg
+48 602 3 22 re f
+0.078 0.212 0.353 rg
+55 605 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 609 Td
+(03) Tj
+ET
+0.094 0.443 0.824 rg
+80 606 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 610 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 610 Td
+(Dark Mode toggle ? switches between light and dark theme instantly) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 602 m 564 602 l S
+0.945 0.945 0.945 rg
+48 580 516 22 re f
+0.000 0.502 0.502 rg
+48 580 3 22 re f
+0.078 0.212 0.353 rg
+55 583 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 587 Td
+(04) Tj
+ET
+0.000 0.502 0.502 rg
+80 584 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 588 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 588 Td
+(Theme preference saved to AsyncStorage, applied on every app session) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 580 m 564 580 l S
+0.094 0.443 0.824 rg
+48 558 3 22 re f
+0.078 0.212 0.353 rg
+55 561 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 565 Td
+(05) Tj
+ET
+0.094 0.443 0.824 rg
+80 562 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 566 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 566 Td
+(Notifications toggle ? enables or disables push notification delivery) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 558 m 564 558 l S
+0.945 0.945 0.945 rg
+48 536 516 22 re f
+0.094 0.443 0.824 rg
+48 536 3 22 re f
+0.078 0.212 0.353 rg
+55 539 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 543 Td
+(06) Tj
+ET
+0.094 0.443 0.824 rg
+80 540 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 544 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 544 Td
+(Biometric Login toggle \(enable\) ? device biometric prompt shown for confirmation) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 536 m 564 536 l S
+0.000 0.502 0.502 rg
+48 514 3 22 re f
+0.078 0.212 0.353 rg
+55 517 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 521 Td
+(07) Tj
+ET
+0.000 0.502 0.502 rg
+80 518 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 522 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 522 Td
+(On success: biometricLogin flag set to "true" in AsyncStorage) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 514 m 564 514 l S
+0.945 0.945 0.945 rg
+48 492 516 22 re f
+0.502 0.251 0.502 rg
+48 492 3 22 re f
+0.078 0.212 0.353 rg
+55 495 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 499 Td
+(08) Tj
+ET
+0.502 0.251 0.502 rg
+80 496 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+100.24000000000001 500 Td
+(NOTE) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 500 Td
+(Credentials stored on next password login; prompt also appears post-login) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 492 m 564 492 l S
+0.094 0.443 0.824 rg
+48 458 3 34 re f
+0.078 0.212 0.353 rg
+55 467 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 471 Td
+(09) Tj
+ET
+0.094 0.443 0.824 rg
+80 468 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 472 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 482 Td
+(Biometric Login toggle \(disable\) ? credentials wiped from SecureStore) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 470 Td
+(immediately) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 458 m 564 458 l S
+0.945 0.945 0.945 rg
+48 436 516 22 re f
+0.000 0.502 0.502 rg
+48 436 3 22 re f
+0.078 0.212 0.353 rg
+55 439 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 443 Td
+(10) Tj
+ET
+0.000 0.502 0.502 rg
+80 440 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 444 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 444 Td
+(biometricLogin flag set to "false" ? biometric button hidden on Login screen) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 436 m 564 436 l S
+0.078 0.212 0.353 rg
+48 390 516 34 re f
+0.831 0.408 0.165 rg
+54 397 28 21 re f
+BT
+1.000 1.000 1.000 rg
+/F2 9 Tf
+63.32 404 Td
+(18) Tj
+ET
+BT
+1.000 1.000 1.000 rg
+/F2 10 Tf
+90 408 Td
+(Support ? Lily AI Assistant \(Chatbot\)) Tj
+ET
+BT
+0.70 0.70 0.70 rg
+/F1 8 Tf
+90 396 Td
+(Conversational AI for billing, room, and policy questions powered by Gemini) Tj
+ET
+0.094 0.443 0.824 rg
+48 366 3 22 re f
+0.078 0.212 0.353 rg
+55 369 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 373 Td
+(01) Tj
+ET
+0.094 0.443 0.824 rg
+80 370 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 374 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 374 Td
+(User opens Lily Assistant from Home quick actions or bottom navigation) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 366 m 564 366 l S
+0.945 0.945 0.945 rg
+48 344 516 22 re f
+0.000 0.502 0.502 rg
+48 344 3 22 re f
+0.078 0.212 0.353 rg
+55 347 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 351 Td
+(02) Tj
+ET
+0.000 0.502 0.502 rg
+80 348 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 352 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 352 Td
+(Chat interface loads with a personalized greeting message from Lily) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 344 m 564 344 l S
+0.094 0.443 0.824 rg
+48 322 3 22 re f
+0.078 0.212 0.353 rg
+55 325 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 329 Td
+(03) Tj
+ET
+0.094 0.443 0.824 rg
+80 326 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 330 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 330 Td
+(User types a question about billing, room assignments, rules, or general info) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 322 m 564 322 l S
+0.945 0.945 0.945 rg
+48 300 516 22 re f
+0.831 0.408 0.165 rg
+48 300 3 22 re f
+0.078 0.212 0.353 rg
+55 303 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 307 Td
+(04) Tj
+ET
+0.831 0.408 0.165 rg
+80 304 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+93.48 308 Td
+(API CALL) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 308 Td
+(POST /chatbot/message ? message + conversation history sent to backend) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 300 m 564 300 l S
+0.000 0.502 0.502 rg
+48 278 3 22 re f
+0.078 0.212 0.353 rg
+55 281 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 285 Td
+(05) Tj
+ET
+0.000 0.502 0.502 rg
+80 282 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 286 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 286 Td
+(Backend enriches prompt with tenant's billing data, room info, and policies) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 278 m 564 278 l S
+0.945 0.945 0.945 rg
+48 256 516 22 re f
+0.831 0.408 0.165 rg
+48 256 3 22 re f
+0.078 0.212 0.353 rg
+55 259 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 263 Td
+(06) Tj
+ET
+0.831 0.408 0.165 rg
+80 260 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+93.48 264 Td
+(API CALL) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 264 Td
+(Gemini AI processes enriched prompt and returns a contextual, accurate response) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 256 m 564 256 l S
+0.000 0.502 0.502 rg
+48 234 3 22 re f
+0.078 0.212 0.353 rg
+55 237 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 241 Td
+(07) Tj
+ET
+0.000 0.502 0.502 rg
+80 238 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 242 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 242 Td
+(Response rendered as a chat bubble with the Lily avatar) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 234 m 564 234 l S
+0.945 0.945 0.945 rg
+48 212 516 22 re f
+0.094 0.443 0.824 rg
+48 212 3 22 re f
+0.078 0.212 0.353 rg
+55 215 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 219 Td
+(08) Tj
+ET
+0.094 0.443 0.824 rg
+80 216 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 220 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 220 Td
+(Conversation continues ? full context window maintained within the session) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 212 m 564 212 l S
+0.094 0.443 0.824 rg
+48 190 3 22 re f
+0.078 0.212 0.353 rg
+55 193 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 197 Td
+(09) Tj
+ET
+0.094 0.443 0.824 rg
+80 194 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 198 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 198 Td
+(User taps "Reset Chat" to clear history and start a fresh conversation) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 190 m 564 190 l S
+0.831 0.408 0.165 rg
+0 32 612 2 re f
+BT
+0.450 0.450 0.450 rg
+/F1 8 Tf
+48 18 Td
+(LilyCrest Dormitory Management System - Mobile Application) Tj
+ET
+BT
+0.450 0.450 0.450 rg
+/F1 8 Tf
+539.04 18 Td
+(Page 9) Tj
+ET
+0.878 0.878 0.878 rg
+48 32 516 0.5 re f
+endstream
+endobj
+20 0 obj
+<< /Type /Page /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 19 0 R /Parent 999 0 R >>
+endobj
+21 0 obj
+<< /Length 8837 >>
+stream
+0.078 0.212 0.353 rg
+0 720 612 72 re f
+0.831 0.408 0.165 rg
+0 717 612 3 re f
+0.831 0.408 0.165 rg
+58 776 m 68 766 l 58 756 l 48 766 l f
+0.078 0.212 0.353 rg
+58 771 m 63 766 l 58 761 l 53 766 l f
+BT
+1.000 1.000 1.000 rg
+/F2 15 Tf
+76 762 Td
+(LilyCrest) Tj
+ET
+BT
+0.65 0.65 0.65 rg
+/F1 7 Tf
+76 752 Td
+(DORMITORY MANAGEMENT SYSTEM) Tj
+ET
+0.078 0.212 0.353 rg
+48 670 516 34 re f
+0.831 0.408 0.165 rg
+54 677 28 21 re f
+BT
+1.000 1.000 1.000 rg
+/F2 9 Tf
+63.32 684 Td
+(19) Tj
+ET
+BT
+1.000 1.000 1.000 rg
+/F2 10 Tf
+90 688 Td
+(Support ? FAQ & Support Ticket System) Tj
+ET
+BT
+0.70 0.70 0.70 rg
+/F1 8 Tf
+90 676 Td
+(Browsing knowledge base articles and submitting formal support requests) Tj
+ET
+0.094 0.443 0.824 rg
+48 646 3 22 re f
+0.078 0.212 0.353 rg
+55 649 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 653 Td
+(01) Tj
+ET
+0.094 0.443 0.824 rg
+80 650 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 654 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 654 Td
+(User navigates to the FAQ section within Support) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 646 m 564 646 l S
+0.945 0.945 0.945 rg
+48 624 516 22 re f
+0.831 0.408 0.165 rg
+48 624 3 22 re f
+0.078 0.212 0.353 rg
+55 627 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 631 Td
+(02) Tj
+ET
+0.831 0.408 0.165 rg
+80 628 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+93.48 632 Td
+(API CALL) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 632 Td
+(GET /faq ? fetches all FAQ entries and available filter categories) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 624 m 564 624 l S
+0.000 0.502 0.502 rg
+48 602 3 22 re f
+0.078 0.212 0.353 rg
+55 605 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 609 Td
+(03) Tj
+ET
+0.000 0.502 0.502 rg
+80 606 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 610 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 610 Td
+(FAQs rendered as expandable accordion list ? tap to expand/collapse) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 602 m 564 602 l S
+0.945 0.945 0.945 rg
+48 580 516 22 re f
+0.094 0.443 0.824 rg
+48 580 3 22 re f
+0.078 0.212 0.353 rg
+55 583 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 587 Td
+(04) Tj
+ET
+0.094 0.443 0.824 rg
+80 584 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 588 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 588 Td
+(User filters FAQs by category: General | Billing | Room | Rules | Maintenance) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 580 m 564 580 l S
+0.094 0.443 0.824 rg
+48 558 3 22 re f
+0.078 0.212 0.353 rg
+55 561 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 565 Td
+(05) Tj
+ET
+0.094 0.443 0.824 rg
+80 562 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 566 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 566 Td
+(User taps "Create Support Ticket" ? subject and description fields appear) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 558 m 564 558 l S
+0.945 0.945 0.945 rg
+48 536 516 22 re f
+0.831 0.408 0.165 rg
+48 536 3 22 re f
+0.078 0.212 0.353 rg
+55 539 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 543 Td
+(06) Tj
+ET
+0.831 0.408 0.165 rg
+80 540 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+93.48 544 Td
+(API CALL) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 544 Td
+(POST /tickets ? ticket saved with Open status and ticket ID assigned) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 536 m 564 536 l S
+0.000 0.502 0.502 rg
+48 514 3 22 re f
+0.078 0.212 0.353 rg
+55 517 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 521 Td
+(07) Tj
+ET
+0.000 0.502 0.502 rg
+80 518 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 522 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 522 Td
+(Ticket visible in list ? status tracked: Open | In Progress | Resolved | Closed) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 514 m 564 514 l S
+0.945 0.945 0.945 rg
+48 492 516 22 re f
+0.000 0.502 0.502 rg
+48 492 3 22 re f
+0.078 0.212 0.353 rg
+55 495 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 499 Td
+(08) Tj
+ET
+0.000 0.502 0.502 rg
+80 496 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 500 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 500 Td
+(Admin response triggers a push notification to the tenant) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 492 m 564 492 l S
+0.094 0.443 0.824 rg
+48 470 3 22 re f
+0.078 0.212 0.353 rg
+55 473 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 477 Td
+(09) Tj
+ET
+0.094 0.443 0.824 rg
+80 474 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 478 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 478 Td
+(User opens ticket and taps "Reply" to add more context to the thread) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 470 m 564 470 l S
+0.945 0.945 0.945 rg
+48 448 516 22 re f
+0.094 0.443 0.824 rg
+48 448 3 22 re f
+0.078 0.212 0.353 rg
+55 451 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 455 Td
+(10) Tj
+ET
+0.094 0.443 0.824 rg
+80 452 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 456 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 456 Td
+(User taps "Close Ticket" when the issue is resolved) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 448 m 564 448 l S
+0.831 0.408 0.165 rg
+48 426 3 22 re f
+0.078 0.212 0.353 rg
+55 429 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 433 Td
+(11) Tj
+ET
+0.831 0.408 0.165 rg
+80 430 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+93.48 434 Td
+(API CALL) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 434 Td
+(PUT /tickets/:id/status ? ticket status updated to Closed in database) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 426 m 564 426 l S
+0.078 0.212 0.353 rg
+48 380 516 34 re f
+0.831 0.408 0.165 rg
+54 387 28 21 re f
+BT
+1.000 1.000 1.000 rg
+/F2 9 Tf
+63.32 394 Td
+(20) Tj
+ET
+BT
+1.000 1.000 1.000 rg
+/F2 10 Tf
+90 398 Td
+(Sign Out) Tj
+ET
+BT
+0.70 0.70 0.70 rg
+/F1 8 Tf
+90 386 Td
+(Secure session termination and complete credential cleanup) Tj
+ET
+0.094 0.443 0.824 rg
+48 356 3 22 re f
+0.078 0.212 0.353 rg
+55 359 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 363 Td
+(01) Tj
+ET
+0.094 0.443 0.824 rg
+80 360 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 364 Td
+(TENANT) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 364 Td
+(User taps "Sign Out" in the Profile tab or Settings screen) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 356 m 564 356 l S
+0.945 0.945 0.945 rg
+48 334 516 22 re f
+0.831 0.408 0.165 rg
+48 334 3 22 re f
+0.078 0.212 0.353 rg
+55 337 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 341 Td
+(02) Tj
+ET
+0.831 0.408 0.165 rg
+80 338 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+93.48 342 Td
+(API CALL) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 342 Td
+(POST /auth/logout ? active session invalidated on backend \(best effort call\)) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 334 m 564 334 l S
+0.000 0.502 0.502 rg
+48 312 3 22 re f
+0.078 0.212 0.353 rg
+55 315 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 319 Td
+(03) Tj
+ET
+0.000 0.502 0.502 rg
+80 316 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 320 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 320 Td
+(session_token removed from AsyncStorage ? session no longer valid locally) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 312 m 564 312 l S
+0.945 0.945 0.945 rg
+48 290 516 22 re f
+0.000 0.502 0.502 rg
+48 290 3 22 re f
+0.078 0.212 0.353 rg
+55 293 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 297 Td
+(04) Tj
+ET
+0.000 0.502 0.502 rg
+80 294 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 298 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 298 Td
+(Biometric credentials cleared from SecureStore \(Keychain / Keystore\)) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 290 m 564 290 l S
+0.000 0.502 0.502 rg
+48 268 3 22 re f
+0.078 0.212 0.353 rg
+55 271 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 275 Td
+(05) Tj
+ET
+0.000 0.502 0.502 rg
+80 272 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 276 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 276 Td
+(Firebase signOut\(\) called ? applies only to Google-authenticated users) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 268 m 564 268 l S
+0.945 0.945 0.945 rg
+48 246 516 22 re f
+0.000 0.502 0.502 rg
+48 246 3 22 re f
+0.078 0.212 0.353 rg
+55 249 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 253 Td
+(06) Tj
+ET
+0.000 0.502 0.502 rg
+80 250 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+96.86 254 Td
+(SYSTEM) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 254 Td
+(AuthContext sets user = null and authStatus = "unauthenticated") Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 246 m 564 246 l S
+0.133 0.545 0.133 rg
+48 224 3 22 re f
+0.078 0.212 0.353 rg
+55 227 20 16 re f
+BT
+1.000 1.000 1.000 rg
+/F2 7 Tf
+61.36 231 Td
+(07) Tj
+ET
+0.133 0.545 0.133 rg
+80 228 54 14 re f
+BT
+1.000 1.000 1.000 rg
+/F2 6.5 Tf
+95.17 232 Td
+(SUCCESS) Tj
+ET
+BT
+0.200 0.200 0.200 rg
+/F1 9 Tf
+142 232 Td
+(App navigates to Login screen ? back navigation disabled \(stack replaced\)) Tj
+ET
+0.878 0.878 0.878 RG
+0.3 w
+48 224 m 564 224 l S
+0.831 0.408 0.165 rg
+0 32 612 2 re f
+BT
+0.450 0.450 0.450 rg
+/F1 8 Tf
+48 18 Td
+(LilyCrest Dormitory Management System - Mobile Application) Tj
+ET
+BT
+0.450 0.450 0.450 rg
+/F1 8 Tf
+534.88 18 Td
+(Page 10) Tj
+ET
+0.878 0.878 0.878 rg
+48 32 516 0.5 re f
+endstream
+endobj
+22 0 obj
+<< /Type /Page /MediaBox [0 0 612 792] /Resources << /Font << /F1 1 0 R /F2 2 0 R >> >> /Contents 21 0 R /Parent 999 0 R >>
+endobj
+23 0 obj
+<< /Type /Catalog /Pages 999 0 R >>
+endobj
+xref
+0 1001
+0000000000 65535 f 
+0000000130 00000 n 
+0000000200 00000 n 
+0000000275 00000 n 
+0000006356 00000 n 
+0000006494 00000 n 
+0000017887 00000 n 
+0000018025 00000 n 
+0000027415 00000 n 
+0000027553 00000 n 
+0000036489 00000 n 
+0000036628 00000 n 
+0000046391 00000 n 
+0000046531 00000 n 
+0000057532 00000 n 
+0000057672 00000 n 
+0000066621 00000 n 
+0000066761 00000 n 
+0000076066 00000 n 
+0000076206 00000 n 
+0000085712 00000 n 
+0000085852 00000 n 
+0000094742 00000 n 
+0000094882 00000 n 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000000 65535 f 
+0000000009 00000 n 
+0000000000 65535 f 
+trailer
+<< /Size 1001 /Root 23 0 R >>
+startxref
+94934
+%%EOF

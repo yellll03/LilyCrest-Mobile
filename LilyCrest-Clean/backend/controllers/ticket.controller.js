@@ -56,7 +56,83 @@ async function createTicket(req, res) {
   }
 }
 
+// Get a single ticket by ticket_id
+async function getTicket(req, res) {
+  try {
+    const { ticketId } = req.params;
+    const db = getDb();
+    const ticket = await db.collection('tickets').findOne({
+      ticket_id: ticketId,
+      user_id: req.user.user_id,
+    });
+    if (!ticket) return res.status(404).json({ detail: 'Ticket not found' });
+    res.json({ ...ticket, _id: undefined });
+  } catch (error) {
+    res.status(500).json({ detail: 'Failed to fetch ticket' });
+  }
+}
+
+// Tenant adds a follow-up reply to their own ticket
+async function respondToTicket(req, res) {
+  try {
+    const { ticketId } = req.params;
+    const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
+    if (!message) return res.status(400).json({ detail: 'Message is required' });
+    if (message.length > 2000) return res.status(400).json({ detail: 'Message must be 2000 characters or fewer' });
+
+    const db = getDb();
+    const ticket = await db.collection('tickets').findOne({
+      ticket_id: ticketId,
+      user_id: req.user.user_id,
+    });
+    if (!ticket) return res.status(404).json({ detail: 'Ticket not found' });
+
+    const response = {
+      response_id: `resp_${uuidv4().replace(/-/g, '').substring(0, 10)}`,
+      author: req.user.name || 'Tenant',
+      author_role: 'tenant',
+      message,
+      created_at: new Date(),
+    };
+
+    await db.collection('tickets').updateOne(
+      { ticket_id: ticketId },
+      { $push: { responses: response }, $set: { updated_at: new Date(), status: 'open' } }
+    );
+
+    res.json({ message: 'Response added', response });
+  } catch (error) {
+    res.status(500).json({ detail: 'Failed to add response' });
+  }
+}
+
+// Update ticket status (tenant can only close their own ticket)
+async function updateTicketStatus(req, res) {
+  try {
+    const { ticketId } = req.params;
+    const status = typeof req.body?.status === 'string' ? req.body.status.toLowerCase() : '';
+    const allowed = ['open', 'closed'];
+    if (!allowed.includes(status)) {
+      return res.status(400).json({ detail: `Status must be one of: ${allowed.join(', ')}` });
+    }
+
+    const db = getDb();
+    const result = await db.collection('tickets').updateOne(
+      { ticket_id: ticketId, user_id: req.user.user_id },
+      { $set: { status, updated_at: new Date() } }
+    );
+    if (result.matchedCount === 0) return res.status(404).json({ detail: 'Ticket not found' });
+
+    res.json({ message: 'Ticket status updated', status });
+  } catch (error) {
+    res.status(500).json({ detail: 'Failed to update ticket status' });
+  }
+}
+
 module.exports = {
   getMyTickets,
-  createTicket
+  createTicket,
+  getTicket,
+  respondToTicket,
+  updateTicketStatus,
 };

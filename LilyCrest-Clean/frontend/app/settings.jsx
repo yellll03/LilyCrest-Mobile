@@ -1,15 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Platform, Alert } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../src/context/ThemeContext';
+import { useAlert } from '../src/context/AlertContext';
+import { clearCredentials } from '../src/services/secureCredentials';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { isDarkMode, toggleDarkMode, colors } = useTheme();
+  const { showAlert } = useAlert();
   const [notifications, setNotifications] = useState(true);
   const [biometrics, setBiometrics] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
@@ -37,12 +40,7 @@ export default function SettingsScreen() {
       setBiometricAvailable(compatible);
       
       if (compatible) {
-        const types = await LocalAuthentication.supportedAuthenticationTypesAsync();
-        if (types.includes(LocalAuthentication.AuthenticationType.FACIAL_RECOGNITION)) {
-          setBiometricType('Face ID');
-        } else if (types.includes(LocalAuthentication.AuthenticationType.FINGERPRINT)) {
-          setBiometricType('Fingerprint');
-        }
+        setBiometricType('Biometrics');
       }
     } catch (error) {
       console.error('Biometric check error:', error);
@@ -53,7 +51,11 @@ export default function SettingsScreen() {
     setNotifications(value);
     await AsyncStorage.setItem('notifications', value.toString());
     if (value) {
-      Alert.alert('Notifications Enabled', 'You will receive important updates about billing, announcements, and maintenance.');
+      showAlert({
+        title: 'Notifications Enabled',
+        message: 'You will receive important updates about billing, announcements, and maintenance.',
+        type: 'success',
+      });
     }
   };
 
@@ -69,13 +71,27 @@ export default function SettingsScreen() {
       if (result.success) {
         setBiometrics(true);
         await AsyncStorage.setItem('biometricLogin', 'true');
-        Alert.alert('Success', `${biometricType} login has been enabled.`);
+        showAlert({
+          title: `${biometricType} Login Enabled`,
+          message: `${biometricType} login is now activated. Sign in with your email and password once more — after that, you can use ${biometricType} to log in instantly.`,
+          type: 'success',
+        });
       } else {
-        Alert.alert('Failed', 'Biometric verification failed. Please try again.');
+        showAlert({
+          title: 'Verification Failed',
+          message: 'Biometric verification was not successful. Please try again.',
+          type: 'error',
+        });
       }
     } else {
       setBiometrics(false);
       await AsyncStorage.setItem('biometricLogin', 'false');
+      await clearCredentials();
+      showAlert({
+        title: `${biometricType} Disabled`,
+        message: `${biometricType} login has been disabled and stored credentials have been removed.`,
+        type: 'warning',
+      });
     }
   };
 

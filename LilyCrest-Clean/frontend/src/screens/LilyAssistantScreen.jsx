@@ -143,7 +143,7 @@ const formatTime = (date) => {
 
 export default function LilyAssistantScreen() {
   const scrollRef = useRef(null);
-  const { user, sessionToken } = useAuth();
+  const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState('chat');
   const [filter, setFilter] = useState('all');
@@ -215,7 +215,7 @@ export default function LilyAssistantScreen() {
   // Reset backend session when session id changes
   useEffect(() => {
     const resetSession = async () => {
-      if (!sessionToken) return;
+      if (!user) return;
       try {
         await apiService.resetChatSession(chat.sessionId);
       } catch (err) {
@@ -223,11 +223,11 @@ export default function LilyAssistantScreen() {
       }
     };
     resetSession();
-  }, [chat.sessionId, sessionToken]);
+  }, [chat.sessionId, user?.user_id]);
 
   useEffect(() => {
     const loadTickets = async () => {
-      if (!sessionToken) {
+      if (!user) {
         setNetworkError('Please sign in to view your inquiries.');
         return;
       }
@@ -240,7 +240,7 @@ export default function LilyAssistantScreen() {
       }
     };
     loadTickets();
-  }, [sessionToken, networkError]);
+  }, [user?.user_id, networkError]);
 
   const handleSend = async (presetText) => {
     const text = sanitizeChatInput(presetText || inputValue);
@@ -689,7 +689,27 @@ export default function LilyAssistantScreen() {
           {renderInquiryDetail()}
 
           <ScrollView style={styles.inquiryList} contentContainerStyle={styles.inquiryContent} showsVerticalScrollIndicator={false}>
-            {filteredInquiries.map((item) => (
+            {filteredInquiries.length === 0 ? (
+              <View style={styles.emptyInquiries}>
+                <View style={styles.emptyInquiriesIcon}>
+                  <Ionicons
+                    name={filter === 'solved' ? 'checkmark-done-circle-outline' : filter === 'pending' ? 'hourglass-outline' : 'chatbubbles-outline'}
+                    size={36}
+                    color="#94a3b8"
+                  />
+                </View>
+                <Text style={styles.emptyInquiriesTitle}>
+                  {filter === 'solved' ? 'No solved inquiries' : filter === 'pending' ? 'No pending inquiries' : 'No inquiries yet'}
+                </Text>
+                <Text style={styles.emptyInquiriesText}>
+                  {filter === 'solved'
+                    ? 'None of your inquiries have been resolved yet. Hang tight!'
+                    : filter === 'pending'
+                    ? 'You have no open inquiries at the moment.'
+                    : 'When you ask Lily to connect you to an admin, your inquiry will appear here.'}
+                </Text>
+              </View>
+            ) : filteredInquiries.map((item) => (
               <InquiryCard
                 key={item.id}
                 title={item.title}
@@ -1166,5 +1186,32 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#94a3b8',
     textAlign: 'right',
+  },
+  // ─── Empty Inquiries ───
+  emptyInquiries: {
+    alignItems: 'center',
+    paddingVertical: 60,
+    paddingHorizontal: 32,
+  },
+  emptyInquiriesIcon: {
+    width: 72,
+    height: 72,
+    borderRadius: 20,
+    backgroundColor: '#f1f5f9',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  emptyInquiriesTitle: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#334155',
+    marginBottom: 6,
+  },
+  emptyInquiriesText: {
+    fontSize: 13,
+    color: '#94a3b8',
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });

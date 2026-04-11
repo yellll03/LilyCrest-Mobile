@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { Link, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { FlatList, Platform, Pressable, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import LilyFlowerIcon from '../src/components/assistant/LilyFlowerIcon';
 import { useAuth } from '../src/context/AuthContext';
@@ -109,9 +109,9 @@ const MOCK_BILLS = [
     total: 6203.89, amount: 6203.89,
   },
   {
-    billing_id: 'BILL-2026-001', description: 'Electricity Bill - March 2026',
+    billing_id: 'BILL-2026-003', description: 'Electricity Bill - March 2026',
     billing_period: 'March 2026', release_date: '2026-03-18', due_date: '2026-03-25',
-    status: 'pending', billing_type: 'electricity',
+    status: 'overdue', billing_type: 'electricity',
     electricity: 353.89,
     total: 353.89, amount: 353.89,
   },
@@ -125,7 +125,7 @@ const MOCK_BILLS = [
     paymongo_reference: 'LC-BILL-2026-002-1709500000',
   },
   {
-    billing_id: 'BILL-2026-003', description: 'Electricity Bill - January 2026',
+    billing_id: 'BILL-2026-001', description: 'Electricity Bill - January 2026',
     billing_period: 'January 2026', release_date: '2026-01-18', due_date: '2026-01-25',
     status: 'paid', billing_type: 'electricity',
     electricity: 195.50,
@@ -183,7 +183,7 @@ export default function BillingScreen() {
   const totalOutstanding = useMemo(() => {
     return history
       .filter(b => { const s = (b.status || '').toLowerCase(); return s === 'pending' || s === 'overdue' || !s; })
-      .reduce((sum, b) => sum + (b.total || b.amount || 0), 0);
+      .reduce((sum, b) => sum + (b.remaining_amount ?? b.total ?? b.amount ?? 0), 0);
   }, [history]);
 
   const unpaidCount = useMemo(() => {
@@ -238,57 +238,42 @@ export default function BillingScreen() {
     </View>
   );
 
-  // ── Clean Filter Section ──
+  // ── Clean Filter Pills ──
   const renderFilters = () => (
-    <View style={styles.filterCard}>
-      {/* Status Row */}
-      <View style={styles.filterLabelRow}>
-        <Ionicons name="filter-outline" size={14} color={colors.textMuted} />
-        <Text style={styles.filterLabel}>Status</Text>
-      </View>
-      <View style={styles.filterSegment}>
-        {STATUS_FILTERS.map(f => {
-          const isActive = activeStatus === f.id;
-          const count = statusCounts[f.id] || 0;
-          return (
-            <Pressable
-              key={f.id}
-              style={[styles.segmentBtn, isActive && styles.segmentBtnActive]}
-              onPress={() => setActiveStatus(f.id)}
-            >
-              {f.dotColor && <View style={[styles.filterDot, { backgroundColor: isActive ? '#fff' : f.dotColor }]} />}
-              <Text style={[styles.segmentText, isActive && styles.segmentTextActive]}>
-                {f.label}
-              </Text>
-              {count > 0 && (
-                <View style={[styles.segmentCount, isActive && styles.segmentCountActive]}>
-                  <Text style={[styles.segmentCountText, isActive && styles.segmentCountTextActive]}>{count}</Text>
-                </View>
-              )}
-            </Pressable>
-          );
-        })}
-      </View>
-
-      {/* Active filter summary */}
-      {activeStatus !== 'all' && (
-        <Pressable
-          style={styles.clearFilters}
-          onPress={() => setActiveStatus('all')}
-        >
-          <Ionicons name="close-circle" size={14} color={colors.primary} />
-          <Text style={styles.clearFiltersText}>Clear filter</Text>
-        </Pressable>
-      )}
-    </View>
+    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow} contentContainerStyle={styles.filterRowContent}>
+      {STATUS_FILTERS.map(f => {
+        const isActive = activeStatus === f.id;
+        const count = statusCounts[f.id] || 0;
+        return (
+          <Pressable
+            key={f.id}
+            style={[styles.filterPill, isActive && styles.filterPillActive]}
+            onPress={() => setActiveStatus(f.id)}
+          >
+            {f.dotColor && <View style={[styles.filterDot, { backgroundColor: isActive ? '#fff' : f.dotColor }]} />}
+            <Text style={[styles.filterPillText, isActive && styles.filterPillTextActive]}>
+              {f.label}
+            </Text>
+            {count > 0 && (
+              <View style={[styles.filterCountWrap, isActive && styles.filterCountWrapActive]}>
+                <Text style={[styles.filterCountText, isActive && styles.filterCountTextActive]}>{count}</Text>
+              </View>
+            )}
+          </Pressable>
+        );
+      })}
+    </ScrollView>
   );
 
   // ── Bill Card ──
+  const MOCK_IDS = useMemo(() => new Set(MOCK_BILLS.map(b => getBillId(b)).filter(Boolean).map(String)), []);
+
   const renderBillCard = ({ item: bill }) => {
     const billId = getBillId(bill);
     const paid = isPaid(bill);
     const statusCfg = getStatusConfig(bill?.status);
     const breakdown = normalizeBreakdown(bill);
+    const isMockBill = MOCK_IDS.has(String(billId));
 
     return (
       <Pressable
@@ -343,7 +328,7 @@ export default function BillingScreen() {
             </Pressable>
           )}
           <Pressable
-            style={[styles.outlineBtn, downloadingId === billId && styles.btnDisabled]}
+            style={[styles.outlineBtn, (downloadingId === billId || !billId) && styles.btnDisabled]}
             disabled={downloadingId === billId || !billId}
             onPress={() => {
               if (!billId) return;
@@ -473,92 +458,46 @@ function createStyles(c, isDarkMode) {
     heroPayBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#D4682A', paddingVertical: 13, borderRadius: 14, marginTop: 16 },
     heroPayText: { color: '#ffffff', fontWeight: '700', fontSize: 15 },
 
-    // ── Clean Filter Card ──
-    filterCard: {
-      backgroundColor: c.surface,
-      borderRadius: 16,
-      padding: 14,
-      borderWidth: isDarkMode ? 1 : 0,
-      borderColor: c.border,
-      ...Platform.select({
-        ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 6 },
-        android: { elevation: 1 },
-      }),
+    // ── Clean Filter Pills ──
+    filterRow: {
+      flexGrow: 0,
     },
-    filterLabelRow: {
-      flexDirection: 'row', alignItems: 'center', gap: 5, marginBottom: 8,
+    filterRowContent: {
+      flexDirection: 'row', gap: 8, paddingHorizontal: 0, paddingVertical: 2,
     },
-    filterLabel: {
-      fontSize: 11, fontWeight: '700', color: c.textMuted,
-      textTransform: 'uppercase', letterSpacing: 0.8,
+    filterPill: {
+      flexDirection: 'row', alignItems: 'center', gap: 5,
+      paddingVertical: 8, paddingHorizontal: 14,
+      borderRadius: 20,
+      backgroundColor: isDarkMode ? 'rgba(255,255,255,0.06)' : c.surface,
+      borderWidth: 1, borderColor: c.border,
     },
-    filterDivider: {
-      height: 1, backgroundColor: c.border, marginVertical: 12,
-    },
-
-    // Status segment
-    filterSegment: {
-      flexDirection: 'row', gap: 6,
-    },
-    segmentBtn: {
-      flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-      gap: 4, paddingVertical: 9, borderRadius: 10,
-      backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : '#F3F4F6',
-      borderWidth: 1, borderColor: 'transparent',
-    },
-    segmentBtnActive: {
+    filterPillActive: {
       backgroundColor: '#1E3A5F', borderColor: '#1E3A5F',
     },
-    segmentText: {
-      fontSize: 12, fontWeight: '600', color: c.textSecondary,
+    filterPillText: {
+      fontSize: 13, fontWeight: '600', color: c.textSecondary,
     },
-    segmentTextActive: {
-      color: '#fff',
+    filterPillTextActive: {
+      color: '#FFFFFF',
     },
     filterDot: {
-      width: 6, height: 6, borderRadius: 3,
+      width: 7, height: 7, borderRadius: 4,
     },
-    segmentCount: {
-      minWidth: 18, height: 18, borderRadius: 9, justifyContent: 'center', alignItems: 'center',
+    filterCountWrap: {
+      minWidth: 18, height: 18, borderRadius: 9,
+      justifyContent: 'center', alignItems: 'center',
       backgroundColor: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.06)',
+      paddingHorizontal: 5,
     },
-    segmentCountActive: {
+    filterCountWrapActive: {
       backgroundColor: 'rgba(255,255,255,0.2)',
     },
-    segmentCountText: {
+    filterCountText: {
       fontSize: 10, fontWeight: '700', color: c.textMuted,
     },
-    segmentCountTextActive: {
-      color: '#fff',
-    },
-
-    // Type pills
-    typeRow: {
-      flexDirection: 'row', flexWrap: 'wrap', gap: 6,
-    },
-    typeBtn: {
-      flexDirection: 'row', alignItems: 'center', gap: 4,
-      paddingVertical: 7, paddingHorizontal: 12, borderRadius: 10,
-      backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : '#F3F4F6',
-      borderWidth: 1, borderColor: 'transparent',
-    },
-    typeBtnActive: {
-      backgroundColor: '#D4682A', borderColor: '#D4682A',
-    },
-    typeBtnText: {
-      fontSize: 12, fontWeight: '600', color: c.textSecondary,
-    },
-    typeBtnTextActive: {
-      color: '#fff',
-    },
-
-    // Clear filters
-    clearFilters: {
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'center',
-      gap: 4, marginTop: 10,
-    },
-    clearFiltersText: {
-      fontSize: 12, fontWeight: '600', color: c.primary,
+    filterCountTextActive: {
+      color: '#FFFFFF',
     },
 
     sectionLabel: { fontSize: 14, fontWeight: '700', color: c.textSecondary },

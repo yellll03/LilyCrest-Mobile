@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>LilyCrest — Module Progress Audit Report</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; color: #1a1a2e; background: #fff; font-size: 11px; line-height: 1.5; }
+    @media print {
+      body { font-size: 10px; }
+      .page-break { page-break-before: always; }
+      .no-print { display: none; }
+      @page { margin: 14mm 12mm; size: A4; }
+    }
+    .container { max-width: 800px; margin: 0 auto; padding: 20px; }
+    .cover { text-align: center; padding: 50px 40px; background: linear-gradient(135deg, #1E3A5F 0%, #2D5A8E 50%, #D4682A 100%); color: #fff; border-radius: 16px; margin-bottom: 28px; }
+    .cover h1 { font-size: 26px; font-weight: 800; margin-bottom: 6px; letter-spacing: -0.5px; }
+    .cover h2 { font-size: 15px; font-weight: 400; opacity: 0.85; margin-bottom: 20px; }
+    .cover .meta { font-size: 11px; opacity: 0.7; }
+    .cover .meta span { margin: 0 6px; }
+    .cover .badge { display: inline-block; background: rgba(255,255,255,0.2); border: 1px solid rgba(255,255,255,0.3); padding: 4px 14px; border-radius: 20px; font-size: 11px; font-weight: 600; margin-top: 14px; }
+    .cover .scope-note { margin-top: 16px; font-size: 12px; opacity: 0.9; font-weight: 500; }
+    .exec-summary { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 20px; }
+    .stat-card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 12px; padding: 14px; text-align: center; }
+    .stat-card .number { font-size: 26px; font-weight: 800; color: #1E3A5F; }
+    .stat-card .label { font-size: 10px; color: #64748b; font-weight: 500; margin-top: 4px; }
+    .stat-card.green .number { color: #16a34a; }
+    .stat-card.amber .number { color: #d97706; }
+    .stat-card.red .number { color: #dc2626; }
+    h2 { font-size: 15px; font-weight: 700; color: #1E3A5F; margin: 24px 0 12px; padding-bottom: 5px; border-bottom: 2px solid #e2e8f0; }
+    h3 { font-size: 12px; font-weight: 700; color: #374151; margin: 14px 0 6px; }
+    h4 { font-size: 10px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.5px; margin: 10px 0 5px; }
+    .module-header { display: flex; align-items: center; gap: 10px; margin: 24px 0 8px; padding: 12px 14px; background: #f8fafc; border-radius: 12px; border-left: 4px solid #1E3A5F; }
+    .module-header.green { border-left-color: #16a34a; }
+    .module-header.amber { border-left-color: #d97706; }
+    .module-header.red { border-left-color: #dc2626; }
+    .module-header .module-num { width: 26px; height: 26px; background: #1E3A5F; color: #fff; border-radius: 7px; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 12px; }
+    .module-header.green .module-num { background: #16a34a; }
+    .module-header.amber .module-num { background: #d97706; }
+    .module-header.red .module-num { background: #dc2626; }
+    .module-header .module-name { font-size: 14px; font-weight: 700; color: #1a1a2e; flex: 1; }
+    .module-header .module-pct { font-size: 18px; font-weight: 800; }
+    .module-header.green .module-pct { color: #16a34a; }
+    .module-header.amber .module-pct { color: #d97706; }
+    .module-header.red .module-pct { color: #dc2626; }
+    .progress-bar { height: 5px; background: #e2e8f0; border-radius: 3px; margin: 4px 0 10px; overflow: hidden; }
+    .progress-fill { height: 100%; border-radius: 3px; }
+    .progress-fill.green { background: #16a34a; }
+    .progress-fill.amber { background: #d97706; }
+    .progress-fill.red { background: #dc2626; }
+    table { width: 100%; border-collapse: collapse; margin: 6px 0 14px; font-size: 10.5px; }
+    th { background: #f1f5f9; color: #475569; font-weight: 600; padding: 7px 8px; text-align: left; font-size: 9.5px; text-transform: uppercase; letter-spacing: 0.3px; border-bottom: 2px solid #e2e8f0; }
+    td { padding: 6px 8px; border-bottom: 1px solid #f1f5f9; vertical-align: top; }
+    .status { display: inline-block; padding: 2px 7px; border-radius: 5px; font-size: 9.5px; font-weight: 600; white-space: nowrap; }
+    .status.done { background: #dcfce7; color: #166534; }
+    .status.partial { background: #fef3c7; color: #92400e; }
+    .status.missing { background: #fee2e2; color: #991b1b; }
+    .status.web { background: #e0e7ff; color: #3730a3; }
+    .status.na { background: #f1f5f9; color: #64748b; }
+    .info-box { padding: 9px 12px; border-radius: 8px; margin: 8px 0; font-size: 10.5px; line-height: 1.5; }
+    .info-box.tip { background: #f0fdf4; border: 1px solid #bbf7d0; color: #166534; }
+    .info-box.warn { background: #fffbeb; border: 1px solid #fde68a; color: #92400e; }
+    .info-box.danger { background: #fef2f2; border: 1px solid #fecaca; color: #991b1b; }
+    .info-box.info { background: #eff6ff; border: 1px solid #bfdbfe; color: #1e40af; }
+    .info-box strong { font-weight: 700; }
+    .priority-item { display: flex; gap: 8px; padding: 6px 10px; margin: 3px 0; border-radius: 7px; background: #f8fafc; }
+    .priority-item .num { width: 20px; height: 20px; border-radius: 5px; display: flex; align-items: center; justify-content: center; font-size: 10px; font-weight: 700; color: #fff; flex-shrink: 0; }
+    .priority-item.critical .num { background: #dc2626; }
+    .priority-item.important .num { background: #d97706; }
+    .priority-item.nice .num { background: #16a34a; }
+    .priority-item .desc { flex: 1; font-size: 10.5px; }
+    .priority-item .desc strong { color: #1a1a2e; }
+    .priority-item .desc span { color: #64748b; font-size: 10px; }
+    .matrix-table td:nth-child(2), .matrix-table td:nth-child(3), .matrix-table td:nth-child(4) { text-align: center; }
+    .report-footer { margin-top: 30px; padding: 14px; border-top: 2px solid #e2e8f0; text-align: center; color: #94a3b8; font-size: 9.5px; }
+    .scope-badge { display: inline-block; padding: 1px 6px; border-radius: 4px; font-size: 9px; font-weight: 600; vertical-align: middle; }
+    .scope-badge.mobile { background: #dbeafe; color: #1e40af; }
+    .scope-badge.backend { background: #e0e7ff; color: #4338ca; }
+    .scope-badge.web-only { background: #f3e8ff; color: #7c3aed; }
+  </style>
+</head>
+<body>
+<div class="container">
+
+  <!-- Cover -->
+  <div class="cover">
+    <h1>🏠 LilyCrest Dormitory</h1>
+    <h2>Module Progress Audit Report</h2>
+    <div class="meta">
+      <span>📅 April 10, 2026</span><span>|</span>
+      <span>🔍 System QA Audit</span><span>|</span>
+      <span>v1.0.0</span>
+    </div>
+    <div class="badge">Node.js/Express Backend + React Native/Expo Mobile</div>
+    <div class="scope-note">📱 Mobile App = <strong>Tenant-Only</strong> &nbsp;|&nbsp; 🖥️ Admin/Owner = Web Portal (separate codebase)</div>
+  </div>
+
+  <!-- Executive Summary -->
+  <h2>Executive Summary</h2>
+  <div class="exec-summary">
+    <div class="stat-card"><div class="number">8</div><div class="label">Total Modules</div></div>
+    <div class="stat-card green"><div class="number">2</div><div class="label">Strong (≥80%)</div></div>
+    <div class="stat-card amber"><div class="number">5</div><div class="label">Partial (30–75%)</div></div>
+    <div class="stat-card red"><div class="number">1</div><div class="label">Not Started</div></div>
+  </div>
+  <div class="info-box info">
+    <strong>Important Scope:</strong> The mobile app serves <strong>tenants only</strong>. All Branch Admin and Owner features are handled by the separate web admin portal. This report audits: (1) Backend API endpoints that serve both platforms, and (2) Tenant-facing mobile screens and flows.
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <!-- MODULE 1 -->
+  <div class="module-header amber">
+    <div class="module-num">1</div>
+    <div class="module-name">Authentication and Access Control</div>
+    <div class="module-pct">85%</div>
+  </div>
+  <div class="progress-bar"><div class="progress-fill amber" style="width:85%"></div></div>
+
+  <h4>Tenant Features <span class="scope-badge mobile">📱 Mobile</span></h4>
+  <table>
+    <tr><th>Feature</th><th width="85">Status</th><th>Implementation</th></tr>
+    <tr><td>Login (email/password)</td><td><span class="status done">✅ Done</span></td><td>Firebase Auth API → MongoDB tenant lookup → Session token</td></tr>
+    <tr><td>Login (Google Sign-In)</td><td><span class="status done">✅ Done</span></td><td>Firebase ID token → MongoDB lookup → Auto-create tenant</td></tr>
+    <tr><td>Logout</td><td><span class="status done">✅ Done</span></td><td>AuthContext → clear session + Firebase sign-out</td></tr>
+    <tr><td>Register account</td><td><span class="status done">✅ Done</span></td><td>POST /api/auth/register</td></tr>
+    <tr><td>Reset password (forgot)</td><td><span class="status done">✅ Done</span></td><td>forgot-password.jsx → Firebase sendPasswordResetEmail</td></tr>
+    <tr><td>Change password</td><td><span class="status done">✅ Done</span></td><td>change-password.jsx → server-side validation + email alert</td></tr>
+    <tr><td>Update profile information</td><td><span class="status done">✅ Done</span></td><td>profile.jsx with field-level validation (name, phone, etc.)</td></tr>
+    <tr><td>Verify session</td><td><span class="status done">✅ Done</span></td><td>authMiddleware checks session_token + expiry in MongoDB</td></tr>
+    <tr><td>Biometric login (fingerprint/face)</td><td><span class="status done">✅ Done</span></td><td>expo-local-authentication + SecureStore credentials</td></tr>
+    <tr><td>Remember me</td><td><span class="status done">✅ Done</span></td><td>AsyncStorage persistent credential storage</td></tr>
+    <tr><td>Session auto-refresh</td><td><span class="status done">✅ Done</span></td><td>Axios interceptor auto-renews via Google re-auth on 401</td></tr>
+    <tr><td>Verify email</td><td><span class="status missing">❌ Missing</span></td><td>Firebase supports email verification but flow not implemented</td></tr>
+    <tr><td>Check account status</td><td><span class="status partial">⚠️ Partial</span></td><td>Login checks is_active flag; no dedicated status screen</td></tr>
+  </table>
+
+  <h4>Backend Security <span class="scope-badge backend">⚙️ API</span></h4>
+  <table>
+    <tr><th>Feature</th><th width="85">Status</th></tr>
+    <tr><td>Rate limiting (auth routes)</td><td><span class="status done">✅ Done</span></td></tr>
+    <tr><td>Login audit logging</td><td><span class="status done">✅ Done</span></td></tr>
+    <tr><td>Dual verification (Firebase + MongoDB)</td><td><span class="status done">✅ Done</span></td></tr>
+    <tr><td>Admin/tenant role separation</td><td><span class="status done">✅ Done</span></td></tr>
+    <tr><td>Password change email notification</td><td><span class="status done">✅ Done</span></td></tr>
+    <tr><td>Admin role management endpoints</td><td><span class="status web">🔒 Web</span></td></tr>
+  </table>
+  <div class="info-box tip"><strong>Assessment:</strong> Tenant auth is robust — dual-verified (Firebase + MongoDB), with biometrics, session security, audit logging, and rate limiting. Only email verification is missing.</div>
+
+  <!-- MODULE 2 -->
+  <div class="page-break"></div>
+  <div class="module-header red">
+    <div class="module-num">2</div>
+    <div class="module-name">Reservation Management</div>
+    <div class="module-pct">5%</div>
+  </div>
+  <div class="progress-bar"><div class="progress-fill red" style="width:5%"></div></div>
+
+  <h4>Tenant Features <span class="scope-badge mobile">📱 Mobile</span></h4>
+  <table>
+    <tr><th>Feature</th><th width="85">Status</th><th>Notes</th></tr>
+    <tr><td>View reservation details</td><td><span class="status missing">❌ Missing</span></td><td>No reservation screen or API endpoint</td></tr>
+    <tr><td>Update reservation information</td><td><span class="status missing">❌ Missing</span></td><td>No reservation API</td></tr>
+    <tr><td>Track move-in and move-out</td><td><span class="status partial">⚠️ Partial</span></td><td>Dashboard reads move_in_date / move_out_date from occupancy records</td></tr>
+    <tr><td>View reservation history</td><td><span class="status missing">❌ Missing</span></td><td>No history endpoint</td></tr>
+    <tr><td>Cancel reservation</td><td><span class="status missing">❌ Missing</span></td><td>No cancel flow</td></tr>
+  </table>
+
+  <h4>Backend API <span class="scope-badge backend">⚙️ API</span></h4>
+  <table>
+    <tr><th>Component</th><th width="85">Status</th></tr>
+    <tr><td>reservation.routes.js</td><td><span class="status missing">❌ Missing</span></td></tr>
+    <tr><td>reservation.controller.js</td><td><span class="status missing">❌ Missing</span></td></tr>
+    <tr><td>Reservation data model</td><td><span class="status missing">❌ Missing</span></td></tr>
+    <tr><td>Admin review/approve (Web)</td><td><span class="status web">🔒 Web</span></td></tr>
+  </table>
+  <div class="info-box danger"><strong>Largest Gap:</strong> This entire module is absent from both the mobile app and backend API. The web admin portal may manage reservations via its own backend, but the tenant mobile app has zero reservation visibility. The dashboard.controller.js references <code>roomoccupancyhistories</code> and <code>reservationId</code>, indicating reservation data exists in MongoDB from the web portal.</div>
+
+  <!-- MODULE 3 -->
+  <div class="module-header amber">
+    <div class="module-num">3</div>
+    <div class="module-name">Room and Bed Management</div>
+    <div class="module-pct">45%</div>
+  </div>
+  <div class="progress-bar"><div class="progress-fill amber" style="width:45%"></div></div>
+
+  <h4>Tenant Features <span class="scope-badge mobile">📱 Mobile</span></h4>
+  <table>
+    <tr><th>Feature</th><th width="85">Status</th><th>Implementation</th></tr>
+    <tr><td>View assigned room and bed</td><td><span class="status done">✅ Done</span></td><td>Home dashboard — room number, type, bed, floor, amenities</td></tr>
+    <tr><td>Check occupancy status</td><td><span class="status partial">⚠️ Partial</span></td><td>Dashboard shows assignment.status = 'active'</td></tr>
+    <tr><td>Submit room or bed concerns</td><td><span class="status done">✅ Done</span></td><td>Maintenance module covers this (service requests)</td></tr>
+  </table>
+
+  <h4>Backend API <span class="scope-badge backend">⚙️ API</span></h4>
+  <table>
+    <tr><th>Endpoint</th><th>Method</th><th width="85">Status</th></tr>
+    <tr><td>/api/rooms</td><td>GET</td><td><span class="status done">✅ Done</span></td></tr>
+    <tr><td>/api/rooms/:roomId</td><td>GET</td><td><span class="status done">✅ Done</span></td></tr>
+    <tr><td>/api/dashboard/me (room info)</td><td>GET</td><td><span class="status done">✅ Done</span></td></tr>
+    <tr><td>Admin CRUD (create/edit/delete rooms)</td><td>—</td><td><span class="status web">🔒 Web</span></td></tr>
+    <tr><td>Bed assignment/release</td><td>—</td><td><span class="status web">🔒 Web</span></td></tr>
+  </table>
+  <div class="info-box info"><strong>Assessment:</strong> Tenants can see their assigned room details on the home dashboard. The room listing API exists but there's no browsing UI on mobile (tenant doesn't need to browse rooms — that's an applicant feature).</div>
+
+  <!-- MODULE 4 -->
+  <div class="module-header green">
+    <div class="module-num">4</div>
+    <div class="module-name">Billing, Payments, and AI-Assisted Billing</div>
+    <div class="module-pct">90%</div>
+  </div>
+  <div class="progress-bar"><div class="progress-fill green" style="width:90%"></div></div>
+
+  <h4>Tenant Features <span class="scope-badge mobile">📱 Mobile</span></h4>
+  <table>
+    <tr><th>Feature</th><th width="85">Status</th><th>Implementation</th></tr>
+    <tr><td>View current and past bills</td><td><span class="status done">✅ Done</span></td><td>billing-history.jsx — status badges, search, filters</td></tr>
+    <tr><td>View bill details (breakdown)</td><td><span class="status done">✅ Done</span></td><td>bill-details.jsx — electricity segments, water, rent</td></tr>
+    <tr><td>Pay bills online</td><td><span class="status done">✅ Done</span></td><td>PayMongo — GCash, Maya, Credit/Debit Card, Online Banking</td></tr>
+    <tr><td>Verify payment status</td><td><span class="status done">✅ Done</span></td><td>PayMongo webhook auto-updates bill status</td></tr>
+    <tr><td>View receipts (PDF)</td><td><span class="status done">✅ Done</span></td><td>downloadBillPdf() → share/save</td></tr>
+    <tr><td>Track payment history</td><td><span class="status done">✅ Done</span></td><td>GET /api/billing/history</td></tr>
+    <tr><td>Payment success/cancel screens</td><td><span class="status done">✅ Done</span></td><td>Deep link redirects from PayMongo</td></tr>
+    <tr><td>AI billing explanation</td><td><span class="status partial">⚠️ Partial</span></td><td>Chatbot answers billing questions via knowledge base</td></tr>
+    <tr><td>Monthly statement notification</td><td><span class="status missing">❌ Missing</span></td><td>No push/email when new bills are released</td></tr>
+  </table>
+
+  <h4>Backend API <span class="scope-badge backend">⚙️ API</span></h4>
+  <table>
+    <tr><th>Endpoint</th><th>Method</th><th width="85">Status</th></tr>
+    <tr><td>/api/billing/me</td><td>GET</td><td><span class="status done">✅ Done</span></td></tr>
+    <tr><td>/api/billing/me/latest</td><td>GET</td><td><span class="status done">✅ Done</span></td></tr>
+    <tr><td>/api/billing/history</td><td>GET</td><td><span class="status done">✅ Done</span></td></tr>
+    <tr><td>/api/billing/:billingId/pdf</td><td>GET</td><td><span class="status done">✅ Done</span></td></tr>
+    <tr><td>/api/paymongo/checkout</td><td>POST</td><td><span class="status done">✅ Done</span></td></tr>
+    <tr><td>/api/paymongo/webhook</td><td>POST</td><td><span class="status done">✅ Done</span></td></tr>
+    <tr><td>PayMongo redirect (success/cancel)</td><td>GET</td><td><span class="status done">✅ Done</span></td></tr>
+  </table>
+  <div class="info-box tip"><strong>Strongest Module:</strong> End-to-end billing flow is fully functional: view → detailed breakdown → pay (4 methods) → auto-verify → PDF receipt. Only automated new-bill notifications are missing.</div>
+
+  <!-- MODULE 5 -->
+  <div class="page-break"></div>
+  <div class="module-header amber">
+    <div class="module-num">5</div>
+    <div class="module-name">Maintenance and Service Requests</div>
+    <div class="module-pct">75%</div>
+  </div>
+  <div class="progress-bar"><div class="progress-fill amber" style="width:75%"></div></div>
+
+  <h4>Tenant Features <span class="scope-badge mobile">📱 Mobile</span></h4>
+  <table>
+    <tr><th>Feature</th><th width="85">Status</th><th>Implementation</th></tr>
+    <tr><td>Submit maintenance requests</td><td><span class="status done">✅ Done</span></td><td>services.jsx — 7 categories, urgency levels, photo attachments</td></tr>
+    <tr><td>Update or follow up on requests</td><td><span class="status done">✅ Done</span></td><td>Edit modal for pending requests</td></tr>
+    <tr><td>View request status</td><td><span class="status done">✅ Done</span></td><td>Status badges (pending/in_progress/resolved/completed)</td></tr>
+    <tr><td>Cancel request</td><td><span class="status done">✅ Done</span></td><td>Cancel with styled confirmation modal</td></tr>
+    <tr><td>Reopen completed request</td><td><span class="status done">✅ Done</span></td><td>Reopen with note + full reopen history tracking</td></tr>
+    <tr><td>Track completion history</td><td><span class="status partial">⚠️ Partial</span></td><td>Reopen history stored; no visual timeline UI</td></tr>
+    <tr><td>Status change push notification</td><td><span class="status missing">❌ Missing</span></td><td>pushService.js has the function but it's never called</td></tr>
+  </table>
+
+  <h4>Backend API <span class="scope-badge backend">⚙️ API</span></h4>
+  <table>
+    <tr><th>Endpoint</th><th>Method</th><th width="85">Status</th></tr>
+    <tr><td>/api/maintenance/me</td><td>GET</td><td><span class="status done">✅ Done</span></td></tr>
+    <tr><td>/api/maintenance</td><td>POST</td><td><span class="status done">✅ Done</span></td></tr>
+    <tr><td>/api/maintenance/:id</td><td>PUT</td><td><span class="status done">✅ Done</span></td></tr>
+    <tr><td>/api/maintenance/:id/cancel</td><td>PATCH</td><td><span class="status done">✅ Done</span></td></tr>
+    <tr><td>/api/maintenance/:id/reopen</td><td>PATCH</td><td><span class="status done">✅ Done</span></td></tr>
+    <tr><td>Admin status update endpoint</td><td>—</td><td><span class="status missing">❌ Missing</span></td></tr>
+    <tr><td>notifyMaintenanceStatusChange()</td><td>—</td><td><span class="status partial">⚠️ Orphaned</span></td></tr>
+  </table>
+  <div class="info-box warn"><strong>Key Gap:</strong> <code>notifyMaintenanceStatusChange()</code> exists in pushService.js but is never called — the backend has no admin endpoint to update request status. When the web portal updates status directly in MongoDB, no notification fires.</div>
+
+  <!-- MODULE 6 -->
+  <div class="module-header amber">
+    <div class="module-num">6</div>
+    <div class="module-name">Announcements and Policies</div>
+    <div class="module-pct">65%</div>
+  </div>
+  <div class="progress-bar"><div class="progress-fill amber" style="width:65%"></div></div>
+
+  <h4>Tenant Features <span class="scope-badge mobile">📱 Mobile</span></h4>
+  <table>
+    <tr><th>Feature</th><th width="85">Status</th><th>Implementation</th></tr>
+    <tr><td>View announcements</td><td><span class="status done">✅ Done</span></td><td>announcements.jsx — categories, urgency badges, search</td></tr>
+    <tr><td>Announcements on home dashboard</td><td><span class="status done">✅ Done</span></td><td>Home screen shows recent announcements</td></tr>
+    <tr><td>Read policy updates (documents)</td><td><span class="status done">✅ Done</span></td><td>my-documents.jsx — 6 full policy documents with rich preview</td></tr>
+    <tr><td>Download policies (PDF)</td><td><span class="status done">✅ Done</span></td><td>Download + native share</td></tr>
+    <tr><td>Acknowledge notices</td><td><span class="status missing">❌ Missing</span></td><td>No acknowledgment tracking API or UI</td></tr>
+    <tr><td>Push for new announcements</td><td><span class="status missing">❌ Missing</span></td><td>No notification mechanism</td></tr>
+  </table>
+
+  <h4>Available Policy Documents</h4>
+  <table>
+    <tr><th>Document</th><th width="85">Status</th><th>Content</th></tr>
+    <tr><td>Lease Contract</td><td><span class="status done">✅ Done</span></td><td>Tenant info, rental period, utilities, termination</td></tr>
+    <tr><td>House Rules</td><td><span class="status done">✅ Done</span></td><td>Quiet hours, visitors, cleanliness, prohibitions</td></tr>
+    <tr><td>Curfew Policy</td><td><span class="status done">✅ Done</span></td><td>Gate hours, late entry procedure, violations</td></tr>
+    <tr><td>Visitor Policy</td><td><span class="status done">✅ Done</span></td><td>Registration, limits, tenant responsibilities</td></tr>
+    <tr><td>Payment Terms</td><td><span class="status done">✅ Done</span></td><td>Due dates, payment methods, consequences</td></tr>
+    <tr><td>Emergency Procedures</td><td><span class="status done">✅ Done</span></td><td>Contacts, fire/earthquake/medical protocols</td></tr>
+  </table>
+
+  <!-- MODULE 7 -->
+  <div class="module-header amber">
+    <div class="module-num">7</div>
+    <div class="module-name">Reports and Analytics</div>
+    <div class="module-pct">30%</div>
+  </div>
+  <div class="progress-bar"><div class="progress-fill amber" style="width:30%"></div></div>
+  <div class="info-box info"><strong>Note:</strong> This module is primarily for Branch Admin and Owner roles (web portal). Tenant-facing analytics are limited to dashboard summaries.</div>
+
+  <h4>Tenant Features <span class="scope-badge mobile">📱 Mobile</span></h4>
+  <table>
+    <tr><th>Feature</th><th width="85">Status</th><th>Implementation</th></tr>
+    <tr><td>Dashboard summary (room, billing, maintenance)</td><td><span class="status done">✅ Done</span></td><td>GET /api/dashboard/me → home screen</td></tr>
+    <tr><td>Billing history view</td><td><span class="status done">✅ Done</span></td><td>billing-history.jsx with totals</td></tr>
+    <tr><td>Monthly payment summary</td><td><span class="status partial">⚠️ Partial</span></td><td>Payment history exists but no monthly summary chart</td></tr>
+  </table>
+
+  <h4>Admin/Owner Features <span class="scope-badge web-only">🔒 Web Only</span></h4>
+  <table>
+    <tr><th>Feature</th><th width="85">Status</th></tr>
+    <tr><td>Dashboard summaries</td><td><span class="status web">🔒 Web</span></td></tr>
+    <tr><td>Occupancy / billing / reservation reports</td><td><span class="status web">🔒 Web</span></td></tr>
+    <tr><td>Maintenance trends</td><td><span class="status web">🔒 Web</span></td></tr>
+    <tr><td>AI forecasting insights</td><td><span class="status web">🔒 Web</span></td></tr>
+  </table>
+
+  <!-- MODULE 8 -->
+  <div class="page-break"></div>
+  <div class="module-header green">
+    <div class="module-num">8</div>
+    <div class="module-name">Support and AI Chatbot</div>
+    <div class="module-pct">85%</div>
+  </div>
+  <div class="progress-bar"><div class="progress-fill green" style="width:85%"></div></div>
+
+  <h4>Tenant Features <span class="scope-badge mobile">📱 Mobile</span></h4>
+  <table>
+    <tr><th>Feature</th><th width="85">Status</th><th>Implementation</th></tr>
+    <tr><td>AI chatbot (Lily — Gemini-powered)</td><td><span class="status done">✅ Done</span></td><td>chatbot.controller.js — 25KB, intent classification</td></tr>
+    <tr><td>Ask billing questions</td><td><span class="status done">✅ Done</span></td><td>Intent routing to billing knowledge base</td></tr>
+    <tr><td>Ask reservation questions</td><td><span class="status done">✅ Done</span></td><td>Knowledge base includes reservation info</td></tr>
+    <tr><td>Ask general account questions</td><td><span class="status done">✅ Done</span></td><td>FAQ + multi-domain knowledge</td></tr>
+    <tr><td>Create support tickets</td><td><span class="status done">✅ Done</span></td><td>ticket.controller.js — create, view, respond, close</td></tr>
+    <tr><td>Track support progress</td><td><span class="status done">✅ Done</span></td><td>Ticket status + threaded responses</td></tr>
+    <tr><td>FAQ answers</td><td><span class="status done">✅ Done</span></td><td>GET /api/faqs with categories</td></tr>
+    <tr><td>Guided help (follow-ups)</td><td><span class="status done">✅ Done</span></td><td>Intent-based suggestion buttons</td></tr>
+    <tr><td>Escalate to live admin</td><td><span class="status done">✅ Done</span></td><td>Live chat queue → admin accept/respond system</td></tr>
+    <tr><td>Chat history</td><td><span class="status done">✅ Done</span></td><td>Persistent session history retrieval</td></tr>
+  </table>
+
+  <h4>Backend API <span class="scope-badge backend">⚙️ API</span></h4>
+  <table>
+    <tr><th>Endpoint</th><th>Method</th><th width="85">Status</th></tr>
+    <tr><td>/api/chatbot/message</td><td>POST</td><td><span class="status done">✅ Done</span></td></tr>
+    <tr><td>/api/chatbot/reset</td><td>POST</td><td><span class="status done">✅ Done</span></td></tr>
+    <tr><td>/api/chatbot/history</td><td>GET</td><td><span class="status done">✅ Done</span></td></tr>
+    <tr><td>/api/chatbot/request-admin</td><td>POST</td><td><span class="status done">✅ Done</span></td></tr>
+    <tr><td>/api/chatbot/live-status/:id</td><td>GET</td><td><span class="status done">✅ Done</span></td></tr>
+    <tr><td>/api/chatbot/close-live-chat</td><td>POST</td><td><span class="status done">✅ Done</span></td></tr>
+    <tr><td>/api/chatbot/admin/* (3 endpoints)</td><td>—</td><td><span class="status done">✅ Done</span></td></tr>
+    <tr><td>/api/tickets/* (5 endpoints)</td><td>—</td><td><span class="status done">✅ Done</span></td></tr>
+    <tr><td>/api/faqs, /api/faqs/categories</td><td>GET</td><td><span class="status done">✅ Done</span></td></tr>
+  </table>
+  <div class="info-box tip"><strong>Excellent:</strong> The Gemini-powered chatbot with intent classification, dormitory knowledge base, live admin escalation, and full support ticket system provides a comprehensive support experience. This is the strongest AI feature in the system.</div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <div class="page-break"></div>
+  <h2>Cross-Module Infrastructure</h2>
+
+  <h3>Push Notifications</h3>
+  <table>
+    <tr><th>Component</th><th width="85">Status</th><th>Notes</th></tr>
+    <tr><td>Expo push token registration (mobile)</td><td><span class="status done">✅ Done</span></td><td>notifications.js — register, save to server</td></tr>
+    <tr><td>Token storage on server</td><td><span class="status done">✅ Done</span></td><td>POST /api/users/push-token</td></tr>
+    <tr><td>sendPushToUser() core function</td><td><span class="status done">✅ Done</span></td><td>pushService.js — Expo Push API</td></tr>
+    <tr><td>Maintenance status change notification</td><td><span class="status partial">⚠️ Orphaned</span></td><td>Function written, never called</td></tr>
+    <tr><td>New billing notification</td><td><span class="status missing">❌ Missing</span></td><td>—</td></tr>
+    <tr><td>New announcement notification</td><td><span class="status missing">❌ Missing</span></td><td>—</td></tr>
+    <tr><td>Move-out reminder notification</td><td><span class="status missing">❌ Missing</span></td><td>—</td></tr>
+  </table>
+
+  <h3>Email Service</h3>
+  <table>
+    <tr><th>Component</th><th width="85">Status</th></tr>
+    <tr><td>SMTP transporter (Nodemailer)</td><td><span class="status done">✅ Done</span></td></tr>
+    <tr><td>Branded HTML email template</td><td><span class="status done">✅ Done</span></td></tr>
+    <tr><td>Password changed confirmation email</td><td><span class="status done">✅ Done</span></td></tr>
+    <tr><td>Maintenance update email</td><td><span class="status missing">❌ Missing</span></td></tr>
+    <tr><td>Monthly billing statement email</td><td><span class="status missing">❌ Missing</span></td></tr>
+    <tr><td>Move-out reminder email</td><td><span class="status missing">❌ Missing</span></td></tr>
+  </table>
+
+  <h3>Scheduled Jobs (Cron)</h3>
+  <table>
+    <tr><th>Component</th><th width="85">Status</th></tr>
+    <tr><td>node-cron scheduler</td><td><span class="status missing">❌ Not Installed</span></td></tr>
+    <tr><td>Periodic notification jobs</td><td><span class="status missing">❌ Missing</span></td></tr>
+    <tr><td>Expired session cleanup</td><td><span class="status missing">❌ Missing</span></td></tr>
+  </table>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <h2>Overall Progress Matrix</h2>
+  <table class="matrix-table">
+    <tr><th>Module</th><th>Tenant Mobile</th><th>Backend API</th><th>Grade</th></tr>
+    <tr><td><strong>1. Authentication & Access Control</strong></td><td>85%</td><td>90%</td><td><span class="status done">✅ Strong</span></td></tr>
+    <tr><td><strong>2. Reservation Management</strong></td><td>5%</td><td>0%</td><td><span class="status missing">❌ Critical</span></td></tr>
+    <tr><td><strong>3. Room & Bed Management</strong></td><td>45%</td><td>40%</td><td><span class="status partial">⚠️ Partial</span></td></tr>
+    <tr><td><strong>4. Billing & Payments (+ AI)</strong></td><td>90%</td><td>95%</td><td><span class="status done">✅ Strong</span></td></tr>
+    <tr><td><strong>5. Maintenance & Service Requests</strong></td><td>75%</td><td>70%</td><td><span class="status partial">⚠️ Partial</span></td></tr>
+    <tr><td><strong>6. Announcements & Policies</strong></td><td>65%</td><td>50%</td><td><span class="status partial">⚠️ Partial</span></td></tr>
+    <tr><td><strong>7. Reports & Analytics</strong></td><td>30%</td><td>20%</td><td><span class="status partial">⚠️ Partial</span></td></tr>
+    <tr><td><strong>8. Support & AI Chatbot</strong></td><td>85%</td><td>95%</td><td><span class="status done">✅ Strong</span></td></tr>
+  </table>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <h2>Priority Recommendations</h2>
+
+  <h3>🔴 Critical — Blocks Real-World Use</h3>
+  <div class="priority-item critical">
+    <div class="num">1</div>
+    <div class="desc"><strong>Reservation Module</strong><br><span>Tenants can't view their reservation status, history, or move-in/out details. Entire module is missing.</span></div>
+  </div>
+  <div class="priority-item critical">
+    <div class="num">2</div>
+    <div class="desc"><strong>Admin Maintenance Status Update API</strong><br><span>No endpoint for admin to update request status. Push notification function is orphaned. Tenants never know when their request is resolved.</span></div>
+  </div>
+  <div class="priority-item critical">
+    <div class="num">3</div>
+    <div class="desc"><strong>Push Notification Integration</strong><br><span>Infrastructure exists (token registration + Expo Push API) but no notifications are actually sent. Tenants miss important updates.</span></div>
+  </div>
+
+  <h3>🟡 Important — Impacts User Experience</h3>
+  <div class="priority-item important">
+    <div class="num">4</div>
+    <div class="desc"><strong>Monthly Billing Statement Notification</strong><br><span>No push/email when new bills are released. Tenants must manually check for new bills.</span></div>
+  </div>
+  <div class="priority-item important">
+    <div class="num">5</div>
+    <div class="desc"><strong>Announcement Acknowledgment</strong><br><span>No way to confirm tenants have read important notices or policy updates.</span></div>
+  </div>
+  <div class="priority-item important">
+    <div class="num">6</div>
+    <div class="desc"><strong>Move-Out Reminders</strong><br><span>No lease-end date tracking in user model. No automated reminder notifications.</span></div>
+  </div>
+
+  <h3>🟢 Nice to Have — Polish</h3>
+  <div class="priority-item nice">
+    <div class="num">7</div>
+    <div class="desc"><strong>Email Verification</strong><br><span>Firebase supports it but the flow is not implemented. Low risk for tenant-only app with admin-provisioned accounts.</span></div>
+  </div>
+  <div class="priority-item nice">
+    <div class="num">8</div>
+    <div class="desc"><strong>Maintenance Status Timeline</strong><br><span>Reopen history is stored but no visual timeline UI. Would improve request tracking experience.</span></div>
+  </div>
+  <div class="priority-item nice">
+    <div class="num">9</div>
+    <div class="desc"><strong>Tenant Spending Dashboard</strong><br><span>Monthly payment summaries and spending trends to help tenants track expenses.</span></div>
+  </div>
+
+  <!-- ═══════════════════════════════════════════════════ -->
+  <h2>Files Inventory</h2>
+
+  <h3>Backend (13 Controllers, 13 Route Files, 3 Services)</h3>
+  <table>
+    <tr><th>File</th><th>Module</th><th>Size</th></tr>
+    <tr><td>auth.controller.js</td><td>Authentication</td><td>26 KB</td></tr>
+    <tr><td>chatbot.controller.js</td><td>Support & AI</td><td>25 KB</td></tr>
+    <tr><td>billing.controller.js</td><td>Billing</td><td>22 KB</td></tr>
+    <tr><td>paymongo.controller.js</td><td>Payments</td><td>14 KB</td></tr>
+    <tr><td>seed.controller.js</td><td>Dev Tooling</td><td>13 KB</td></tr>
+    <tr><td>user.controller.js</td><td>Auth / Profile</td><td>11 KB</td></tr>
+    <tr><td>documents.controller.js</td><td>Policies</td><td>9 KB</td></tr>
+    <tr><td>maintenance.controller.js</td><td>Maintenance</td><td>6 KB</td></tr>
+    <tr><td>dashboard.controller.js</td><td>Reports</td><td>5 KB</td></tr>
+    <tr><td>ticket.controller.js</td><td>Support</td><td>5 KB</td></tr>
+    <tr><td>room.controller.js</td><td>Room</td><td>1 KB</td></tr>
+    <tr><td>faq.controller.js</td><td>Support</td><td>1 KB</td></tr>
+    <tr><td>announcement.controller.js</td><td>Announcements</td><td>1 KB</td></tr>
+  </table>
+
+  <h3>Mobile Frontend (20 Screens)</h3>
+  <table>
+    <tr><th>Screen</th><th>Module</th><th>Tab?</th></tr>
+    <tr><td>login.jsx, forgot-password.jsx, change-password.jsx, index.jsx</td><td>Authentication</td><td>—</td></tr>
+    <tr><td>home.jsx</td><td>Dashboard / Reports</td><td>✅ Tab</td></tr>
+    <tr><td>profile.jsx</td><td>Authentication</td><td>✅ Tab</td></tr>
+    <tr><td>billing.jsx, bill-details.jsx, billing-history.jsx</td><td>Billing</td><td>✅ Tab</td></tr>
+    <tr><td>payment.jsx, payment-success.jsx, payment-cancel.jsx</td><td>Payments</td><td>—</td></tr>
+    <tr><td>services.jsx</td><td>Maintenance</td><td>✅ Tab</td></tr>
+    <tr><td>announcements.jsx</td><td>Announcements</td><td>✅ Tab</td></tr>
+    <tr><td>chatbot.jsx</td><td>Support & AI</td><td>✅ Tab</td></tr>
+    <tr><td>my-documents.jsx, documents.jsx, house-rules.jsx</td><td>Policies</td><td>—</td></tr>
+    <tr><td>settings.jsx, about.jsx, privacy-policy.jsx, terms-of-service.jsx</td><td>General</td><td>—</td></tr>
+  </table>
+
+  <!-- Footer -->
+  <div class="report-footer">
+    <p><strong>LilyCrest Dormitory Management System — Module Progress Audit Report</strong></p>
+    <p>Generated from codebase analysis on April 10, 2026</p>
+    <p>Backend: 13 controllers, 13 routes, 3 services | Frontend: 20 screens, 7 tabs</p>
+    <p>© 2026 LilyCrest Dormitory. All rights reserved.</p>
+  </div>
+
+</div>
+</body>
+</html>

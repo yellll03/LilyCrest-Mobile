@@ -5,10 +5,11 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../src/context/AuthContext';
 import { useTheme } from '../src/context/ThemeContext';
+import { useAlert } from '../src/context/AlertContext';
 import { apiService } from '../src/services/api';
 
 // ── Document types for upload picker ──
@@ -246,6 +247,7 @@ export default function MyDocumentsScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { colors, isDarkMode } = useTheme();
+  const { showAlert } = useAlert();
   const [downloading, setDownloading] = useState(null);
   const [previewDoc, setPreviewDoc] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
@@ -313,7 +315,7 @@ export default function MyDocumentsScreen() {
         anchor.download = fileName;
         anchor.click();
         window.URL.revokeObjectURL(url);
-        Alert.alert('Success', `${doc.title} downloaded as PDF.`);
+        showAlert({ title: 'Success', message: `${doc.title} downloaded as PDF.`, type: 'success' });
       } else {
         const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
         const dl = FileSystem.createDownloadResumable(downloadUrl, fileUri, {
@@ -323,12 +325,12 @@ export default function MyDocumentsScreen() {
         if (await Sharing.isAvailableAsync()) {
           await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: `${doc.title} PDF` });
         } else {
-          Alert.alert('Saved', `${doc.title} saved to ${uri}`);
+          showAlert({ title: 'Saved', message: `${doc.title} saved successfully.`, type: 'success' });
         }
       }
     } catch (error) {
       console.error('Download error:', error);
-      Alert.alert('Error', 'Failed to download document. Please try again.');
+      showAlert({ title: 'Error', message: 'Failed to download document. Please try again.', type: 'error' });
     } finally {
       setDownloading(null);
     }
@@ -340,7 +342,7 @@ export default function MyDocumentsScreen() {
     try {
       const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (!permissionResult.granted) {
-        Alert.alert('Permission Required', 'Please allow access to your photo library to upload documents.');
+        showAlert({ title: 'Permission Required', message: 'Please allow access to your photo library to upload documents.', type: 'warning' });
         return;
       }
 
@@ -355,7 +357,7 @@ export default function MyDocumentsScreen() {
 
       const base64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
       if (base64.length > 5 * 1024 * 1024) {
-        Alert.alert('File Too Large', 'Please select a file under 5 MB.');
+        showAlert({ title: 'File Too Large', message: 'Please select a file under 5 MB.', type: 'warning' });
         return;
       }
 
@@ -367,10 +369,10 @@ export default function MyDocumentsScreen() {
       });
 
       await fetchUploadedDocs();
-      Alert.alert('Success', `${docType.label} uploaded successfully. It will be reviewed by the admin.`);
+      showAlert({ title: 'Upload Successful', message: `${docType.label} uploaded successfully. It will be reviewed by the admin.`, type: 'success' });
     } catch (error) {
       console.error('Upload error:', error);
-      Alert.alert('Upload Failed', error?.response?.data?.detail || 'Please try again.');
+      showAlert({ title: 'Upload Failed', message: error?.response?.data?.detail || 'Please try again.', type: 'error' });
     } finally {
       setUploading(false);
     }
@@ -384,7 +386,7 @@ export default function MyDocumentsScreen() {
       setUploadedDocs(prev => prev.filter(d => d.doc_id !== docId));
     } catch (error) {
       console.error('Delete error:', error);
-      Alert.alert('Error', 'Failed to delete document.');
+      showAlert({ title: 'Error', message: 'Failed to delete document.', type: 'error' });
     }
   };
 
@@ -395,11 +397,11 @@ export default function MyDocumentsScreen() {
       if (response?.data?.file_data) {
         setPreviewImage({ uri: response.data.file_data, label: doc.label, status: doc.status, uploaded_at: doc.uploaded_at });
       } else {
-        Alert.alert('Error', 'Could not load document preview.');
+        showAlert({ title: 'Error', message: 'Could not load document preview.', type: 'error' });
       }
     } catch (error) {
       console.error('View doc error:', error);
-      Alert.alert('Error', 'Failed to load document.');
+      showAlert({ title: 'Error', message: 'Failed to load document.', type: 'error' });
     }
   };
 

@@ -21,7 +21,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useGoogleSignIn } from '../src/config/googleSignIn';
 import { useAuth } from '../src/context/AuthContext';
 import { useTheme } from '../src/context/ThemeContext';
-import { api } from '../src/services/api';
+import { useAlert } from '../src/context/AlertContext';
+import { saveCredentials, getCredentials, hasStoredCredentials, clearCredentials } from '../src/services/secureCredentials';
+
 
 // Validation helpers
 const validateEmail = (email) => {
@@ -44,9 +46,10 @@ const validatePassword = (password) => {
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { loginWithEmail, signInWithGoogle, logout, checkAuth, isLoading } = useAuth();
+  const { loginWithEmail, signInWithGoogle, checkAuth, isLoading } = useAuth();
   const { signInWithGoogle: googleSignIn } = useGoogleSignIn();
   const { colors } = useTheme();
+  const { showAlert } = useAlert();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -55,9 +58,12 @@ export default function LoginScreen() {
   const [isBiometricLoading, setIsBiometricLoading] = useState(false);
   const [errors, setErrors] = useState({ email: '', password: '' });
   const [touched, setTouched] = useState({ email: false, password: false });
-  const [loginError, setLoginError] = useState('');
+  // loginError: { message: string, type: 'credentials' | 'access' | 'ratelimit' | 'network' }
+  const [loginError, setLoginError] = useState(null);
   const [rememberMe, setRememberMe] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [biometricEnabled, setBiometricEnabled] = useState(false);
+  const [biometricType, setBiometricType] = useState('Biometric');
   const [canUseBiometric, setCanUseBiometric] = useState(false);
 
   // Real-time validation
@@ -76,7 +82,7 @@ export default function LoginScreen() {
   }, [password, touched.password]);
 
   useEffect(() => {
-    setLoginError('');
+    setLoginError(null);
   }, [email, password]);
 
   // Load remember-me preference and biometric eligibility
@@ -85,10 +91,9 @@ export default function LoginScreen() {
       try {
         const savedRemember = await AsyncStorage.getItem('remember_me');
         const savedEmail = await AsyncStorage.getItem('last_email');
-        const token = await AsyncStorage.getItem('session_token');
         const bioSetting = await AsyncStorage.getItem('biometricLogin');
         const prefersRemember = savedRemember === 'true';
-        const biometricEnabled = bioSetting === 'true';
+        const isBioEnabled = bioSetting === 'true';
         if (prefersRemember) setRememberMe(true);
         if (savedEmail && !email) setEmail(savedEmail);
 
@@ -96,8 +101,16 @@ export default function LoginScreen() {
         const isEnrolled = await LocalAuthentication.isEnrolledAsync();
         const available = hasHardware && isEnrolled;
         setBiometricAvailable(available);
-        // Biometric login requires: hardware + enrolled + remember me + biometric setting enabled + valid token
-        setCanUseBiometric(available && prefersRemember && biometricEnabled && !!token);
+        setBiometricEnabled(isBioEnabled);
+
+        // Use generic "Biometrics" label (covers fingerprint, face, PIN)
+        if (available) {
+          setBiometricType('Biometrics');
+        }
+
+        // Biometric login requires: hardware + enrolled + biometric enabled + stored credentials
+        const hasCreds = await hasStoredCredentials();
+        setCanUseBiometric(available && isBioEnabled && hasCreds);
       } catch (err) {
         console.warn('Init login prefs failed:', err?.message);
       }
@@ -105,34 +118,7 @@ export default function LoginScreen() {
     init();
   }, []);
 
-  const verifyTenantSession = async () => {
-    try {
-      const response = await api.get('/auth/me');
-      return { ok: true, user: response.data };
-    } catch (error) {
-      const status = error?.response?.status;
-      if (status === 403) {
-        return { ok: false, message: 'Access denied. This app is for registered tenants only.' };
-      }
-      if (status === 401) {
-        return { ok: false, message: 'Session expired. Please sign in again.' };
-      }
-      return { ok: false, message: 'Unable to verify tenant status. Please try again.' };
-    }
-  };
 
-  const updateBiometricEligibility = async (rememberOverride) => {
-    try {
-      const token = await AsyncStorage.getItem('session_token');
-      const remember = rememberOverride != null
-        ? rememberOverride
-        : (await AsyncStorage.getItem('remember_me')) === 'true';
-      const bioSetting = await AsyncStorage.getItem('biometricLogin');
-      setCanUseBiometric(!!remember && bioSetting === 'true' && biometricAvailable && !!token);
-    } catch (_e) {
-      setCanUseBiometric(false);
-    }
-  };
 
   const handleLogin = async () => {
     const emailValidation = validateEmail(email);
@@ -144,42 +130,91 @@ export default function LoginScreen() {
     if (!emailValidation.valid || !passwordValidation.valid) return;
 
     setIsEmailLoading(true);
-    setLoginError('');
+    setLoginError(null);
     const normalizedEmail = email.trim().toLowerCase();
     const normalizedPassword = password;
 
     try {
-      // Authenticate with backend directly — it handles Firebase auth + tenant lookup
       const result = await loginWithEmail(normalizedEmail, normalizedPassword);
       if (!result.success) {
-        const errMsg = result.error || 'Unable to sign in. Please try again.';
-        setLoginError(errMsg);
-        const errLower = errMsg.toLowerCase();
-        if (errLower.includes('invalid email or password') || errLower.includes('password must be')) {
-          setPassword('');
-          setTouched({ email: true, password: true });
-          setErrors((prev) => ({ ...prev, password: errMsg }));
-        } else if (errLower.includes('not registered') || errLower.includes('access denied') || errLower.includes('inactive')) {
-          // Tenant-specific errors — show as login-level error, don't mark password wrong
-          setTouched({ email: true, password: true });
+        const { status } = result;
+        if (status === 400) {
+          setLoginError({ message: result.error, type: 'credentials' });
+        } else if (status === 401) {
+          setLoginError({ message: result.error, type: 'credentials' });
+        } else if (status === 403) {
+          setLoginError({ message: result.error, type: 'access' });
+        } else if (status === 429) {
+          setLoginError({ message: result.error, type: 'ratelimit' });
+        } else if (status === 500) {
+          setLoginError({ message: result.error, type: 'network' });
+        } else if (status === 0) {
+          setLoginError({ message: result.error, type: 'network' });
+        } else {
+          setLoginError({ message: result.error, type: 'credentials' });
         }
+        setErrors({ email: '', password: '' });
+        setTouched({ email: false, password: false });
         return;
       }
 
-
-      // Persist remember-me preference
+      // Persist remember-me email preference
       await AsyncStorage.setItem('remember_me', rememberMe ? 'true' : 'false');
       if (rememberMe) {
         await AsyncStorage.setItem('last_email', normalizedEmail);
       } else {
         await AsyncStorage.removeItem('last_email');
       }
-      await updateBiometricEligibility(rememberMe);
 
-      router.replace('/(tabs)/home');
+      // Handle biometric credential storage
+      if (biometricAvailable) {
+        const bioSetting = await AsyncStorage.getItem('biometricLogin');
+        if (bioSetting === 'true') {
+          // Biometric was previously enabled — refresh stored credentials silently
+          // (covers password-change scenario where old credentials were cleared)
+          await saveCredentials(normalizedEmail, normalizedPassword);
+          setCanUseBiometric(true);
+          router.replace('/(tabs)/home');
+        } else {
+          // First time on this device — offer to enable biometric login
+          showAlert({
+            title: 'Enable Biometric Login',
+            message: `Sign in faster next time using ${biometricType}.`,
+            type: 'info',
+            icon: 'finger-print',
+            buttons: [
+              {
+                text: 'Not Now',
+                style: 'cancel',
+                onPress: () => router.replace('/(tabs)/home'),
+              },
+              {
+                text: 'Enable',
+                onPress: async () => {
+                  try {
+                    const bioResult = await LocalAuthentication.authenticateAsync({
+                      promptMessage: 'Confirm your identity to enable biometric login',
+                      cancelLabel: 'Skip',
+                      disableDeviceFallback: false,
+                    });
+                    if (bioResult.success) {
+                      await saveCredentials(normalizedEmail, normalizedPassword);
+                      await AsyncStorage.setItem('biometricLogin', 'true');
+                      setCanUseBiometric(true);
+                    }
+                  } catch (_) {}
+                  router.replace('/(tabs)/home');
+                },
+              },
+            ],
+          });
+        }
+      } else {
+        router.replace('/(tabs)/home');
+      }
     } catch (error) {
       console.error('Login error:', error);
-      setLoginError('An unexpected error occurred. Please try again.');
+      setLoginError({ message: 'An unexpected error occurred. Please try again.', type: 'network' });
     } finally {
       setIsEmailLoading(false);
     }
@@ -187,55 +222,46 @@ export default function LoginScreen() {
 
   const handleGoogleLogin = async () => {
     setIsGoogleLoading(true);
-    setLoginError('');
-    
+    setLoginError(null);
+
     try {
-      // Use React Native-compatible Google Sign-In
       const result = await googleSignIn();
-      
+
       if (result.success) {
-        // Get fresh Firebase ID token (force refresh to ensure validity)
         const { getFreshIdToken } = await import('../src/config/firebase');
         const idToken = await getFreshIdToken(true);
-        
+
         if (!idToken) {
-          setLoginError('Failed to get authentication token. Please try again.');
+          setLoginError({ message: 'Failed to get authentication token. Please try again.', type: 'network' });
           return;
         }
-        
-        // Send to our backend to create session
+
         const backendResult = await signInWithGoogle(idToken);
-        
+
         if (backendResult.success) {
-            const verified = await verifyTenantSession();
-            if (!verified.ok) {
-            await logout();
-            setLoginError(verified.message);
-            return;
-            }
-            await AsyncStorage.setItem('remember_me', rememberMe ? 'true' : 'false');
-            await updateBiometricEligibility(rememberMe);
-            router.replace('/(tabs)/home');
+          await AsyncStorage.setItem('remember_me', rememberMe ? 'true' : 'false');
+          router.replace('/(tabs)/home');
         } else {
-          setLoginError(backendResult.error || 'Failed to create session');
+          const type = backendResult.status === 403 ? 'access' : 'credentials';
+          setLoginError({ message: backendResult.error || 'Failed to create session.', type });
         }
       } else if (result.cancelled) {
-        // User deliberately cancelled — not an error, don't show anything
+        // User deliberately cancelled — not an error
       } else {
-        setLoginError(result.error || 'Google sign-in failed. Please try again.');
+        setLoginError({ message: result.error || 'Google sign-in failed. Please try again.', type: 'credentials' });
       }
     } catch (error) {
       console.error('Google login error:', error);
-      setLoginError('Google sign-in failed. Please try again or use email/password.');
+      setLoginError({ message: 'Google sign-in failed. Please try again or use email/password.', type: 'network' });
     } finally {
       setIsGoogleLoading(false);
     }
   };
 
   const handleBiometricLogin = async () => {
-    setLoginError('');
+    setLoginError(null);
     if (!canUseBiometric) {
-      setLoginError('Biometric login unavailable. Please sign in with email instead.');
+      setLoginError({ message: 'Biometric login unavailable. Please sign in with email instead.', type: 'network' });
       return;
     }
 
@@ -244,33 +270,46 @@ export default function LoginScreen() {
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
       const enrolled = await LocalAuthentication.isEnrolledAsync();
       if (!hasHardware || !enrolled) {
-        setLoginError('Biometric authentication is not available on this device.');
+        setLoginError({ message: 'Biometric authentication is not available on this device.', type: 'network' });
         return;
       }
 
       const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Sign in with biometrics',
+        promptMessage: 'Sign in to LilyCrest',
         cancelLabel: 'Cancel',
         disableDeviceFallback: false,
       });
 
       if (!result.success) {
-        setLoginError('Biometric authentication failed. Please try again.');
+        setLoginError({ message: 'Biometric verification failed. Please try again.', type: 'credentials' });
         return;
       }
 
-      const verified = await verifyTenantSession();
-      if (!verified.ok) {
-        await logout();
-        setLoginError(verified.message);
+      const creds = await getCredentials();
+      if (!creds) {
+        setLoginError({ message: 'Stored credentials not found. Please sign in with your password to re-enable biometric login.', type: 'access' });
+        setCanUseBiometric(false);
         return;
       }
 
-      await checkAuth();
+      const loginResult = await loginWithEmail(creds.email, creds.password);
+      if (!loginResult.success) {
+        if (loginResult.status === 401 || loginResult.status === 400) {
+          await clearCredentials();
+          setCanUseBiometric(false);
+          setLoginError({ message: 'Your password was changed. Please sign in with your new password to re-enable biometric login.', type: 'access' });
+        } else {
+          setLoginError({ message: loginResult.error || 'Sign-in failed. Please try again.', type: 'credentials' });
+        }
+        return;
+      }
+
+      await AsyncStorage.setItem('remember_me', 'true');
+      await AsyncStorage.setItem('last_email', creds.email);
       router.replace('/(tabs)/home');
     } catch (error) {
       console.error('Biometric login error:', error);
-      setLoginError('Biometric sign-in failed. Please use email or Google.');
+      setLoginError({ message: 'Biometric sign-in failed. Please use email or Google.', type: 'network' });
     } finally {
       setIsBiometricLoading(false);
     }
@@ -278,6 +317,10 @@ export default function LoginScreen() {
 
   const isEmailValid = validateEmail(email).valid;
   const isPasswordValid = validatePassword(password).valid;
+
+  // Derive field-level error highlighting from loginError
+  const showEmailFieldError = (touched.email && errors.email) || (loginError && ['credentials', 'access', 'ratelimit'].includes(loginError.type));
+  const showPasswordFieldError = (touched.password && errors.password) || (loginError && ['credentials'].includes(loginError.type));
 
   return (
     <SafeAreaView style={styles.container}>
@@ -302,13 +345,29 @@ export default function LoginScreen() {
           <Text style={styles.title}>Welcome Back</Text>
           <Text style={styles.subtitle}>Sign in to access your tenant portal</Text>
 
+          {/* Login Error Banner — placed above the form so it's always visible */}
+          {loginError ? (() => {
+            const cfg = {
+              credentials: { bg: '#FEF2F2', border: '#FECACA', text: '#991B1B', icon: 'lock-closed', iconColor: '#EF4444' },
+              access:      { bg: '#FFF7ED', border: '#FED7AA', text: '#92400E', icon: 'shield-checkmark', iconColor: '#F97316' },
+              ratelimit:   { bg: '#FFFBEB', border: '#FDE68A', text: '#92400E', icon: 'time', iconColor: '#F59E0B' },
+              network:     { bg: '#F0F9FF', border: '#BAE6FD', text: '#0C4A6E', icon: 'wifi', iconColor: '#0EA5E9' },
+            }[loginError.type] || { bg: '#FEF2F2', border: '#FECACA', text: '#991B1B', icon: 'alert-circle', iconColor: '#EF4444' };
+            return (
+              <View style={[styles.loginErrorContainer, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
+                <Ionicons name={cfg.icon} size={18} color={cfg.iconColor} />
+                <Text style={[styles.loginErrorText, { color: cfg.text }]}>{loginError.message}</Text>
+              </View>
+            );
+          })() : null}
+
           {/* Form */}
           <View style={styles.form}>
             {/* Email Input */}
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Email Address</Text>
-              <View style={[styles.inputWrapper, touched.email && errors.email && styles.inputWrapperError, touched.email && isEmailValid && styles.inputWrapperSuccess]}>
-                <Ionicons name="mail-outline" size={20} color={touched.email && errors.email ? '#EF4444' : '#9CA3AF'} style={styles.inputIcon} />
+              <View style={[styles.inputWrapper, showEmailFieldError && styles.inputWrapperError, !showEmailFieldError && touched.email && isEmailValid && styles.inputWrapperSuccess]}>
+                <Ionicons name="mail-outline" size={20} color={showEmailFieldError ? '#EF4444' : '#9CA3AF'} style={styles.inputIcon} />
                 <TextInput 
                   style={styles.input} 
                   placeholder="Enter your email" 
@@ -320,7 +379,7 @@ export default function LoginScreen() {
                   autoCapitalize="none" 
                   autoCorrect={false} 
                 />
-                {touched.email && isEmailValid && <Ionicons name="checkmark-circle" size={20} color="#22C55E" />}
+                {!showEmailFieldError && touched.email && isEmailValid && <Ionicons name="checkmark-circle" size={20} color="#22C55E" />}
               </View>
               {touched.email && errors.email ? (
                 <View style={styles.errorContainer}>
@@ -333,8 +392,8 @@ export default function LoginScreen() {
             {/* Password Input */}
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Password</Text>
-              <View style={[styles.inputWrapper, touched.password && errors.password && styles.inputWrapperError, touched.password && isPasswordValid && styles.inputWrapperSuccess]}>
-                <Ionicons name="lock-closed-outline" size={20} color={touched.password && errors.password ? '#EF4444' : '#9CA3AF'} style={styles.inputIcon} />
+              <View style={[styles.inputWrapper, showPasswordFieldError && styles.inputWrapperError, !showPasswordFieldError && touched.password && isPasswordValid && styles.inputWrapperSuccess]}>
+                <Ionicons name="lock-closed-outline" size={20} color={showPasswordFieldError ? '#EF4444' : '#9CA3AF'} style={styles.inputIcon} />
                 <TextInput 
                   style={styles.input} 
                   placeholder="Enter your password" 
@@ -362,7 +421,6 @@ export default function LoginScreen() {
                 const next = !rememberMe;
                 setRememberMe(next);
                 await AsyncStorage.setItem('remember_me', next ? 'true' : 'false');
-                updateBiometricEligibility(next);
               }}>
                 <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
                   {rememberMe ? <Ionicons name="checkmark" size={14} color="#ffffff" /> : null}
@@ -375,13 +433,6 @@ export default function LoginScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Login Error */}
-            {loginError ? (
-              <View style={styles.loginErrorContainer}>
-                <Ionicons name="alert-circle" size={18} color="#FFFFFF" />
-                <Text style={styles.loginErrorText}>{loginError}</Text>
-              </View>
-            ) : null}
 
             {/* Sign In Button */}
             <TouchableOpacity 
@@ -394,20 +445,30 @@ export default function LoginScreen() {
 
             {/* Biometric Sign-In */}
             {canUseBiometric ? (
-              <TouchableOpacity 
-                style={[styles.biometricButton, isBiometricLoading && styles.signInButtonDisabled]} 
-                onPress={handleBiometricLogin} 
+              <TouchableOpacity
+                style={[styles.biometricButton, isBiometricLoading && styles.signInButtonDisabled]}
+                onPress={handleBiometricLogin}
                 disabled={isBiometricLoading}
               >
                 {isBiometricLoading ? (
                   <ActivityIndicator color={colors.primary} />
                 ) : (
                   <>
-                    <Ionicons name="finger-print" size={18} color={colors.primary} />
-                    <Text style={styles.biometricText}>Sign in with biometrics</Text>
+                    <Ionicons name="finger-print" size={20} color="#1E3A5F" />
+                    <Text style={styles.biometricText}>Sign in with {biometricType}</Text>
                   </>
                 )}
               </TouchableOpacity>
+            ) : biometricAvailable ? (
+              <View style={styles.biometricHintRow}>
+                <Ionicons name="finger-print" size={16} color="#9CA3AF" />
+                <Text style={styles.biometricHintText}>
+                  {biometricEnabled
+                    ? `${biometricType} is enabled — sign in once to activate it.`
+                    : `${biometricType} available — enable it in Settings.`
+                  }
+                </Text>
+              </View>
             ) : null}
           </View>
 
@@ -493,8 +554,8 @@ const styles = StyleSheet.create({
   rememberText: { color: '#1E3A5F', fontWeight: '600' },
   forgotPassword: { alignSelf: 'flex-end' },
   forgotPasswordText: { color: '#D4682A', fontSize: 14, fontWeight: '600' },
-  loginErrorContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#EF4444', borderRadius: 10, padding: 12, marginBottom: 16, gap: 8 },
-  loginErrorText: { flex: 1, color: '#FFFFFF', fontSize: 14, fontWeight: '500' },
+  loginErrorContainer: { flexDirection: 'row', alignItems: 'flex-start', borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 20, gap: 10 },
+  loginErrorText: { flex: 1, fontSize: 13, fontWeight: '500', lineHeight: 18 },
   signInButton: { 
     backgroundColor: '#1E3A5F', 
     paddingVertical: 16, 
@@ -515,8 +576,10 @@ const styles = StyleSheet.create({
     }) 
   },
   signInButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
-  biometricButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1.5, borderColor: '#E5E7EB', borderRadius: 12, paddingVertical: 12, backgroundColor: '#FFFFFF', marginTop: 12 },
+  biometricButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1.5, borderColor: '#CBD5E1', borderRadius: 12, paddingVertical: 12, backgroundColor: '#F8FAFC', marginTop: 12 },
   biometricText: { color: '#1E3A5F', fontSize: 14, fontWeight: '600' },
+  biometricHintRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 12, paddingVertical: 8 },
+  biometricHintText: { fontSize: 12, color: '#9CA3AF', flex: 1 },
   dividerContainer: { flexDirection: 'row', alignItems: 'center', marginVertical: 24 },
   divider: { flex: 1, height: 1, backgroundColor: '#E5E7EB' },
   dividerText: { paddingHorizontal: 16, color: '#9CA3AF', fontSize: 13 },

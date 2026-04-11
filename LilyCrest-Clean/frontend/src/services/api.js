@@ -68,53 +68,16 @@ export const api = axios.create({
   timeout: 30000, // 30 second timeout
 });
 
-// Track if we're currently refreshing to prevent multiple refresh attempts
-let isRefreshing = false;
-let failedQueue = [];
-
-const processQueue = (error, token = null) => {
-  failedQueue.forEach(prom => {
-    if (error) {
-      prom.reject(error);
-    } else {
-      prom.resolve(token);
-    }
-  });
-  
-  failedQueue = [];
-};
-
-// Request interceptor to add auth token
+// Request interceptor — attach session token to every request
 api.interceptors.request.use(
   async (config) => {
     const token = await AsyncStorage.getItem('session_token');
-    const urlPath = config.url || '';
-    const isAuthPath = urlPath.includes('/auth/');
-
-    if (!token && !isAuthPath) {
-      return Promise.reject(new axios.Cancel('Missing session token; request cancelled'));
-    }
-
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
-
-    // Only attach Firebase ID token for auth-related requests
-    if (isAuthPath) {
-      try {
-        const idToken = await getFreshIdToken();
-        if (idToken) {
-          config.headers['X-Firebase-ID-Token'] = idToken;
-        }
-      } catch (idErr) {
-        console.warn('Unable to attach Firebase ID token:', idErr?.message);
-      }
-    }
     return config;
   },
-  (error) => {
-    return Promise.reject(error);
-  }
+  (error) => Promise.reject(error),
 );
 
 // Response interceptor for error handling
@@ -123,76 +86,47 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     
-    // Handle 401 errors with token refresh attempt
-    if (error.response?.status === 401 && !originalRequest._retry) {
-      if (isRefreshing) {
-        // If already refreshing, queue this request
-        return new Promise((resolve, reject) => {
-          failedQueue.push({ resolve, reject });
-        })
-          .then(token => {
-            originalRequest.headers.Authorization = `Bearer ${token}`;
-            return api(originalRequest);
-          })
-          .catch(err => {
-            return Promise.reject(err);
-          });
-      }
-
+    // Handle 401 — try to refresh session once.
+    // Skip for auth endpoints (login/register) — those 401s mean wrong credentials,
+    // not an expired session. Retrying them would show the wrong error.
+    const isAuthEndpoint = /\/auth\/(login|register)/.test(originalRequest?.url || '');
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
       originalRequest._retry = true;
-      isRefreshing = true;
 
       try {
-        // Try to get fresh Firebase token and create new session
-        // This only works for Google/Firebase auth users — email/password users
-        // don't have a Firebase session to refresh.
-        const idToken = await getFreshIdToken(true); // Force refresh
+        // Only works for Google/Firebase auth users
+        const idToken = await getFreshIdToken(true);
         
         if (idToken) {
-          // Firebase user exists — attempt Google-style session renewal
+          // Renew session via Google auth endpoint
           const response = await axios.post(`${BACKEND_URL}/api/auth/google`, { idToken });
           const { session_token } = response.data;
           
           if (session_token) {
             await AsyncStorage.setItem('session_token', session_token);
-            processQueue(null, session_token);
-            
-            // Retry original request with new token
             originalRequest.headers.Authorization = `Bearer ${session_token}`;
-            isRefreshing = false;
             return api(originalRequest);
           }
         }
-        // No Firebase user (email/password auth) — clear session, user must re-login
-        processQueue(new Error('Session expired'), null);
-        await AsyncStorage.removeItem('session_token');
-        isRefreshing = false;
       } catch (refreshError) {
-        console.error('Token refresh failed:', refreshError);
-        processQueue(refreshError, null);
-        await AsyncStorage.removeItem('session_token');
-        isRefreshing = false;
-        return Promise.reject(refreshError);
+        console.warn('Token refresh failed:', refreshError?.message);
       }
+
+      // Refresh failed or no Firebase user — clear session
+      try {
+        await AsyncStorage.removeItem('session_token');
+      } catch (_) {}
     }
     
-    // Log connection errors for debugging
+    // Log network errors for debugging
     if (!error.response && error.request) {
-      console.error('Network Error - No response from server:', {
+      console.error('Network Error:', {
         url: error.config?.url,
-        baseURL: error.config?.baseURL,
         method: error.config?.method,
-        message: error.message
+        message: error.message,
       });
     }
     
-    if (error.response?.status === 401) {
-      try {
-        await AsyncStorage.removeItem('session_token');
-      } catch (_) {
-        // ignore storage removal errors
-      }
-    }
     return Promise.reject(error);
   }
 );
@@ -205,9 +139,6 @@ export const apiService = {
   // Rooms
   getRooms: (params) => api.get('/rooms', { params }),
   getRoom: (roomId) => api.get(`/rooms/${roomId}`),
-  
-  // Assignments
-  getMyAssignment: () => api.get('/assignments/me'),
   
   // Billing
   getMyBilling: () => api.get('/billing/me'),

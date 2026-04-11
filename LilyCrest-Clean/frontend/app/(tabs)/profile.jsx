@@ -1,11 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Image, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { useCallback, useEffect, useState } from 'react';
+import { ActivityIndicator, Image, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
 import { useTheme } from '../../src/context/ThemeContext';
+import { useAlert } from '../../src/context/AlertContext';
 import { apiService } from '../../src/services/api';
 
 const NAME_MAX = 60;
@@ -55,6 +56,7 @@ export default function ProfileScreen() {
   const { user, logout, updateUser, checkAuth, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const { colors, isDarkMode } = useTheme();
+  const { showAlert } = useAlert();
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -81,11 +83,31 @@ export default function ProfileScreen() {
     });
   }, [user?.name, user?.username, user?.email, user?.phone, user?.address]);
 
-  // load fresh profile once auth is ready
-  useEffect(() => {
-    if (authLoading) return;
-    fetchProfile();
-  }, [authLoading]);
+  // Fetch fresh profile data from server
+  const fetchProfile = async () => {
+    setProfileError('');
+    try {
+      const response = await apiService.getProfile();
+      if (response?.data) {
+        updateUser(response.data);
+      }
+    } catch (error) {
+      const status = error?.response?.status;
+      if (status === 401) {
+        try { await checkAuth?.(); } catch (_) {}
+      }
+      setProfileError('Unable to load profile. Pull to refresh and try again.');
+    }
+  };
+
+  // Refresh profile every time this tab gains focus
+  useFocusEffect(
+    useCallback(() => {
+      if (!authLoading && user) {
+        fetchProfile();
+      }
+    }, [authLoading, user?.user_id])
+  );
 
   useEffect(() => {
     if (isEditing) {
@@ -118,28 +140,7 @@ export default function ProfileScreen() {
     router.replace('/');
   };
 
-  const fetchProfile = async () => {
-    setProfileError('');
-    let attempts = 0;
-    while (attempts < 2) {
-      try {
-        const response = await apiService.getProfile();
-        if (response?.data) {
-          updateUser(response.data);
-        }
-        return;
-      } catch (error) {
-        const isUnauthorized = error?.response?.status === 401;
-        if (isUnauthorized && attempts === 0) {
-          try { await checkAuth?.(); } catch (_) {}
-          attempts += 1;
-          continue;
-        }
-        setProfileError('Unable to load profile. Pull to refresh and try again.');
-        return;
-      }
-    }
-  };
+
 
   const hasChanges = () => {
     return (
@@ -167,88 +168,69 @@ export default function ProfileScreen() {
     }
 
     setIsLoading(true);
-    let attempts = 0;
-    while (attempts < 2) {
-      try {
-        const payload = {
-          name: formData.name.trim(),
-          username: formData.username.trim().toLowerCase(),
-          email: formData.email.trim().toLowerCase(),
-          phone: formData.phone.trim() === '+63' ? '' : formData.phone.trim(),
-          address: formData.address.trim(),
-        };
-        const response = await apiService.updateProfile(payload);
-        updateUser(response.data);
-        setFormData({
-          name: response.data?.name || '',
-          username: response.data?.username || '',
-          email: response.data?.email || '',
-          phone: response.data?.phone || '+63',
-          address: response.data?.address || '',
-        });
-        setIsEditing(false);
-        setProfileBanner({ type: 'success', text: 'Profile updated successfully.' });
-        setIsLoading(false);
-        return;
-      } catch (error) {
-        const status = error?.response?.status;
-        if (status === 401 && attempts === 0) {
-          try { await checkAuth?.(); } catch (_) {}
-          attempts += 1;
-          continue;
-        }
-        // Show per-field errors from backend validation
-        if (status === 400 && error?.response?.data?.errors) {
-          const backendErrors = error.response.data.errors;
-          setErrors((prev) => ({
-            ...prev,
-            name: backendErrors.name || prev.name,
-            username: backendErrors.username || prev.username,
-            email: backendErrors.email || prev.email,
-            phone: backendErrors.phone || prev.phone,
-            address: backendErrors.address || prev.address,
-          }));
-          setProfileBanner({ type: 'error', text: error.response.data.detail || 'Validation failed.' });
-        } else {
-          setProfileBanner({ type: 'error', text: 'Failed to update profile. Please try again.' });
-        }
-        setIsLoading(false);
-        return;
+    try {
+      const payload = {
+        name: formData.name.trim(),
+        username: formData.username.trim().toLowerCase(),
+        email: formData.email.trim().toLowerCase(),
+        phone: formData.phone.trim() === '+63' ? '' : formData.phone.trim(),
+        address: formData.address.trim(),
+      };
+      const response = await apiService.updateProfile(payload);
+
+      // Update auth context with fresh data from server
+      updateUser(response.data);
+
+      // Update form with the server-confirmed values
+      setFormData({
+        name: response.data?.name || '',
+        username: response.data?.username || '',
+        email: response.data?.email || '',
+        phone: response.data?.phone || '+63',
+        address: response.data?.address || '',
+      });
+      setIsEditing(false);
+      setProfileBanner({ type: 'success', text: 'Profile updated successfully.' });
+    } catch (error) {
+      const status = error?.response?.status;
+      if (status === 400 && error?.response?.data?.errors) {
+        const backendErrors = error.response.data.errors;
+        setErrors((prev) => ({
+          ...prev,
+          name: backendErrors.name || prev.name,
+          username: backendErrors.username || prev.username,
+          email: backendErrors.email || prev.email,
+          phone: backendErrors.phone || prev.phone,
+          address: backendErrors.address || prev.address,
+        }));
+        setProfileBanner({ type: 'error', text: error.response.data.detail || 'Validation failed.' });
+      } else {
+        setProfileBanner({ type: 'error', text: 'Failed to update profile. Please try again.' });
       }
+    } finally {
+      setIsLoading(false);
     }
   };
 
   const pickImage = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permissionResult.granted) { Alert.alert('Permission Required', 'Please allow access to your photo library'); return; }
+    if (!permissionResult.granted) { showAlert({ title: 'Permission Required', message: 'Please allow access to your photo library to change your profile picture.', type: 'warning' }); return; }
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.5, base64: true });
     if (!result.canceled && result.assets[0].base64) {
       const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
-      // Validate size before sending
       if (base64Image.length > IMAGE_MAX_BYTES) {
         setProfileBanner({ type: 'error', text: 'Image is too large (max 2 MB). Please choose a smaller photo.' });
         return;
       }
       setIsLoading(true);
-      let attempts = 0;
-      while (attempts < 2) {
-        try {
-          const response = await apiService.updateProfile({ picture: base64Image });
-          updateUser(response.data);
-          setProfileBanner({ type: 'success', text: 'Profile picture updated.' });
-          setIsLoading(false);
-          return;
-        } catch (error) {
-          const isUnauthorized = error?.response?.status === 401;
-          if (isUnauthorized && attempts === 0) {
-            try { await checkAuth?.(); } catch (_) {}
-            attempts += 1;
-            continue;
-          }
-          setProfileBanner({ type: 'error', text: error?.response?.data?.errors?.picture || 'Failed to update profile picture.' });
-          setIsLoading(false);
-          return;
-        }
+      try {
+        const response = await apiService.updateProfile({ picture: base64Image });
+        updateUser(response.data);
+        setProfileBanner({ type: 'success', text: 'Profile picture updated.' });
+      } catch (error) {
+        setProfileBanner({ type: 'error', text: error?.response?.data?.errors?.picture || 'Failed to update profile picture.' });
+      } finally {
+        setIsLoading(false);
       }
     }
   };
@@ -300,7 +282,18 @@ export default function ProfileScreen() {
         <View style={styles.header}><Text style={styles.headerTitle}>Profile</Text></View>
 
         {profileBanner ? (
-          <View style={styles.banner(profileBanner.type)}>
+          <View style={{
+            flexDirection: 'row',
+            alignItems: 'center',
+            gap: 10,
+            marginHorizontal: 20,
+            marginBottom: 12,
+            padding: 12,
+            borderRadius: 12,
+            borderWidth: 1,
+            backgroundColor: profileBanner.type === 'success' ? '#ecfdf3' : profileBanner.type === 'warning' ? '#fffbeb' : '#fef2f2',
+            borderColor: profileBanner.type === 'success' ? '#bbf7d0' : profileBanner.type === 'warning' ? '#fde68a' : '#fecaca',
+          }}>
             <Ionicons
               name={profileBanner.type === 'success' ? 'checkmark-circle' : profileBanner.type === 'warning' ? 'alert-circle' : 'close-circle'}
               size={18}
@@ -470,19 +463,6 @@ export default function ProfileScreen() {
 }
 
 const createStyles = (colors, isDarkMode) => StyleSheet.create({
-    banner: (type) => ({
-      flexDirection: 'row',
-      alignItems: 'center',
-      gap: 10,
-      marginHorizontal: 20,
-      marginBottom: 12,
-      padding: 12,
-      borderRadius: 12,
-      borderWidth: 1,
-      backgroundColor: type === 'success' ? '#ecfdf3' : type === 'warning' ? '#fffbeb' : '#fef2f2',
-      borderColor: type === 'success' ? '#bbf7d0' : type === 'warning' ? '#fde68a' : '#fecaca',
-      ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.1, shadowRadius: 8 }, android: { elevation: 3 } }),
-    }),
     bannerText: { flex: 1, fontSize: 13, fontWeight: '700', color: colors.text },
   container: { flex: 1, backgroundColor: colors.background },
   scrollView: { flex: 1 },

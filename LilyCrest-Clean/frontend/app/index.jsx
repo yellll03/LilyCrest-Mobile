@@ -1,4 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as LocalAuthentication from 'expo-local-authentication';
 import { usePathname, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -15,17 +17,55 @@ import {
 } from 'react-native';
 import { useAuth } from '../src/context/AuthContext';
 import { useTheme } from '../src/context/ThemeContext';
+import { getCredentials, hasStoredCredentials } from '../src/services/secureCredentials';
 
 const { width, height } = Dimensions.get('window');
 
 export default function SplashScreen() {
   const router = useRouter();
   const pathname = usePathname();
-  const { user, isLoading, checkAuth } = useAuth();
+  const { user, isLoading, checkAuth, loginWithEmail } = useAuth();
   const { colors } = useTheme();
   const [checking, setChecking] = useState(true);
   const [showContent, setShowContent] = useState(false);
-  
+
+  // Auto-biometric: try to authenticate with stored credentials on app launch
+  const tryAutoBiometric = async () => {
+    try {
+      const bioSetting = await AsyncStorage.getItem('biometricLogin');
+      if (bioSetting !== 'true') return;
+
+      const hasCreds = await hasStoredCredentials();
+      if (!hasCreds) return;
+
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+      if (!hasHardware || !isEnrolled) return;
+
+      // Prompt biometric
+      const authResult = await LocalAuthentication.authenticateAsync({
+        promptMessage: 'Sign in to LilyCrest',
+        cancelLabel: 'Use Password',
+        disableDeviceFallback: false,
+      });
+
+      if (!authResult.success) return; // User cancelled — proceed to login screen
+
+      // Retrieve and use stored credentials
+      const creds = await getCredentials();
+      if (!creds) return;
+
+      const result = await loginWithEmail(creds.email, creds.password);
+      if (result.success) {
+        console.log('[AutoBiometric] ✓ Signed in automatically');
+        // User will be redirected by the useEffect that watches `user`
+      } else {
+        console.log('[AutoBiometric] Stored credentials invalid — user will see login');
+      }
+    } catch (err) {
+      console.warn('[AutoBiometric] Skipped:', err?.message);
+    }
+  };
   // Animation values
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideAnim = useRef(new Animated.Value(50)).current;
@@ -39,6 +79,13 @@ export default function SplashScreen() {
   useEffect(() => {
     const init = async () => {
       await checkAuth();
+
+      // If no valid session, try auto-biometric login
+      const token = await AsyncStorage.getItem('session_token');
+      if (!token) {
+        await tryAutoBiometric();
+      }
+
       setChecking(false);
     };
     init();
@@ -98,14 +145,17 @@ export default function SplashScreen() {
     }
   }, []);
 
+  // Auto-redirect to home if user is already authenticated (app launch only)
+  const hasRedirected = useRef(false);
   useEffect(() => {
-    if (!checking && !isLoading && user) {
-      // Avoid dispatching replace when we're already on the tabbed home route
-      if (pathname !== '/(tabs)/home') {
+    if (!checking && !isLoading && user && !hasRedirected.current) {
+      hasRedirected.current = true;
+      const timeout = setTimeout(() => {
         router.replace('/(tabs)/home');
-      }
+      }, 100);
+      return () => clearTimeout(timeout);
     }
-  }, [checking, isLoading, user, pathname]);
+  }, [checking, isLoading, user]);
 
   if (checking || isLoading) {
     return (

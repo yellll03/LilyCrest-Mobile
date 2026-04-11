@@ -80,7 +80,7 @@ function SkeletonCard({ height = 120, colors }) {
 }
 
 export default function HomeScreen() {
-  const { user, checkAuth, authReady, sessionToken, isLoading: authLoading } = useAuth();
+  const { user, checkAuth, authReady, isLoading: authLoading } = useAuth();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const router = useRouter();
@@ -255,13 +255,25 @@ export default function HomeScreen() {
     isFetchingRef.current = true;
     try {
       setLoadError(null);
+      const MOCK_ANNOUNCEMENTS_HOME = [
+        { title: 'April 2026 Billing Statements Released', content: 'Your April 2026 billing statements are now available. Settle on or before April 28 to avoid late fees.', category: 'Billing', created_at: '2026-04-18T08:00:00.000Z' },
+        { title: 'Scheduled Water Interruption – April 12', content: 'Water interruption on April 12, 8:00 AM–5:00 PM due to pipe maintenance. Please store water in advance.', category: 'Maintenance', created_at: '2026-04-09T09:00:00.000Z' },
+        { title: 'House Rules Reminder: Quiet Hours', content: 'Quiet hours are strictly 10:00 PM to 7:00 AM. Please be considerate of your fellow residents.', category: 'Rules', created_at: '2026-04-05T10:00:00.000Z' },
+        { title: 'Refer a Friend – Get 1 Month FREE WiFi!', content: 'Refer a friend who successfully moves in and enjoy 1 month of free WiFi. Mention your name upon inquiry.', category: 'Promo', created_at: '2026-04-01T08:00:00.000Z' },
+      ];
+
       const [dashboardRes, announcementsRes] = await Promise.all([
         apiService.getDashboard(),
         apiService.getAnnouncements().catch(() => ({ data: [] })),
       ]);
 
       const dashboard = dashboardRes?.data || {};
-      const announcements = announcementsRes?.data || [];
+      const realAnnouncements = announcementsRes?.data || [];
+      const realAnnIds = new Set(realAnnouncements.map(a => a.announcement_id).filter(Boolean));
+      const announcements = [
+        ...realAnnouncements,
+        ...MOCK_ANNOUNCEMENTS_HOME.filter(m => !realAnnIds.has(m.announcement_id)),
+      ];
 
       const billingItems = Array.isArray(dashboard?.billing?.items)
         ? dashboard.billing.items
@@ -309,26 +321,33 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (!authReady || authLoading) return;
-    if (!sessionToken) { setIsLoading(false); setLoadError('Please sign in to load your dashboard.'); return; }
+    if (!user) {
+      setIsLoading(false);
+      setLoadError('Please sign in to load your dashboard.');
+      return;
+    }
+    // User just became available (login) — clear any stale error and fetch
+    setLoadError(null);
+    setIsLoading(true);
     fetchDashboard();
-  }, [authLoading, authReady, sessionToken, user?.user_id]);
+  }, [authLoading, authReady, user?.user_id]);
 
   useFocusEffect(
     useCallback(() => {
-      if (!authReady || !sessionToken || !user?.user_id) return undefined;
+      if (!authReady || !user?.user_id) return undefined;
       // Fetch immediately when tab gains focus (e.g., after login redirect)
       fetchDashboard();
       // Also poll while this tab is focused
       const interval = setInterval(() => fetchDashboard(), 60000);
       return () => clearInterval(interval);
-    }, [authReady, sessionToken, user?.user_id])
+    }, [authReady, user?.user_id])
   );
 
   const onRefresh = useCallback(() => {
-    if (!authReady || !sessionToken || !user?.user_id) { setRefreshing(false); return; }
+    if (!authReady || !user?.user_id) { setRefreshing(false); return; }
     setRefreshing(true);
     fetchDashboard();
-  }, [authReady, sessionToken, user?.user_id]);
+  }, [authReady, user?.user_id]);
 
   const openMap = () => {
     const address = '#7 Gil Puyat Ave. cor Marconi St. Brgy Palanan, Makati City';
@@ -473,10 +492,16 @@ export default function HomeScreen() {
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.sectionTitle}>Your Room</Text>
-            <View style={styles.activeBadge}>
-              <View style={styles.activeDot} />
-              <Text style={styles.activeText}>Active Tenant</Text>
-            </View>
+            {tenancyAssignment ? (
+              <View style={styles.activeBadge}>
+                <View style={styles.activeDot} />
+                <Text style={styles.activeText}>Active Tenant</Text>
+              </View>
+            ) : (
+              <View style={[styles.activeBadge, { backgroundColor: '#FEF3C7' }]}>
+                <Text style={[styles.activeText, { color: '#D97706' }]}>No Room Assigned</Text>
+              </View>
+            )}
           </View>
 
           <TouchableOpacity

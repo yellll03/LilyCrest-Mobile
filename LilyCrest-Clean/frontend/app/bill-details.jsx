@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Alert, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAuth } from '../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
+import { useAlert } from '../src/context/AlertContext';
 import { apiService } from '../src/services/api';
 import { downloadBillPdf } from '../src/utils/downloadBillPdf';
 
@@ -47,14 +48,14 @@ const MOCK_BILLS = [
     },
   },
   {
-    billing_id: 'BILL-2026-001',
+    billing_id: 'BILL-2026-003',
     description: 'Electricity Bill - March 2026',
     billing_period: 'March 2026',
     period_start: '2026-02-15',
     period_end: '2026-03-15',
     release_date: '2026-03-18',
     due_date: '2026-03-25',
-    status: 'pending',
+    status: 'overdue',
     billing_type: 'electricity',
     electricity: 353.89,
     total: 353.89,
@@ -108,6 +109,32 @@ const MOCK_BILLS = [
       },
     ],
   },
+  {
+    billing_id: 'BILL-2026-001',
+    description: 'Electricity Bill - January 2026',
+    billing_period: 'January 2026',
+    period_start: '2025-12-15',
+    period_end: '2026-01-15',
+    release_date: '2026-01-18',
+    due_date: '2026-01-25',
+    status: 'paid',
+    billing_type: 'electricity',
+    electricity: 195.50,
+    total: 195.50,
+    amount: 195.50,
+    payment_method: 'paymongo',
+    payment_date: '2026-01-22T14:20:00Z',
+    electricity_breakdown: [
+      {
+        occupants: 4,
+        reading_date_from: '2025-12-15', reading_date_to: '2026-01-15',
+        reading_from: 898.00, reading_to: 946.61,
+        consumption: 48.61, rate: 16,
+        segment_total: 777.76,
+        share_per_tenant: 194.44,
+      },
+    ],
+  },
 ];
 
 // ── Helpers ──
@@ -144,6 +171,7 @@ export default function BillDetailsScreen() {
   const billId = Array.isArray(billIdParam) ? billIdParam[0] : billIdParam;
   const { user } = useAuth();
   const { colors, isDarkMode } = useTheme();
+  const { showAlert } = useAlert();
   const styles = useThemedStyles((c) => createStyles(c, isDarkMode));
 
   const [bill, setBill] = useState(null);
@@ -187,24 +215,24 @@ export default function BillDetailsScreen() {
       const resp = await apiService.createPaymongoCheckout(id);
       const checkoutUrl = resp?.data?.checkout_url;
       if (!checkoutUrl) {
-        Alert.alert('Error', 'Could not create payment session. Please try again.');
+        showAlert({ title: 'Error', message: 'Could not create payment session. Please try again.', type: 'error' });
         return;
       }
       const supported = await Linking.canOpenURL(checkoutUrl);
       if (supported) {
         await Linking.openURL(checkoutUrl);
         setTimeout(() => {
-          Alert.alert(
-            'Payment Status',
-            'If you completed the payment, it will be reflected in your billing within a few minutes.',
-            [{ text: 'OK' }]
-          );
+          showAlert({
+            title: 'Payment Status',
+            message: 'If you completed the payment, it will be reflected in your billing within a few minutes.',
+            type: 'info',
+          });
         }, 1000);
       } else {
-        Alert.alert('Error', 'Unable to open payment page. Please try again.');
+        showAlert({ title: 'Error', message: 'Unable to open payment page. Please try again.', type: 'error' });
       }
     } catch (err) {
-      Alert.alert('Payment Error', err?.response?.data?.detail || 'Failed to create payment session.');
+      showAlert({ title: 'Payment Error', message: err?.response?.data?.detail || 'Failed to create payment session.', type: 'error' });
     } finally {
       setCreatingCheckout(false);
     }
@@ -228,7 +256,8 @@ export default function BillDetailsScreen() {
   }
 
   const billIdentifier = getBillId(bill);
-  const isMockBill = String(billIdentifier || '').startsWith('mock');
+  const MOCK_IDS = new Set(MOCK_BILLS.map(b => getBillId(b)).filter(Boolean).map(String));
+  const isMockBill = String(billIdentifier || '').startsWith('mock') || MOCK_IDS.has(String(billIdentifier));
   const statusKey = (bill.status || 'pending').toLowerCase();
   const statusCfg = STATUS_CONFIG[statusKey] || STATUS_CONFIG.pending;
   const isPaid = statusKey === 'paid';
@@ -621,11 +650,11 @@ export default function BillDetailsScreen() {
 
         {/* ── Download PDF ── */}
         <Pressable
-          style={[styles.downloadBtn, (downloading || !billIdentifier || isMockBill) && styles.btnDisabled]}
-          disabled={downloading || !billIdentifier || isMockBill}
+          style={[styles.downloadBtn, (downloading || !billIdentifier) && styles.btnDisabled]}
+          disabled={downloading || !billIdentifier}
           onPress={() => {
-            if (!billIdentifier || isMockBill) {
-              Alert.alert('Download unavailable', 'No downloadable receipt for this bill.');
+            if (!billIdentifier) {
+              showAlert({ title: 'Download Unavailable', message: 'No downloadable receipt for this bill.', type: 'warning' });
               return;
             }
             downloadBillPdf(billIdentifier, setDownloading);

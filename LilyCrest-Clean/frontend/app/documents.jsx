@@ -1,9 +1,10 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Alert, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../src/context/ThemeContext';
+import { useAlert } from '../src/context/AlertContext';
 import { apiService } from '../src/services/api';
 
 const documents = [
@@ -18,6 +19,7 @@ const documents = [
 export default function DocumentsScreen() {
   const router = useRouter();
   const { colors, isDarkMode } = useTheme();
+  const { showAlert } = useAlert();
 
   const handlePress = async (doc) => {
     if (doc.download) {
@@ -27,11 +29,11 @@ export default function DocumentsScreen() {
         if (supported) {
           await Linking.openURL(url);
         } else {
-          Alert.alert('Unable to open link', 'Please try again later.');
+          showAlert({ title: 'Unable to Open', message: 'Could not open the download link. Please try again later.', type: 'error' });
         }
       } catch (error) {
         console.error('Contract download error:', error);
-        Alert.alert('Download failed', 'Please try again.');
+        showAlert({ title: 'Download Failed', message: 'There was a problem downloading the document. Please try again.', type: 'error' });
       }
     }
   };

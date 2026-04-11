@@ -1,16 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../src/context/AuthContext';
 import { useTheme } from '../src/context/ThemeContext';
+import { useAlert } from '../src/context/AlertContext';
 import { apiService } from '../src/services/api';
+import { clearCredentials } from '../src/services/secureCredentials';
 
 export default function ChangePasswordScreen() {
   const router = useRouter();
   const { colors, isDarkMode } = useTheme();
-  const { user } = useAuth();
+  const { showAlert } = useAlert();
+  const { user, logout } = useAuth();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -26,6 +29,7 @@ export default function ChangePasswordScreen() {
       uppercase: /[A-Z]/.test(password),
       lowercase: /[a-z]/.test(password),
       number: /[0-9]/.test(password),
+      special: /[!@#$%^&*()\-_=+\[\]{};:'",.<>?/\\|`~]/.test(password),
     };
     return checks;
   };
@@ -48,6 +52,10 @@ export default function ChangePasswordScreen() {
       setErrors(prev => ({ ...prev, confirm: 'Passwords do not match' }));
       return;
     }
+    if (currentPassword === newPassword) {
+      setErrors(prev => ({ ...prev, new: 'New password must be different from your current password' }));
+      return;
+    }
     
     setIsLoading(true);
     try {
@@ -55,15 +63,41 @@ export default function ChangePasswordScreen() {
         notifyApp: true,
         notifyEmail: true,
       });
-      
-      Alert.alert(
-        'Password Changed',
-        'Your password has been updated successfully.',
-        [{ text: 'OK', onPress: () => router.back() }]
-      );
+
+      // Clear biometric credentials since password changed
+      await clearCredentials();
+
+      // Show premium styled alert then force re-login
+      showAlert({
+        title: '🔒 Password Changed Successfully',
+        message: 'Your password has been updated. For your security, you will be signed out and need to log in again with your new password.\n\nA confirmation email has also been sent to your registered address.',
+        type: 'success',
+        buttons: [{
+          text: 'Sign In Again',
+          onPress: async () => {
+            await logout();
+            router.replace('/login');
+          },
+        }],
+      });
     } catch (error) {
-      const message = error.response?.data?.detail || 'Failed to change password. Please try again.';
-      Alert.alert('Error', message);
+      const data = error.response?.data;
+      const message = data?.detail || 'Failed to change password. Please try again.';
+      
+      // Show all validation errors if the backend returned multiple
+      if (data?.errors && data.errors.length > 1) {
+        showAlert({
+          title: 'Validation Error',
+          message: data.errors.join('\n'),
+          type: 'warning',
+        });
+      } else {
+        showAlert({
+          title: 'Error',
+          message,
+          type: 'error',
+        });
+      }
     } finally {
       setIsLoading(false);
     }
@@ -146,6 +180,10 @@ export default function ChangePasswordScreen() {
               <View style={styles.requirementRow}>
                 <Ionicons name={passwordChecks.number ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={passwordChecks.number ? '#22C55E' : colors.textMuted} />
                 <Text style={[styles.requirementText, passwordChecks.number && styles.requirementMet]}>One number</Text>
+              </View>
+              <View style={styles.requirementRow}>
+                <Ionicons name={passwordChecks.special ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={passwordChecks.special ? '#22C55E' : colors.textMuted} />
+                <Text style={[styles.requirementText, passwordChecks.special && styles.requirementMet]}>One special character (!@#$%^&*...)</Text>
               </View>
             </View>
           </View>

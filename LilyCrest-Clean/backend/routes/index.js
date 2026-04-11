@@ -51,8 +51,8 @@ router.use('/chatbot', chatbotRoutes);
 const paymongoRoutes = require('./paymongo.routes');
 router.use('/paymongo', paymongoRoutes);
 
-// Seed route
-router.post('/seed', authMiddleware, adminMiddleware, seedController.seedData);
+// Seed route (auth only — for demo/presentation use)
+router.post('/seed', authMiddleware, seedController.seedData);
 
 // Health check
 router.get('/health', (req, res) => {

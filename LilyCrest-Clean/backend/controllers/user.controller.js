@@ -1,72 +1,20 @@
 const { getDb } = require('../config/database');
 const { v4: uuidv4 } = require('uuid');
-const { verifyFirebaseIdToken } = require('../config/firebase');
 
-// Get current user — with auto-correction of admin-derived email/username
+// Get current user profile
 async function getMe(req, res) {
   try {
-    const { _id, ...userData } = req.user;
+    const db = getDb();
+    const user = await db.collection('users').findOne(
+      { user_id: req.user.user_id },
+      { projection: { _id: 0 } },
+    );
 
-    // Always display the tenant's personal email from their Google account
-    // If the stored email doesn't match, update it to the real one.
-    const firebaseIdToken = req.headers['x-firebase-id-token'];
-    if (firebaseIdToken) {
-      try {
-        const decoded = await verifyFirebaseIdToken(firebaseIdToken);
-        const googleEmail = decoded.email;
-
-        if (googleEmail) {
-          const storedEmail = (userData.email || '').toLowerCase();
-          const storedUsername = (userData.username || '');
-          const updates = {};
-
-          // If stored email doesn't match their personal Google email, fix it
-          if (storedEmail !== googleEmail.toLowerCase()) {
-            updates.email = googleEmail;
-            updates.google_email = googleEmail;
-            console.log(`[getMe] Updating email: "${storedEmail}" → "${googleEmail}" for user ${userData.user_id}`);
-          }
-
-          // If username is empty or still generic, derive from their real email
-          if (!storedUsername || storedUsername === storedEmail.split('@')[0]) {
-            const cleanUsername = googleEmail.split('@')[0]
-              .replace(/[^a-zA-Z0-9_]/g, '_')
-              .toLowerCase()
-              .slice(0, 30);
-            if (storedUsername !== cleanUsername) {
-              updates.username = cleanUsername;
-              console.log(`[getMe] Updating username: "${storedUsername}" → "${cleanUsername}" for user ${userData.user_id}`);
-            }
-          }
-
-          // Link Firebase UID if missing
-          if (!userData.firebaseUid && decoded.uid) {
-            updates.firebaseUid = decoded.uid;
-            updates.firebase_uid = decoded.uid;
-          }
-
-          if (Object.keys(updates).length > 0) {
-            updates.updated_at = new Date();
-            const db = getDb();
-            await db.collection('users').updateOne(
-              { user_id: userData.user_id },
-              { $set: updates }
-            );
-
-            // Return the corrected data
-            const correctedUser = await db.collection('users').findOne(
-              { user_id: userData.user_id },
-              { projection: { _id: 0 } }
-            );
-            return res.json(correctedUser);
-          }
-        }
-      } catch (firebaseErr) {
-        console.warn('[getMe] Firebase token check failed:', firebaseErr.message);
-      }
+    if (!user) {
+      return res.status(404).json({ detail: 'User not found' });
     }
 
-    res.json(userData);
+    res.json(user);
   } catch (error) {
     console.error('getMe error:', error);
     res.status(500).json({ detail: 'Failed to load profile' });

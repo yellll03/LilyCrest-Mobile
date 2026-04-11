@@ -1,6 +1,115 @@
 const { v4: uuidv4 } = require('uuid');
+const { ObjectId } = require('mongodb');
 const { getDb } = require('../config/database');
 const { buildBrandedPdf, esc } = require('../utils/pdfBuilder');
+
+// ── Presentation-mode mock bills ─────────────────────────────────────────────
+// Used as PDF fallback when a bill ID is not found in the database.
+// These match the mock data already shown in the mobile billing screens.
+const PRESENTATION_BILLS = {
+  'BILL-2026-004': {
+    billing_id: 'BILL-2026-004',
+    description: 'April 2026 Billing Statement',
+    billing_period: 'April 2026',
+    billing_type: 'consolidated',
+    release_date: new Date('2026-04-18'),
+    due_date: new Date('2026-04-28'),
+    status: 'pending',
+    rent: 5400, electricity: 353.89, water: 450, penalties: 0,
+    total: 6203.89, amount: 6203.89,
+    electricity_breakdown: [
+      { occupants: 4, reading_date_from: '2026-03-15', reading_date_to: '2026-03-24', reading_from: 1091.91, reading_to: 1127.69, consumption: 35.78, rate: 16, segment_total: 572.48, share_per_tenant: 143.12 },
+      { occupants: 3, reading_date_from: '2026-03-24', reading_date_to: '2026-04-15', reading_from: 1127.69, reading_to: 1167.21, consumption: 39.52, rate: 16, segment_total: 632.32, share_per_tenant: 210.77 },
+    ],
+    water_breakdown: { reading_from: 22, reading_to: 31, consumption: 9, rate: 50, total: 450, sharing_policy: 'Equal division among active tenants' },
+  },
+  'BILL-2026-003': {
+    billing_id: 'BILL-2026-003',
+    description: 'Electricity Bill - March 2026',
+    billing_period: 'March 2026',
+    billing_type: 'electricity',
+    release_date: new Date('2026-03-18'),
+    due_date: new Date('2026-03-25'),
+    status: 'pending',
+    electricity: 353.89, total: 353.89, amount: 353.89,
+    electricity_breakdown: [
+      { occupants: 4, reading_date_from: '2026-02-15', reading_date_to: '2026-02-24', reading_from: 1016.61, reading_to: 1052.39, consumption: 35.78, rate: 16, segment_total: 572.48, share_per_tenant: 143.12 },
+      { occupants: 3, reading_date_from: '2026-02-24', reading_date_to: '2026-03-15', reading_from: 1052.39, reading_to: 1091.91, consumption: 39.52, rate: 16, segment_total: 632.32, share_per_tenant: 210.77 },
+    ],
+  },
+  'BILL-2026-002': {
+    billing_id: 'BILL-2026-002',
+    description: 'Electricity Bill - February 2026',
+    billing_period: 'February 2026',
+    billing_type: 'electricity',
+    release_date: new Date('2026-02-18'),
+    due_date: new Date('2026-02-25'),
+    status: 'paid',
+    electricity: 280, total: 280, amount: 280,
+    payment_method: 'paymongo',
+    payment_date: new Date('2026-02-20T10:30:00Z'),
+    paymongo_reference: 'LC-BILL-2026-002-1709500000',
+    electricity_breakdown: [
+      { occupants: 4, reading_date_from: '2026-01-15', reading_date_to: '2026-02-15', reading_from: 946.61, reading_to: 1016.61, consumption: 70, rate: 16, segment_total: 1120, share_per_tenant: 280 },
+    ],
+  },
+  'BILL-2026-001': {
+    billing_id: 'BILL-2026-001',
+    description: 'Electricity Bill - January 2026',
+    billing_period: 'January 2026',
+    billing_type: 'electricity',
+    release_date: new Date('2026-01-18'),
+    due_date: new Date('2026-01-25'),
+    status: 'paid',
+    electricity: 195.50, total: 195.50, amount: 195.50,
+    payment_method: 'paymongo',
+    payment_date: new Date('2026-01-22T14:20:00Z'),
+    paymongo_reference: 'LC-BILL-2026-001-1706900000',
+    electricity_breakdown: [
+      { occupants: 3, reading_date_from: '2025-12-15', reading_date_to: '2026-01-15', reading_from: 905.98, reading_to: 946.61, consumption: 40.63, rate: 16, segment_total: 650.08, share_per_tenant: 195.50 },
+    ],
+  },
+};
+
+// Map a document from the real 'bills' collection to the legacy billing shape
+function mapRealBill(b, userId) {
+  const c = b.charges || {};
+  // Use remainingAmount as the payable total (accounts for credits/discounts)
+  const payableAmount = b.remainingAmount ?? b.totalAmount ?? 0;
+
+  // Format billing period from billingMonth ISO string → "April 2026"
+  let billingPeriod = b.billingMonth || b.description || '';
+  try {
+    if (billingPeriod && billingPeriod.includes('T')) {
+      billingPeriod = new Date(billingPeriod).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+    }
+  } catch (_) { /* keep raw value */ }
+
+  return {
+    billing_id: b._id?.toString(),
+    user_id: userId,
+    description: billingPeriod ? `${billingPeriod} Billing Statement` : 'Billing Statement',
+    billing_period: billingPeriod,
+    billing_type: 'consolidated',
+    due_date: b.dueDate,
+    release_date: b.billingCycleStart,
+    status: b.status,
+    // Individual charge fields so breakdown chips render correctly
+    rent: c.rent || 0,
+    electricity: c.electricity || 0,
+    water: c.water || 0,
+    penalties: (c.penalty || 0) + (c.applianceFees || 0) + (c.corkageFees || 0),
+    // Totals
+    amount: payableAmount,
+    total: payableAmount,
+    gross_amount: b.grossAmount,
+    remaining_amount: b.remainingAmount,
+    payment_method: b.paymentMethod,
+    payment_date: b.paidAt,
+    additional_charges: b.additionalCharges,
+    created_at: b.createdAt,
+  };
+}
 
 function normalizeLine(line) {
   if (!line) return '';
@@ -12,21 +121,45 @@ function normalizeLine(line) {
     .trimEnd();
 }
 
+// Fetch bills for a user — tries the legacy 'billing' collection first,
+// then falls back to the real 'bills' collection (keyed by MongoDB ObjectId).
+async function fetchUserBills(db, user, { paidOnly = false, limit = 100 } = {}) {
+  const userId = user.user_id;
+  const mongoId = user._id;
+
+  // 1. Legacy 'billing' collection (string user_id)
+  const legacyQuery = { user_id: userId };
+  if (paidOnly) legacyQuery.status = 'paid';
+  const legacy = await db.collection('billing')
+    .find(legacyQuery)
+    .sort({ due_date: -1, created_at: -1 })
+    .limit(limit)
+    .toArray();
+
+  if (legacy.length) return legacy.map((b) => ({ ...b, _id: undefined }));
+
+  // 2. Real 'bills' collection (ObjectId userId)
+  if (!mongoId) return [];
+  const realQuery = { userId: mongoId };
+  if (paidOnly) realQuery.status = 'paid';
+  const real = await db.collection('bills')
+    .find(realQuery)
+    .sort({ dueDate: -1 })
+    .limit(limit)
+    .toArray();
+
+  return real.map((b) => mapRealBill(b, userId));
+}
+
 // Get the most recent bill for the user (by due date, fallback to created_at)
 async function getLatestBilling(req, res) {
   try {
     const db = getDb();
-    const cursor = db.collection('billing')
-      .find({ user_id: req.user.user_id })
-      .sort({ due_date: -1, created_at: -1 })
-      .limit(1);
-
-    const latest = await cursor.next();
-    if (!latest) {
+    const bills = await fetchUserBills(db, req.user, { limit: 1 });
+    if (!bills.length) {
       return res.status(404).json({ detail: 'No billing found' });
     }
-
-    res.json({ ...latest, _id: undefined });
+    res.json(bills[0]);
   } catch (error) {
     console.error('Get latest billing error:', error);
     res.status(500).json({ detail: 'Failed to fetch latest billing' });
@@ -37,12 +170,10 @@ async function getLatestBilling(req, res) {
 async function getMyBilling(req, res) {
   try {
     const db = getDb();
-    const bills = await db.collection('billing')
-      .find({ user_id: req.user.user_id })
-      .sort({ due_date: -1 })
-      .toArray();
-    res.json(bills.map(b => ({ ...b, _id: undefined })));
+    const bills = await fetchUserBills(db, req.user);
+    res.json(bills);
   } catch (error) {
+    console.error('Get billing error:', error);
     res.status(500).json({ detail: 'Failed to fetch billing' });
   }
 }
@@ -51,11 +182,8 @@ async function getMyBilling(req, res) {
 async function getPaymentHistory(req, res) {
   try {
     const db = getDb();
-    const bills = await db.collection('billing')
-      .find({ user_id: req.user.user_id, status: 'paid' })
-      .sort({ payment_date: -1 })
-      .toArray();
-    res.json(bills.map((b) => ({ ...b, _id: undefined })));
+    const bills = await fetchUserBills(db, req.user, { paidOnly: true });
+    res.json(bills);
   } catch (error) {
     res.status(500).json({ detail: 'Failed to fetch payment history' });
   }
@@ -176,11 +304,13 @@ async function updateBilling(req, res) {
       { returnDocument: 'after' }
     );
 
-    if (!result.value) {
+    // MongoDB driver v6+ returns document directly; older versions use .value
+    const updated = result?.value ?? result;
+    if (!updated || !updated.billing_id) {
       return res.status(404).json({ detail: 'Bill not found' });
     }
 
-    res.json({ ...result.value, _id: undefined });
+    res.json({ ...updated, _id: undefined });
   } catch (error) {
     console.error('Update billing error:', error);
     res.status(500).json({ detail: 'Failed to update bill' });
@@ -192,7 +322,25 @@ async function downloadBillPdf(req, res) {
   try {
     const { billingId } = req.params;
     const db = getDb();
-    const bill = await db.collection('billing').findOne({ billing_id: billingId, user_id: req.user.user_id });
+    const userId = req.user.user_id;
+    const mongoId = req.user._id;
+
+    // 1. Try legacy 'billing' collection (string billing_id + user_id)
+    let bill = await db.collection('billing').findOne({ billing_id: billingId, user_id: userId });
+
+    // 2. Try real 'bills' collection (ObjectId _id + userId)
+    if (!bill && mongoId) {
+      let realBill = null;
+      try {
+        realBill = await db.collection('bills').findOne({ _id: new ObjectId(billingId), userId: mongoId });
+      } catch (_) { /* billingId is not a valid ObjectId — skip */ }
+      if (realBill) bill = mapRealBill(realBill, userId);
+    }
+
+    // 3. Presentation-mode fallback — serve mock bill for demo purposes
+    if (!bill && PRESENTATION_BILLS[billingId]) {
+      bill = { ...PRESENTATION_BILLS[billingId] };
+    }
 
     if (!bill) {
       return res.status(404).json({ detail: 'Bill not found' });
@@ -362,8 +510,10 @@ async function downloadBillPdf(req, res) {
     });
 
     res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Length', pdfBuffer.length);
     res.setHeader('Content-Disposition', `attachment; filename="${billingId}.pdf"`);
-    res.send(pdfBuffer);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.end(pdfBuffer);
   } catch (error) {
     console.error('Download bill PDF error:', error);
     res.status(500).json({ detail: 'Failed to generate bill PDF' });
@@ -377,5 +527,8 @@ module.exports = {
   getPaymentHistory,
   createBilling,
   updateBilling,
-  downloadBillPdf
+  downloadBillPdf,
+  // Shared utilities used by paymongo controller
+  PRESENTATION_BILLS,
+  mapRealBill,
 };

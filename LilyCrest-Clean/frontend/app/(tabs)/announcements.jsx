@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { format, formatDistanceToNow } from 'date-fns';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
@@ -22,59 +22,214 @@ function safeDistanceToNow(dateStr) {
   } catch (_e) { return ''; }
 }
 
+// Check if announcement is less than 3 days old
+function isNew(dateStr) {
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return false;
+    return (Date.now() - d.getTime()) < 3 * 24 * 60 * 60 * 1000;
+  } catch (_e) { return false; }
+}
+
 export default function AnnouncementsScreen() {
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const styles = useThemedStyles((c) => StyleSheet.create({
     container: { flex: 1, backgroundColor: c.background },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: c.background },
-    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
-    backButton: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-    headerTitle: { fontSize: 18, fontWeight: '600', color: c.text },
-    refreshIndicator: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-    categoryFilter: { backgroundColor: c.surface, maxHeight: 56, borderBottomWidth: 1, borderBottomColor: c.border },
-    categoryFilterContent: { paddingHorizontal: 16, paddingVertical: 10, gap: 8 },
-    categoryChip: { flexDirection: 'row', alignItems: 'center', paddingVertical: 8, paddingHorizontal: 14, borderRadius: 20, backgroundColor: c.surfaceSecondary, marginRight: 8, gap: 6 },
-    categoryChipActive: { backgroundColor: c.primary },
-    categoryChipText: { fontSize: 13, fontWeight: '500', color: c.textSecondary },
-    categoryChipTextActive: { color: c.surface },
+
+    // ── Header ──
+    headerWrapper: {
+      backgroundColor: c.surface,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+    },
+    headerRow: {
+      flexDirection: 'row',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      paddingHorizontal: 20,
+      paddingTop: 20,
+      paddingBottom: 12,
+    },
+    headerLeft: { flex: 1 },
+    headerTitle: { fontSize: 22, fontWeight: '700', color: c.text, letterSpacing: -0.3 },
+    headerSubtitle: { fontSize: 13, color: c.textMuted, marginTop: 2 },
+    refreshBtn: {
+      width: 36, height: 36, borderRadius: 10,
+      backgroundColor: c.surfaceSecondary,
+      justifyContent: 'center', alignItems: 'center',
+    },
+
+    // ── Category Filter ──
+    categoryFilter: { backgroundColor: c.surface },
+    categoryFilterContent: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 12, gap: 6 },
+    categoryChip: {
+      flexDirection: 'row', alignItems: 'center',
+      paddingVertical: 6, paddingHorizontal: 12,
+      borderRadius: 20, backgroundColor: c.surfaceSecondary,
+      marginRight: 4, gap: 5,
+    },
+    categoryChipActive: { backgroundColor: '#1E3A5F' },
+    categoryChipText: { fontSize: 12, fontWeight: '600', color: c.textSecondary },
+    categoryChipTextActive: { color: '#FFFFFF' },
+    chipCountWrap: {
+      backgroundColor: 'rgba(0,0,0,0.08)',
+      borderRadius: 8,
+      minWidth: 18, height: 18,
+      justifyContent: 'center', alignItems: 'center',
+      paddingHorizontal: 5,
+    },
+    chipCountWrapActive: {
+      backgroundColor: 'rgba(255,255,255,0.2)',
+    },
+    chipCount: {
+      fontSize: 10, fontWeight: '700',
+      color: c.textMuted,
+      textAlign: 'center',
+    },
+    chipCountActive: {
+      color: '#FFFFFF',
+    },
+
+    // ── Cards ──
     scrollView: { flex: 1 },
-    scrollContent: { padding: 16 },
-    statsContainer: { flexDirection: 'row', marginBottom: 16, gap: 12 },
-    statCard: { flex: 1, backgroundColor: c.surface, padding: 16, borderRadius: 12, alignItems: 'center', ...Platform.select({ web: { boxShadow: '0 2px 4px rgba(0,0,0,0.05)' }, default: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 } }) },
-    statNumber: { fontSize: 24, fontWeight: 'bold', color: c.text },
-    statLabel: { fontSize: 12, color: c.textMuted, marginTop: 2 },
-    emptyState: { alignItems: 'center', paddingVertical: 48 },
-    emptyText: { fontSize: 16, color: c.textMuted, marginTop: 12 },
-    announcementCard: { backgroundColor: c.surface, borderRadius: 14, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: c.border },
-    announcementHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 12 },
-    priorityIcon: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 12, borderWidth: 1, borderColor: c.border },
+    scrollContent: { padding: 16, paddingTop: 16 },
+    announcementCard: {
+      backgroundColor: c.surface, borderRadius: 14, marginBottom: 12,
+      borderWidth: 1, borderColor: c.border,
+      overflow: 'hidden',
+    },
+    cardAccent: {
+      position: 'absolute', left: 0, top: 0, bottom: 0,
+      width: 3.5, borderTopLeftRadius: 14, borderBottomLeftRadius: 14,
+    },
+    cardBody: { padding: 14, paddingLeft: 16 },
+    announcementHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 },
+    priorityIcon: {
+      width: 36, height: 36, borderRadius: 10,
+      justifyContent: 'center', alignItems: 'center', marginRight: 10,
+    },
     announcementTitleContainer: { flex: 1 },
-    announcementTitle: { fontSize: 16, fontWeight: '600', color: c.text, marginBottom: 4 },
-    announcementTime: { fontSize: 12, color: c.textMuted },
-    badgeRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 12, gap: 8 },
-    categoryBadge: { flexDirection: 'row', alignItems: 'center', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 6, gap: 4 },
-    categoryBadgeText: { fontSize: 12, fontWeight: '500' },
-    urgentBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FEE2E2', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 6, gap: 4, borderWidth: 1, borderColor: '#fecdd3' },
-    urgentText: { fontSize: 12, fontWeight: '500', color: '#EF4444' },
-    announcementContent: { fontSize: 14, color: c.text, lineHeight: 22, marginBottom: 12 },
-    announcementFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderTopWidth: 1, borderTopColor: c.border, paddingTop: 12 },
-    footerLeft: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-    announcementDate: { fontSize: 12, color: c.textMuted },
+    titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
+    announcementTitle: { fontSize: 14, fontWeight: '700', color: c.text, flex: 1, lineHeight: 20 },
+    newDot: {
+      width: 7, height: 7, borderRadius: 4,
+      backgroundColor: '#3B82F6', marginTop: 6,
+    },
+    announcementTime: { fontSize: 11.5, color: c.textMuted, marginTop: 2 },
+    badgeRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 8, gap: 6 },
+    categoryBadge: {
+      flexDirection: 'row', alignItems: 'center',
+      paddingVertical: 3, paddingHorizontal: 8,
+      borderRadius: 5, gap: 4,
+    },
+    categoryBadgeText: { fontSize: 10.5, fontWeight: '600' },
+    urgentBadge: {
+      flexDirection: 'row', alignItems: 'center',
+      backgroundColor: '#FEE2E2', paddingVertical: 3, paddingHorizontal: 8,
+      borderRadius: 5, gap: 4,
+    },
+    urgentText: { fontSize: 10.5, fontWeight: '600', color: '#EF4444' },
+    announcementContent: {
+      fontSize: 13, color: c.textSecondary, lineHeight: 20,
+    },
+    announcementFooter: {
+      flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+      borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border,
+      paddingTop: 10, marginTop: 10,
+    },
+    footerLeft: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    announcementDate: { fontSize: 10.5, color: c.textMuted, fontWeight: '500' },
+    footerAuthor: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+    authorText: { fontSize: 10.5, color: c.textMuted, fontWeight: '500' },
+
+    // ── Empty ──
+    emptyState: { alignItems: 'center', paddingVertical: 60 },
+    emptyIcon: {
+      width: 72, height: 72, borderRadius: 20,
+      backgroundColor: c.surfaceSecondary,
+      justifyContent: 'center', alignItems: 'center',
+      marginBottom: 16,
+    },
+    emptyTitle: { fontSize: 16, fontWeight: '600', color: c.text, marginBottom: 4 },
+    emptyText: { fontSize: 13, color: c.textMuted, textAlign: 'center', lineHeight: 20, paddingHorizontal: 40 },
+
     bottomSpacer: { height: Platform.OS === 'ios' ? 100 : 80 },
   }));
+
   const [announcements, setAnnouncements] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [selectedCategory, setSelectedCategory] = useState(null);
 
+  const MOCK_ANNOUNCEMENTS = [
+    {
+      announcement_id: 'ann_001',
+      title: 'April 2026 Billing Statements Released',
+      content: 'Your April 2026 billing statements are now available in the app. Kindly settle your balance on or before April 28, 2026 to avoid late fees. You may pay conveniently via GCash, Maya, or Credit/Debit Card through our in-app PayMongo payment. For concerns, message us at 0917 1000087.',
+      author_name: 'LilyCrest Admin',
+      priority: 'high',
+      category: 'Billing',
+      is_urgent: true,
+      created_at: '2026-04-18T08:00:00.000Z',
+    },
+    {
+      announcement_id: 'ann_002',
+      title: 'Scheduled Water Interruption – April 12, 2026',
+      content: 'Please be advised that there will be a scheduled water interruption on Saturday, April 12, 2026, from 8:00 AM to 5:00 PM due to pipe maintenance. Please store enough water before the interruption. We apologize for the inconvenience and appreciate your understanding.',
+      author_name: 'LilyCrest Admin',
+      priority: 'high',
+      category: 'Maintenance',
+      is_urgent: true,
+      created_at: '2026-04-09T09:00:00.000Z',
+    },
+    {
+      announcement_id: 'ann_003',
+      title: 'House Rules Reminder: Quiet Hours',
+      content: 'As a reminder to all tenants, quiet hours are strictly observed from 10:00 PM to 7:00 AM. Please keep noise to a minimum during these hours out of respect for your fellow residents. Repeated violations may result in a notice from management. Thank you for your cooperation.',
+      author_name: 'LilyCrest Admin',
+      priority: 'normal',
+      category: 'Rules',
+      is_urgent: false,
+      created_at: '2026-04-05T10:00:00.000Z',
+    },
+    {
+      announcement_id: 'ann_004',
+      title: 'Refer a Friend – Get 1 Month FREE!',
+      content: 'Know someone looking for a place to stay? Refer a friend and get 1 month of free WiFi when they successfully move in! Simply have them mention your name upon inquiry. This promo is ongoing until slots are filled. Spread the word and enjoy the perks!',
+      author_name: 'LilyCrest Admin',
+      priority: 'normal',
+      category: 'Promo',
+      is_urgent: false,
+      created_at: '2026-04-01T08:00:00.000Z',
+    },
+    {
+      announcement_id: 'ann_005',
+      title: 'Welcome, New Tenants! – April 2026 Move-Ins',
+      content: 'LilyCrest warmly welcomes our new tenants who moved in this April! We hope you feel at home. Should you need anything or have questions about the dorm policies, do not hesitate to reach out to us at 0917 1000087 or message us on our Facebook page. Enjoy your stay!',
+      author_name: 'LilyCrest Admin',
+      priority: 'low',
+      category: 'General',
+      is_urgent: false,
+      created_at: '2026-04-01T07:00:00.000Z',
+    },
+  ];
+
   const fetchAnnouncements = async () => {
     try {
       const response = await apiService.getAnnouncements();
-      // Clone array so even identical payload triggers rerender
-      setAnnouncements([...(response.data || [])]);
+      const real = response.data || [];
+      // Always show mock announcements; real ones are prepended and take priority
+      const realIds = new Set(real.map(a => a.announcement_id).filter(Boolean));
+      const merged = [
+        ...real,
+        ...MOCK_ANNOUNCEMENTS.filter(m => !realIds.has(m.announcement_id)),
+      ];
+      setAnnouncements(merged);
     } catch (error) {
       console.error('Fetch announcements error:', error);
+      setAnnouncements([...MOCK_ANNOUNCEMENTS]);
     } finally {
       setIsLoading(false);
       setRefreshing(false);
@@ -92,15 +247,6 @@ export default function AnnouncementsScreen() {
 
   const onRefresh = useCallback(() => { setRefreshing(true); fetchAnnouncements(); }, []);
 
-  const getPriorityIcon = (priority) => {
-    switch (priority) {
-      case 'high': return 'alert-circle';
-      case 'normal': return 'information-circle';
-      case 'low': return 'checkmark-circle';
-      default: return 'information-circle';
-    }
-  };
-
   const getPriorityColor = (priority) => {
     switch (priority) {
       case 'high': return '#EF4444';
@@ -110,96 +256,163 @@ export default function AnnouncementsScreen() {
     }
   };
 
+  const getPriorityIcon = (priority) => {
+    switch (priority) {
+      case 'high': return 'alert-circle';
+      case 'normal': return 'information-circle';
+      case 'low': return 'checkmark-circle';
+      default: return 'information-circle';
+    }
+  };
+
   const getCategoryColor = (category) => {
+    // Color palette — red is RESERVED for urgency, never used for categories
     switch (category?.toLowerCase()) {
-      case 'maintenance': return { bg: '#FEF3C7', text: '#D97706' };
-      case 'billing': return { bg: '#DBEAFE', text: '#2563EB' };
-      case 'event': return { bg: '#F3E8FF', text: '#9333EA' };
-      case 'promo': return { bg: '#DCFCE7', text: '#16A34A' };
-      case 'rules': return { bg: '#FFE4E6', text: '#E11D48' };
-      default: return { bg: '#F3F4F6', text: '#4B5563' };
+      case 'billing':     return { bg: '#DBEAFE', text: '#2563EB', icon: 'card' };            // Blue
+      case 'maintenance': return { bg: '#FEF3C7', text: '#D97706', icon: 'construct' };       // Amber
+      case 'rules':       return { bg: '#EEF2FF', text: '#4F46E5', icon: 'document-text' };   // Indigo
+      case 'promo':       return { bg: '#DCFCE7', text: '#16A34A', icon: 'pricetag' };        // Green
+      case 'event':       return { bg: '#F3E8FF', text: '#9333EA', icon: 'calendar' };        // Purple
+      default:            return { bg: '#F3F4F6', text: '#4B5563', icon: 'megaphone' };       // Gray
     }
   };
 
   const getCategoryIcon = (category) => {
-    switch (category?.toLowerCase()) {
-      case 'maintenance': return 'construct';
-      case 'billing': return 'card';
-      case 'event': return 'calendar';
-      case 'promo': return 'pricetag';
-      case 'rules': return 'document-text';
-      default: return 'megaphone';
-    }
+    return getCategoryColor(category).icon;
   };
 
   const categories = ['All', ...new Set(announcements.map((a) => a.category || 'General'))];
   const filteredAnnouncements = selectedCategory && selectedCategory !== 'All' ? announcements.filter((a) => (a.category || 'General') === selectedCategory) : announcements;
 
+  // Count per category for pill badges
+  const getCategoryCount = (cat) => {
+    if (cat === 'All') return announcements.length;
+    return announcements.filter((a) => (a.category || 'General') === cat).length;
+  };
+
   if (isLoading) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color={colors.primary} /></View>;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Announcements</Text>
-        <TouchableOpacity
-          style={styles.refreshIndicator}
-          onPress={() => { if (!refreshing) { setRefreshing(true); fetchAnnouncements(); } }}
-          disabled={refreshing}
-          accessibilityLabel="Refresh announcements"
-        >
-          {refreshing ? (
-            <ActivityIndicator size={18} color={colors.primary} />
-          ) : (
-            <Ionicons name="sync" size={18} color={colors.textMuted} />
-          )}
-        </TouchableOpacity>
-      </View>
-
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryFilter} contentContainerStyle={styles.categoryFilterContent}>
-        {categories.map((category) => (
-          <TouchableOpacity key={category} style={[styles.categoryChip, (selectedCategory === category || (!selectedCategory && category === 'All')) && styles.categoryChipActive]} onPress={() => setSelectedCategory(category === 'All' ? null : category)}>
-            <Ionicons name={category === 'All' ? 'apps' : getCategoryIcon(category)} size={14} color={(selectedCategory === category || (!selectedCategory && category === 'All')) ? colors.surface : colors.textMuted} />
-            <Text style={[styles.categoryChipText, (selectedCategory === category || (!selectedCategory && category === 'All')) && styles.categoryChipTextActive]}>{category}</Text>
+      {/* ── Premium Header ── */}
+      <View style={styles.headerWrapper}>
+        <View style={styles.headerRow}>
+          <View style={styles.headerLeft}>
+            <Text style={styles.headerTitle}>Announcements</Text>
+            <Text style={styles.headerSubtitle}>
+              {announcements.length} notice{announcements.length !== 1 ? 's' : ''} from management
+            </Text>
+          </View>
+          <TouchableOpacity
+            style={styles.refreshBtn}
+            onPress={() => { if (!refreshing) { setRefreshing(true); fetchAnnouncements(); } }}
+            disabled={refreshing}
+            accessibilityLabel="Refresh announcements"
+          >
+            {refreshing ? (
+              <ActivityIndicator size={16} color={colors.primary} />
+            ) : (
+              <Ionicons name="refresh" size={18} color={colors.textMuted} />
+            )}
           </TouchableOpacity>
-        ))}
-      </ScrollView>
-
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />} showsVerticalScrollIndicator={false}>
-        <View style={styles.statsContainer}>
-          <View style={styles.statCard}><Text style={styles.statNumber}>{announcements.length}</Text><Text style={styles.statLabel}>Total</Text></View>
-          <View style={styles.statCard}><Text style={[styles.statNumber, { color: '#EF4444' }]}>{announcements.filter((a) => a.priority === 'high').length}</Text><Text style={styles.statLabel}>Urgent</Text></View>
-          <View style={styles.statCard}><Text style={[styles.statNumber, { color: '#22C55E' }]}>{announcements.filter((a) => a.category === 'Event').length}</Text><Text style={styles.statLabel}>Events</Text></View>
         </View>
 
+        {/* ── Category Pills ── */}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryFilter} contentContainerStyle={styles.categoryFilterContent}>
+          {categories.map((category) => {
+            const isActive = selectedCategory === category || (!selectedCategory && category === 'All');
+            const count = getCategoryCount(category);
+            return (
+              <TouchableOpacity
+                key={category}
+                style={[styles.categoryChip, isActive && styles.categoryChipActive]}
+                onPress={() => setSelectedCategory(category === 'All' ? null : category)}
+              >
+                <Ionicons
+                  name={category === 'All' ? 'apps' : getCategoryIcon(category)}
+                  size={13}
+                  color={isActive ? '#FFFFFF' : colors.textMuted}
+                />
+                <Text style={[styles.categoryChipText, isActive && styles.categoryChipTextActive]}>{category}</Text>
+                <View style={[styles.chipCountWrap, isActive && styles.chipCountWrapActive]}>
+                  <Text style={[styles.chipCount, isActive && styles.chipCountActive]}>{count}</Text>
+                </View>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
 
+      {/* ── Content ── */}
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
+        showsVerticalScrollIndicator={false}
+      >
+
+
+        {/* ── Announcement Cards ── */}
         {filteredAnnouncements.length === 0 ? (
-          <View style={styles.emptyState}><Ionicons name="megaphone-outline" size={48} color="#D1D5DB" /><Text style={styles.emptyText}>No announcements yet</Text></View>
+          <View style={styles.emptyState}>
+            <View style={styles.emptyIcon}>
+              <Ionicons name="megaphone-outline" size={32} color={colors.textMuted} />
+            </View>
+            <Text style={styles.emptyTitle}>No announcements</Text>
+            <Text style={styles.emptyText}>There are no announcements in this category yet. Pull down to refresh.</Text>
+          </View>
         ) : filteredAnnouncements.map((announcement) => {
-          const categoryColor = getCategoryColor(announcement.category || 'General');
+          const catColor = getCategoryColor(announcement.category || 'General');
+          const prioColor = getPriorityColor(announcement.priority);
+          const isRecent = isNew(announcement.created_at);
           return (
             <View key={announcement.announcement_id} style={styles.announcementCard}>
-              <View style={styles.announcementHeader}>
-                <View style={[styles.priorityIcon, { backgroundColor: `${getPriorityColor(announcement.priority)}15` }]}>
-                  <Ionicons name={getPriorityIcon(announcement.priority)} size={24} color={getPriorityColor(announcement.priority)} />
+              {/* Left accent bar */}
+              <View style={[styles.cardAccent, { backgroundColor: prioColor }]} />
+
+              <View style={styles.cardBody}>
+                {/* Header row: icon + title */}
+                <View style={styles.announcementHeader}>
+                  <View style={[styles.priorityIcon, { backgroundColor: `${prioColor}14` }]}>
+                    <Ionicons name={getPriorityIcon(announcement.priority)} size={22} color={prioColor} />
+                  </View>
+                  <View style={styles.announcementTitleContainer}>
+                    <View style={styles.titleRow}>
+                      <Text style={styles.announcementTitle} numberOfLines={2}>{announcement.title}</Text>
+                      {isRecent && <View style={styles.newDot} />}
+                    </View>
+                    <Text style={styles.announcementTime}>{safeDistanceToNow(announcement.created_at)}</Text>
+                  </View>
                 </View>
-                <View style={styles.announcementTitleContainer}>
-                  <Text style={styles.announcementTitle} numberOfLines={2}>{announcement.title}</Text>
-                  <Text style={styles.announcementTime}>{safeDistanceToNow(announcement.created_at)}</Text>
+
+                {/* Category + Urgent badges */}
+                <View style={styles.badgeRow}>
+                  <View style={[styles.categoryBadge, { backgroundColor: catColor.bg }]}>
+                    <Ionicons name={catColor.icon} size={11} color={catColor.text} />
+                    <Text style={[styles.categoryBadgeText, { color: catColor.text }]}>{announcement.category || 'General'}</Text>
+                  </View>
+                  {announcement.priority === 'high' && (
+                    <View style={styles.urgentBadge}>
+                      <Ionicons name="warning" size={11} color="#EF4444" />
+                      <Text style={styles.urgentText}>Urgent</Text>
+                    </View>
+                  )}
                 </View>
-              </View>
-              <View style={styles.badgeRow}>
-                <View style={[styles.categoryBadge, { backgroundColor: categoryColor.bg }]}>
-                  <Ionicons name={getCategoryIcon(announcement.category || 'General')} size={12} color={categoryColor.text} />
-                  <Text style={[styles.categoryBadgeText, { color: categoryColor.text }]}>{announcement.category || 'General'}</Text>
+
+                {/* Content */}
+                <Text style={styles.announcementContent} numberOfLines={4}>{announcement.content}</Text>
+
+                {/* Footer */}
+                <View style={styles.announcementFooter}>
+                  <View style={styles.footerLeft}>
+                    <Ionicons name="calendar-outline" size={13} color={colors.textMuted} />
+                    <Text style={styles.announcementDate}>{safeFormat(announcement.created_at, 'MMM dd, yyyy • h:mm a')}</Text>
+                  </View>
+                  <View style={styles.footerAuthor}>
+                    <Ionicons name="person-circle-outline" size={13} color={colors.textMuted} />
+                    <Text style={styles.authorText}>{announcement.author_name || 'Admin'}</Text>
+                  </View>
                 </View>
-                {announcement.priority === 'high' && <View style={styles.urgentBadge}><Ionicons name="warning" size={12} color="#EF4444" /><Text style={styles.urgentText}>Urgent</Text></View>}
-              </View>
-              <Text style={styles.announcementContent}>{announcement.content}</Text>
-              <View style={styles.announcementFooter}>
-                <View style={styles.footerLeft}><Ionicons name="calendar-outline" size={14} color="#9CA3AF" /><Text style={styles.announcementDate}>{safeFormat(announcement.created_at, 'MMM dd, yyyy • h:mm a')}</Text></View>
               </View>
             </View>
           );
@@ -209,4 +422,3 @@ export default function AnnouncementsScreen() {
     </SafeAreaView>
   );
 }
-

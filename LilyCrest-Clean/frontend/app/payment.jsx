@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Alert, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../src/context/ThemeContext';
+import { useAlert } from '../src/context/AlertContext';
 import { apiService } from '../src/services/api';
 
 function safeCurrency(amount) {
@@ -21,11 +22,50 @@ function safeDate(value) {
   } catch (_e) { return '—'; }
 }
 
+// Presentation-mode mock bills — mirrors billing-history MOCK_BILLS
+const MOCK_BILLS = [
+  {
+    billing_id: 'BILL-2026-004', description: 'April 2026 Billing Statement',
+    billing_period: 'April 2026', release_date: '2026-04-18', due_date: '2026-04-28',
+    status: 'pending', billing_type: 'consolidated',
+    rent: 5400, electricity: 353.89, water: 450, penalties: 0,
+    total: 6203.89, amount: 6203.89,
+  },
+  {
+    billing_id: 'BILL-2026-003', description: 'Electricity Bill - March 2026',
+    billing_period: 'March 2026', release_date: '2026-03-18', due_date: '2026-03-25',
+    status: 'overdue', billing_type: 'electricity',
+    electricity: 353.89, total: 353.89, amount: 353.89,
+  },
+  {
+    billing_id: 'BILL-2026-002', description: 'Electricity Bill - February 2026',
+    billing_period: 'February 2026', release_date: '2026-02-18', due_date: '2026-02-25',
+    status: 'paid', billing_type: 'electricity',
+    electricity: 280, total: 280, amount: 280,
+    payment_method: 'paymongo', payment_date: '2026-02-20T10:30:00Z',
+    paymongo_reference: 'LC-BILL-2026-002-1709500000',
+  },
+  {
+    billing_id: 'BILL-2026-001', description: 'Electricity Bill - January 2026',
+    billing_period: 'January 2026', release_date: '2026-01-18', due_date: '2026-01-25',
+    status: 'paid', billing_type: 'electricity',
+    electricity: 195.50, total: 195.50, amount: 195.50,
+    payment_method: 'paymongo', payment_date: '2026-01-22T14:20:00Z',
+  },
+];
+
+function findMockBill(id) {
+  if (!id) return null;
+  const t = String(id).trim().toLowerCase();
+  return MOCK_BILLS.find(b => String(b.billing_id).toLowerCase() === t) || null;
+}
+
 export default function PaymentScreen() {
   const router = useRouter();
   const { billId: billIdParam, mode } = useLocalSearchParams();
   const billId = Array.isArray(billIdParam) ? billIdParam[0] : billIdParam;
   const { colors, isDarkMode } = useTheme();
+  const { showAlert } = useAlert();
   const styles = useMemo(() => createStyles(colors, isDarkMode), [colors, isDarkMode]);
 
   const [bill, setBill] = useState(null);
@@ -42,14 +82,26 @@ export default function PaymentScreen() {
         const resp = await apiService.getMyBilling();
         const all = resp?.data || [];
         const target = billId ? String(billId).trim().toLowerCase() : null;
-        const match = all.find((b) => {
+
+        // Try real bills first
+        let match = all.find((b) => {
           const ids = [b.billing_id, b.billingId, b.billId, b.id, b._id, b.reference_id]
             .filter(Boolean).map(id => String(id).trim().toLowerCase());
           return target && ids.includes(target);
-        }) || all.find(b => (b.status || '').toLowerCase() !== 'paid') || all[0] || null;
+        });
+
+        // Fall back to mock bills (presentation mode)
+        if (!match) match = findMockBill(billId);
+
+        // Last resort: first unpaid or first bill from API
+        if (!match) match = all.find(b => (b.status || '').toLowerCase() !== 'paid') || all[0] || null;
+
         setBill(match);
       } catch (_e) {
-        setError('Unable to load billing data.');
+        // On network/auth error, use mock bill if available
+        const mock = findMockBill(billId);
+        if (mock) { setBill(mock); }
+        else { setError('Unable to load billing data.'); }
       } finally {
         setLoading(false);
       }
@@ -66,25 +118,26 @@ export default function PaymentScreen() {
       const resp = await apiService.createPaymongoCheckout(id);
       const checkoutUrl = resp?.data?.checkout_url;
       if (!checkoutUrl) {
-        Alert.alert('Error', 'Could not create payment session. Please try again.');
+        showAlert({ title: 'Error', message: 'Could not create payment session. Please try again.', type: 'error' });
         return;
       }
       const supported = await Linking.canOpenURL(checkoutUrl);
       if (supported) {
         await Linking.openURL(checkoutUrl);
         setTimeout(() => {
-          Alert.alert(
-            'Payment Status',
-            'If you completed the payment, it will be reflected in your billing within a few minutes.',
-            [{ text: 'OK', onPress: () => router.back() }]
-          );
+          showAlert({
+            title: 'Payment Status',
+            message: 'If you completed the payment, it will be reflected in your billing within a few minutes.',
+            type: 'info',
+            buttons: [{ text: 'OK', onPress: () => router.back() }],
+          });
         }, 1000);
       } else {
-        Alert.alert('Error', 'Unable to open payment page. Please try again.');
+        showAlert({ title: 'Error', message: 'Unable to open payment page. Please try again.', type: 'error' });
       }
     } catch (err) {
       const detail = err?.response?.data?.detail || 'Failed to create payment session.';
-      Alert.alert('Payment Error', detail);
+      showAlert({ title: 'Payment Error', message: detail, type: 'error' });
     } finally {
       setCreatingCheckout(false);
     }

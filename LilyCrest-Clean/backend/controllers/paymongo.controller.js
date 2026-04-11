@@ -1,6 +1,8 @@
 const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
+const { ObjectId } = require('mongodb');
 const { getDb } = require('../config/database');
+const { PRESENTATION_BILLS, mapRealBill } = require('./billing.controller');
 
 const PAYMONGO_BASE = 'https://api.paymongo.com/v1';
 
@@ -18,6 +20,29 @@ function paymongoHeaders() {
   };
 }
 
+// Resolve a bill from any of the three sources: legacy 'billing', real 'bills', or presentation mock
+async function resolveBill(db, billingId, user) {
+  const userId = user.user_id;
+  const mongoId = user._id;
+
+  // 1. Legacy 'billing' collection (string billing_id)
+  let bill = await db.collection('billing').findOne({ billing_id: billingId, user_id: userId });
+  if (bill) return bill;
+
+  // 2. Real 'bills' collection (ObjectId _id)
+  if (mongoId) {
+    try {
+      const realBill = await db.collection('bills').findOne({ _id: new ObjectId(billingId), userId: mongoId });
+      if (realBill) return mapRealBill(realBill, userId);
+    } catch (_) { /* not a valid ObjectId */ }
+  }
+
+  // 3. Presentation-mode mock bill
+  if (PRESENTATION_BILLS[billingId]) return { ...PRESENTATION_BILLS[billingId] };
+
+  return null;
+}
+
 // Create a PayMongo Checkout Session for a specific bill
 async function createCheckoutSession(req, res) {
   try {
@@ -27,10 +52,7 @@ async function createCheckoutSession(req, res) {
     }
 
     const db = getDb();
-    const bill = await db.collection('billing').findOne({
-      billing_id: billingId,
-      user_id: req.user.user_id,
-    });
+    const bill = await resolveBill(db, billingId, req.user);
 
     if (!bill) {
       return res.status(404).json({ detail: 'Bill not found' });
@@ -41,7 +63,7 @@ async function createCheckoutSession(req, res) {
       return res.status(400).json({ detail: 'This bill has already been paid' });
     }
 
-    const amount = Math.round((bill.total || bill.amount || 0) * 100); // PayMongo uses centavos
+    const amount = Math.round((bill.remaining_amount ?? bill.total ?? bill.amount ?? 0) * 100); // centavos
     if (amount <= 0) {
       return res.status(400).json({ detail: 'Invalid bill amount' });
     }
@@ -73,11 +95,6 @@ async function createCheckoutSession(req, res) {
             'grab_pay',
             'paymaya',
             'card',
-            'dob',
-            'dob_ubp',
-            'brankas_bdo',
-            'brankas_landbank',
-            'brankas_metrobank',
           ],
           reference_number: referenceNumber,
           // Redirect to backend endpoints that bounce the user back to the app via deep link

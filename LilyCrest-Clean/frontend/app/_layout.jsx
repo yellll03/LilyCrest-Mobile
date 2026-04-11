@@ -4,6 +4,7 @@ import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react';
 import { Platform, Text, TextInput, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import { AlertProvider } from '../src/context/AlertContext';
 import { AuthProvider } from '../src/context/AuthContext';
 import { ThemeProvider, useTheme } from '../src/context/ThemeContext';
 
@@ -111,11 +112,14 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ErrorBoundary>
         <ThemeProvider>
-          <AuthProvider>
-            <LayoutContent />
-          </AuthProvider>
+          <AlertProvider>
+            <AuthProvider>
+              <LayoutContent />
+            </AuthProvider>
+          </AlertProvider>
         </ThemeProvider>
       </ErrorBoundary>
     </GestureHandlerRootView>
   );
 }
+

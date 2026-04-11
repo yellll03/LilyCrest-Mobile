@@ -4,26 +4,117 @@ const { getDb } = require('../config/database');
 async function seedData(req, res) {
   try {
     const db = getDb();
-    
-    // Remove previously seeded sample rooms and stop reseeding them
+
+    // ── Rooms ──────────────────────────────────────────────────────────────
+    const sampleRooms = [
+      {
+        room_id: 'room_quad_001',
+        room_number: '101',
+        room_type: 'Quadruple Sharing',
+        bed_type: 'Lower Bed',
+        floor: 1,
+        capacity: 4,
+        price: 5400,
+        status: 'occupied',
+        amenities: ['WiFi', 'Air Conditioning', 'Cabinet', 'Electric Fan'],
+        description: 'Quadruple sharing room on the ground floor with shared bathroom.',
+        images: [],
+        created_at: new Date(),
+      },
+      {
+        room_id: 'room_double_001',
+        room_number: '201',
+        room_type: 'Double Sharing',
+        bed_type: 'Upper Bed',
+        floor: 2,
+        capacity: 2,
+        price: 7500,
+        status: 'available',
+        amenities: ['WiFi', 'Air Conditioning', 'Cabinet', 'Ref'],
+        description: 'Double sharing room on the second floor with private bathroom.',
+        images: [],
+        created_at: new Date(),
+      },
+      {
+        room_id: 'room_private_001',
+        room_number: '301',
+        room_type: 'Private Room',
+        bed_type: 'Single Bed',
+        floor: 3,
+        capacity: 1,
+        price: 12000,
+        status: 'available',
+        amenities: ['WiFi', 'Air Conditioning', 'Cabinet', 'Ref', 'Private Bathroom'],
+        description: 'Private room on the third floor with ensuite bathroom.',
+        images: [],
+        created_at: new Date(),
+      },
+    ];
+
     await db.collection('rooms').deleteMany({ room_id: { $in: ['room_quad_001', 'room_double_001', 'room_private_001'] } });
+    await db.collection('rooms').insertMany(sampleRooms);
 
     const sampleAnnouncements = [
       {
-        announcement_id: 'ann_001', title: 'Welcome to Lilycrest Gil Puyat!',
-        content: 'We\'re excited to have you as part of our community at #7 Gil Puyat Ave. cor Marconi St. Brgy Palanan, Makati City. Contact us at 0917 1000087.',
-        author_id: 'admin', priority: 'high', category: 'General', is_active: true, created_at: new Date()
+        announcement_id: 'ann_001',
+        title: 'April 2026 Billing Statements Released',
+        content: 'Your April 2026 billing statements are now available in the app. Kindly settle your balance on or before April 28, 2026 to avoid late fees. You may pay conveniently via GCash, Maya, or Credit/Debit Card through our in-app PayMongo payment. For concerns, message us at 0917 1000087.',
+        author_id: 'admin',
+        author_name: 'LilyCrest Admin',
+        priority: 'high',
+        category: 'Billing',
+        is_active: true,
+        is_urgent: true,
+        created_at: new Date('2026-04-18T08:00:00.000Z'),
       },
       {
-        announcement_id: 'ann_002', title: '🎉 DISCOUNTED Monthly Rates Available!',
-        content: 'Avail our discounted monthly rates! Quadruple Sharing: 10% OFF. Double Sharing: 20% OFF. Private Room: 10% OFF.',
-        author_id: 'admin', priority: 'high', category: 'Promo', is_active: true, created_at: new Date(Date.now() - 2 * 60 * 60 * 1000)
+        announcement_id: 'ann_002',
+        title: 'Scheduled Water Interruption – April 12, 2026',
+        content: 'Please be advised that there will be a scheduled water interruption on Saturday, April 12, 2026, from 8:00 AM to 5:00 PM due to pipe maintenance. Please store enough water before the interruption. We apologize for the inconvenience and appreciate your understanding.',
+        author_id: 'admin',
+        author_name: 'LilyCrest Admin',
+        priority: 'high',
+        category: 'Maintenance',
+        is_active: true,
+        is_urgent: true,
+        created_at: new Date('2026-04-09T09:00:00.000Z'),
       },
       {
-        announcement_id: 'ann_003', title: 'Monthly Rent Payment Reminder',
-        content: 'Please remember that monthly rent is due on the 1st of each month. Grace period: 2 days. Late fee: ₱50/day.',
-        author_id: 'admin', priority: 'normal', category: 'Billing', is_active: true, created_at: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000)
-      }
+        announcement_id: 'ann_003',
+        title: 'House Rules Reminder: Quiet Hours',
+        content: 'As a reminder to all tenants, quiet hours are strictly observed from 10:00 PM to 7:00 AM. Please keep noise to a minimum during these hours out of respect for your fellow residents. Repeated violations may result in a notice from management. Thank you for your cooperation.',
+        author_id: 'admin',
+        author_name: 'LilyCrest Admin',
+        priority: 'normal',
+        category: 'Rules',
+        is_active: true,
+        is_urgent: false,
+        created_at: new Date('2026-04-05T10:00:00.000Z'),
+      },
+      {
+        announcement_id: 'ann_004',
+        title: 'Refer a Friend – Get 1 Month FREE!',
+        content: 'Know someone looking for a place to stay? Refer a friend and get 1 month of free WiFi when they successfully move in! Simply have them mention your name upon inquiry. This promo is ongoing until slots are filled. Spread the word and enjoy the perks!',
+        author_id: 'admin',
+        author_name: 'LilyCrest Admin',
+        priority: 'normal',
+        category: 'Promo',
+        is_active: true,
+        is_urgent: false,
+        created_at: new Date('2026-04-01T08:00:00.000Z'),
+      },
+      {
+        announcement_id: 'ann_005',
+        title: 'Welcome, New Tenants! – April 2026 Move-Ins',
+        content: 'LilyCrest warmly welcomes our new tenants who moved in this April! We hope you feel at home. Should you need anything or have questions about the dorm policies, do not hesitate to reach out to us at 0917 1000087 or message us on our Facebook page. Enjoy your stay!',
+        author_id: 'admin',
+        author_name: 'LilyCrest Admin',
+        priority: 'low',
+        category: 'General',
+        is_active: true,
+        is_urgent: false,
+        created_at: new Date('2026-04-01T07:00:00.000Z'),
+      },
     ];
 
     await db.collection('announcements').deleteMany({});
@@ -195,6 +286,18 @@ async function seedData(req, res) {
 
       await db.collection('billing').deleteMany({});
       await db.collection('billing').insertMany(sampleBilling);
+
+      // ── Room Assignment ──────────────────────────────────────────────────
+      await db.collection('room_assignments').deleteMany({ user_id: existingUser.user_id });
+      await db.collection('room_assignments').insertOne({
+        assignment_id: `assign_${existingUser.user_id}`,
+        user_id: existingUser.user_id,
+        room_id: 'room_quad_001',
+        status: 'active',
+        move_in_date: new Date('2025-01-01'),
+        move_out_date: new Date('2026-12-31'),
+        created_at: new Date(),
+      });
     }
 
     res.json({ message: 'Seed data created successfully' });

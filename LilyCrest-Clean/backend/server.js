@@ -50,7 +50,7 @@ app.use(cors({
   maxAge: 86400
 }));
 
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 app.use(cookieParser());
 
 // Rate limiting — general API (100 requests per minute per IP)
@@ -90,34 +90,84 @@ async function startServer() {
   // Connect to MongoDB
   await connectToMongo();
 
-  // Fix firebaseUid index: must be sparse to allow multiple docs without the field
+  // ── Index migration: fix unique indexes that cause E11000 crashes ──
   try {
     const { getDb } = require('./config/database');
     const db = getDb();
     const users = db.collection('users');
-    // Drop the non-sparse unique index if it exists
     const indexes = await users.indexes();
+
     for (const idx of indexes) {
-      if (idx.key?.firebaseUid && idx.unique && !idx.sparse) {
-        console.log(`[Migration] Dropping non-sparse unique index: ${idx.name}`);
-        await users.dropIndex(idx.name);
+      // Drop unique indexes on email/username — enforce uniqueness in app code instead
+      if ((idx.key?.email || idx.key?.username) && idx.unique) {
+        console.log(`[Migration] Dropping unique index: ${idx.name}`);
+        try { await users.dropIndex(idx.name); } catch (_) {}
+      }
+
+      // Drop any legacy non-sparse unique indexes on firebaseUid or firebase_uid
+      const isFirebaseIdx = idx.key?.firebaseUid || idx.key?.firebase_uid;
+      if (isFirebaseIdx && idx.unique && !idx.sparse) {
+        console.log(`[Migration] Dropping non-sparse index: ${idx.name}`);
+        try { await users.dropIndex(idx.name); } catch (_) {}
       }
     }
-    // Recreate as sparse unique (allows multiple docs without firebaseUid)
-    await users.createIndex(
-      { firebaseUid: 1 },
-      { unique: true, sparse: true, name: 'firebaseUid_1_sparse' }
-    );
-    // Also ensure firebase_uid has a sparse index if needed
-    const existingFbUidIdx = indexes.find(i => i.key?.firebase_uid && i.unique && !i.sparse);
-    if (existingFbUidIdx) {
-      console.log(`[Migration] Dropping non-sparse unique index: ${existingFbUidIdx.name}`);
-      await users.dropIndex(existingFbUidIdx.name);
-      await users.createIndex(
-        { firebase_uid: 1 },
-        { unique: true, sparse: true, name: 'firebase_uid_1_sparse' }
-      );
+
+    // Clear duplicate firebase_uid values before creating the sparse unique index
+    // Find all firebase_uid values that appear on more than one doc
+    const dupes = await users.aggregate([
+      { $match: { firebase_uid: { $exists: true, $ne: null } } },
+      { $group: { _id: '$firebase_uid', count: { $sum: 1 }, ids: { $push: '$user_id' } } },
+      { $match: { count: { $gt: 1 } } },
+    ]).toArray();
+
+    for (const dupe of dupes) {
+      // Keep the firebase_uid on the MOST RECENTLY logged-in user, clear from others
+      const relatedUsers = await users
+        .find({ firebase_uid: dupe._id })
+        .sort({ last_login: -1 })
+        .toArray();
+      
+      // Skip the first one (most recent), clear the rest
+      for (let i = 1; i < relatedUsers.length; i++) {
+        console.log(`[Migration] Clearing stale firebase_uid from ${relatedUsers[i].user_id}`);
+        await users.updateOne(
+          { user_id: relatedUsers[i].user_id },
+          { $unset: { firebase_uid: '' } },
+        );
+      }
     }
+
+    // Ensure sparse unique index on firebase_uid
+    await users.createIndex(
+      { firebase_uid: 1 },
+      { unique: true, sparse: true, name: 'firebase_uid_1_sparse' },
+    );
+
+    // Auto-generate user_id for any documents that don't have one
+    // (Web admin may create tenants without user_id — mobile app requires it)
+    const { v4: uuidv4 } = require('uuid');
+    const missingUserIds = await users.find({
+      $or: [
+        { user_id: { $exists: false } },
+        { user_id: null },
+        { user_id: '' },
+      ],
+    }).toArray();
+
+    for (const doc of missingUserIds) {
+      const newUserId = `user_${uuidv4().replace(/-/g, '').substring(0, 12)}`;
+      await users.updateOne(
+        { _id: doc._id },
+        { $set: { user_id: newUserId } },
+      );
+      console.log(`[Migration] Generated user_id=${newUserId} for ${doc.email || doc.name || doc._id}`);
+    }
+
+    if (missingUserIds.length > 0) {
+      console.log(`[Migration] Fixed ${missingUserIds.length} documents with missing user_id`);
+    }
+
+    console.log('[Migration] Index migration complete');
   } catch (idxErr) {
     console.warn('[Migration] Index migration warning:', idxErr?.message);
   }

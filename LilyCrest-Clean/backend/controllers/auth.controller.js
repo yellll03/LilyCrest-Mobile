@@ -3,27 +3,63 @@ const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../config/database');
 const { verifyFirebaseIdToken, verifyTenantInFirebase, admin } = require('../config/firebase');
 
+// ─── HELPERS ────────────────────────────────────────────────────────────────
+
 const isProduction = process.env.NODE_ENV === 'production';
 
-function buildSessionCookieOptions() {
+function cookieOptions() {
   return {
     httpOnly: true,
     secure: isProduction,
     sameSite: isProduction ? 'none' : 'lax',
     path: '/',
-    maxAge: 7 * 24 * 60 * 60 * 1000
+    maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
   };
 }
 
-const maskEmail = (email = '') => {
+function firebaseApiKey() {
+  return process.env.FIREBASE_API_KEY || process.env.FIREBASE_WEB_API_KEY || null;
+}
+
+function generateUserId() {
+  return `user_${uuidv4().replace(/-/g, '').substring(0, 12)}`;
+}
+
+function generateSessionToken() {
+  return `session_${uuidv4().replace(/-/g, '')}`;
+}
+
+function maskEmail(email = '') {
   const [user, domain] = email.split('@');
   if (!user || !domain) return email;
-  if (user.length <= 2) return `${user[0]}***@${domain}`;
-  return `${user.slice(0, 2)}***@${domain}`;
-};
+  return user.length <= 2 ? `${user[0]}***@${domain}` : `${user.slice(0, 2)}***@${domain}`;
+}
 
-// Non-blocking audit: log every login attempt for security monitoring
-async function logLoginAttempt(db, email, success, reason, req) {
+/** Case-insensitive regex for exact email match */
+function emailRegex(email) {
+  const escaped = email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return new RegExp(`^${escaped}$`, 'i');
+}
+
+/** Create a new session and return { session_token, expires_at } */
+async function createSession(db, userId) {
+  const token = generateSessionToken();
+  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+  // Remove old sessions for this user (single-session model)
+  await db.collection('user_sessions').deleteMany({ user_id: userId });
+  await db.collection('user_sessions').insertOne({
+    user_id: userId,
+    session_token: token,
+    expires_at: expiresAt,
+    created_at: new Date(),
+  });
+
+  return { session_token: token, expires_at: expiresAt };
+}
+
+/** Non-blocking audit log */
+async function logAttempt(db, email, success, reason, req) {
   try {
     await db.collection('login_attempts').insertOne({
       email: (email || '').toLowerCase(),
@@ -33,17 +69,196 @@ async function logLoginAttempt(db, email, success, reason, req) {
       user_agent: req.headers['user-agent'] || 'unknown',
       timestamp: new Date(),
     });
-  } catch (err) {
-    console.warn('Failed to log login attempt:', err?.message);
+  } catch (_) {
+    /* audit failure is non-critical */
   }
 }
 
-// Prefer explicit backend env var but allow a fallback to avoid silent failures.
-function getFirebaseApiKey() {
-  return process.env.FIREBASE_API_KEY || process.env.FIREBASE_WEB_API_KEY || null;
+/** Look up a non-admin tenant by email */
+async function findTenantByEmail(db, email) {
+  return db.collection('users').findOne({
+    $or: [
+      { email: emailRegex(email) },
+      { google_email: emailRegex(email) },
+    ],
+    role: { $nin: ['admin', 'superadmin'] },
+  });
 }
 
-// Firebase Google Sign-In
+/** Return user object without MongoDB _id */
+async function getCleanUser(db, userId) {
+  return db.collection('users').findOne(
+    { user_id: userId },
+    { projection: { _id: 0 } },
+  );
+}
+
+// ─── EMAIL / PASSWORD LOGIN ─────────────────────────────────────────────────
+
+async function login(req, res) {
+  const emailRaw = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  const password = typeof req.body?.password === 'string' ? req.body.password : '';
+
+  // Input validation
+  if (!emailRaw || !password) {
+    return res.status(400).json({ detail: 'Email and password are required' });
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRaw) || emailRaw.length > 254) {
+    return res.status(400).json({ detail: 'Please provide a valid email address' });
+  }
+  if (password.length < 6 || password.length > 128) {
+    return res.status(400).json({ detail: 'Password must be 6 to 128 characters long' });
+  }
+
+  const apiKey = firebaseApiKey();
+  if (!apiKey) {
+    return res.status(500).json({ detail: 'Firebase API key not configured on backend' });
+  }
+
+  const db = getDb();
+  let fbUid;
+
+  // Step 1: Authenticate with Firebase
+  try {
+    const resp = await axios.post(
+      `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
+      { email: emailRaw, password, returnSecureToken: true },
+    );
+    fbUid = resp.data.localId;
+  } catch (fbErr) {
+    const msg = fbErr.response?.data?.error?.message || '';
+
+    if (msg.includes('EMAIL_NOT_FOUND')) {
+      // Tenant might exist in MongoDB but not Firebase (admin-provisioned)
+      const mongoUser = await findTenantByEmail(db, emailRaw);
+      if (mongoUser) {
+        // Don't create Firebase accounts for inactive tenants
+        if (mongoUser.is_active === false) {
+          logAttempt(db, emailRaw, false, 'inactive', req);
+          return res.status(403).json({ detail: 'Access denied. Your tenant account is inactive. Please contact admin.' });
+        }
+        console.log(`[Login] Auto-creating Firebase account for tenant: ${mongoUser.user_id}`);
+        try {
+          const createResp = await axios.post(
+            `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`,
+            { email: emailRaw, password, returnSecureToken: true },
+          );
+          fbUid = createResp.data.localId;
+        } catch (createErr) {
+          const cMsg = createErr.response?.data?.error?.message || '';
+          if (cMsg === 'EMAIL_EXISTS') {
+            // Edge case: try sign-in again (casing difference)
+            try {
+              const retry = await axios.post(
+                `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
+                { email: emailRaw, password, returnSecureToken: true },
+              );
+              fbUid = retry.data.localId;
+            } catch {
+              logAttempt(db, emailRaw, false, 'firebase_retry_failed', req);
+              return res.status(401).json({ detail: 'Invalid email or password' });
+            }
+          } else {
+            logAttempt(db, emailRaw, false, 'firebase_create_failed', req);
+            return res.status(401).json({ detail: 'Invalid email or password' });
+          }
+        }
+      } else {
+        logAttempt(db, emailRaw, false, 'not_tenant', req);
+        return res.status(403).json({
+          detail: 'Access denied. Your account is not registered as a verified tenant. Please contact the admin office.',
+        });
+      }
+    } else if (msg.includes('INVALID_PASSWORD') || msg.includes('INVALID_LOGIN_CREDENTIALS')) {
+      // Check MongoDB before responding — if the account is inactive or not a tenant,
+      // return the correct 403 instead of a generic 401.
+      // This also covers Google-only accounts attempting email/password login.
+      const mongoUser = await findTenantByEmail(db, emailRaw);
+      if (!mongoUser) {
+        // Has a Firebase account but is not in our system as a tenant
+        logAttempt(db, emailRaw, false, 'not_tenant', req);
+        return res.status(403).json({
+          detail: 'Access denied. Your account is not registered as a verified tenant. Please contact the admin office.',
+        });
+      }
+      if (mongoUser.is_active === false) {
+        logAttempt(db, emailRaw, false, 'inactive', req);
+        return res.status(403).json({ detail: 'Access denied. Your tenant account is inactive. Please contact admin.' });
+      }
+      // User is an active tenant but the password is genuinely wrong
+      logAttempt(db, emailRaw, false, 'invalid_password', req);
+      return res.status(401).json({ detail: 'Invalid email or password' });
+    } else if (msg.includes('USER_DISABLED')) {
+      logAttempt(db, emailRaw, false, 'user_disabled', req);
+      return res.status(403).json({ detail: 'This account has been disabled' });
+    } else if (msg.includes('TOO_MANY_ATTEMPTS')) {
+      logAttempt(db, emailRaw, false, 'too_many_attempts', req);
+      return res.status(429).json({ detail: 'Too many failed attempts. Please try again later.' });
+    } else {
+      logAttempt(db, emailRaw, false, 'firebase_error', req);
+      return res.status(401).json({ detail: 'Invalid email or password' });
+    }
+  }
+
+  // Step 2: Find MongoDB tenant by exact email (NOT google_email — that's for Google sign-in only)
+  const tenant = await db.collection('users').findOne({
+    email: emailRegex(emailRaw),
+    role: { $nin: ['admin', 'superadmin'] },
+  });
+  if (!tenant) {
+    logAttempt(db, emailRaw, false, 'not_tenant', req);
+    return res.status(403).json({
+      detail: 'Access denied. Your account is not registered as a verified tenant. Please contact the admin office.',
+    });
+  }
+
+  if (!tenant.user_id) {
+    console.error(`[Login] CRITICAL: Tenant document missing user_id! email=${tenant.email} _id=${tenant._id}`);
+    return res.status(500).json({ detail: 'Account configuration error. Please contact the admin office.' });
+  }
+
+  if (tenant.is_active === false) {
+    logAttempt(db, emailRaw, false, 'inactive', req);
+    return res.status(403).json({ detail: 'Access denied. Your tenant account is inactive. Please contact admin.' });
+  }
+
+  console.log(`[Login] Tenant found: user_id=${tenant.user_id} email=${tenant.email} name=${tenant.name}`);
+
+  // Step 3: Link Firebase UID and update last_login
+  // Clear stale firebase_uid from any OTHER user first (prevents E11000)
+  await db.collection('users').updateMany(
+    { firebase_uid: fbUid, user_id: { $ne: tenant.user_id } },
+    { $unset: { firebase_uid: '' } },
+  );
+  try {
+    await db.collection('users').updateOne(
+      { user_id: tenant.user_id },
+      { $set: { firebase_uid: fbUid, last_login: new Date() } },
+    );
+  } catch (updateErr) {
+    if (updateErr.code === 11000) {
+      console.warn('[Login] Duplicate key on firebase_uid, proceeding without update');
+      await db.collection('users').updateOne(
+        { user_id: tenant.user_id },
+        { $set: { last_login: new Date() } },
+      );
+    } else {
+      throw updateErr;
+    }
+  }
+
+  // Step 4: Create session
+  const session = await createSession(db, tenant.user_id);
+  res.cookie('session_token', session.session_token, cookieOptions());
+
+  const user = await getCleanUser(db, tenant.user_id);
+  logAttempt(db, emailRaw, true, 'success', req);
+  console.log(`[Login] ✓ user_id=${tenant.user_id} email=${user?.email} name=${user?.name}`);
+  res.json({ user, session_token: session.session_token });
+}
+
+// ─── GOOGLE SIGN-IN ─────────────────────────────────────────────────────────
+
 async function googleSignIn(req, res) {
   try {
     const { idToken } = req.body;
@@ -51,397 +266,195 @@ async function googleSignIn(req, res) {
       return res.status(400).json({ detail: 'Firebase ID token is required' });
     }
 
-    let decodedToken;
+    let decoded;
     try {
-      decodedToken = await verifyFirebaseIdToken(idToken);
-    } catch (error) {
+      decoded = await verifyFirebaseIdToken(idToken);
+    } catch {
       return res.status(401).json({ detail: 'Invalid Firebase ID token' });
     }
 
-    const userEmail = decodedToken.email;
-    const firebaseUid = decodedToken.uid;
-
-    if (!userEmail) {
+    const email = decoded.email;
+    const fbUid = decoded.uid;
+    if (!email) {
       return res.status(400).json({ detail: 'No email associated with this Google account' });
     }
 
     const db = getDb();
-    const newSessionToken = `session_${uuidv4().replace(/-/g, '')}`;
+    console.log(`[GoogleSignIn] Login attempt: ${email}`);
 
-    console.log(`[GoogleSignIn] Attempting login for Google email: ${userEmail}, Firebase UID: ${firebaseUid}`);
-
-    // ── Lookup 1: by email or linked google_email (case-insensitive, non-admin) ──
-    const emailRegexMatch = new RegExp(`^${userEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
-    let existingUser = await db.collection('users').findOne({
-      $or: [
-        { email: emailRegexMatch },
-        { google_email: emailRegexMatch },
-      ],
+    // Lookup — ordered by precision to avoid cross-user contamination
+    // 1. Exact email match (most reliable)
+    let tenant = await db.collection('users').findOne({
+      email: emailRegex(email),
       role: { $nin: ['admin', 'superadmin'] },
     });
-
-    if (existingUser) {
-      console.log(`[GoogleSignIn] ✓ Found tenant by email/google_email match: ${existingUser.user_id}`);
+    if (tenant) {
+      console.log(`[GoogleSignIn] Found by email: ${tenant.user_id} (${tenant.email})`);
     }
 
-    // ── Lookup 2: by firebaseUid (non-admin) ──
-    if (!existingUser) {
-      existingUser = await db.collection('users').findOne({
-        $or: [
-          { firebaseUid },
-          { firebase_uid: firebaseUid },
-        ],
+    // 2. google_email match (secondary)
+    if (!tenant) {
+      tenant = await db.collection('users').findOne({
+        google_email: emailRegex(email),
         role: { $nin: ['admin', 'superadmin'] },
       });
-      if (existingUser) {
-        console.log(`[GoogleSignIn] ✓ Found tenant by firebaseUid: ${existingUser.user_id}`);
-      }
+      if (tenant) console.log(`[GoogleSignIn] Found by google_email: ${tenant.user_id} (${tenant.email})`);
     }
 
-    // ── Lookup 3: active session fallback ──
-    // If the user has an active Bearer token (e.g., from a prior email/password login),
-    // link their Google account to that existing tenant record.
-    if (!existingUser) {
-      const authHeader = req.headers.authorization;
-      const cookieToken = req.cookies?.session_token;
-      const bearerToken = (authHeader && authHeader.startsWith('Bearer '))
-        ? authHeader.substring(7)
-        : cookieToken;
-
-      console.log(`[GoogleSignIn] No email/UID match. Checking for active session token: ${bearerToken ? 'present' : 'absent'}`);
-
-      if (bearerToken) {
-        const session = await db.collection('user_sessions').findOne({
-          session_token: bearerToken,
-          expires_at: { $gt: new Date() },
-        });
-        if (session) {
-          const sessionUser = await db.collection('users').findOne({
-            user_id: session.user_id,
-            role: { $nin: ['admin', 'superadmin'] },
-          });
-          if (sessionUser) {
-            console.log(`[GoogleSignIn] ✓ Linking Google account (${userEmail}) to tenant ${sessionUser.user_id} via active session`);
-            existingUser = sessionUser;
-          } else {
-            console.log(`[GoogleSignIn] ✗ Session user ${session.user_id} is admin or not found`);
-          }
-        } else {
-          console.log(`[GoogleSignIn] ✗ No valid session found for bearer token`);
-        }
-      }
+    // 3. firebase_uid match (last resort)
+    if (!tenant) {
+      tenant = await db.collection('users').findOne({
+        firebase_uid: fbUid,
+        role: { $nin: ['admin', 'superadmin'] },
+      });
+      if (tenant) console.log(`[GoogleSignIn] Found by firebase_uid: ${tenant.user_id} (${tenant.email})`);
     }
 
-
-    // ── Not found — user is not a verified tenant ──
-    if (!existingUser) {
-      console.log(`[GoogleSignIn] ✗ All lookups failed for ${userEmail}. Returning 403.`);
+    // Not found → not a registered tenant
+    if (!tenant) {
+      console.log(`[GoogleSignIn] Not found: ${email}`);
       return res.status(403).json({
         detail: 'Access denied. Your Google account is not registered as a verified tenant. Please contact the admin office.',
       });
     }
 
-    if (Object.prototype.hasOwnProperty.call(existingUser, 'is_active') && !existingUser.is_active) {
+    if (tenant.is_active === false) {
       return res.status(403).json({
         detail: 'Access denied. Your tenant account is inactive. Please contact admin.',
       });
     }
 
-    const finalUserId = existingUser.user_id;
+    if (!tenant.user_id) {
+      console.error(`[GoogleSignIn] CRITICAL: Tenant document missing user_id! email=${tenant.email} _id=${tenant._id}`);
+      return res.status(500).json({ detail: 'Account configuration error. Please contact the admin office.' });
+    }
 
-    // Remove firebaseUid from ALL documents globally to guarantee the unique index
-    // is clear before we assign it to the current user.
+    // Clear stale firebase_uid from any OTHER user first (prevents E11000)
     await db.collection('users').updateMany(
-      { $or: [{ firebaseUid: firebaseUid }, { firebase_uid: firebaseUid }] },
-      { $unset: { firebaseUid: '', firebase_uid: '' } }
+      { firebase_uid: fbUid, user_id: { $ne: tenant.user_id } },
+      { $unset: { firebase_uid: '' } },
     );
 
-    // Determine the correct username for this tenant
-    const tenantEmailPrefix = userEmail.split('@')[0];
-    const resolvedUsername = existingUser.username || tenantEmailPrefix;
+    // Build update — only set email if it won't conflict with another user
+    const updateFields = {
+      google_email: email,
+      name: decoded.name || tenant.name || email.split('@')[0],
+      picture: decoded.picture || tenant.picture || null,
+      firebase_uid: fbUid,
+      last_login: new Date(),
+    };
 
-    // Update profile with Google identity data
-    await db.collection('users').updateOne(
-      { _id: existingUser._id },
-      {
-        $set: {
-          email: userEmail,
-          google_email: userEmail,
-          name: decodedToken.name || existingUser.name || tenantEmailPrefix,
-          picture: decodedToken.picture || existingUser.picture || null,
-          phone: decodedToken.phoneNumber || existingUser.phone || null,
-          role: existingUser.role || 'resident',
-          last_login: new Date(),
-          firebaseUid,
-          firebase_uid: firebaseUid,
-          username: resolvedUsername,
-        },
+    // Only update email if this tenant already owns it (was found by email match)
+    const tenantEmail = (tenant.email || '').toLowerCase();
+    if (tenantEmail === email.toLowerCase()) {
+      updateFields.email = email;
+    }
+
+    try {
+      await db.collection('users').updateOne(
+        { user_id: tenant.user_id },
+        { $set: updateFields },
+      );
+    } catch (updateErr) {
+      if (updateErr.code === 11000) {
+        // Duplicate key — strip conflicting fields and retry
+        console.warn('[GoogleSignIn] Duplicate key, retrying without email/firebase_uid');
+        delete updateFields.email;
+        delete updateFields.firebase_uid;
+        await db.collection('users').updateOne(
+          { user_id: tenant.user_id },
+          { $set: updateFields },
+        );
+      } else {
+        throw updateErr;
       }
-    );
+    }
 
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    await db.collection('user_sessions').deleteMany({ user_id: finalUserId });
-    await db.collection('user_sessions').insertOne({
-      user_id: finalUserId,
-      session_token: newSessionToken,
-      expires_at: expiresAt,
-      created_at: new Date()
-    });
+    // Create session
+    const session = await createSession(db, tenant.user_id);
+    res.cookie('session_token', session.session_token, cookieOptions());
 
-    res.cookie('session_token', newSessionToken, buildSessionCookieOptions());
-
-    const user = await db.collection('users').findOne({ user_id: finalUserId }, { projection: { _id: 0 } });
-    res.json({ user, session_token: newSessionToken });
+    const user = await getCleanUser(db, tenant.user_id);
+    console.log(`[GoogleSignIn] ✓ user_id=${tenant.user_id} email=${user?.email} name=${user?.name}`);
+    res.json({ user, session_token: session.session_token });
   } catch (error) {
     console.error('Google auth error:', error);
     res.status(500).json({ detail: 'Authentication service error' });
   }
 }
 
-// Register new user with Email/Password
+// ─── REGISTER ───────────────────────────────────────────────────────────────
+
 async function register(req, res) {
   try {
     const { email, password, name, phone } = req.body;
     if (!email || !password) {
       return res.status(400).json({ detail: 'Email and password are required' });
     }
-
     if (password.length < 8) {
       return res.status(400).json({ detail: 'Password must be at least 8 characters' });
     }
 
-    // Create user in Firebase Auth via Identity Toolkit (avoids admin credential issues)
-    const firebaseApiKey = getFirebaseApiKey();
-    if (!firebaseApiKey) {
+    const apiKey = firebaseApiKey();
+    if (!apiKey) {
       return res.status(500).json({ detail: 'Firebase API key not configured on backend' });
     }
 
-    let firebaseUid;
+    // Create Firebase account
+    let fbUid;
     try {
-      const response = await axios.post(
-        `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${firebaseApiKey}`,
-        {
-          email,
-          password,
-          returnSecureToken: true,
-        }
+      const resp = await axios.post(
+        `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${apiKey}`,
+        { email, password, returnSecureToken: true },
       );
-      firebaseUid = response.data.localId;
-    } catch (firebaseError) {
-      const errorMessage = firebaseError.response?.data?.error?.message;
-      if (errorMessage === 'EMAIL_EXISTS') {
+      fbUid = resp.data.localId;
+    } catch (fbErr) {
+      const msg = fbErr.response?.data?.error?.message;
+      if (msg === 'EMAIL_EXISTS') {
         return res.status(400).json({ detail: 'Email already registered' });
       }
-      console.error('Firebase user creation error:', firebaseError);
+      console.error('Firebase registration error:', fbErr);
       return res.status(500).json({ detail: 'Failed to create user account' });
     }
 
-    // Create user in MongoDB
+    // Create MongoDB user
     const db = getDb();
-    const userId = `user_${uuidv4().replace(/-/g, '').substring(0, 12)}`;
-    const sessionToken = `session_${uuidv4().replace(/-/g, '')}`;
+    const userId = generateUserId();
 
-    const newUser = {
+    await db.collection('users').insertOne({
       user_id: userId,
       email,
       name: name || email.split('@')[0],
       phone: phone || null,
       picture: null,
       role: 'resident',
-      // Store both casing variants to satisfy existing unique index on firebaseUid
-      firebaseUid,
-      firebase_uid: firebaseUid,
+      firebase_uid: fbUid,
+      username: email,
       created_at: new Date(),
       last_login: new Date(),
-      username: email // Ensure username is unique and non-null
-    };
-
-    await db.collection('users').insertOne(newUser);
-
-    // Create session
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    await db.collection('user_sessions').insertOne({
-      user_id: userId,
-      session_token: sessionToken,
-      expires_at: expiresAt,
-      created_at: new Date()
     });
 
-    res.cookie('session_token', sessionToken, buildSessionCookieOptions());
+    // Create session
+    const session = await createSession(db, userId);
+    res.cookie('session_token', session.session_token, cookieOptions());
 
-    const user = await db.collection('users').findOne({ user_id: userId }, { projection: { _id: 0 } });
-    res.status(201).json({ user, session_token: sessionToken });
+    const user = await getCleanUser(db, userId);
+    res.status(201).json({ user, session_token: session.session_token });
   } catch (error) {
     console.error('Registration error:', error);
     res.status(500).json({ detail: 'Registration failed' });
   }
 }
 
-// Email/Password Login via Firebase
-async function login(req, res) {
-  try {
-    const emailInput = typeof req.body?.email === 'string' ? req.body.email : '';
-    const password = typeof req.body?.password === 'string' ? req.body.password : '';
-    const email = emailInput.trim().toLowerCase();
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+// ─── GET CURRENT USER ───────────────────────────────────────────────────────
 
-    if (!email || !password) {
-      return res.status(400).json({ detail: 'Email and password are required' });
-    }
-
-    if (!emailRegex.test(email)) {
-      return res.status(400).json({ detail: 'Please provide a valid email address' });
-    }
-
-    if (email.length > 254) {
-      return res.status(400).json({ detail: 'Email address is too long' });
-    }
-
-    // Accept 6+ for login (backward compat with Firebase-reset passwords);
-    // frontend enforces 8+ for new passwords/registrations.
-    if (password.length < 6 || password.length > 128) {
-      return res.status(400).json({ detail: 'Password must be 6 to 128 characters long' });
-    }
-
-    // First, try to authenticate with Firebase
-    const firebaseApiKey = getFirebaseApiKey();
-    let firebaseUid;
-    
-    if (!firebaseApiKey) {
-      return res.status(500).json({ detail: 'Firebase API key not configured on backend' });
-    }
-
-    try {
-      const response = await axios.post(
-        `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${firebaseApiKey}`,
-        { email, password, returnSecureToken: true }
-      );
-      firebaseUid = response.data.localId;
-    } catch (firebaseError) {
-      const errorMessage = firebaseError.response?.data?.error?.message || 'INVALID_CREDENTIALS';
-
-      // If user not found in Firebase, check if they exist in MongoDB (admin-provisioned tenant)
-      if (errorMessage.includes('EMAIL_NOT_FOUND')) {
-        const db = getDb();
-        const emailRegexMatch = new RegExp(`^${email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
-        const mongoUser = await db.collection('users').findOne({ email: emailRegexMatch });
-
-        if (mongoUser) {
-          // Tenant exists in MongoDB but not in Firebase — auto-create Firebase account
-          console.log(`[Login] Auto-creating Firebase account for existing tenant: ${mongoUser.user_id} (${email})`);
-          try {
-            // Create the Firebase Auth account with the password they entered
-            const createResp = await axios.post(
-              `https://identitytoolkit.googleapis.com/v1/accounts:signUp?key=${firebaseApiKey}`,
-              { email, password, returnSecureToken: true }
-            );
-            firebaseUid = createResp.data.localId;
-            console.log(`[Login] ✓ Firebase account created for ${email}, UID: ${firebaseUid}`);
-          } catch (createErr) {
-            const createMsg = createErr.response?.data?.error?.message || '';
-            if (createMsg === 'EMAIL_EXISTS') {
-              // Race condition or email casing difference — try signing in again
-              try {
-                const retryResp = await axios.post(
-                  `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${firebaseApiKey}`,
-                  { email, password, returnSecureToken: true }
-                );
-                firebaseUid = retryResp.data.localId;
-              } catch {
-                return res.status(401).json({ detail: 'Invalid email or password' });
-              }
-            } else {
-              console.error('[Login] Failed to auto-create Firebase account:', createMsg);
-              return res.status(401).json({ detail: 'Invalid email or password' });
-            }
-          }
-        } else {
-          // No MongoDB record either — genuinely not found
-          logLoginAttempt(getDb(), email, false, 'user_not_found', req);
-          return res.status(401).json({ detail: 'Invalid email or password' });
-        }
-      } else if (errorMessage.includes('INVALID_PASSWORD') || errorMessage.includes('INVALID_LOGIN_CREDENTIALS')) {
-        logLoginAttempt(getDb(), email, false, 'invalid_password', req);
-        return res.status(401).json({ detail: 'Invalid email or password' });
-      } else if (errorMessage.includes('USER_DISABLED')) {
-        logLoginAttempt(getDb(), email, false, 'user_disabled', req);
-        return res.status(403).json({ detail: 'This account has been disabled' });
-      } else if (errorMessage.includes('TOO_MANY_ATTEMPTS')) {
-        logLoginAttempt(getDb(), email, false, 'too_many_attempts', req);
-        return res.status(429).json({ detail: 'Too many failed attempts. Please try again later.' });
-      } else {
-        logLoginAttempt(getDb(), email, false, 'unknown_firebase_error', req);
-        return res.status(401).json({ detail: 'Invalid email or password' });
-      }
-    }
-
-    const db = getDb();
-    const sessionToken = `session_${uuidv4().replace(/-/g, '')}`;
-    // Case-insensitive email lookup to handle mixed-case records
-    const emailRegexMatch = new RegExp(`^${email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
-    let existingUser = await db.collection('users').findOne({
-      email: emailRegexMatch,
-      role: { $nin: ['admin', 'superadmin'] },
-    });
-
-    // Not found — user is not a verified tenant
-    if (!existingUser) {
-      logLoginAttempt(db, email, false, 'not_tenant', req);
-      return res.status(403).json({ detail: 'Access denied. Your account is not registered as a verified tenant. Please contact the admin office.' });
-    }
-
-    if (Object.prototype.hasOwnProperty.call(existingUser, 'is_active') && !existingUser.is_active) {
-      logLoginAttempt(db, email, false, 'inactive_tenant', req);
-      return res.status(403).json({ detail: 'Access denied. Your tenant account is inactive. Please contact admin.' });
-    }
-
-    const userId = existingUser.user_id;
-
-    // Remove firebaseUid from ALL documents globally to guarantee the unique index
-    // is clear before we assign it to the current user.
-    if (firebaseUid) {
-      await db.collection('users').updateMany(
-        { $or: [{ firebaseUid: firebaseUid }, { firebase_uid: firebaseUid }] },
-        { $unset: { firebaseUid: '', firebase_uid: '' } }
-      );
-    }
-
-    await db.collection('users').updateOne(
-      { user_id: userId },
-      { $set: {
-        firebase_uid: firebaseUid,
-        firebaseUid,
-        last_login: new Date(),
-      }}
-    );
-
-    const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
-    await db.collection('user_sessions').deleteMany({ user_id: userId });
-    await db.collection('user_sessions').insertOne({
-      user_id: userId,
-      session_token: sessionToken,
-      expires_at: expiresAt,
-      created_at: new Date()
-    });
-
-    res.cookie('session_token', sessionToken, buildSessionCookieOptions());
-
-    const user = await db.collection('users').findOne({ user_id: userId }, { projection: { _id: 0 } });
-    logLoginAttempt(db, email, true, 'success', req);
-    res.json({ user, session_token: sessionToken });
-  } catch (error) {
-    console.error('Login error:', error);
-    res.status(500).json({ detail: 'Authentication service error' });
-  }
-}
-
-// Get current user
 async function getMe(req, res) {
   const { _id, ...user } = req.user;
   res.json(user);
 }
 
-// Logout
+// ─── LOGOUT ─────────────────────────────────────────────────────────────────
+
 async function logout(req, res) {
   try {
     const db = getDb();
@@ -450,69 +463,169 @@ async function logout(req, res) {
       httpOnly: true,
       secure: isProduction,
       sameSite: isProduction ? 'none' : 'lax',
-      path: '/'
+      path: '/',
     });
     res.json({ message: 'Logged out successfully' });
   } catch (error) {
+    console.error('Logout error:', error);
     res.status(500).json({ detail: 'Logout failed' });
   }
 }
 
-// Change Password
+// ─── CHANGE PASSWORD ────────────────────────────────────────────────────────
+
+// Common weak passwords to reject (top offenders)
+const COMMON_PASSWORDS = new Set([
+  'password', 'password1', 'password123', '12345678', '123456789',
+  '1234567890', 'qwerty123', 'abc12345', 'iloveyou', 'sunshine',
+  'princess', 'football', 'charlie', 'access14', 'trustno1',
+  'letmein1', 'baseball', 'dragon12', 'master12', 'monkey12',
+  'lilycrest', 'lilycrest1', 'lilycrest123', 'dormitory', 'tenant123',
+]);
+
+function validateNewPassword(password) {
+  const errors = [];
+
+  if (!password || typeof password !== 'string') {
+    return ['New password is required'];
+  }
+  if (password.length < 8) {
+    errors.push('Password must be at least 8 characters');
+  }
+  if (password.length > 128) {
+    errors.push('Password must be 128 characters or fewer');
+  }
+  if (!/[A-Z]/.test(password)) {
+    errors.push('Password must contain at least one uppercase letter');
+  }
+  if (!/[a-z]/.test(password)) {
+    errors.push('Password must contain at least one lowercase letter');
+  }
+  if (!/[0-9]/.test(password)) {
+    errors.push('Password must contain at least one number');
+  }
+  if (!/[!@#$%^&*()\-_=+\[\]{};:'",.<>?/\\|`~]/.test(password)) {
+    errors.push('Password must contain at least one special character (e.g. !@#$%^&*)');
+  }
+  if (COMMON_PASSWORDS.has(password.toLowerCase())) {
+    errors.push('This password is too common. Please choose a stronger one');
+  }
+
+  return errors;
+}
+
 async function changePassword(req, res) {
   try {
-    const { current_password, new_password } = req.body;
+    const { current_password, new_password, notify_email, notify_app } = req.body;
     const userEmail = req.user.email;
+    const userId = req.user.user_id;
+    const userName = req.user.name || 'Tenant';
+    const requestIp = req.ip || req.headers['x-forwarded-for'] || 'Unknown';
 
+    // ── Input validation ──────────────────────────────────────────────────
     if (!current_password || !new_password) {
       return res.status(400).json({ detail: 'Current password and new password are required' });
     }
-    if (new_password.length < 8) {
-      return res.status(400).json({ detail: 'New password must be at least 8 characters' });
+
+    // Server-side complexity checks (mirrors frontend rules)
+    const validationErrors = validateNewPassword(new_password);
+    if (validationErrors.length > 0) {
+      return res.status(400).json({
+        detail: validationErrors[0],
+        errors: validationErrors,
+      });
     }
 
-    const firebaseApiKey = getFirebaseApiKey();
+    // Prevent reusing the same password
+    if (current_password === new_password) {
+      return res.status(400).json({ detail: 'New password must be different from your current password' });
+    }
+
+    // ── Verify current password via Firebase ──────────────────────────────
+    const apiKey = firebaseApiKey();
+    if (!apiKey) {
+      return res.status(500).json({ detail: 'Firebase API key not configured' });
+    }
+
     try {
       await axios.post(
-        `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${firebaseApiKey}`,
-        { email: userEmail, password: current_password, returnSecureToken: false }
+        `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
+        { email: userEmail, password: current_password, returnSecureToken: false },
       );
-    } catch (error) {
+    } catch (fbErr) {
+      const msg = fbErr.response?.data?.error?.message || '';
+      if (msg.includes('TOO_MANY_ATTEMPTS')) {
+        return res.status(429).json({ detail: 'Too many attempts. Please try again later.' });
+      }
       return res.status(401).json({ detail: 'Current password is incorrect' });
     }
 
-    await admin.auth().updateUser(req.user.firebase_uid, { password: new_password });
+    // ── Update password in Firebase ───────────────────────────────────────
+    const uid = req.user.firebase_uid;
+    if (!uid) {
+      return res.status(400).json({ detail: 'No Firebase account linked. Cannot change password.' });
+    }
+    await admin.auth().updateUser(uid, { password: new_password });
 
-    // Notify via email (uses Firebase's password reset template as a security alert)
-    try {
-      await axios.post(
-        `https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${firebaseApiKey}`,
-        { requestType: 'PASSWORD_RESET', email: userEmail }
-      );
-    } catch (notifyErr) {
-      console.warn('Password change email alert failed:', notifyErr?.response?.data?.error?.message || notifyErr?.message);
+    console.log(`[ChangePassword] ✓ Password updated for user_id=${userId} email=${maskEmail(userEmail)}`);
+
+    const db = getDb();
+    const changeTimestamp = new Date();
+
+    // ── In-app audit announcement ─────────────────────────────────────────
+    if (notify_app !== false) {
+      try {
+        await db.collection('announcements').insertOne({
+          announcement_id: `ann_${uuidv4().replace(/-/g, '').substring(0, 12)}`,
+          title: 'Password changed',
+          content: `Your password was updated for ${maskEmail(userEmail)} on ${changeTimestamp.toLocaleString('en-PH', { timeZone: 'Asia/Manila', dateStyle: 'long', timeStyle: 'short' })}. If this wasn't you, reset your password immediately or contact admin.`,
+          category: 'Security',
+          priority: 'high',
+          author_id: 'system',
+          user_id: userId,
+          is_private: true,
+          is_active: true,
+          created_at: changeTimestamp,
+        });
+      } catch (annErr) {
+        console.warn('[ChangePassword] Announcement insert failed:', annErr?.message);
+      }
     }
 
-    // Add an in-app announcement/notification for audit visibility
+    // ── Email confirmation (non-blocking) ─────────────────────────────────
+    if (notify_email !== false) {
+      const { sendPasswordChangedEmail } = require('../services/emailService');
+      sendPasswordChangedEmail(userEmail, userName, requestIp)
+        .catch(err => console.warn('[ChangePassword] Email failed:', err?.message));
+    }
+
+    // ── Push notification (non-blocking) ──────────────────────────────────
     try {
-      const db = getDb();
-      const announcementId = `ann_${uuidv4().replace(/-/g, '').substring(0, 12)}`;
-      const masked = maskEmail(userEmail.trim().toLowerCase());
-      await db.collection('announcements').insertOne({
-        announcement_id: announcementId,
-        title: 'Password changed',
-        content: `Your password was updated for ${masked}. If this wasn\'t you, reset your password immediately or contact admin.`,
-        category: 'Security',
-        priority: 'high',
-        author_id: 'system',
-        user_id: req.user?.user_id,
-        is_private: true,
-        is_active: true,
-        created_at: new Date(),
+      const { sendPushToUser } = require('../services/pushService');
+      sendPushToUser(userId, {
+        title: '🔒 Password Changed',
+        body: 'Your LilyCrest account password was just updated. If this wasn\'t you, contact admin immediately.',
+        data: { type: 'security_alert', action: 'password_changed' },
+      }).catch(() => {});
+    } catch (_) { /* push service may not be available */ }
+
+    // ── Invalidate all existing sessions (force re-login with new password) ──
+    try {
+      await db.collection('user_sessions').deleteMany({ user_id: userId });
+      console.log(`[ChangePassword] Sessions cleared for user_id=${userId}`);
+    } catch (_) { /* non-critical */ }
+
+    // ── Audit log entry ───────────────────────────────────────────────────
+    try {
+      await db.collection('login_attempts').insertOne({
+        email: userEmail.toLowerCase(),
+        success: true,
+        reason: 'password_changed',
+        ip: requestIp,
+        user_agent: req.headers['user-agent'] || 'unknown',
+        timestamp: changeTimestamp,
       });
-    } catch (announceErr) {
-      console.warn('Password change announcement not created:', announceErr?.message);
-    }
+    } catch (_) { /* non-critical */ }
 
     res.json({ message: 'Password updated successfully' });
   } catch (error) {
@@ -521,54 +634,56 @@ async function changePassword(req, res) {
   }
 }
 
-// Forgot Password
+// ─── FORGOT PASSWORD ────────────────────────────────────────────────────────
+
 async function forgotPassword(req, res) {
+  // Always return same message to prevent email enumeration
+  const successMsg = 'If your email is registered, you will receive a password reset link.';
   try {
     const { email } = req.body;
     if (!email) {
       return res.status(400).json({ detail: 'Email is required' });
     }
 
-    // Always perform the same work regardless of user existence to prevent timing side-channel
     const tenantData = await verifyTenantInFirebase(email);
+    const apiKey = process.env.FIREBASE_API_KEY;
 
-    const firebaseApiKey = process.env.FIREBASE_API_KEY;
-    if (tenantData && firebaseApiKey) {
+    if (tenantData && apiKey) {
       try {
         await axios.post(
-          `https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${firebaseApiKey}`,
-          { requestType: 'PASSWORD_RESET', email }
+          `https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${apiKey}`,
+          { requestType: 'PASSWORD_RESET', email },
         );
       } catch (resetErr) {
         console.warn('Password reset email not sent:', resetErr?.message);
       }
     }
 
-    // Always create announcement (with masked email) to normalize response time
+    // Audit log
     try {
       const db = getDb();
-      const announcementId = `ann_${uuidv4().replace(/-/g, '').substring(0, 12)}`;
-      const masked = maskEmail(email.trim().toLowerCase());
       await db.collection('announcements').insertOne({
-        announcement_id: announcementId,
+        announcement_id: `ann_${uuidv4().replace(/-/g, '').substring(0, 12)}`,
         title: 'Password reset requested',
-        content: `We received a password reset request for ${masked}. If this was you, please check your email for the reset link. If not, ignore this notice or contact admin immediately.`,
+        content: `We received a password reset request for ${maskEmail(email.trim().toLowerCase())}. If this was you, please check your email for the reset link.`,
         category: 'Account',
         priority: 'normal',
         author_id: 'system',
-        is_active: tenantData ? true : false,
+        user_id: tenantData?.user_id || null,
+        is_private: true,
+        is_active: !!tenantData,
         created_at: new Date(),
       });
-    } catch (announceErr) {
-      console.warn('Forgot password announcement not created:', announceErr?.message);
-    }
+    } catch (_) { /* non-critical */ }
 
-    res.json({ message: 'If your email is registered, you will receive a password reset link.' });
+    res.json({ message: successMsg });
   } catch (error) {
     console.error('Forgot password error:', error);
-    res.json({ message: 'If your email is registered, you will receive a password reset link.' });
+    res.json({ message: successMsg });
   }
 }
+
+// ─── EXPORTS ────────────────────────────────────────────────────────────────
 
 module.exports = {
   googleSignIn,
@@ -577,5 +692,5 @@ module.exports = {
   getMe,
   logout,
   changePassword,
-  forgotPassword
+  forgotPassword,
 };

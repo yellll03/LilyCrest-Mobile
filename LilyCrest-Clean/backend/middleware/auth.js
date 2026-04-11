@@ -31,6 +31,13 @@ async function authMiddleware(req, res, next) {
       return res.status(401).json({ detail: 'Invalid or expired session' });
     }
 
+    // Guard against sessions created with missing user_id
+    if (!session.user_id) {
+      // Delete the broken session so the client gets a clean 401 and re-authenticates
+      await db.collection('user_sessions').deleteOne({ _id: session._id });
+      return res.status(401).json({ detail: 'Invalid session. Please sign in again.' });
+    }
+
     const user = await db.collection('users').findOne({ user_id: session.user_id });
     if (!user) {
       return res.status(401).json({ detail: 'User not found' });
