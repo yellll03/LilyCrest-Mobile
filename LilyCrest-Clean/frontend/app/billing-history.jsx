@@ -98,41 +98,6 @@ const normalizeBreakdown = (bill) => {
 
 const getBillId = (bill) => bill?.billing_id || bill?.id || bill?.billingId || bill?.billId || bill?.reference_id || bill?._id;
 
-// Fallback bills — matching actual LilyCrest billing format
-// Readings on the 15th, bills released on the 18th
-const MOCK_BILLS = [
-  {
-    billing_id: 'BILL-2026-004', description: 'April 2026 Billing Statement',
-    billing_period: 'April 2026', release_date: '2026-04-18', due_date: '2026-04-28',
-    status: 'pending', billing_type: 'consolidated',
-    rent: 5400, electricity: 353.89, water: 450, penalties: 0,
-    total: 6203.89, amount: 6203.89,
-  },
-  {
-    billing_id: 'BILL-2026-003', description: 'Electricity Bill - March 2026',
-    billing_period: 'March 2026', release_date: '2026-03-18', due_date: '2026-03-25',
-    status: 'overdue', billing_type: 'electricity',
-    electricity: 353.89,
-    total: 353.89, amount: 353.89,
-  },
-  {
-    billing_id: 'BILL-2026-002', description: 'Electricity Bill - February 2026',
-    billing_period: 'February 2026', release_date: '2026-02-18', due_date: '2026-02-25',
-    status: 'paid', billing_type: 'electricity',
-    electricity: 280,
-    total: 280, amount: 280,
-    payment_method: 'paymongo', payment_date: '2026-02-20T10:30:00Z',
-    paymongo_reference: 'LC-BILL-2026-002-1709500000',
-  },
-  {
-    billing_id: 'BILL-2026-001', description: 'Electricity Bill - January 2026',
-    billing_period: 'January 2026', release_date: '2026-01-18', due_date: '2026-01-25',
-    status: 'paid', billing_type: 'electricity',
-    electricity: 195.50,
-    total: 195.50, amount: 195.50,
-    payment_method: 'paymongo', payment_date: '2026-01-22T14:20:00Z',
-  },
-];
 
 export default function BillingScreen() {
   const router = useRouter();
@@ -159,19 +124,11 @@ export default function BillingScreen() {
         apiService.getMyBilling?.(),
       ]);
       const historyList = historyResp?.data || [];
-      if (!historyList.length) {
-        setHistory(MOCK_BILLS);
-      } else {
-        setHistory(historyList);
-      }
+      setHistory(historyList);
     } catch (err) {
       const status = err?.response?.status;
-      if (status === 404) {
-        setHistory(MOCK_BILLS);
-      } else {
-        if (status === 401) { try { await checkAuth?.(); } catch (_) {} }
-        setError('Unable to load billing data. Pull to retry.');
-      }
+      if (status === 401) { try { await checkAuth?.(); } catch (_) {} }
+      setError('Unable to load billing data. Pull to retry.');
     } finally {
       setLoading(false);
     }
@@ -266,14 +223,11 @@ export default function BillingScreen() {
   );
 
   // ── Bill Card ──
-  const MOCK_IDS = useMemo(() => new Set(MOCK_BILLS.map(b => getBillId(b)).filter(Boolean).map(String)), []);
-
   const renderBillCard = ({ item: bill }) => {
     const billId = getBillId(bill);
     const paid = isPaid(bill);
     const statusCfg = getStatusConfig(bill?.status);
     const breakdown = normalizeBreakdown(bill);
-    const isMockBill = MOCK_IDS.has(String(billId));
 
     return (
       <Pressable

@@ -255,25 +255,13 @@ export default function HomeScreen() {
     isFetchingRef.current = true;
     try {
       setLoadError(null);
-      const MOCK_ANNOUNCEMENTS_HOME = [
-        { title: 'April 2026 Billing Statements Released', content: 'Your April 2026 billing statements are now available. Settle on or before April 28 to avoid late fees.', category: 'Billing', created_at: '2026-04-18T08:00:00.000Z' },
-        { title: 'Scheduled Water Interruption – April 12', content: 'Water interruption on April 12, 8:00 AM–5:00 PM due to pipe maintenance. Please store water in advance.', category: 'Maintenance', created_at: '2026-04-09T09:00:00.000Z' },
-        { title: 'House Rules Reminder: Quiet Hours', content: 'Quiet hours are strictly 10:00 PM to 7:00 AM. Please be considerate of your fellow residents.', category: 'Rules', created_at: '2026-04-05T10:00:00.000Z' },
-        { title: 'Refer a Friend – Get 1 Month FREE WiFi!', content: 'Refer a friend who successfully moves in and enjoy 1 month of free WiFi. Mention your name upon inquiry.', category: 'Promo', created_at: '2026-04-01T08:00:00.000Z' },
-      ];
-
       const [dashboardRes, announcementsRes] = await Promise.all([
         apiService.getDashboard(),
         apiService.getAnnouncements().catch(() => ({ data: [] })),
       ]);
 
       const dashboard = dashboardRes?.data || {};
-      const realAnnouncements = announcementsRes?.data || [];
-      const realAnnIds = new Set(realAnnouncements.map(a => a.announcement_id).filter(Boolean));
-      const announcements = [
-        ...realAnnouncements,
-        ...MOCK_ANNOUNCEMENTS_HOME.filter(m => !realAnnIds.has(m.announcement_id)),
-      ];
+      const announcements = announcementsRes?.data || [];
 
       const billingItems = Array.isArray(dashboard?.billing?.items)
         ? dashboard.billing.items

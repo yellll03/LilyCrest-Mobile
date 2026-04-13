@@ -1,6 +1,33 @@
 const { getDb } = require('../config/database');
 const { v4: uuidv4 } = require('uuid');
 
+// Normalize a raw MongoDB user document to the shape the app expects.
+// Admin-panel documents use camelCase (fullName, emailAddress, contactNumber, etc.)
+// while app-created documents use snake_case (name, email, phone).
+// This bridges both schemas so the mobile app always sees consistent field names.
+function normalizeUser(doc) {
+  if (!doc) return doc;
+  const u = { ...doc };
+
+  // Name: fullName → name
+  if (!u.name && u.fullName) u.name = u.fullName;
+
+  // Email: emailAddress → email
+  if (!u.email && u.emailAddress) u.email = u.emailAddress;
+
+  // Phone: contactNumber / phoneNumber → phone
+  if (!u.phone && (u.contactNumber || u.phoneNumber)) {
+    u.phone = u.contactNumber || u.phoneNumber;
+  }
+
+  // Username: fallback to email prefix if missing
+  if (!u.username && u.email) {
+    u.username = u.email.split('@')[0];
+  }
+
+  return u;
+}
+
 // Get current user profile
 async function getMe(req, res) {
   try {
@@ -14,7 +41,7 @@ async function getMe(req, res) {
       return res.status(404).json({ detail: 'User not found' });
     }
 
-    res.json(user);
+    res.json(normalizeUser(user));
   } catch (error) {
     console.error('getMe error:', error);
     res.status(500).json({ detail: 'Failed to load profile' });
@@ -160,7 +187,7 @@ async function updateMe(req, res) {
       { projection: { _id: 0 } }
     );
 
-    res.json(updatedUser);
+    res.json(normalizeUser(updatedUser));
   } catch (error) {
     console.error('Update user error:', error);
     res.status(500).json({ detail: 'Failed to update user' });

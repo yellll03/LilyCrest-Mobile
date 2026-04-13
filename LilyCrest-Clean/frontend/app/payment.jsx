@@ -22,44 +22,6 @@ function safeDate(value) {
   } catch (_e) { return '—'; }
 }
 
-// Presentation-mode mock bills — mirrors billing-history MOCK_BILLS
-const MOCK_BILLS = [
-  {
-    billing_id: 'BILL-2026-004', description: 'April 2026 Billing Statement',
-    billing_period: 'April 2026', release_date: '2026-04-18', due_date: '2026-04-28',
-    status: 'pending', billing_type: 'consolidated',
-    rent: 5400, electricity: 353.89, water: 450, penalties: 0,
-    total: 6203.89, amount: 6203.89,
-  },
-  {
-    billing_id: 'BILL-2026-003', description: 'Electricity Bill - March 2026',
-    billing_period: 'March 2026', release_date: '2026-03-18', due_date: '2026-03-25',
-    status: 'overdue', billing_type: 'electricity',
-    electricity: 353.89, total: 353.89, amount: 353.89,
-  },
-  {
-    billing_id: 'BILL-2026-002', description: 'Electricity Bill - February 2026',
-    billing_period: 'February 2026', release_date: '2026-02-18', due_date: '2026-02-25',
-    status: 'paid', billing_type: 'electricity',
-    electricity: 280, total: 280, amount: 280,
-    payment_method: 'paymongo', payment_date: '2026-02-20T10:30:00Z',
-    paymongo_reference: 'LC-BILL-2026-002-1709500000',
-  },
-  {
-    billing_id: 'BILL-2026-001', description: 'Electricity Bill - January 2026',
-    billing_period: 'January 2026', release_date: '2026-01-18', due_date: '2026-01-25',
-    status: 'paid', billing_type: 'electricity',
-    electricity: 195.50, total: 195.50, amount: 195.50,
-    payment_method: 'paymongo', payment_date: '2026-01-22T14:20:00Z',
-  },
-];
-
-function findMockBill(id) {
-  if (!id) return null;
-  const t = String(id).trim().toLowerCase();
-  return MOCK_BILLS.find(b => String(b.billing_id).toLowerCase() === t) || null;
-}
-
 export default function PaymentScreen() {
   const router = useRouter();
   const { billId: billIdParam, mode } = useLocalSearchParams();
@@ -83,25 +45,19 @@ export default function PaymentScreen() {
         const all = resp?.data || [];
         const target = billId ? String(billId).trim().toLowerCase() : null;
 
-        // Try real bills first
+        // Find matching bill by ID
         let match = all.find((b) => {
           const ids = [b.billing_id, b.billingId, b.billId, b.id, b._id, b.reference_id]
             .filter(Boolean).map(id => String(id).trim().toLowerCase());
           return target && ids.includes(target);
         });
 
-        // Fall back to mock bills (presentation mode)
-        if (!match) match = findMockBill(billId);
-
         // Last resort: first unpaid or first bill from API
         if (!match) match = all.find(b => (b.status || '').toLowerCase() !== 'paid') || all[0] || null;
 
         setBill(match);
       } catch (_e) {
-        // On network/auth error, use mock bill if available
-        const mock = findMockBill(billId);
-        if (mock) { setBill(mock); }
-        else { setError('Unable to load billing data.'); }
+        setError('Unable to load billing data.');
       } finally {
         setLoading(false);
       }

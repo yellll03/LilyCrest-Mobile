@@ -167,73 +167,13 @@ export default function AnnouncementsScreen() {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [urgentOnly, setUrgentOnly] = useState(false);
 
-  const MOCK_ANNOUNCEMENTS = [
-    {
-      announcement_id: 'ann_001',
-      title: 'April 2026 Billing Statements Released',
-      content: 'Your April 2026 billing statements are now available in the app. Kindly settle your balance on or before April 28, 2026 to avoid late fees. You may pay conveniently via GCash, Maya, or Credit/Debit Card through our in-app PayMongo payment. For concerns, message us at 0917 1000087.',
-      author_name: 'LilyCrest Admin',
-      priority: 'high',
-      category: 'Billing',
-      is_urgent: true,
-      created_at: '2026-04-18T08:00:00.000Z',
-    },
-    {
-      announcement_id: 'ann_002',
-      title: 'Scheduled Water Interruption – April 12, 2026',
-      content: 'Please be advised that there will be a scheduled water interruption on Saturday, April 12, 2026, from 8:00 AM to 5:00 PM due to pipe maintenance. Please store enough water before the interruption. We apologize for the inconvenience and appreciate your understanding.',
-      author_name: 'LilyCrest Admin',
-      priority: 'high',
-      category: 'Maintenance',
-      is_urgent: true,
-      created_at: '2026-04-09T09:00:00.000Z',
-    },
-    {
-      announcement_id: 'ann_003',
-      title: 'House Rules Reminder: Quiet Hours',
-      content: 'As a reminder to all tenants, quiet hours are strictly observed from 10:00 PM to 7:00 AM. Please keep noise to a minimum during these hours out of respect for your fellow residents. Repeated violations may result in a notice from management. Thank you for your cooperation.',
-      author_name: 'LilyCrest Admin',
-      priority: 'normal',
-      category: 'Rules',
-      is_urgent: false,
-      created_at: '2026-04-05T10:00:00.000Z',
-    },
-    {
-      announcement_id: 'ann_004',
-      title: 'Refer a Friend – Get 1 Month FREE!',
-      content: 'Know someone looking for a place to stay? Refer a friend and get 1 month of free WiFi when they successfully move in! Simply have them mention your name upon inquiry. This promo is ongoing until slots are filled. Spread the word and enjoy the perks!',
-      author_name: 'LilyCrest Admin',
-      priority: 'normal',
-      category: 'Promo',
-      is_urgent: false,
-      created_at: '2026-04-01T08:00:00.000Z',
-    },
-    {
-      announcement_id: 'ann_005',
-      title: 'Welcome, New Tenants! – April 2026 Move-Ins',
-      content: 'LilyCrest warmly welcomes our new tenants who moved in this April! We hope you feel at home. Should you need anything or have questions about the dorm policies, do not hesitate to reach out to us at 0917 1000087 or message us on our Facebook page. Enjoy your stay!',
-      author_name: 'LilyCrest Admin',
-      priority: 'low',
-      category: 'General',
-      is_urgent: false,
-      created_at: '2026-04-01T07:00:00.000Z',
-    },
-  ];
-
   const fetchAnnouncements = async () => {
     try {
       const response = await apiService.getAnnouncements();
-      const real = response.data || [];
-      // Always show mock announcements; real ones are prepended and take priority
-      const realIds = new Set(real.map(a => a.announcement_id).filter(Boolean));
-      const merged = [
-        ...real,
-        ...MOCK_ANNOUNCEMENTS.filter(m => !realIds.has(m.announcement_id)),
-      ];
-      setAnnouncements(merged);
+      setAnnouncements(response.data || []);
     } catch (error) {
       console.error('Fetch announcements error:', error);
-      setAnnouncements([...MOCK_ANNOUNCEMENTS]);
+      setAnnouncements([]);
     } finally {
       setIsLoading(false);
       setRefreshing(false);

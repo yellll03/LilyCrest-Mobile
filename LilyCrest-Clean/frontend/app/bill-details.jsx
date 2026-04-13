@@ -10,132 +10,7 @@ import { downloadBillPdf } from '../src/utils/downloadBillPdf';
 
 const getBillId = (bill) => bill?.billing_id || bill?.id || bill?._id || bill?.billingId || bill?.billId || bill?.reference_id;
 
-// ── Mock data matching actual LilyCrest billing format ──
-// Readings recorded every 15th of the month, bills released every 18th
-// Multiple segments happen when someone moves in or out mid-period
-const MOCK_BILLS = [
-  {
-    billing_id: 'BILL-2026-004',
-    description: 'April 2026 Billing Statement',
-    billing_period: 'April 2026',
-    release_date: '2026-04-18',
-    due_date: '2026-04-28',
-    status: 'pending',
-    billing_type: 'consolidated',
-    rent: 5400, electricity: 353.89, water: 450, penalties: 0,
-    total: 6203.89, amount: 6203.89,
-    electricity_breakdown: [
-      {
-        occupants: 4,
-        reading_date_from: '2026-03-15', reading_date_to: '2026-03-24',
-        reading_from: 1091.91, reading_to: 1127.69,
-        consumption: 35.78, rate: 16,
-        segment_total: 572.48, share_per_tenant: 143.12,
-      },
-      {
-        occupants: 3,
-        reading_date_from: '2026-03-24', reading_date_to: '2026-04-15',
-        reading_from: 1127.69, reading_to: 1167.21,
-        consumption: 39.52, rate: 16,
-        segment_total: 632.32, share_per_tenant: 210.77,
-      },
-    ],
-    water_breakdown: {
-      reading_from: 22, reading_to: 31,
-      consumption: 9, rate: 50,
-      total: 450,
-      sharing_policy: 'Equal division among active tenants',
-    },
-  },
-  {
-    billing_id: 'BILL-2026-003',
-    description: 'Electricity Bill - March 2026',
-    billing_period: 'March 2026',
-    period_start: '2026-02-15',
-    period_end: '2026-03-15',
-    release_date: '2026-03-18',
-    due_date: '2026-03-25',
-    status: 'overdue',
-    billing_type: 'electricity',
-    electricity: 353.89,
-    total: 353.89,
-    amount: 353.89,
-    electricity_breakdown: [
-      {
-        // Segment 1: before tenant moved out on Feb 24
-        occupants: 4,
-        reading_date_from: '2026-02-15', reading_date_to: '2026-02-24',
-        reading_from: 1016.61, reading_to: 1052.39,
-        consumption: 35.78, rate: 16,
-        segment_total: 572.48,
-        share_per_tenant: 143.12,
-      },
-      {
-        // Segment 2: after tenant moved out
-        occupants: 3,
-        reading_date_from: '2026-02-24', reading_date_to: '2026-03-15',
-        reading_from: 1052.39, reading_to: 1091.91,
-        consumption: 39.52, rate: 16,
-        segment_total: 632.32,
-        share_per_tenant: 210.77,
-      },
-    ],
-  },
-  {
-    billing_id: 'BILL-2026-002',
-    description: 'Electricity Bill - February 2026',
-    billing_period: 'February 2026',
-    period_start: '2026-01-15',
-    period_end: '2026-02-15',
-    release_date: '2026-02-18',
-    due_date: '2026-02-25',
-    status: 'paid',
-    billing_type: 'electricity',
-    electricity: 280.00,
-    total: 280.00,
-    amount: 280.00,
-    payment_method: 'paymongo',
-    payment_date: '2026-02-20T10:30:00Z',
-    paymongo_reference: 'LC-BILL-2026-002-1709500000',
-    electricity_breakdown: [
-      {
-        // No move-in/out = single segment 15th to 15th
-        occupants: 4,
-        reading_date_from: '2026-01-15', reading_date_to: '2026-02-15',
-        reading_from: 946.61, reading_to: 1016.61,
-        consumption: 70, rate: 16,
-        segment_total: 1120,
-        share_per_tenant: 280,
-      },
-    ],
-  },
-  {
-    billing_id: 'BILL-2026-001',
-    description: 'Electricity Bill - January 2026',
-    billing_period: 'January 2026',
-    period_start: '2025-12-15',
-    period_end: '2026-01-15',
-    release_date: '2026-01-18',
-    due_date: '2026-01-25',
-    status: 'paid',
-    billing_type: 'electricity',
-    electricity: 195.50,
-    total: 195.50,
-    amount: 195.50,
-    payment_method: 'paymongo',
-    payment_date: '2026-01-22T14:20:00Z',
-    electricity_breakdown: [
-      {
-        occupants: 4,
-        reading_date_from: '2025-12-15', reading_date_to: '2026-01-15',
-        reading_from: 898.00, reading_to: 946.61,
-        consumption: 48.61, rate: 16,
-        segment_total: 777.76,
-        share_per_tenant: 194.44,
-      },
-    ],
-  },
-];
+
 
 // ── Helpers ──
 function safeCurrency(amount) {
@@ -192,12 +67,8 @@ export default function BillDetailsScreen() {
           return ids.includes(String(billId));
         });
         if (match) { setBill(match); return; }
-        const mockMatch = MOCK_BILLS.find((b) => String(getBillId(b)) === String(billId));
-        if (mockMatch) { setBill(mockMatch); return; }
         setError('Bill not found');
       } catch (err) {
-        const mockMatch = MOCK_BILLS.find((b) => String(getBillId(b)) === String(billId));
-        if (mockMatch) { setBill(mockMatch); return; }
         setError('Unable to load bill details');
       } finally {
         setLoading(false);
@@ -256,8 +127,6 @@ export default function BillDetailsScreen() {
   }
 
   const billIdentifier = getBillId(bill);
-  const MOCK_IDS = new Set(MOCK_BILLS.map(b => getBillId(b)).filter(Boolean).map(String));
-  const isMockBill = String(billIdentifier || '').startsWith('mock') || MOCK_IDS.has(String(billIdentifier));
   const statusKey = (bill.status || 'pending').toLowerCase();
   const statusCfg = STATUS_CONFIG[statusKey] || STATUS_CONFIG.pending;
   const isPaid = statusKey === 'paid';
@@ -627,7 +496,7 @@ export default function BillDetailsScreen() {
             <View style={styles.paySection}>
               <TouchableOpacity
                 style={[styles.paymongoBtn, creatingCheckout && styles.btnDisabled]}
-                disabled={creatingCheckout || isMockBill}
+                disabled={creatingCheckout}
                 onPress={handlePayOnline}
                 activeOpacity={0.8}
               >

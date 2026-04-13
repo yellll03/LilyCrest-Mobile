@@ -85,12 +85,24 @@ async function findTenantByEmail(db, email) {
   });
 }
 
+/** Normalize camelCase admin-panel fields to the snake_case the app expects */
+function normalizeUser(doc) {
+  if (!doc) return doc;
+  const u = { ...doc };
+  if (!u.name && u.fullName) u.name = u.fullName;
+  if (!u.email && u.emailAddress) u.email = u.emailAddress;
+  if (!u.phone && (u.contactNumber || u.phoneNumber)) u.phone = u.contactNumber || u.phoneNumber;
+  if (!u.username && u.email) u.username = u.email.split('@')[0];
+  return u;
+}
+
 /** Return user object without MongoDB _id */
 async function getCleanUser(db, userId) {
-  return db.collection('users').findOne(
+  const doc = await db.collection('users').findOne(
     { user_id: userId },
     { projection: { _id: 0 } },
   );
+  return normalizeUser(doc);
 }
 
 // ─── EMAIL / PASSWORD LOGIN ─────────────────────────────────────────────────
