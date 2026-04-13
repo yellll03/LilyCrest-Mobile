@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { Link, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, FlatList, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { FlatList, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import LilyFlowerIcon from '../src/components/assistant/LilyFlowerIcon';
 import { useAuth } from '../src/context/AuthContext';
@@ -107,6 +107,7 @@ export default function BillingScreen() {
 
   const [history, setHistory] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [activeStatus, setActiveStatus] = useState('all');
   // Type filter removed — consolidated bills contain all charge types
@@ -115,11 +116,11 @@ export default function BillingScreen() {
   useEffect(() => { if (!authLoading) loadData(); }, [authLoading]);
   useFocusEffect(useCallback(() => { if (!authLoading) loadData(); return undefined; }, [authLoading]));
 
-  const loadData = async () => {
-    setLoading(true);
+  const loadData = async ({ silent = false } = {}) => {
+    if (!silent) setLoading(true);
     setError(null);
     try {
-      const [currentResp, historyResp] = await Promise.all([
+      const [, historyResp] = await Promise.all([
         apiService.getLatestBilling?.().catch(() => null),
         apiService.getMyBilling?.(),
       ]);
@@ -131,7 +132,13 @@ export default function BillingScreen() {
       setError('Unable to load billing data. Pull to retry.');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
+  };
+
+  const handleRefresh = () => {
+    setRefreshing(true);
+    loadData({ silent: true });
   };
 
 
@@ -360,6 +367,14 @@ export default function BillingScreen() {
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={renderListHeader}
         contentContainerStyle={styles.listContent}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={['#D4682A']}
+            tintColor="#D4682A"
+          />
+        }
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Ionicons name="receipt-outline" size={48} color={colors.textMuted} />
