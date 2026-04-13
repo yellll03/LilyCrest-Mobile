@@ -62,6 +62,7 @@ const apiLimiter = rateLimit({
   message: { detail: 'Too many requests. Please try again shortly.' },
 });
 app.use('/api', apiLimiter);
+app.use('/api/m', apiLimiter);
 
 // Stricter rate limit for chatbot (30 requests per minute per IP)
 const chatbotLimiter = rateLimit({
@@ -78,9 +79,14 @@ app.use('/api/announcements', cacheMiddleware(120));
 app.use('/api/dashboard', cacheMiddleware(60));
 app.use('/api/faqs', cacheMiddleware(300));
 app.use('/api/rooms', cacheMiddleware(120));
+app.use('/api/m/announcements', cacheMiddleware(120));
+app.use('/api/m/dashboard', cacheMiddleware(60));
+app.use('/api/m/faqs', cacheMiddleware(300));
+app.use('/api/m/rooms', cacheMiddleware(120));
 
-// Register API routes
+// Register API routes — /api/m is the mobile-facing prefix (mirrors /api)
 app.use('/api', apiRoutes);
+app.use('/api/m', apiRoutes);
 
 // Start server
 async function startServer() {

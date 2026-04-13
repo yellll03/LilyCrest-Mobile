@@ -2,6 +2,7 @@ const { v4: uuidv4 } = require('uuid');
 const { ObjectId } = require('mongodb');
 const { getDb } = require('../config/database');
 const { buildBrandedPdf, esc } = require('../utils/pdfBuilder');
+const { notifyBillCreated } = require('../services/pushService');
 
 // ── Presentation-mode mock bills ─────────────────────────────────────────────
 // Used as PDF fallback when a bill ID is not found in the database.
@@ -235,6 +236,10 @@ async function createBilling(req, res) {
 
     const db = getDb();
     await db.collection('billing').insertOne(newBill);
+
+    // Push notification (non-blocking)
+    notifyBillCreated(req.user.user_id, newBill).catch(() => {});
+
     res.status(201).json({ ...newBill, _id: undefined });
   } catch (error) {
     console.error('Create billing error:', error);

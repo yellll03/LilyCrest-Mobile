@@ -59,4 +59,45 @@ function adminMiddleware(req, res, next) {
   return next();
 }
 
-module.exports = { authMiddleware, adminMiddleware };
+// Like authMiddleware but doesn't block unauthenticated requests.
+// Attaches req.user if a valid session is found; sets req.user = null otherwise.
+async function optionalAuthMiddleware(req, res, next) {
+  const authHeader = req.headers.authorization;
+  const cookieToken = req.cookies?.session_token;
+  const queryToken = req.query?.token;
+
+  let token = null;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.substring(7);
+  } else if (cookieToken) {
+    token = cookieToken;
+  } else if (queryToken) {
+    token = queryToken;
+  }
+
+  if (!token) {
+    req.user = null;
+    return next();
+  }
+
+  try {
+    const db = getDb();
+    const session = await db.collection('user_sessions').findOne({
+      session_token: token,
+      expires_at: { $gt: new Date() },
+    });
+
+    if (session?.user_id) {
+      const user = await db.collection('users').findOne({ user_id: session.user_id });
+      req.user = user || null;
+    } else {
+      req.user = null;
+    }
+  } catch (_) {
+    req.user = null;
+  }
+
+  return next();
+}
+
+module.exports = { authMiddleware, adminMiddleware, optionalAuthMiddleware };

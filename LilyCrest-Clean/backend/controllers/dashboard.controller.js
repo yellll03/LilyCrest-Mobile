@@ -15,24 +15,21 @@ async function getDashboard(req, res) {
     const db = getDb();
 
     // ── Room Assignment ──────────────────────────────────────────────────────
-    // The real data lives in roomoccupancyhistories, keyed by MongoDB ObjectId
+    // Try multiple sources: roomoccupancyhistories → bedhistories → reservations
     let assignment = null;
     let room = null;
 
     if (mongoId) {
+      // Source 1: roomoccupancyhistories (legacy)
       const occupancy = await db.collection('roomoccupancyhistories').findOne({
         tenantId: mongoId,
         stayStatus: 'active',
       });
 
       if (occupancy) {
-        // Get the room document by its ObjectId
         const roomDoc = await db.collection('rooms').findOne({ _id: occupancy.roomId });
-
-        // Find the specific bed this tenant is assigned to
         const bed = roomDoc?.beds?.find((b) => b.id === occupancy.bedId);
 
-        // Normalise assignment into the shape the frontend expects
         assignment = {
           assignment_id: occupancy._id?.toString(),
           user_id: userId,
@@ -44,7 +41,6 @@ async function getDashboard(req, res) {
           branch: occupancy.branchId,
         };
 
-        // Normalise room into the shape the frontend expects
         if (roomDoc) {
           room = {
             room_id: roomDoc._id?.toString(),
@@ -64,6 +60,118 @@ async function getDashboard(req, res) {
             images: roomDoc.images || [],
             name: roomDoc.name,
           };
+        }
+      }
+
+      // Source 2: bedhistories (web admin creates these on move-in)
+      if (!assignment) {
+        const bedHistory = await db.collection('bedhistories').findOne(
+          { tenantId: mongoId, status: 'active' },
+          { sort: { moveInDate: -1 } }
+        );
+
+        if (bedHistory) {
+          const roomOid = typeof bedHistory.roomId === 'string'
+            ? new ObjectId(bedHistory.roomId)
+            : bedHistory.roomId;
+          const roomDoc = await db.collection('rooms').findOne({ _id: roomOid });
+          const bed = roomDoc?.beds?.find((b) => b.id === bedHistory.bedId);
+
+          assignment = {
+            assignment_id: bedHistory._id?.toString(),
+            user_id: userId,
+            room_id: bedHistory.roomId?.toString(),
+            status: 'active',
+            move_in_date: bedHistory.moveInDate || bedHistory.effectiveStartDate || null,
+            move_out_date: bedHistory.moveOutDate || bedHistory.effectiveEndDate || null,
+            bed_id: bedHistory.bedId,
+            branch: bedHistory.branch,
+          };
+
+          if (roomDoc) {
+            room = {
+              room_id: roomDoc._id?.toString(),
+              room_number: roomDoc.roomNumber,
+              room_type: formatRoomType(roomDoc.type),
+              bed_type: bed
+                ? bed.position === 'upper'
+                  ? 'Upper Bed'
+                  : 'Lower Bed'
+                : 'N/A',
+              floor: roomDoc.floor,
+              capacity: roomDoc.capacity,
+              price: roomDoc.monthlyPrice,
+              amenities: roomDoc.amenities || [],
+              policies: roomDoc.policies || [],
+              description: roomDoc.description || '',
+              images: roomDoc.images || [],
+              name: roomDoc.name,
+            };
+          }
+        }
+      }
+
+      // Source 3: reservations (web admin reservation flow — status moveIn/active)
+      if (!assignment) {
+        const reservation = await db.collection('reservations').findOne(
+          { userId: mongoId, status: { $in: ['moveIn', 'active', 'completed', 'confirmed'] } },
+          { sort: { createdAt: -1 } }
+        );
+
+        if (reservation?.roomId) {
+          const roomOid = typeof reservation.roomId === 'string'
+            ? new ObjectId(reservation.roomId)
+            : reservation.roomId;
+          const roomDoc = await db.collection('rooms').findOne({ _id: roomOid });
+          const selectedBed = reservation.selectedBed || {};
+          const bed = roomDoc?.beds?.find((b) => b.id === selectedBed.id);
+
+          // Calculate contract end from move-in + lease duration
+          let contractEnd = null;
+          const moveIn = reservation.moveInDate || reservation.checkInDate || reservation.targetMoveInDate;
+          if (moveIn && reservation.leaseDuration) {
+            const endDate = new Date(moveIn);
+            endDate.setMonth(endDate.getMonth() + reservation.leaseDuration);
+            contractEnd = endDate;
+          }
+
+          assignment = {
+            assignment_id: reservation._id?.toString(),
+            user_id: userId,
+            room_id: reservation.roomId?.toString(),
+            status: 'active',
+            move_in_date: moveIn || null,
+            move_out_date: reservation.moveOutDate || contractEnd || null,
+            bed_id: selectedBed.id || null,
+            branch: reservation.branch,
+          };
+
+          if (roomDoc) {
+            room = {
+              room_id: roomDoc._id?.toString(),
+              room_number: roomDoc.roomNumber,
+              room_type: formatRoomType(roomDoc.type),
+              bed_type: bed
+                ? bed.position === 'upper'
+                  ? 'Upper Bed'
+                  : selectedBed.position === 'upper'
+                    ? 'Upper Bed'
+                    : 'Lower Bed'
+                : selectedBed.position === 'upper'
+                  ? 'Upper Bed'
+                  : selectedBed.position === 'lower'
+                    ? 'Lower Bed'
+                    : 'N/A',
+              floor: roomDoc.floor,
+              capacity: roomDoc.capacity,
+              price: roomDoc.monthlyPrice || reservation.monthlyRent,
+              amenities: roomDoc.amenities || [],
+              policies: roomDoc.policies || [],
+              description: roomDoc.description || '',
+              images: roomDoc.images || [],
+              name: roomDoc.name,
+            };
+          }
         }
       }
     }

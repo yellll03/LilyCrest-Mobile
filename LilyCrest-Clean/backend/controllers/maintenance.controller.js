@@ -161,10 +161,68 @@ async function reopenMaintenance(req, res) {
   }
 }
 
+// Admin: update maintenance request status and notify tenant
+async function adminUpdateStatus(req, res) {
+  try {
+    const { requestId } = req.params;
+    const { status, notes, assigned_to } = req.body;
+
+    const VALID_STATUSES = ['pending', 'viewed', 'in_progress', 'resolved', 'completed', 'rejected'];
+    if (!status || !VALID_STATUSES.includes(status)) {
+      return res.status(400).json({ detail: `status must be one of: ${VALID_STATUSES.join(', ')}` });
+    }
+
+    const db = getDb();
+    const existing = await db.collection('maintenance_requests').findOne({ request_id: requestId });
+    if (!existing) {
+      return res.status(404).json({ detail: 'Request not found' });
+    }
+
+    const updates = { status, updated_at: new Date() };
+    if (notes !== undefined) updates.notes = notes;
+    if (assigned_to !== undefined) updates.assigned_to = assigned_to;
+
+    await db.collection('maintenance_requests').updateOne(
+      { request_id: requestId },
+      { $set: updates }
+    );
+
+    // Notify the tenant (non-blocking)
+    notifyMaintenanceStatusChange(existing.user_id, existing, status).catch(() => {});
+
+    const updated = await db.collection('maintenance_requests').findOne({ request_id: requestId });
+    res.json({ ...updated, _id: undefined });
+  } catch (error) {
+    console.error('Admin update maintenance status error:', error);
+    res.status(500).json({ detail: 'Failed to update maintenance request status' });
+  }
+}
+
+// Admin: get all maintenance requests
+async function adminGetAll(req, res) {
+  try {
+    const db = getDb();
+    const { status, user_id } = req.query;
+    const filter = {};
+    if (status) filter.status = status;
+    if (user_id) filter.user_id = user_id;
+
+    const requests = await db.collection('maintenance_requests')
+      .find(filter)
+      .sort({ created_at: -1 })
+      .toArray();
+    res.json(requests.map(r => ({ ...r, _id: undefined })));
+  } catch (error) {
+    res.status(500).json({ detail: 'Failed to fetch maintenance requests' });
+  }
+}
+
 module.exports = {
   getMyMaintenance,
   createMaintenance,
   updateMaintenance,
   cancelMaintenance,
   reopenMaintenance,
+  adminUpdateStatus,
+  adminGetAll,
 };

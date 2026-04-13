@@ -394,8 +394,10 @@ export default function MyDocumentsScreen() {
   const handleViewUploadedDoc = async (doc) => {
     try {
       const response = await apiService.getUserDocumentFile(doc.doc_id);
-      if (response?.data?.file_data) {
-        setPreviewImage({ uri: response.data.file_data, label: doc.label, status: doc.status, uploaded_at: doc.uploaded_at });
+      const fileData = response?.data?.file_data;
+      if (fileData) {
+        // file_data may be a base64 string (mobile upload) or a URL (reservation docs)
+        setPreviewImage({ uri: fileData, label: doc.label, status: doc.status, uploaded_at: doc.uploaded_at, source: doc.source });
       } else {
         showAlert({ title: 'Error', message: 'Could not load document preview.', type: 'error' });
       }
@@ -407,8 +409,17 @@ export default function MyDocumentsScreen() {
 
   const styles = createStyles(colors, isDarkMode);
 
-  const idDocs = uploadedDocs.filter(d => ['government_id', 'passport', 'drivers_license', 'student_id', 'company_id'].includes(d.type));
-  const otherDocs = uploadedDocs.filter(d => !['government_id', 'passport', 'drivers_license', 'student_id', 'company_id'].includes(d.type));
+  const ID_TYPES = ['government_id', 'passport', 'drivers_license', 'student_id', 'company_id'];
+
+  // Separate reservation docs from user-uploaded docs
+  const reservationDocs = uploadedDocs.filter(d => d.source === 'reservation');
+  const userUploadedDocs = uploadedDocs.filter(d => d.source !== 'reservation');
+
+  // Split within each source
+  const reservationIdDocs = reservationDocs.filter(d => ID_TYPES.includes(d.type));
+  const reservationOtherDocs = reservationDocs.filter(d => !ID_TYPES.includes(d.type));
+  const idDocs = userUploadedDocs.filter(d => ID_TYPES.includes(d.type));
+  const otherDocs = userUploadedDocs.filter(d => !ID_TYPES.includes(d.type));
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -474,7 +485,77 @@ export default function MyDocumentsScreen() {
               </TouchableOpacity>
             </View>
 
-            {/* Valid IDs Section */}
+            {/* ── Reservation Documents (submitted during web reservation) ── */}
+            {reservationDocs.length > 0 && (
+              <View style={styles.subSection}>
+                <View style={styles.reservationBadgeRow}>
+                  <Ionicons name="checkmark-circle" size={14} color="#16A34A" />
+                  <Text style={styles.reservationBadgeText}>Submitted During Reservation</Text>
+                </View>
+                {reservationIdDocs.length > 0 && (
+                  <>
+                    <Text style={styles.subSectionTitle}>Valid IDs</Text>
+                    {reservationIdDocs.map(doc => {
+                      const sc = statusColor(doc.status);
+                      const typeInfo = UPLOAD_TYPES.find(t => t.key === doc.type);
+                      return (
+                        <TouchableOpacity key={doc.doc_id} style={styles.uploadedDocCard} onPress={() => handleViewUploadedDoc(doc)} activeOpacity={0.7}>
+                          <View style={[styles.uploadedDocIcon, { backgroundColor: `${typeInfo?.color || '#6B7280'}12` }]}>
+                            <Ionicons name={typeInfo?.icon || 'card'} size={22} color={typeInfo?.color || '#6B7280'} />
+                          </View>
+                          <View style={styles.uploadedDocContent}>
+                            <View style={styles.uploadedDocTitleRow}>
+                              <Text style={styles.uploadedDocTitle} numberOfLines={1}>{doc.label}</Text>
+                              <View style={[styles.statusBadge, { backgroundColor: sc.bg }]}>
+                                <Text style={[styles.statusText, { color: sc.text }]}>{statusLabel(doc.status)}</Text>
+                              </View>
+                            </View>
+                            <Text style={styles.uploadedDocDate}>
+                              Submitted {new Date(doc.uploaded_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </Text>
+                          </View>
+                          <View style={styles.reservationLock}>
+                            <Ionicons name="lock-closed" size={14} color={colors.textMuted} />
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </>
+                )}
+                {reservationOtherDocs.length > 0 && (
+                  <>
+                    <Text style={[styles.subSectionTitle, reservationIdDocs.length > 0 && { marginTop: 12 }]}>Other Documents</Text>
+                    {reservationOtherDocs.map(doc => {
+                      const sc = statusColor(doc.status);
+                      const typeInfo = UPLOAD_TYPES.find(t => t.key === doc.type);
+                      return (
+                        <TouchableOpacity key={doc.doc_id} style={styles.uploadedDocCard} onPress={() => handleViewUploadedDoc(doc)} activeOpacity={0.7}>
+                          <View style={[styles.uploadedDocIcon, { backgroundColor: `${typeInfo?.color || '#6B7280'}12` }]}>
+                            <Ionicons name={typeInfo?.icon || 'document'} size={22} color={typeInfo?.color || '#6B7280'} />
+                          </View>
+                          <View style={styles.uploadedDocContent}>
+                            <View style={styles.uploadedDocTitleRow}>
+                              <Text style={styles.uploadedDocTitle} numberOfLines={1}>{doc.label}</Text>
+                              <View style={[styles.statusBadge, { backgroundColor: sc.bg }]}>
+                                <Text style={[styles.statusText, { color: sc.text }]}>{statusLabel(doc.status)}</Text>
+                              </View>
+                            </View>
+                            <Text style={styles.uploadedDocDate}>
+                              Submitted {new Date(doc.uploaded_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
+                            </Text>
+                          </View>
+                          <View style={styles.reservationLock}>
+                            <Ionicons name="lock-closed" size={14} color={colors.textMuted} />
+                          </View>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </>
+                )}
+              </View>
+            )}
+
+            {/* ── User-Uploaded Valid IDs ── */}
             {idDocs.length > 0 && (
               <View style={styles.subSection}>
                 <Text style={styles.subSectionTitle}>Valid IDs</Text>
@@ -510,7 +591,7 @@ export default function MyDocumentsScreen() {
               </View>
             )}
 
-            {/* Other Uploaded Documents Section */}
+            {/* ── User-Uploaded Other Documents ── */}
             {otherDocs.length > 0 && (
               <View style={styles.subSection}>
                 <Text style={styles.subSectionTitle}>Documents Uploaded</Text>
@@ -697,7 +778,7 @@ export default function MyDocumentsScreen() {
           </View>
           {previewImage?.uploaded_at && (
             <Text style={styles.imagePreviewDate}>
-              Uploaded {new Date(previewImage.uploaded_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
+              {previewImage.source === 'reservation' ? 'Submitted during reservation' : 'Uploaded'} {new Date(previewImage.uploaded_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' })}
             </Text>
           )}
         </SafeAreaView>
@@ -808,6 +889,10 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   downloadButtonDisabled: { backgroundColor: colors.textMuted },
   helpCard: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: isDarkMode ? 'rgba(249,115,22,0.1)' : '#FFF7ED', borderRadius: 12, padding: 14, marginTop: 8, gap: 10 },
   helpText: { flex: 1, fontSize: 13, color: isDarkMode ? '#FDBA74' : '#9A3412', lineHeight: 20 },
+  // Reservation document styles
+  reservationBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: isDarkMode ? 'rgba(22,163,106,0.12)' : '#F0FDF4', borderRadius: 8, alignSelf: 'flex-start' },
+  reservationBadgeText: { fontSize: 11, fontWeight: '700', color: '#16A34A', letterSpacing: 0.3 },
+  reservationLock: { width: 32, height: 32, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginLeft: 8, backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : '#F8FAFC' },
   // Upload Type Picker
   pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
   pickerSheet: { backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: Platform.OS === 'ios' ? 34 : 20, maxHeight: '70%' },

@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { format, formatDistanceToNow } from 'date-fns';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
 import { apiService } from '../../src/services/api';
@@ -147,6 +147,14 @@ export default function AnnouncementsScreen() {
     footerAuthor: { flexDirection: 'row', alignItems: 'center', gap: 3 },
     authorText: { fontSize: 10.5, color: c.textMuted, fontWeight: '500' },
 
+    // ── Error Banner ──
+    errorBanner: {
+      flexDirection: 'row', alignItems: 'center', gap: 8,
+      backgroundColor: '#FEF3C7', borderWidth: 1, borderColor: '#FDE68A',
+      borderRadius: 10, padding: 12, marginBottom: 12,
+    },
+    errorBannerText: { flex: 1, fontSize: 13, color: '#92400E', fontWeight: '500' },
+
     // ── Empty ──
     emptyState: { alignItems: 'center', paddingVertical: 60 },
     emptyIcon: {
@@ -158,22 +166,51 @@ export default function AnnouncementsScreen() {
     emptyTitle: { fontSize: 16, fontWeight: '600', color: c.text, marginBottom: 4 },
     emptyText: { fontSize: 13, color: c.textMuted, textAlign: 'center', lineHeight: 20, paddingHorizontal: 40 },
 
+    readMoreText: { fontSize: 12, color: c.primary, fontWeight: '600', marginTop: 4 },
+
+    // ── Detail Modal ──
+    modalOverlay: {
+      flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
+      justifyContent: 'flex-end',
+    },
+    modalSheet: {
+      backgroundColor: c.surface,
+      borderTopLeftRadius: 24, borderTopRightRadius: 24,
+      padding: 20, paddingBottom: Platform.OS === 'ios' ? 40 : 24,
+      maxHeight: '85%',
+    },
+    modalHeader: {
+      flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 12,
+    },
+    modalTitle: { fontSize: 15, fontWeight: '700', color: c.text, lineHeight: 22, flex: 1 },
+    modalTime: { fontSize: 11.5, color: c.textMuted, marginTop: 2 },
+    modalBody: { marginVertical: 14 },
+    modalContent: { fontSize: 14, color: c.textSecondary, lineHeight: 22 },
+    modalFooter: {
+      flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+      borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border, paddingTop: 12,
+    },
+
     bottomSpacer: { height: Platform.OS === 'ios' ? 100 : 80 },
   }));
 
   const [announcements, setAnnouncements] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [fetchError, setFetchError] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [urgentOnly, setUrgentOnly] = useState(false);
+  const [selectedAnn, setSelectedAnn] = useState(null);
 
-  const fetchAnnouncements = async () => {
+  const fetchAnnouncements = async (silent = false) => {
+    if (!silent) setFetchError(null);
     try {
       const response = await apiService.getAnnouncements();
       setAnnouncements(response.data || []);
+      setFetchError(null);
     } catch (error) {
       console.error('Fetch announcements error:', error);
-      setAnnouncements([]);
+      if (!silent) setFetchError('Unable to load announcements. Pull down to refresh.');
     } finally {
       setIsLoading(false);
       setRefreshing(false);
@@ -184,7 +221,7 @@ export default function AnnouncementsScreen() {
   useFocusEffect(
     useCallback(() => {
       // Only poll while this tab is focused
-      const interval = setInterval(() => { fetchAnnouncements(); }, 60000);
+      const interval = setInterval(() => { fetchAnnouncements(true); }, 60000);
       return () => clearInterval(interval);
     }, [])
   );
@@ -282,7 +319,7 @@ export default function AnnouncementsScreen() {
               <TouchableOpacity
                 key={category}
                 style={[styles.categoryChip, isActive && styles.categoryChipActive]}
-                onPress={() => setSelectedCategory(category === 'All' ? null : category)}
+                onPress={() => { setSelectedCategory(category === 'All' ? null : category); setUrgentOnly(false); }}
               >
                 <Ionicons
                   name={category === 'All' ? 'apps' : getCategoryIcon(category)}
@@ -319,7 +356,13 @@ export default function AnnouncementsScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
         showsVerticalScrollIndicator={false}
       >
-
+        {/* ── Fetch Error Banner ── */}
+        {fetchError ? (
+          <View style={styles.errorBanner}>
+            <Ionicons name="cloud-offline-outline" size={16} color="#92400E" />
+            <Text style={styles.errorBannerText}>{fetchError}</Text>
+          </View>
+        ) : null}
 
         {/* ── Announcement Cards ── */}
         {filteredAnnouncements.length === 0 ? (
@@ -327,15 +370,21 @@ export default function AnnouncementsScreen() {
             <View style={styles.emptyIcon}>
               <Ionicons name="megaphone-outline" size={32} color={colors.textMuted} />
             </View>
-            <Text style={styles.emptyTitle}>No announcements</Text>
-            <Text style={styles.emptyText}>There are no announcements in this category yet. Pull down to refresh.</Text>
+            <Text style={styles.emptyTitle}>{fetchError ? 'Could not load announcements' : 'No announcements'}</Text>
+            <Text style={styles.emptyText}>{fetchError ? 'Check your connection and pull down to refresh.' : 'There are no announcements in this category yet. Pull down to refresh.'}</Text>
           </View>
         ) : filteredAnnouncements.map((announcement) => {
           const catColor = getCategoryColor(announcement.category || 'General');
           const prioColor = getPriorityColor(announcement.priority);
           const isRecent = isNew(announcement.created_at);
+          const isTruncated = (announcement.content || '').length > 180;
           return (
-            <View key={announcement.announcement_id} style={styles.announcementCard}>
+            <TouchableOpacity
+              key={announcement.announcement_id}
+              style={styles.announcementCard}
+              onPress={() => setSelectedAnn(announcement)}
+              activeOpacity={0.85}
+            >
               {/* Left accent bar */}
               <View style={[styles.cardAccent, { backgroundColor: prioColor }]} />
 
@@ -368,8 +417,12 @@ export default function AnnouncementsScreen() {
                   )}
                 </View>
 
-                {/* Content */}
+                {/* Content preview */}
                 <Text style={styles.announcementContent} numberOfLines={4}>{announcement.content}</Text>
+
+                {isTruncated && (
+                  <Text style={styles.readMoreText}>Read more...</Text>
+                )}
 
                 {/* Footer */}
                 <View style={styles.announcementFooter}>
@@ -383,11 +436,76 @@ export default function AnnouncementsScreen() {
                   </View>
                 </View>
               </View>
-            </View>
+            </TouchableOpacity>
           );
         })}
         <View style={styles.bottomSpacer} />
       </ScrollView>
+
+      {/* ── Announcement Detail Modal ── */}
+      <Modal
+        visible={!!selectedAnn}
+        animationType="slide"
+        transparent
+        onRequestClose={() => setSelectedAnn(null)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            {selectedAnn && (() => {
+              const catColor = getCategoryColor(selectedAnn.category || 'General');
+              const prioColor = getPriorityColor(selectedAnn.priority);
+              return (
+                <>
+                  {/* Modal header */}
+                  <View style={styles.modalHeader}>
+                    <View style={[styles.priorityIcon, { backgroundColor: `${prioColor}14` }]}>
+                      <Ionicons name={getPriorityIcon(selectedAnn.priority)} size={22} color={prioColor} />
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.modalTitle}>{selectedAnn.title}</Text>
+                      <Text style={styles.modalTime}>{safeDistanceToNow(selectedAnn.created_at)}</Text>
+                    </View>
+                    <TouchableOpacity onPress={() => setSelectedAnn(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                      <Ionicons name="close" size={22} color={colors.textMuted} />
+                    </TouchableOpacity>
+                  </View>
+
+                  {/* Badges */}
+                  <View style={styles.badgeRow}>
+                    <View style={[styles.categoryBadge, { backgroundColor: catColor.bg }]}>
+                      <Ionicons name={catColor.icon} size={11} color={catColor.text} />
+                      <Text style={[styles.categoryBadgeText, { color: catColor.text }]}>{selectedAnn.category || 'General'}</Text>
+                    </View>
+                    {selectedAnn.priority === 'high' && (
+                      <View style={styles.urgentBadge}>
+                        <Ionicons name="warning" size={11} color="#EF4444" />
+                        <Text style={styles.urgentText}>Urgent</Text>
+                      </View>
+                    )}
+                  </View>
+
+                  {/* Full content */}
+                  <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+                    <Text style={styles.modalContent}>{selectedAnn.content}</Text>
+                  </ScrollView>
+
+                  {/* Modal footer */}
+                  <View style={styles.modalFooter}>
+                    <View style={styles.footerLeft}>
+                      <Ionicons name="calendar-outline" size={13} color={colors.textMuted} />
+                      <Text style={styles.announcementDate}>{safeFormat(selectedAnn.created_at, 'MMM dd, yyyy • h:mm a')}</Text>
+                    </View>
+                    <View style={styles.footerAuthor}>
+                      <Ionicons name="person-circle-outline" size={13} color={colors.textMuted} />
+                      <Text style={styles.authorText}>{selectedAnn.author_name || 'Admin'}</Text>
+                    </View>
+                  </View>
+                </>
+              );
+            })()}
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }

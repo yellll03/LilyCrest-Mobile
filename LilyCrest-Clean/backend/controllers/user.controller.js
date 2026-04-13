@@ -1,4 +1,5 @@
 const { getDb } = require('../config/database');
+const { ObjectId } = require('mongodb');
 const { v4: uuidv4 } = require('uuid');
 
 // Normalize a raw MongoDB user document to the shape the app expects.
@@ -260,17 +261,137 @@ async function uploadDocument(req, res) {
   }
 }
 
+// ── Map reservation document fields to structured entries ──
+const VALID_ID_TYPE_LABELS = {
+  national_id: 'National ID',
+  passport: 'Passport',
+  drivers_license: "Driver's License",
+  sss: 'SSS ID',
+  philhealth: 'PhilHealth ID',
+  tin: 'TIN ID',
+  postal: 'Postal ID',
+  voters: "Voter's ID",
+  prc: 'PRC ID',
+  umid: 'UMID',
+  student_id: 'Student ID',
+};
+
+function buildReservationDocs(reservation) {
+  if (!reservation) return [];
+  const docs = [];
+  const resId = reservation._id?.toString() || 'unknown';
+  const submittedAt = reservation.applicationSubmittedAt || reservation.createdAt || new Date();
+
+  if (reservation.validIDFrontUrl) {
+    const idLabel = VALID_ID_TYPE_LABELS[reservation.validIDType] || 'Valid ID';
+    docs.push({
+      doc_id: `res_${resId}_valid_id_front`,
+      type: 'government_id',
+      label: `${idLabel} (Front)`,
+      status: 'verified',
+      uploaded_at: submittedAt,
+      source: 'reservation',
+      file_url: reservation.validIDFrontUrl,
+    });
+  }
+  if (reservation.validIDBackUrl) {
+    const idLabel = VALID_ID_TYPE_LABELS[reservation.validIDType] || 'Valid ID';
+    docs.push({
+      doc_id: `res_${resId}_valid_id_back`,
+      type: 'government_id',
+      label: `${idLabel} (Back)`,
+      status: 'verified',
+      uploaded_at: submittedAt,
+      source: 'reservation',
+      file_url: reservation.validIDBackUrl,
+    });
+  }
+  if (reservation.selfiePhotoUrl) {
+    docs.push({
+      doc_id: `res_${resId}_selfie`,
+      type: 'government_id',
+      label: 'Selfie Photo',
+      status: 'verified',
+      uploaded_at: submittedAt,
+      source: 'reservation',
+      file_url: reservation.selfiePhotoUrl,
+    });
+  }
+  if (reservation.nbiClearanceUrl) {
+    docs.push({
+      doc_id: `res_${resId}_nbi`,
+      type: 'other',
+      label: 'NBI Clearance',
+      status: 'verified',
+      uploaded_at: submittedAt,
+      source: 'reservation',
+      file_url: reservation.nbiClearanceUrl,
+    });
+  }
+  if (reservation.companyIDUrl) {
+    docs.push({
+      doc_id: `res_${resId}_company_id`,
+      type: 'company_id',
+      label: 'Company / Employee ID',
+      status: 'verified',
+      uploaded_at: submittedAt,
+      source: 'reservation',
+      file_url: reservation.companyIDUrl,
+    });
+  }
+  if (reservation.proofOfPaymentUrl) {
+    docs.push({
+      doc_id: `res_${resId}_proof_of_payment`,
+      type: 'other',
+      label: 'Proof of Payment',
+      status: 'verified',
+      uploaded_at: submittedAt,
+      source: 'reservation',
+      file_url: reservation.proofOfPaymentUrl,
+    });
+  }
+  if (reservation.contractFileUrl) {
+    docs.push({
+      doc_id: `res_${resId}_contract`,
+      type: 'other',
+      label: 'Signed Contract',
+      status: 'verified',
+      uploaded_at: submittedAt,
+      source: 'reservation',
+      file_url: reservation.contractFileUrl,
+    });
+  }
+
+  return docs;
+}
+
 // Get user's uploaded documents (without file_data to keep response light)
+// Also includes documents submitted during the reservation process on the web
 async function getUserDocuments(req, res) {
   try {
     const db = getDb();
     const user = await db.collection('users').findOne(
       { user_id: req.user.user_id },
-      { projection: { uploaded_documents: 1 } }
+      { projection: { uploaded_documents: 1, _id: 1 } }
     );
 
-    const docs = (user?.uploaded_documents || []).map(({ file_data, ...rest }) => rest);
-    res.json(docs);
+    // Mobile-uploaded documents (strip file_data for listing)
+    const uploadedDocs = (user?.uploaded_documents || []).map(({ file_data, ...rest }) => rest);
+
+    // Reservation documents (from the web admin reservation flow)
+    let reservationDocs = [];
+    const mongoId = user?._id;
+    if (mongoId) {
+      const reservation = await db.collection('reservations').findOne(
+        { userId: mongoId, status: { $in: ['moveIn', 'active', 'completed', 'payment_pending', 'confirmed'] } },
+        { sort: { createdAt: -1 } }
+      );
+      reservationDocs = buildReservationDocs(reservation);
+    }
+
+    // Reservation docs first (submitted during onboarding), then user-uploaded docs
+    const allDocs = [...reservationDocs, ...uploadedDocs];
+    res.json(allDocs);
   } catch (error) {
     console.error('Get documents error:', error);
     res.status(500).json({ detail: 'Failed to get documents' });
@@ -282,6 +403,40 @@ async function getDocumentFile(req, res) {
   try {
     const { docId } = req.params;
     const db = getDb();
+
+    // Reservation documents (ID starts with 'res_')
+    if (docId.startsWith('res_')) {
+      const user = await db.collection('users').findOne(
+        { user_id: req.user.user_id },
+        { projection: { _id: 1 } }
+      );
+      if (!user?._id) {
+        return res.status(404).json({ detail: 'Document not found.' });
+      }
+
+      const reservation = await db.collection('reservations').findOne(
+        { userId: user._id, status: { $in: ['moveIn', 'active', 'completed', 'payment_pending', 'confirmed'] } },
+        { sort: { createdAt: -1 } }
+      );
+      if (!reservation) {
+        return res.status(404).json({ detail: 'Document not found.' });
+      }
+
+      // Map the doc_id suffix to the reservation field
+      const resDocs = buildReservationDocs(reservation);
+      const doc = resDocs.find(d => d.doc_id === docId);
+      if (!doc) {
+        return res.status(404).json({ detail: 'Document not found.' });
+      }
+
+      // Return file_url as file_data so the frontend can display it
+      return res.json({
+        ...doc,
+        file_data: doc.file_url,
+      });
+    }
+
+    // Regular uploaded documents
     const user = await db.collection('users').findOne(
       { user_id: req.user.user_id },
       { projection: { uploaded_documents: 1 } }

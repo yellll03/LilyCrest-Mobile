@@ -3,6 +3,7 @@ const { v4: uuidv4 } = require('uuid');
 const { ObjectId } = require('mongodb');
 const { getDb } = require('../config/database');
 const { PRESENTATION_BILLS, mapRealBill } = require('./billing.controller');
+const { notifyPaymentConfirmed } = require('../services/pushService');
 
 const PAYMONGO_BASE = 'https://api.paymongo.com/v1';
 
@@ -170,6 +171,8 @@ async function getCheckoutStatus(req, res) {
       const userId = session?.attributes?.metadata?.user_id;
       if (billingId && userId) {
         const db = getDb();
+        const existing = await db.collection('billing').findOne({ billing_id: billingId, user_id: userId });
+        const alreadyPaid = existing?.status === 'paid';
         await db.collection('billing').updateOne(
           { billing_id: billingId, user_id: userId },
           {
@@ -182,6 +185,10 @@ async function getCheckoutStatus(req, res) {
             },
           }
         );
+        // Push only once — skip if bill was already marked paid
+        if (!alreadyPaid && existing) {
+          notifyPaymentConfirmed(userId, { ...existing, status: 'paid' }).catch(() => {});
+        }
       }
     }
 
@@ -210,6 +217,8 @@ async function handleWebhook(req, res) {
 
       if (billingId && userId) {
         const db = getDb();
+        const existing = await db.collection('billing').findOne({ billing_id: billingId, user_id: userId });
+        const alreadyPaid = existing?.status === 'paid';
         await db.collection('billing').updateOne(
           { billing_id: billingId, user_id: userId },
           {
@@ -224,6 +233,9 @@ async function handleWebhook(req, res) {
           }
         );
         console.log(`[PayMongo Webhook] Bill ${billingId} marked as paid`);
+        if (!alreadyPaid && existing) {
+          notifyPaymentConfirmed(userId, { ...existing, status: 'paid' }).catch(() => {});
+        }
       }
     }
 
@@ -314,18 +326,21 @@ function redirectSuccess(req, res) {
   const devLink = `exp+frontend://payment-success?billing_id=${encodeURIComponent(billingId)}&status=success`;
   console.log(`[PayMongo] Payment success redirect for bill ${billingId}`);
 
+  // Immediately redirect to the app scheme. Chrome Custom Tabs (openAuthSessionAsync)
+  // intercepts this and closes the browser, returning control to the app.
+  // The fallback HTML is shown only if the browser doesn't support the scheme.
   res.send(`<!DOCTYPE html>
 <html><head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Payment Successful</title>
 <style>
-  body { font-family: -apple-system, sans-serif; display: flex; flex-direction: column; 
+  body { font-family: -apple-system, sans-serif; display: flex; flex-direction: column;
          align-items: center; justify-content: center; min-height: 100vh; margin: 0;
          background: #f0fdf4; color: #15803d; text-align: center; padding: 20px; }
   h1 { font-size: 24px; margin-bottom: 8px; }
   p { color: #4B5563; margin-bottom: 24px; }
-  a { display: inline-block; padding: 14px 32px; background: #D4682A; color: #fff; 
+  a { display: inline-block; padding: 14px 32px; background: #D4682A; color: #fff;
       text-decoration: none; border-radius: 12px; font-weight: 700; font-size: 16px; }
   .retry { margin-top: 12px; font-size: 14px; color: #6B7280; }
 </style>
@@ -333,11 +348,10 @@ function redirectSuccess(req, res) {
 <h1>✅ Payment Successful!</h1>
 <p>Redirecting you back to LilyCrest...</p>
 <a href="${prodLink}">Return to App</a>
-<p class="retry">If the app doesn't open, <a href="${devLink}" style="background:none;padding:0;color:#D4682A;font-size:14px;">tap here</a></p>
+<p class="retry">If the app doesn't open, <a href="${devLink}" style="background:none;padding:0;color:#D4682A;font-size:14px;">tap here (dev build)</a></p>
 <script>
-  // Try production scheme first, fallback to dev scheme
-  setTimeout(function() { window.location.href = "${prodLink}"; }, 300);
-  setTimeout(function() { window.location.href = "${devLink}"; }, 2500);
+  // Immediate redirect — no timer so the browser can intercept it as a navigation event
+  window.location.replace("${prodLink}");
 </script>
 </body></html>`);
 }
@@ -359,7 +373,7 @@ function redirectCancel(req, res) {
          background: #fef2f2; color: #b91c1c; text-align: center; padding: 20px; }
   h1 { font-size: 24px; margin-bottom: 8px; }
   p { color: #4B5563; margin-bottom: 24px; }
-  a { display: inline-block; padding: 14px 32px; background: #1E3A5F; color: #fff; 
+  a { display: inline-block; padding: 14px 32px; background: #1E3A5F; color: #fff;
       text-decoration: none; border-radius: 12px; font-weight: 700; font-size: 16px; }
   .retry { margin-top: 12px; font-size: 14px; color: #6B7280; }
 </style>
@@ -367,10 +381,9 @@ function redirectCancel(req, res) {
 <h1>Payment Cancelled</h1>
 <p>No charges were made. Redirecting back...</p>
 <a href="${prodLink}">Return to App</a>
-<p class="retry">If the app doesn't open, <a href="${devLink}" style="background:none;padding:0;color:#1E3A5F;font-size:14px;">tap here</a></p>
+<p class="retry">If the app doesn't open, <a href="${devLink}" style="background:none;padding:0;color:#1E3A5F;font-size:14px;">tap here (dev build)</a></p>
 <script>
-  setTimeout(function() { window.location.href = "${prodLink}"; }, 300);
-  setTimeout(function() { window.location.href = "${devLink}"; }, 2500);
+  window.location.replace("${prodLink}");
 </script>
 </body></html>`);
 }
