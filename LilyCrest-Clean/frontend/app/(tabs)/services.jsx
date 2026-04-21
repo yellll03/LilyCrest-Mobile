@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { Link, useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
     ActivityIndicator,
     Image,
@@ -18,8 +18,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import LilyFlowerIcon from '../../src/components/assistant/LilyFlowerIcon';
-import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
 import { useAlert } from '../../src/context/AlertContext';
+import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
 import { apiService } from '../../src/services/api';
 import { pickFromCamera, pickFromLibrary } from '../../src/utils/attachmentPicker';
 
@@ -54,7 +54,7 @@ const RESOLUTION_ESTIMATES = {
   high: 'Within 24 hours',
 };
 
-const STATUS_STEPS = ['pending', 'in_progress', 'resolved'];
+const STATUS_STEPS = ['pending', 'viewed', 'in_progress', 'resolved'];
 
 export default function ServicesScreen() {
   const router = useRouter();
@@ -218,7 +218,9 @@ export default function ServicesScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      // Only poll while this tab is focused
+      // Refresh immediately when tab gains focus
+      fetchRequests();
+      // Also poll while this tab is focused
       const interval = setInterval(() => { fetchRequests(); }, 60000);
       return () => clearInterval(interval);
     }, [])
@@ -232,7 +234,7 @@ export default function ServicesScreen() {
   const handleSubmit = async () => {
     setHasAttemptedSubmit(true);
     const nextErrors = {
-      type: !selectedType ? 'Please select a service type' : '',
+      type: selectedType ? '' : 'Please select a service type',
       description: description.trim().length < 10 ? 'Please describe your concern (min 10 characters)' : '',
     };
     setFieldErrors(nextErrors);
@@ -286,6 +288,7 @@ export default function ServicesScreen() {
 
   const getStatusColor = (status) => {
     switch ((status || '').toLowerCase()) {
+      case 'viewed': return { bg: '#E0E7FF', text: '#6366F1', label: 'Viewed', icon: 'eye' };
       case 'in_progress': case 'in process': return { bg: '#DBEAFE', text: '#3B82F6', label: 'In Progress', icon: 'construct' };
       case 'resolved': return { bg: '#D1FAE5', text: '#059669', label: 'Resolved', icon: 'checkmark-done-circle' };
       case 'completed': return { bg: '#DCFCE7', text: '#22C55E', label: 'Completed', icon: 'checkmark-circle' };
@@ -395,7 +398,7 @@ export default function ServicesScreen() {
       return typeLabel.includes(q) || (r.description || '').toLowerCase().includes(q);
     });
   };
-  const activeStatuses = ['pending', 'in_progress'];
+  const activeStatuses = ['pending', 'viewed', 'in_progress'];
   const resolvedStatuses = ['completed', 'resolved', 'rejected'];
   const activeRequests = filterBySearch(requests.filter(r => activeStatuses.includes((r.status || 'pending').toLowerCase())));
   const resolvedRequests = filterBySearch(requests.filter(r => resolvedStatuses.includes((r.status || '').toLowerCase())));
@@ -717,12 +720,7 @@ export default function ServicesScreen() {
                   )}
 
                   {/* Description */}
-                  {!editMode ? (
-                    <View style={{ marginBottom: 14 }}>
-                      <Text style={{ fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: 6 }}>Description</Text>
-                      <Text style={{ fontSize: 14, color: colors.text, lineHeight: 22 }}>{detailRequest.description}</Text>
-                    </View>
-                  ) : (
+                  {editMode ? (
                     <>
                       <Text style={styles.modalSectionTitle}>Service Type</Text>
                       <View style={styles.typeGrid}>
@@ -748,6 +746,11 @@ export default function ServicesScreen() {
                       <Text style={styles.modalSectionTitle}>Description</Text>
                       <TextInput style={styles.descriptionInput} placeholder="Describe your concern..." placeholderTextColor={colors.textMuted} multiline numberOfLines={4} textAlignVertical="top" value={editDescription} onChangeText={setEditDescription} />
                     </>
+                  ) : (
+                    <View style={{ marginBottom: 14 }}>
+                      <Text style={{ fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: 6 }}>Description</Text>
+                      <Text style={{ fontSize: 14, color: colors.text, lineHeight: 22 }}>{detailRequest.description}</Text>
+                    </View>
                   )}
 
                   {/* Admin Notes */}

@@ -1,23 +1,86 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useEffect, useMemo } from 'react';
-import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
+import { useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../src/context/ThemeContext';
+import { apiService } from '../src/services/api';
 
 export default function PaymentSuccessScreen() {
   const router = useRouter();
-  const { billing_id } = useLocalSearchParams();
+  const { billing_id, checkout_id } = useLocalSearchParams();
   const { colors, isDarkMode } = useTheme();
   const styles = useMemo(() => createStyles(colors, isDarkMode), [colors, isDarkMode]);
+  const [isVerifying, setIsVerifying] = useState(Boolean(checkout_id));
+  const [verifyMessage, setVerifyMessage] = useState('Finalizing your payment...');
 
-  // Auto-navigate back after a few seconds
+  // Confirm the PayMongo checkout result so backend can mark the bill as paid.
+  // If checkout_id is missing (older app flows), fall back to the old timed redirect.
   useEffect(() => {
-    const timer = setTimeout(() => {
-      router.replace('/(tabs)/billing');
-    }, 5000);
-    return () => clearTimeout(timer);
-  }, []);
+    let timer;
+    let cancelled = false;
+
+    const pollCheckoutStatus = async () => {
+      const checkoutId = String(checkout_id || '').trim();
+      if (!checkoutId) {
+        setIsVerifying(false);
+        timer = setTimeout(() => {
+          router.replace('/(tabs)/billing');
+        }, 5000);
+        return;
+      }
+
+      const maxAttempts = 24;
+      const delayMs = 2500;
+
+      for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+        if (cancelled) return;
+        try {
+          const response = await apiService.getPaymongoCheckoutStatus(checkoutId);
+          const payload = response?.data || {};
+          const status = String(payload.status || '').toLowerCase();
+          const paid = Boolean(payload.paid) || status === 'paid' || status === 'succeeded';
+
+          if (paid) {
+            setVerifyMessage('Payment confirmed. Redirecting to billing...');
+            setIsVerifying(false);
+            timer = setTimeout(() => {
+              if (!cancelled) {
+                router.replace('/(tabs)/billing');
+              }
+            }, 1200);
+            return;
+          }
+
+          if (attempt < maxAttempts) {
+            setVerifyMessage('Waiting for payment confirmation...');
+            await new Promise((resolve) => {
+              timer = setTimeout(resolve, delayMs);
+            });
+          }
+        } catch (_error) {
+          if (attempt < maxAttempts) {
+            setVerifyMessage('Rechecking payment status...');
+            await new Promise((resolve) => {
+              timer = setTimeout(resolve, delayMs);
+            });
+          }
+        }
+      }
+
+      if (!cancelled) {
+        setIsVerifying(false);
+        setVerifyMessage('Payment is still processing. Please check Billing in a few moments.');
+      }
+    };
+
+    pollCheckoutStatus();
+
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+    };
+  }, [checkout_id, router]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -29,6 +92,10 @@ export default function PaymentSuccessScreen() {
         <Text style={styles.subtitle}>
           Your payment has been processed successfully. It will be reflected in your billing shortly.
         </Text>
+        <View style={styles.verifyRow}>
+          {isVerifying ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name="information-circle-outline" size={16} color={colors.textSecondary} />}
+          <Text style={styles.verifyText}>{verifyMessage}</Text>
+        </View>
         {billing_id && (
           <Text style={styles.ref}>Bill ID: {billing_id}</Text>
         )}
@@ -58,6 +125,20 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
   },
   title: { fontSize: 24, fontWeight: '800', color: c.text },
   subtitle: { fontSize: 15, color: c.textSecondary, textAlign: 'center', lineHeight: 22, maxWidth: 300 },
+  verifyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    maxWidth: 320,
+  },
+  verifyText: {
+    fontSize: 13,
+    color: c.textSecondary,
+    textAlign: 'center',
+    lineHeight: 18,
+    flexShrink: 1,
+  },
   ref: { fontSize: 12, color: c.textMuted, fontWeight: '600' },
   primaryBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,

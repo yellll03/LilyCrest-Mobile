@@ -143,6 +143,8 @@ const formatTime = (date) => {
 
 export default function LilyAssistantScreen() {
   const scrollRef = useRef(null);
+  const adminScrollRef = useRef(null);
+  const seenAdminMsgIds = useRef(new Set());
   const { user } = useAuth();
   const insets = useSafeAreaInsets();
   const [activeTab, setActiveTab] = useState('chat');
@@ -151,6 +153,9 @@ export default function LilyAssistantScreen() {
   const [attachments, setAttachments] = useState([]);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [isSending, setIsSending] = useState(false);
+  const [replyText, setReplyText] = useState('');
+  const [isSendingReply, setIsSendingReply] = useState(false);
+  const [activeTicket, setActiveTicket] = useState(null); // { id, status } when admin chat is live
   const [networkError, setNetworkError] = useState(null);
   const [hasInteracted, setHasInteracted] = useState(false);
   const initialSession = useMemo(() => `${user?.user_id || 'guest'}-chat-${Date.now()}`, [user?.user_id]);
@@ -242,6 +247,48 @@ export default function LilyAssistantScreen() {
     loadTickets();
   }, [user?.user_id, networkError]);
 
+  // Poll for admin replies when a ticket is active
+  useEffect(() => {
+    if (!activeTicket?.id) return;
+    const poll = async () => {
+      try {
+        const { data } = await apiService.getTicket(activeTicket.id);
+        const responses = Array.isArray(data.responses) ? data.responses : [];
+        const adminResponses = responses.filter((r) => r.sender !== 'user');
+        const newMsgs = [];
+        for (const resp of adminResponses) {
+          const rid = String(resp._id || resp.id || `${resp.message}-${resp.created_at}`);
+          if (!seenAdminMsgIds.current.has(rid)) {
+            seenAdminMsgIds.current.add(rid);
+            newMsgs.push({
+              id: `admin-${rid}`,
+              sender: 'admin',
+              text: resp.message || resp.text || '',
+              time: formatTime(resp.created_at ? new Date(resp.created_at) : new Date()),
+              avatar: 'A',
+            });
+          }
+        }
+        if (newMsgs.length) {
+          setMessages((prev) => [...prev, ...newMsgs]);
+          setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
+        }
+        if (data.status === 'solved' || data.status === 'closed') {
+          setMessages((prev) => [
+            ...prev,
+            { id: `sys-resolved-${Date.now()}`, sender: 'system', text: 'Your inquiry has been resolved. Thank you!' },
+          ]);
+          setActiveTicket(null);
+        }
+      } catch (err) {
+        console.warn('Admin poll failed:', err?.message);
+      }
+    };
+    poll();
+    const interval = setInterval(poll, 8000);
+    return () => clearInterval(interval);
+  }, [activeTicket?.id]);
+
   const handleSend = async (presetText) => {
     const text = sanitizeChatInput(presetText || inputValue);
     const attachmentNames = attachments.map((file) => file.name);
@@ -265,6 +312,19 @@ export default function LilyAssistantScreen() {
     setInputValue('');
     setAttachments([]);
     setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
+
+    // ── Active admin ticket: route message to ticket instead of Gemini ──
+    if (activeTicket?.id && text) {
+      setIsSending(true);
+      try {
+        await apiService.respondToTicket(activeTicket.id, { message: text, sender: 'user' });
+      } catch (err) {
+        setNetworkError('Failed to send message to admin. Please try again.');
+      } finally {
+        setIsSending(false);
+      }
+      return;
+    }
 
     if (!text) {
       setMessages((prev) => [
@@ -352,6 +412,7 @@ export default function LilyAssistantScreen() {
   };
 
   const escalateToAdmin = async (text, attached = []) => {
+    if (activeTicket) return; // already connected to admin
     setIsSending(true);
     const safeText = sanitizeChatInput(text).slice(0, MAX_CHAT_INPUT_CHARS);
     const attachmentNote = attached.length ? `\nAttachments: ${attached.join(', ')}` : '';
@@ -364,18 +425,24 @@ export default function LilyAssistantScreen() {
 
       const inquiry = mapTicketToInquiry(data);
       setInquiries((prev) => [inquiry, ...prev.filter((item) => item.id !== inquiry.id)]);
-      setSelectedInquiry(inquiry);
-      setActiveTab('inquiries');
+
+      const ticketId = data.ticket_id || data.id || inquiry.id;
+      setActiveTicket({ id: ticketId, status: 'open' });
 
       setMessages((prev) => [
         ...prev,
         {
-          id: `b-${Date.now()}`,
+          id: `b-esc-${Date.now()}`,
           sender: 'bot',
-          text: `Ticket ${data.ticket_id || inquiry.id} opened. An admin will reply in My Inquiries. I will keep this chat updated.`,
+          text: 'Sorry, I am not able to respond to your query. You will be transferred to an admin for better assistance. Thank you for your patience.',
           time: formatTime(new Date()),
           avatar: 'L',
           meta: { intent: 'admin-escalation', confidence: 1 },
+        },
+        {
+          id: `sys-transfer-${Date.now()}`,
+          sender: 'system',
+          text: 'Chat has been transferred to admin, who will assist you',
         },
       ]);
     } catch (error) {
@@ -395,6 +462,33 @@ export default function LilyAssistantScreen() {
     } finally {
       setIsSending(false);
       setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
+    }
+  };
+
+  const sendReply = async () => {
+    const text = sanitizeChatInput(replyText).slice(0, MAX_CHAT_INPUT_CHARS);
+    if (!text || !selectedInquiry) return;
+    setIsSendingReply(true);
+    setReplyText('');
+    const newMsg = {
+      id: `u-reply-${Date.now()}`,
+      sender: 'user',
+      text,
+      time: formatTime(new Date()),
+    };
+    setSelectedInquiry((prev) => ({ ...prev, thread: [...prev.thread, newMsg] }));
+    setInquiries((prev) =>
+      prev.map((item) =>
+        item.id === selectedInquiry.id ? { ...item, thread: [...item.thread, newMsg] } : item
+      )
+    );
+    try {
+      await apiService.respondToTicket(selectedInquiry.id, { message: text, sender: 'user' });
+    } catch (err) {
+      console.warn('Reply failed:', err?.message);
+    } finally {
+      setIsSendingReply(false);
+      setTimeout(() => adminScrollRef.current?.scrollToEnd({ animated: true }), 80);
     }
   };
 
@@ -454,25 +548,90 @@ export default function LilyAssistantScreen() {
 
   const renderInquiryDetail = () => {
     if (!selectedInquiry) return null;
+    const isSolved = selectedInquiry.status === 'solved';
+    const isActive = activeTicket?.id === selectedInquiry.id;
     return (
-      <View style={styles.detailCard}>
-        <Text style={styles.detailTitle}>{selectedInquiry.title}</Text>
-        <Text style={styles.detailTime}>{selectedInquiry.timestamp}</Text>
-        <View style={styles.detailAttachments}>
-          {selectedInquiry.attachments.map((file) => (
-            <View key={file} style={styles.detailChip}>
-              <Text style={styles.detailChipText}>{file}</Text>
+      <View style={styles.adminChatContainer}>
+        {/* Header */}
+        <View style={styles.adminChatHeader}>
+          <Pressable style={styles.adminBackBtn} onPress={() => setSelectedInquiry(null)}>
+            <Ionicons name="arrow-back" size={22} color="#f8fafc" />
+          </Pressable>
+          <View style={styles.adminAvatarWrap}>
+            <Text style={styles.adminAvatarText}>A</Text>
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.adminHeaderName}>LilyCrest Admin</Text>
+            <View style={styles.adminHeaderStatusRow}>
+              {!isSolved && <View style={styles.adminOnlineDot} />}
+              <Text style={styles.adminHeaderStatus}>{isSolved ? 'Resolved' : 'Pending'}</Text>
             </View>
-          ))}
+          </View>
+          <View style={[styles.adminStatusChip, isSolved && styles.adminStatusSolved]}>
+            <Text style={[styles.adminStatusChipText, isSolved && styles.adminStatusSolvedText]}>
+              {isSolved ? 'Solved' : 'Pending'}
+            </Text>
+          </View>
         </View>
-        <View style={styles.detailThread}>
-          {selectedInquiry.thread.map((item) => (
-            <View key={item.id} style={[styles.threadRow, item.sender === 'admin' ? styles.threadAdmin : styles.threadUser]}>
-              <Text style={styles.threadLabel}>{item.sender === 'admin' ? 'Admin' : 'You'}</Text>
-              <Text style={styles.threadText}>{item.text}</Text>
-              <Text style={styles.threadTime}>{item.time}</Text>
+
+        {/* Read-only thread */}
+        <ScrollView
+          ref={adminScrollRef}
+          style={styles.adminChatScroll}
+          contentContainerStyle={[styles.adminChatContent, { flexGrow: 1, justifyContent: 'flex-end' }]}
+          showsVerticalScrollIndicator={false}
+          onContentSizeChange={() => adminScrollRef.current?.scrollToEnd({ animated: false })}
+        >
+          <View style={styles.systemMsgRow}>
+            <View style={styles.systemMsgLine} />
+            <Text style={styles.systemMsgText}>Chat has been transferred to admin, who will assist you</Text>
+            <View style={styles.systemMsgLine} />
+          </View>
+
+          {selectedInquiry.thread.map((item) => {
+            const isUser = item.sender === 'user';
+            return (
+              <View key={item.id} style={[styles.threadBubbleRow, isUser ? styles.threadBubbleRowRight : styles.threadBubbleRowLeft]}>
+                {!isUser && (
+                  <View style={styles.threadAdminAvatar}>
+                    <Text style={styles.threadAdminAvatarText}>A</Text>
+                  </View>
+                )}
+                <View style={[styles.threadBubble, isUser ? styles.threadBubbleUser : styles.threadBubbleAdmin]}>
+                  <Text style={[styles.threadBubbleText, isUser ? styles.threadBubbleTextUser : styles.threadBubbleTextAdmin]}>
+                    {item.text}
+                  </Text>
+                  <Text style={[styles.threadBubbleTime, isUser && styles.threadBubbleTimeUser]}>{item.time}</Text>
+                </View>
+              </View>
+            );
+          })}
+        </ScrollView>
+
+        {/* Footer — go to Chat tab to continue, or "Resolved" notice */}
+        <View style={styles.inquiryDetailFooter}>
+          {isSolved ? (
+            <View style={styles.inquiryResolvedNotice}>
+              <Ionicons name="checkmark-circle" size={16} color="#15803d" />
+              <Text style={styles.inquiryResolvedText}>This inquiry has been resolved</Text>
             </View>
-          ))}
+          ) : isActive ? (
+            <Pressable
+              style={styles.goToChatBtn}
+              onPress={() => {
+                setSelectedInquiry(null);
+                setActiveTab('chat');
+              }}
+            >
+              <Ionicons name="arrow-forward-circle-outline" size={15} color="#ffffff" />
+              <Text style={styles.goToChatText}>Continue in Chat</Text>
+            </Pressable>
+          ) : (
+            <View style={styles.inquiryResolvedNotice}>
+              <Ionicons name="information-circle-outline" size={16} color="#64748b" />
+              <Text style={[styles.inquiryResolvedText, { color: '#64748b' }]}>Go to Chat tab to talk to admin</Text>
+            </View>
+          )}
         </View>
       </View>
     );
@@ -507,6 +666,8 @@ export default function LilyAssistantScreen() {
               setMessages([]);
               setHasInteracted(false);
               setNetworkError(null);
+              setActiveTicket(null);
+              seenAdminMsgIds.current.clear();
             }}
           >
             <Ionicons name="refresh-outline" size={16} color="#D4682A" />
@@ -600,7 +761,27 @@ export default function LilyAssistantScreen() {
           </ScrollView>
 
           <View style={styles.bottomZone}>
-            {!hasStartedChat ? (
+            {/* Admin connected banner */}
+            {activeTicket ? (
+              <View style={styles.adminConnectedBanner}>
+                <View style={styles.adminConnectedDot} />
+                <Text style={styles.adminConnectedText}>Connected to LilyCrest Admin</Text>
+                <Pressable
+                  onPress={() => {
+                    setMessages((prev) => [
+                      ...prev,
+                      { id: `sys-end-${Date.now()}`, sender: 'system', text: 'You have ended the admin chat.' },
+                    ]);
+                    setActiveTicket(null);
+                    seenAdminMsgIds.current.clear();
+                  }}
+                >
+                  <Text style={styles.adminEndText}>End</Text>
+                </Pressable>
+              </View>
+            ) : null}
+
+            {!hasStartedChat && !activeTicket ? (
               <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.quickActionsBar}>
                 {QUICK_ACTIONS.map((action) => (
                   <Pressable key={action.id} style={styles.quickActionPill} onPress={() => handleQuickAction(action)}>
@@ -629,7 +810,7 @@ export default function LilyAssistantScreen() {
               </View>
               <TextInput
                 style={styles.input}
-                placeholder="You may type your concern here…"
+                placeholder={activeTicket ? 'Message admin…' : 'You may type your concern here…'}
                 placeholderTextColor="#94a3b8"
                 value={inputValue}
                 onChangeText={(text) => {
@@ -675,7 +856,7 @@ export default function LilyAssistantScreen() {
             </View>
           ) : null}
         </View>
-      ) : (
+      ) : selectedInquiry ? renderInquiryDetail() : (
         <View style={styles.body}>
           {/* Filter pills */}
           <View style={styles.filterRow}>
@@ -685,8 +866,6 @@ export default function LilyAssistantScreen() {
               </Pressable>
             ))}
           </View>
-
-          {renderInquiryDetail()}
 
           <ScrollView style={styles.inquiryList} contentContainerStyle={styles.inquiryContent} showsVerticalScrollIndicator={false}>
             {filteredInquiries.length === 0 ? (
@@ -713,6 +892,7 @@ export default function LilyAssistantScreen() {
               <InquiryCard
                 key={item.id}
                 title={item.title}
+                preview={item.thread?.[0]?.text || ''}
                 status={item.status}
                 timestamp={item.timestamp}
                 onPress={() => setSelectedInquiry(item)}
@@ -1213,5 +1393,275 @@ const styles = StyleSheet.create({
     color: '#94a3b8',
     textAlign: 'center',
     lineHeight: 20,
+  },
+  // ─── Inquiry Detail Footer ───
+  inquiryDetailFooter: {
+    backgroundColor: '#ffffff',
+    borderTopWidth: 1,
+    borderTopColor: '#e8eaed',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  inquiryResolvedNotice: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    justifyContent: 'center',
+  },
+  inquiryResolvedText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#15803d',
+  },
+  goToChatBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    backgroundColor: '#D4682A',
+    borderRadius: 24,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+  },
+  goToChatText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 14,
+  },
+  // ─── Admin Connected Banner ───
+  adminConnectedBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    backgroundColor: '#f0f9f4',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#86efac',
+    paddingHorizontal: 14,
+    paddingVertical: 9,
+  },
+  adminConnectedDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#22c55e',
+  },
+  adminConnectedText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#15803d',
+  },
+  adminEndText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#dc2626',
+    paddingLeft: 8,
+  },
+  // ─── Admin Chat (Shopee-style) ───
+  adminChatContainer: {
+    flex: 1,
+    backgroundColor: '#f0f2f5',
+  },
+  adminChatHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: '#1e293b',
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: 'rgba(255,255,255,0.06)',
+  },
+  adminBackBtn: {
+    padding: 6,
+    marginRight: 2,
+  },
+  adminAvatarWrap: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: '#D4682A',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  adminAvatarText: {
+    color: '#ffffff',
+    fontWeight: '800',
+    fontSize: 15,
+  },
+  adminHeaderName: {
+    color: '#f8fafc',
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  adminHeaderStatusRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    marginTop: 2,
+  },
+  adminOnlineDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: '#22c55e',
+  },
+  adminHeaderStatus: {
+    color: '#94a3b8',
+    fontSize: 11,
+    fontWeight: '500',
+  },
+  adminStatusChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 12,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderWidth: 1,
+    borderColor: '#fed7aa',
+  },
+  adminStatusChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#fed7aa',
+  },
+  adminStatusSolved: {
+    borderColor: '#86efac',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+  },
+  adminStatusSolvedText: {
+    color: '#86efac',
+  },
+  adminChatScroll: {
+    flex: 1,
+  },
+  adminChatContent: {
+    padding: 14,
+    paddingBottom: 20,
+  },
+  // System transfer notice
+  systemMsgRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginVertical: 16,
+    paddingHorizontal: 4,
+  },
+  systemMsgLine: {
+    flex: 1,
+    height: 1,
+    backgroundColor: '#c9cdd4',
+  },
+  systemMsgText: {
+    fontSize: 11,
+    color: '#8a8f99',
+    fontWeight: '400',
+    textAlign: 'center',
+    flexShrink: 1,
+  },
+  // Bubble rows
+  threadBubbleRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    marginBottom: 4,
+  },
+  threadBubbleRowLeft: {
+    justifyContent: 'flex-start',
+  },
+  threadBubbleRowRight: {
+    justifyContent: 'flex-end',
+  },
+  threadAdminAvatar: {
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    backgroundColor: '#D4682A',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 2,
+    flexShrink: 0,
+  },
+  threadAdminAvatarText: {
+    color: '#ffffff',
+    fontWeight: '800',
+    fontSize: 11,
+  },
+  threadBubble: {
+    maxWidth: '72%',
+    borderRadius: 18,
+    paddingHorizontal: 14,
+    paddingTop: 9,
+    paddingBottom: 7,
+  },
+  threadBubbleAdmin: {
+    backgroundColor: '#ffffff',
+    borderBottomLeftRadius: 4,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOpacity: 0.06, shadowOffset: { width: 0, height: 1 }, shadowRadius: 3 },
+      android: { elevation: 1 },
+    }),
+  },
+  threadBubbleUser: {
+    backgroundColor: '#E07840',
+    borderBottomRightRadius: 4,
+  },
+  threadBubbleText: {
+    fontSize: 14,
+    lineHeight: 20,
+  },
+  threadBubbleTextAdmin: {
+    color: '#1e293b',
+  },
+  threadBubbleTextUser: {
+    color: '#ffffff',
+  },
+  threadBubbleTime: {
+    fontSize: 10,
+    color: '#94a3b8',
+    alignSelf: 'flex-end',
+    marginTop: 3,
+  },
+  threadBubbleTimeUser: {
+    color: 'rgba(255,255,255,0.65)',
+  },
+  // Reply input bar
+  adminInputBar: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 8,
+    backgroundColor: '#ffffff',
+    borderTopWidth: 1,
+    borderTopColor: '#e8eaed',
+    paddingHorizontal: 12,
+    paddingTop: 10,
+    paddingBottom: 12,
+  },
+  adminInput: {
+    flex: 1,
+    minHeight: 40,
+    maxHeight: 110,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    backgroundColor: '#f0f2f5',
+    borderRadius: 22,
+    fontSize: 14,
+    color: '#1e293b',
+    borderWidth: 1,
+    borderColor: '#e2e8f0',
+  },
+  adminSendBtn: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#D4682A',
+    justifyContent: 'center',
+    alignItems: 'center',
+    flexShrink: 0,
+  },
+  adminSendBtnText: {
+    color: '#ffffff',
+    fontWeight: '700',
+    fontSize: 12,
   },
 });

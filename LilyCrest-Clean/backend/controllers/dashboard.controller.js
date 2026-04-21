@@ -222,20 +222,41 @@ async function getDashboard(req, res) {
     const latestBill = billing[0] || null;
 
     // ── Maintenance ──────────────────────────────────────────────────────────
-    // Collection is 'maintenancerequests' (no underscore)
-    const activeMaintenanceCount = await db.collection('maintenancerequests').countDocuments({
+    // Read from canonical + legacy collections and de-duplicate by request_id.
+    const maintenanceQuery = {
       $or: [
         { user_id: userId },
         ...(mongoId ? [{ userId: mongoId }] : []),
       ],
-      status: { $in: ['pending', 'in_progress'] },
-    }).catch(() =>
-      // Fallback to old 'maintenance_requests' collection
-      db.collection('maintenance_requests').countDocuments({
-        user_id: userId,
-        status: { $in: ['pending', 'in_progress'] },
-      }).catch(() => 0)
-    );
+      status: { $in: ['pending', 'viewed', 'in_progress'] },
+    };
+
+    const maintenanceCollections = ['maintenance_requests', 'maintenancerequests'];
+    const activeMaintenanceMap = new Map();
+
+    for (const collectionName of maintenanceCollections) {
+      const docs = await db.collection(collectionName)
+        .find(maintenanceQuery, { projection: { _id: 1, request_id: 1 } })
+        .toArray()
+        .catch(() => []);
+
+      docs.forEach((doc) => {
+        const key = doc.request_id || `${collectionName}:${String(doc._id)}`;
+        const existing = activeMaintenanceMap.get(key);
+
+        if (!existing) {
+          activeMaintenanceMap.set(key, { ...doc, __source: collectionName });
+          return;
+        }
+
+        // Prefer canonical collection when duplicate request IDs exist.
+        if (existing.__source === 'maintenancerequests' && collectionName === 'maintenance_requests') {
+          activeMaintenanceMap.set(key, { ...doc, __source: collectionName });
+        }
+      });
+    }
+
+    const activeMaintenanceCount = activeMaintenanceMap.size;
 
     res.json({
       user: { ...req.user, _id: undefined },

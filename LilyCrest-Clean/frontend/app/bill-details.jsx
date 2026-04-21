@@ -1,10 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState } from 'react';
-import { ActivityIndicator, Linking, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useAlert } from '../src/context/AlertContext';
 import { useAuth } from '../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
-import { useAlert } from '../src/context/AlertContext';
 import { apiService } from '../src/services/api';
 import { downloadBillPdf } from '../src/utils/downloadBillPdf';
 
@@ -85,23 +86,25 @@ export default function BillDetailsScreen() {
     try {
       const resp = await apiService.createPaymongoCheckout(id);
       const checkoutUrl = resp?.data?.checkout_url;
+      const checkoutId = resp?.data?.checkout_id;
       if (!checkoutUrl) {
         showAlert({ title: 'Error', message: 'Could not create payment session. Please try again.', type: 'error' });
         return;
       }
-      const supported = await Linking.canOpenURL(checkoutUrl);
-      if (supported) {
-        await Linking.openURL(checkoutUrl);
-        setTimeout(() => {
-          showAlert({
-            title: 'Payment Status',
-            message: 'If you completed the payment, it will be reflected in your billing within a few minutes.',
-            type: 'info',
-          });
-        }, 1000);
-      } else {
-        showAlert({ title: 'Error', message: 'Unable to open payment page. Please try again.', type: 'error' });
+
+      // Open PayMongo checkout in an in-app browser that monitors for the
+      // frontend:// deep-link redirect and closes automatically when it fires.
+      const result = await WebBrowser.openAuthSessionAsync(checkoutUrl, 'frontend://');
+
+      if (result.type === 'success') {
+        const returnUrl = result.url || '';
+        if (returnUrl.includes('payment-success')) {
+          router.replace({ pathname: '/payment-success', params: { billing_id: id, checkout_id: checkoutId || '' } });
+        } else {
+          router.replace({ pathname: '/payment-cancel', params: { billing_id: id, checkout_id: checkoutId || '' } });
+        }
       }
+      // result.type === 'cancel' means the user closed the browser — stay on page
     } catch (err) {
       showAlert({ title: 'Payment Error', message: err?.response?.data?.detail || 'Failed to create payment session.', type: 'error' });
     } finally {

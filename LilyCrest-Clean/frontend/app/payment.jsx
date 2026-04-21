@@ -1,11 +1,11 @@
 import { Ionicons } from '@expo/vector-icons';
-import * as WebBrowser from 'expo-web-browser';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme } from '../src/context/ThemeContext';
 import { useAlert } from '../src/context/AlertContext';
+import { useTheme } from '../src/context/ThemeContext';
 import { apiService } from '../src/services/api';
 
 function safeCurrency(amount) {
@@ -74,6 +74,7 @@ export default function PaymentScreen() {
     try {
       const resp = await apiService.createPaymongoCheckout(id);
       const checkoutUrl = resp?.data?.checkout_url;
+      const checkoutId = resp?.data?.checkout_id;
       if (!checkoutUrl) {
         showAlert({ title: 'Error', message: 'Could not create payment session. Please try again.', type: 'error' });
         return;
@@ -86,9 +87,9 @@ export default function PaymentScreen() {
       if (result.type === 'success') {
         const returnUrl = result.url || '';
         if (returnUrl.includes('payment-success')) {
-          router.replace({ pathname: '/payment-success', params: { billing_id: id } });
+          router.replace({ pathname: '/payment-success', params: { billing_id: id, checkout_id: checkoutId || '' } });
         } else {
-          router.replace({ pathname: '/payment-cancel', params: { billing_id: id } });
+          router.replace({ pathname: '/payment-cancel', params: { billing_id: id, checkout_id: checkoutId || '' } });
         }
       }
       // result.type === 'cancel' means the user closed the browser — stay on page

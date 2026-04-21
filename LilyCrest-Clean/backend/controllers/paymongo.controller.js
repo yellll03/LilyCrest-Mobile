@@ -7,6 +7,38 @@ const { notifyPaymentConfirmed } = require('../services/pushService');
 
 const PAYMONGO_BASE = 'https://api.paymongo.com/v1';
 
+function normalizeBaseUrl(value) {
+  return String(value || '').trim().replace(/\/+$/, '');
+}
+
+function isLocalhostUrl(value) {
+  try {
+    const parsed = new URL(value);
+    return ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname);
+  } catch (_) {
+    return false;
+  }
+}
+
+function resolveRedirectBaseUrl(req) {
+  const configured = normalizeBaseUrl(process.env.BACKEND_URL);
+  if (configured && !isLocalhostUrl(configured)) {
+    return configured;
+  }
+
+  const forwardedProto = req.headers['x-forwarded-proto'];
+  const protocol = typeof forwardedProto === 'string' && forwardedProto
+    ? forwardedProto.split(',')[0].trim()
+    : (req.protocol || 'http');
+  const host = req.get('host');
+
+  if (host) {
+    return `${protocol}://${host}`;
+  }
+
+  return configured || 'http://localhost:8001';
+}
+
 function getSecretKey() {
   return process.env.PAYMONGO_SECRET_KEY || '';
 }
@@ -21,27 +53,123 @@ function paymongoHeaders() {
   };
 }
 
-// Resolve a bill from any of the three sources: legacy 'billing', real 'bills', or presentation mock
-async function resolveBill(db, billingId, user) {
+// ── Resolve a bill from any of the three sources ─────────────────────────────
+// Returns { bill, source } so callers know which collection to update.
+// source: 'legacy' | 'real' | 'presentation'
+async function resolveBillWithSource(db, billingId, user) {
   const userId = user.user_id;
   const mongoId = user._id;
 
   // 1. Legacy 'billing' collection (string billing_id)
-  let bill = await db.collection('billing').findOne({ billing_id: billingId, user_id: userId });
-  if (bill) return bill;
+  const legacyBill = await db.collection('billing').findOne({ billing_id: billingId, user_id: userId });
+  if (legacyBill) return { bill: legacyBill, source: 'legacy' };
 
   // 2. Real 'bills' collection (ObjectId _id)
   if (mongoId) {
     try {
       const realBill = await db.collection('bills').findOne({ _id: new ObjectId(billingId), userId: mongoId });
-      if (realBill) return mapRealBill(realBill, userId);
+      if (realBill) return { bill: mapRealBill(realBill, userId), source: 'real', rawBill: realBill };
     } catch (_) { /* not a valid ObjectId */ }
   }
 
   // 3. Presentation-mode mock bill
-  if (PRESENTATION_BILLS[billingId]) return { ...PRESENTATION_BILLS[billingId] };
+  if (PRESENTATION_BILLS[billingId]) return { bill: { ...PRESENTATION_BILLS[billingId] }, source: 'presentation' };
 
-  return null;
+  return { bill: null, source: null };
+}
+
+// Backward-compatible wrapper
+async function resolveBill(db, billingId, user) {
+  const { bill } = await resolveBillWithSource(db, billingId, user);
+  return bill;
+}
+
+// ── Save checkout reference to the correct collection ────────────────────────
+async function saveCheckoutRef(db, billingId, userId, mongoId, checkoutId, referenceNumber) {
+  // Try legacy collection first
+  const legacyResult = await db.collection('billing').updateOne(
+    { billing_id: billingId, user_id: userId },
+    {
+      $set: {
+        paymongo_checkout_id: checkoutId,
+        paymongo_reference: referenceNumber,
+        payment_method: 'paymongo',
+        updated_at: new Date(),
+      },
+    }
+  );
+  if (legacyResult.matchedCount > 0) return;
+
+  // Try real 'bills' collection
+  if (mongoId) {
+    try {
+      await db.collection('bills').updateOne(
+        { _id: new ObjectId(billingId), userId: mongoId },
+        {
+          $set: {
+            paymongoSessionId: checkoutId,
+            paymongoReference: referenceNumber,
+            paymentMethod: 'paymongo',
+            updatedAt: new Date(),
+          },
+        }
+      );
+    } catch (_) { /* billingId not a valid ObjectId */ }
+  }
+}
+
+// ── Mark a bill as paid in the correct collection ────────────────────────────
+// Returns the bill document (pre-update) for push notification context
+async function markBillPaid(db, billingId, userId, { paymentId, eventType } = {}) {
+  // 1. Try legacy 'billing' collection
+  const legacyBill = await db.collection('billing').findOne({ billing_id: billingId, user_id: userId });
+  if (legacyBill) {
+    const alreadyPaid = legacyBill.status === 'paid';
+    await db.collection('billing').updateOne(
+      { billing_id: billingId, user_id: userId },
+      {
+        $set: {
+          status: 'paid',
+          payment_method: 'paymongo',
+          payment_date: new Date(),
+          paymongo_payment_id: paymentId || null,
+          ...(eventType ? { paymongo_event: eventType } : {}),
+          updated_at: new Date(),
+        },
+      }
+    );
+    return { existing: legacyBill, alreadyPaid };
+  }
+
+  // 2. Try real 'bills' collection (billingId is the ObjectId string)
+  try {
+    const user = await db.collection('users').findOne({ user_id: userId });
+    const mongoId = user?._id;
+    if (!mongoId) return { existing: null, alreadyPaid: false };
+
+    const realBill = await db.collection('bills').findOne({ _id: new ObjectId(billingId), userId: mongoId });
+    if (realBill) {
+      const alreadyPaid = realBill.status === 'paid';
+      await db.collection('bills').updateOne(
+        { _id: new ObjectId(billingId) },
+        {
+          $set: {
+            status: 'paid',
+            paymentMethod: 'paymongo',
+            paidAt: new Date(),
+            paymentDate: new Date(),
+            paymongoPaymentId: paymentId || null,
+            ...(eventType ? { paymongoEvent: eventType } : {}),
+            updatedAt: new Date(),
+          },
+        }
+      );
+      return { existing: mapRealBill(realBill, userId), alreadyPaid };
+    }
+  } catch (_) { /* billingId not a valid ObjectId */ }
+
+  // 3. Presentation mode (no DB update needed)
+  return { existing: null, alreadyPaid: false };
 }
 
 // Create a PayMongo Checkout Session for a specific bill
@@ -53,7 +181,7 @@ async function createCheckoutSession(req, res) {
     }
 
     const db = getDb();
-    const bill = await resolveBill(db, billingId, req.user);
+    const { bill } = await resolveBillWithSource(db, billingId, req.user);
 
     if (!bill) {
       return res.status(404).json({ detail: 'Bill not found' });
@@ -72,8 +200,9 @@ async function createCheckoutSession(req, res) {
     const description = bill.description || `Bill ${billingId}`;
     const referenceNumber = `LC-${billingId}-${Date.now()}`;
 
-    // Backend URL for redirect endpoints (PayMongo requires HTTPS/HTTP URLs)
-    const backendUrl = process.env.BACKEND_URL || 'http://localhost:8001';
+    // Build redirect URLs from a device-reachable origin in development.
+    // If BACKEND_URL points to localhost, use the incoming request host instead.
+    const backendUrl = resolveRedirectBaseUrl(req);
 
     // Build the PayMongo Checkout Session payload
     const payload = {
@@ -122,18 +251,8 @@ async function createCheckoutSession(req, res) {
       return res.status(500).json({ detail: 'Failed to create checkout session' });
     }
 
-    // Save checkout reference to billing document
-    await db.collection('billing').updateOne(
-      { billing_id: billingId, user_id: req.user.user_id },
-      {
-        $set: {
-          paymongo_checkout_id: checkoutId,
-          paymongo_reference: referenceNumber,
-          payment_method: 'paymongo',
-          updated_at: new Date(),
-        },
-      }
-    );
+    // Save checkout reference to the correct collection (legacy or real)
+    await saveCheckoutRef(db, billingId, req.user.user_id, req.user._id, checkoutId, referenceNumber);
 
     res.json({
       checkout_url: checkoutUrl,
@@ -165,27 +284,25 @@ async function getCheckoutStatus(req, res) {
     const paymentStatus = session?.attributes?.payment_intent?.attributes?.status || session?.attributes?.status || 'pending';
     const payments = session?.attributes?.payments || [];
 
-    // If paid, update the bill
-    if (paymentStatus === 'succeeded' || payments.length > 0) {
+    // Mark paid only when the payment intent is confirmed or every payment object is paid.
+    // Avoid using payments.length > 0 alone — payments can appear in non-final states.
+    const paymentConfirmed =
+      paymentStatus === 'succeeded' ||
+      paymentStatus === 'paid' ||
+      (payments.length > 0 && payments.every((p) => {
+        const s = p?.attributes?.status || p?.status || '';
+        return s === 'paid' || s === 'succeeded';
+      }));
+
+    if (paymentConfirmed) {
       const billingId = session?.attributes?.metadata?.billing_id;
       const userId = session?.attributes?.metadata?.user_id;
       if (billingId && userId) {
         const db = getDb();
-        const existing = await db.collection('billing').findOne({ billing_id: billingId, user_id: userId });
-        const alreadyPaid = existing?.status === 'paid';
-        await db.collection('billing').updateOne(
-          { billing_id: billingId, user_id: userId },
-          {
-            $set: {
-              status: 'paid',
-              payment_method: 'paymongo',
-              payment_date: new Date(),
-              paymongo_payment_id: payments[0]?.id || null,
-              updated_at: new Date(),
-            },
-          }
-        );
-        // Push only once — skip if bill was already marked paid
+        const { existing, alreadyPaid } = await markBillPaid(db, billingId, userId, {
+          paymentId: payments[0]?.id,
+        });
+        // Push only once
         if (!alreadyPaid && existing) {
           notifyPaymentConfirmed(userId, { ...existing, status: 'paid' }).catch(() => {});
         }
@@ -194,6 +311,7 @@ async function getCheckoutStatus(req, res) {
 
     res.json({
       status: paymentStatus,
+      paid: paymentConfirmed,
       payments_count: payments.length,
       checkout_url: session?.attributes?.checkout_url,
     });
@@ -217,21 +335,10 @@ async function handleWebhook(req, res) {
 
       if (billingId && userId) {
         const db = getDb();
-        const existing = await db.collection('billing').findOne({ billing_id: billingId, user_id: userId });
-        const alreadyPaid = existing?.status === 'paid';
-        await db.collection('billing').updateOne(
-          { billing_id: billingId, user_id: userId },
-          {
-            $set: {
-              status: 'paid',
-              payment_method: 'paymongo',
-              payment_date: new Date(),
-              paymongo_payment_id: payments[0]?.id || null,
-              paymongo_event: eventType,
-              updated_at: new Date(),
-            },
-          }
-        );
+        const { existing, alreadyPaid } = await markBillPaid(db, billingId, userId, {
+          paymentId: payments[0]?.id,
+          eventType,
+        });
         console.log(`[PayMongo Webhook] Bill ${billingId} marked as paid`);
         if (!alreadyPaid && existing) {
           notifyPaymentConfirmed(userId, { ...existing, status: 'paid' }).catch(() => {});
@@ -246,6 +353,7 @@ async function handleWebhook(req, res) {
     res.status(200).json({ received: true }); // Still 200 to prevent retries
   }
 }
+
 // Auto-register PayMongo webhook on server startup
 async function registerWebhook() {
   const key = getSecretKey();

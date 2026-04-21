@@ -5,11 +5,29 @@ import { Platform } from 'react-native';
 import { getFreshIdToken } from '../config/firebase';
 
 const DEFAULT_PORT = process.env.EXPO_PUBLIC_BACKEND_PORT || '8001';
+const EXPLICIT_BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 // Default the chatbot port to the main backend unless explicitly overridden.
 const CHATBOT_PORT = process.env.EXPO_PUBLIC_CHATBOT_PORT || DEFAULT_PORT;
 const DEV_FALLBACK_HOST = process.env.EXPO_PUBLIC_DEV_HOST || null;
 
+function normalizeUrl(value) {
+  return String(value || '').trim().replace(/\/+$/, '');
+}
+
+function ensureHttpBase(value) {
+  const normalized = normalizeUrl(value);
+  if (!normalized) return normalized;
+  if (/^https?:\/\//i.test(normalized)) return normalized;
+  return `http://${normalized}`;
+}
+
 function resolveDevHost() {
+  const explicit = ensureHttpBase(EXPLICIT_BACKEND_URL);
+  if (explicit) {
+    console.log('Backend URL resolved from EXPO_PUBLIC_BACKEND_URL:', explicit);
+    return explicit;
+  }
+
   const hostUri = Constants.expoConfig?.hostUri || Constants.manifest2?.extra?.expoGo?.hostUri;
   if (hostUri) {
     const host = hostUri.split(':')[0];
@@ -17,15 +35,19 @@ function resolveDevHost() {
     console.log('Backend URL resolved from Expo host:', backendUrl);
     return backendUrl;
   }
-  const fallbackHost = DEV_FALLBACK_HOST || Platform.select({ android: 'http://10.0.2.2', default: 'http://localhost' });
-  const fallbackUrl = `${fallbackHost}:${DEFAULT_PORT}`;
+  const fallbackHost = DEV_FALLBACK_HOST || Platform.select({ android: '10.0.2.2', default: 'localhost' });
+  const fallbackBase = ensureHttpBase(fallbackHost);
+  const fallbackUrl = `${fallbackBase}:${DEFAULT_PORT}`;
   console.log('Backend URL using fallback:', fallbackUrl);
   return fallbackUrl;
 }
 
 
 let BACKEND_URL;
-if (Platform.OS === 'android') {
+const explicitBackend = ensureHttpBase(EXPLICIT_BACKEND_URL);
+if (explicitBackend) {
+  BACKEND_URL = explicitBackend;
+} else if (Platform.OS === 'android') {
   // Prefer Expo hostUri (works for both emulator and physical device); fall back to emulator loopback.
   BACKEND_URL = resolveDevHost();
 } else if (Platform.OS === 'web') {
@@ -56,6 +78,7 @@ function withPort(baseUrl, port) {
 }
 
 const CHATBOT_BASE_URL = withPort(BACKEND_URL, CHATBOT_PORT);
+const AUTH_REFRESH_URL = `${BACKEND_URL}/api/auth/google`;
 
 // Export base URL for non-axios downloads (e.g., Linking openURL)
 export const BASE_BACKEND_URL = BACKEND_URL;
@@ -89,7 +112,7 @@ api.interceptors.response.use(
     // Handle 401 — try to refresh session once.
     // Skip for auth endpoints (login/register) — those 401s mean wrong credentials,
     // not an expired session. Retrying them would show the wrong error.
-    const isAuthEndpoint = /\/auth\/(login|register)/.test(originalRequest?.url || '');
+    const isAuthEndpoint = /\/auth\/(login|register|google|forgot-password|login\/verify-otp|login\/resend-otp)/.test(originalRequest?.url || '');
     if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
       originalRequest._retry = true;
 
@@ -99,7 +122,7 @@ api.interceptors.response.use(
         
         if (idToken) {
           // Renew session via Google auth endpoint
-          const response = await axios.post(`${BACKEND_URL}/api/auth/google`, { idToken });
+          const response = await axios.post(AUTH_REFRESH_URL, { idToken });
           const { session_token } = response.data;
           
           if (session_token) {
@@ -109,7 +132,10 @@ api.interceptors.response.use(
           }
         }
       } catch (refreshError) {
-        console.warn('Token refresh failed:', refreshError?.message);
+        console.warn('Token refresh failed:', {
+          message: refreshError?.message,
+          endpoint: AUTH_REFRESH_URL,
+        });
       }
 
       // Refresh failed or no Firebase user — clear session
@@ -122,6 +148,7 @@ api.interceptors.response.use(
     if (!error.response && error.request) {
       console.error('Network Error:', {
         url: error.config?.url,
+        baseURL: error.config?.baseURL,
         method: error.config?.method,
         message: error.message,
       });
