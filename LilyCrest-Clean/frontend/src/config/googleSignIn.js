@@ -12,12 +12,17 @@ if (Platform.OS !== 'web') {
     GoogleSignin = googleSignInModule.GoogleSignin;
     statusCodes = googleSignInModule.statusCodes;
     // Configure once at module load — not on every render
-    GoogleSignin.configure({
-      webClientId: GOOGLE_WEB_CLIENT_ID,
-      offlineAccess: false,
-      forceCodeForRefreshToken: false,
-      profileImageSize: 120,
-    });
+    if (GOOGLE_WEB_CLIENT_ID) {
+      GoogleSignin.configure({
+        webClientId: GOOGLE_WEB_CLIENT_ID,
+        offlineAccess: false,
+        forceCodeForRefreshToken: false,
+        profileImageSize: 120,
+        scopes: ['profile', 'email'],
+      });
+    } else {
+      console.warn('Google Sign-In skipped configure because webClientId is missing.');
+    }
   } catch (nativeModuleError) {
     console.warn('Native Google Sign-In module not available:', nativeModuleError?.message);
   }
@@ -47,6 +52,13 @@ export function useGoogleSignIn() {
         };
       }
 
+      if (!GOOGLE_WEB_CLIENT_ID) {
+        return {
+          success: false,
+          error: 'Google Sign-In is not configured in this build. Please reinstall the latest APK.',
+        };
+      }
+
       await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
 
       try {
@@ -61,31 +73,63 @@ export function useGoogleSignIn() {
         return { success: false, cancelled: true, error: 'Sign-in cancelled' };
       }
 
-      const signInData = googleResult?.data;
-      let idToken = signInData?.idToken;
-      let accessToken;
+      // v14+ can return 'noSavedCredentialFound' — treat as cancelled
+      if (googleResult?.type === 'noSavedCredentialFound' || !googleResult?.data) {
+        return { success: false, cancelled: true, error: 'Sign-in cancelled' };
+      }
 
-      if (!idToken && GoogleSignin.getTokens) {
+      const signInData = googleResult.data;
+      let idToken = signInData?.idToken;
+      let accessToken = signInData?.accessToken;
+
+      // Fallback 1: getTokens() — in v16 idToken may be absent from signIn result
+      if (!idToken) {
         try {
           const tokens = await GoogleSignin.getTokens();
           idToken = tokens?.idToken;
           accessToken = tokens?.accessToken;
+          console.log('[Google] getTokens() idToken present:', !!idToken);
         } catch (tokenErr) {
-          console.warn('Unable to read Google tokens:', tokenErr?.message);
+          console.warn('[Google] getTokens() failed:', tokenErr?.message);
         }
       }
 
+      // Fallback 2: signInSilently() to force a fresh token from Google Play Services
       if (!idToken) {
-        return { success: false, error: 'No ID token returned from Google.' };
+        try {
+          const silentResult = await GoogleSignin.signInSilently();
+          if (silentResult?.type === 'success') {
+            idToken = silentResult.data?.idToken;
+            if (!idToken) {
+              const tokens = await GoogleSignin.getTokens();
+              idToken = tokens?.idToken;
+              accessToken = tokens?.accessToken;
+            }
+          }
+          console.log('[Google] signInSilently() idToken present:', !!idToken);
+        } catch (silentErr) {
+          console.warn('[Google] signInSilently() failed:', silentErr?.message);
+        }
       }
 
-      const credential = GoogleAuthProvider.credential(idToken);
+      if (!idToken && !accessToken) {
+        console.warn('[Google] All token methods exhausted. signIn data:', JSON.stringify(signInData));
+        return { success: false, error: 'No authentication token returned from Google.' };
+      }
+
+      // Some Android/Play Services flows return only an access token.
+      // Firebase accepts either the Google ID token, the access token, or both.
+      const credential = GoogleAuthProvider.credential(idToken ?? null, accessToken ?? null);
       const userCredential = await signInWithCredential(auth, credential);
+
+      // Get Firebase ID token — this is what the backend verifyFirebaseIdToken() expects.
+      // The Google idToken above is a Google token, not a Firebase one.
+      const firebaseIdToken = await userCredential.user.getIdToken(true);
 
       return {
         success: true,
         user: userCredential.user,
-        idToken,
+        idToken: firebaseIdToken,
         accessToken,
       };
     } catch (error) {

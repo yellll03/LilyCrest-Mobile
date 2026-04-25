@@ -1,7 +1,9 @@
 const axios = require('axios');
+const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../config/database');
 const { verifyFirebaseIdToken, verifyTenantInFirebase, admin } = require('../config/firebase');
+const { sendPasswordResetEmail, sendPasswordChangedEmail } = require('../services/emailService');
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────
 
@@ -28,6 +30,9 @@ function generateUserId() {
 function generateSessionToken() {
   return `session_${uuidv4().replace(/-/g, '')}`;
 }
+
+const PASSWORD_LOCK_THRESHOLD = 3;
+const PASSWORD_LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 
 function maskEmail(email = '') {
   const [user, domain] = email.split('@');
@@ -85,13 +90,138 @@ async function findTenantByEmail(db, email) {
   });
 }
 
+function getActivePasswordLockUntil(user) {
+  if (!user?.login_lock_until) return null;
+  const lockUntil = new Date(user.login_lock_until);
+  if (Number.isNaN(lockUntil.getTime())) return null;
+  if (lockUntil <= new Date()) return null;
+  return lockUntil;
+}
+
+function buildPasswordLockMessage(lockUntil) {
+  const remainingMs = lockUntil.getTime() - Date.now();
+  const remainingMinutes = Math.max(1, Math.ceil(remainingMs / 60000));
+  return `Account temporarily locked after ${PASSWORD_LOCK_THRESHOLD} failed password attempts. Try again in ${remainingMinutes} minute${remainingMinutes !== 1 ? 's' : ''}.`;
+}
+
+async function clearPasswordLock(db, userId) {
+  if (!userId) return;
+  await db.collection('users').updateOne(
+    { user_id: userId },
+    {
+      $set: { failed_login_attempts: 0 },
+      $unset: { login_lock_until: '' },
+    },
+  );
+}
+
+async function registerFailedPasswordAttempt(db, user) {
+  if (!user?.user_id) {
+    return { locked: false, remainingAttempts: PASSWORD_LOCK_THRESHOLD };
+  }
+
+  const currentAttempts = Number.isFinite(user.failed_login_attempts)
+    ? Math.max(0, Number(user.failed_login_attempts))
+    : 0;
+  const nextAttempts = currentAttempts + 1;
+
+  if (nextAttempts >= PASSWORD_LOCK_THRESHOLD) {
+    const lockUntil = new Date(Date.now() + PASSWORD_LOCK_DURATION_MS);
+    await db.collection('users').updateOne(
+      { user_id: user.user_id },
+      { $set: { failed_login_attempts: 0, login_lock_until: lockUntil } },
+    );
+    return { locked: true, lockUntil, remainingAttempts: 0 };
+  }
+
+  await db.collection('users').updateOne(
+    { user_id: user.user_id },
+    {
+      $set: { failed_login_attempts: nextAttempts },
+      $unset: { login_lock_until: '' },
+    },
+  );
+
+  return {
+    locked: false,
+    remainingAttempts: Math.max(0, PASSWORD_LOCK_THRESHOLD - nextAttempts),
+  };
+}
+
+function firstNonEmptyString(...values) {
+  for (const value of values) {
+    if (typeof value !== 'string') continue;
+    const trimmed = value.trim();
+    if (trimmed) return trimmed;
+  }
+  return '';
+}
+
+function generateOtpCode() {
+  return Math.floor(100000 + Math.random() * 900000).toString();
+}
+
+function normalizeOtpCode(value) {
+  return String(value ?? '').replace(/\D/g, '').slice(0, 6);
+}
+
+function parseDateSafe(value) {
+  const parsed = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function parseOtpAttempts(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+}
+
 /** Normalize camelCase admin-panel fields to the snake_case the app expects */
 function normalizeUser(doc) {
   if (!doc) return doc;
   const u = { ...doc };
-  if (!u.name && u.fullName) u.name = u.fullName;
+
+  const applicant = (u.applicantDetails && typeof u.applicantDetails === 'object')
+    ? u.applicantDetails
+    : ((u.applicant_details && typeof u.applicant_details === 'object') ? u.applicant_details : {});
+
+  const applicantFirstName = firstNonEmptyString(
+    applicant.firstName,
+    applicant.first_name,
+    u.firstName,
+    u.first_name,
+  );
+  const applicantLastName = firstNonEmptyString(
+    applicant.lastName,
+    applicant.last_name,
+    u.lastName,
+    u.last_name,
+  );
+
+  if (!u.firstName && applicantFirstName) u.firstName = applicantFirstName;
+  if (!u.lastName && applicantLastName) u.lastName = applicantLastName;
+
+  if (!u.name) {
+    const applicantFullName = [applicantFirstName, applicantLastName].filter(Boolean).join(' ').trim();
+    if (applicantFullName) {
+      u.name = applicantFullName;
+    } else if (u.fullName) {
+      u.name = u.fullName;
+    }
+  }
+
   if (!u.email && u.emailAddress) u.email = u.emailAddress;
   if (!u.phone && (u.contactNumber || u.phoneNumber)) u.phone = u.contactNumber || u.phoneNumber;
+  if (!u.address) {
+    u.address = firstNonEmptyString(
+      applicant.address,
+      applicant.homeAddress,
+      applicant.home_address,
+      applicant.currentAddress,
+      applicant.current_address,
+      u.homeAddress,
+      u.home_address,
+    );
+  }
   if (!u.username && u.email) u.username = u.email.split('@')[0];
   return u;
 }
@@ -128,6 +258,16 @@ async function login(req, res) {
   }
 
   const db = getDb();
+  const tenantByEmail = await findTenantByEmail(db, emailRaw);
+  const activeLockUntil = getActivePasswordLockUntil(tenantByEmail);
+  if (activeLockUntil) {
+    logAttempt(db, emailRaw, false, 'password_locked', req);
+    return res.status(429).json({ detail: buildPasswordLockMessage(activeLockUntil) });
+  }
+  if (tenantByEmail?.user_id && tenantByEmail?.login_lock_until) {
+    await clearPasswordLock(db, tenantByEmail.user_id);
+  }
+
   let fbUid;
 
   // Step 1: Authenticate with Firebase
@@ -142,7 +282,7 @@ async function login(req, res) {
 
     if (msg.includes('EMAIL_NOT_FOUND')) {
       // Tenant might exist in MongoDB but not Firebase (admin-provisioned)
-      const mongoUser = await findTenantByEmail(db, emailRaw);
+      const mongoUser = tenantByEmail || await findTenantByEmail(db, emailRaw);
       if (mongoUser) {
         // Don't create Firebase accounts for inactive tenants
         if (mongoUser.is_active === false) {
@@ -185,7 +325,7 @@ async function login(req, res) {
       // Check MongoDB before responding — if the account is inactive or not a tenant,
       // return the correct 403 instead of a generic 401.
       // This also covers Google-only accounts attempting email/password login.
-      const mongoUser = await findTenantByEmail(db, emailRaw);
+      const mongoUser = tenantByEmail || await findTenantByEmail(db, emailRaw);
       if (!mongoUser) {
         // Has a Firebase account but is not in our system as a tenant
         logAttempt(db, emailRaw, false, 'not_tenant', req);
@@ -198,8 +338,13 @@ async function login(req, res) {
         return res.status(403).json({ detail: 'Access denied. Your tenant account is inactive. Please contact admin.' });
       }
       // User is an active tenant but the password is genuinely wrong
+      const lockState = await registerFailedPasswordAttempt(db, mongoUser);
+      if (lockState.locked) {
+        logAttempt(db, emailRaw, false, 'password_locked', req);
+        return res.status(429).json({ detail: buildPasswordLockMessage(lockState.lockUntil) });
+      }
       logAttempt(db, emailRaw, false, 'invalid_password', req);
-      return res.status(401).json({ detail: 'Invalid email or password' });
+      return res.status(401).json({ detail: 'Invalid email or password', attempts_remaining: lockState.remainingAttempts });
     } else if (msg.includes('USER_DISABLED')) {
       logAttempt(db, emailRaw, false, 'user_disabled', req);
       return res.status(403).json({ detail: 'This account has been disabled' });
@@ -236,6 +381,10 @@ async function login(req, res) {
 
   console.log(`[Login] Tenant found: user_id=${tenant.user_id} email=${tenant.email} name=${tenant.name}`);
 
+  if (tenant.failed_login_attempts || tenant.login_lock_until) {
+    await clearPasswordLock(db, tenant.user_id);
+  }
+
   // Step 3: Link Firebase UID and update last_login
   // Clear stale firebase_uid from any OTHER user first (prevents E11000)
   await db.collection('users').updateMany(
@@ -259,8 +408,18 @@ async function login(req, res) {
     }
   }
 
-  // Step 4: Generate OTP and send to email
-  const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+  // Step 4: Biometric login bypasses OTP — biometric IS the second factor
+  if (req.body.biometric_login === true) {
+    const session = await createSession(db, tenant.user_id);
+    res.cookie('session_token', session.session_token, cookieOptions());
+    const userData = await getCleanUser(db, tenant.user_id);
+    logAttempt(db, emailRaw, true, 'biometric_success', req);
+    console.log(`[Login] ✓ Biometric login (OTP skipped) for user_id=${tenant.user_id}`);
+    return res.json({ user: userData, session_token: session.session_token });
+  }
+
+  // Step 5: Password login — generate OTP and send to email
+  const otpCode = generateOtpCode();
   const otpToken = uuidv4();
   const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
@@ -294,41 +453,48 @@ async function login(req, res) {
 // ─── VERIFY LOGIN OTP ───────────────────────────────────────────────────────
 
 async function verifyOtp(req, res) {
-  const { otp_token, otp_code } = req.body;
+  const normalizedToken = typeof req.body?.otp_token === 'string' ? req.body.otp_token.trim() : '';
+  const normalizedCode = normalizeOtpCode(req.body?.otp_code);
 
-  if (!otp_token || !otp_code) {
+  if (!normalizedToken || !normalizedCode) {
     return res.status(400).json({ detail: 'Verification token and code are required.' });
+  }
+  if (normalizedCode.length !== 6) {
+    return res.status(400).json({ detail: 'Please enter the complete 6-digit code.' });
   }
 
   const db = getDb();
-  const record = await db.collection('otp_store').findOne({ otp_token });
+  const record = await db.collection('otp_store').findOne({ otp_token: normalizedToken });
 
   if (!record) {
     return res.status(400).json({ detail: 'Invalid or expired session. Please log in again.' });
   }
 
-  if (new Date() > record.expires_at) {
-    await db.collection('otp_store').deleteOne({ otp_token });
+  const expiry = parseDateSafe(record.expires_at);
+  if (!expiry || new Date() > expiry) {
+    await db.collection('otp_store').deleteOne({ otp_token: normalizedToken });
     return res.status(400).json({ detail: 'Verification code has expired. Please log in again.' });
   }
 
-  if (record.attempts >= 3) {
-    await db.collection('otp_store').deleteOne({ otp_token });
+  const attempts = parseOtpAttempts(record.attempts);
+  if (attempts >= 3) {
+    await db.collection('otp_store').deleteOne({ otp_token: normalizedToken });
     return res.status(400).json({ detail: 'Too many incorrect attempts. Please log in again.' });
   }
 
-  if (record.otp_code !== otp_code.trim()) {
-    await db.collection('otp_store').updateOne({ otp_token }, { $inc: { attempts: 1 } });
-    const remaining = 3 - (record.attempts + 1);
+  const storedCode = normalizeOtpCode(record.otp_code);
+  if (storedCode !== normalizedCode) {
+    await db.collection('otp_store').updateOne({ otp_token: normalizedToken }, { $inc: { attempts: 1 } });
+    const remaining = 3 - (attempts + 1);
     const detail = remaining > 0
       ? `Incorrect code. ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining.`
       : 'Too many incorrect attempts. Please log in again.';
-    if (remaining <= 0) await db.collection('otp_store').deleteOne({ otp_token });
+    if (remaining <= 0) await db.collection('otp_store').deleteOne({ otp_token: normalizedToken });
     return res.status(400).json({ detail, attempts_remaining: remaining });
   }
 
   // Valid — delete OTP and create session
-  await db.collection('otp_store').deleteOne({ otp_token });
+  await db.collection('otp_store').deleteOne({ otp_token: normalizedToken });
 
   const session = await createSession(db, record.user_id);
   res.cookie('session_token', session.session_token, cookieOptions());
@@ -342,24 +508,25 @@ async function verifyOtp(req, res) {
 // ─── RESEND LOGIN OTP ───────────────────────────────────────────────────────
 
 async function resendOtp(req, res) {
-  const { otp_token } = req.body;
+  const normalizedToken = typeof req.body?.otp_token === 'string' ? req.body.otp_token.trim() : '';
 
-  if (!otp_token) {
+  if (!normalizedToken) {
     return res.status(400).json({ detail: 'OTP token is required.' });
   }
 
   const db = getDb();
-  const record = await db.collection('otp_store').findOne({ otp_token });
+  const record = await db.collection('otp_store').findOne({ otp_token: normalizedToken });
 
-  if (!record || new Date() > record.expires_at) {
+  const expiry = parseDateSafe(record?.expires_at);
+  if (!record || !expiry || new Date() > expiry) {
     return res.status(400).json({ detail: 'Session expired. Please log in again.' });
   }
 
-  const newCode = Math.floor(100000 + Math.random() * 900000).toString();
+  const newCode = generateOtpCode();
   const newExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
   await db.collection('otp_store').updateOne(
-    { otp_token },
+    { otp_token: normalizedToken },
     { $set: { otp_code: newCode, attempts: 0, expires_at: newExpiry } },
   );
 
@@ -389,8 +556,7 @@ async function googleSignIn(req, res) {
       return res.status(401).json({ detail: 'Invalid Firebase ID token' });
     }
 
-    const email = decoded.email;
-    const fbUid = decoded.uid;
+    const { email, uid: fbUid } = decoded;
     if (!email) {
       return res.status(400).json({ detail: 'No email associated with this Google account' });
     }
@@ -565,7 +731,8 @@ async function register(req, res) {
 // ─── GET CURRENT USER ───────────────────────────────────────────────────────
 
 async function getMe(req, res) {
-  const { _id, ...user } = req.user;
+  const normalizedUser = normalizeUser(req.user);
+  const { _id, ...user } = normalizedUser;
   res.json(user);
 }
 
@@ -710,7 +877,6 @@ async function changePassword(req, res) {
 
     // ── Email confirmation (non-blocking) ─────────────────────────────────
     if (notify_email !== false) {
-      const { sendPasswordChangedEmail } = require('../services/emailService');
       sendPasswordChangedEmail(userEmail, userName, requestIp)
         .catch(err => console.warn('[ChangePassword] Email failed:', err?.message));
     }
@@ -761,41 +927,276 @@ async function forgotPassword(req, res) {
       return res.status(400).json({ detail: 'Email is required' });
     }
 
-    const tenantData = await verifyTenantInFirebase(email);
-    const apiKey = process.env.FIREBASE_API_KEY;
+    const normalizedEmail = email.trim().toLowerCase();
+    const tenantData = await verifyTenantInFirebase(normalizedEmail);
 
-    if (tenantData && apiKey) {
-      try {
-        await axios.post(
-          `https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=${apiKey}`,
-          { requestType: 'PASSWORD_RESET', email },
-        );
-      } catch (resetErr) {
-        console.warn('Password reset email not sent:', resetErr?.message);
-      }
-    }
+    if (tenantData) {
+      const rawToken = crypto.randomBytes(32).toString('hex');
+      const hashedToken = crypto.createHash('sha256').update(rawToken).digest('hex');
 
-    // Audit log
-    try {
       const db = getDb();
-      await db.collection('announcements').insertOne({
-        announcement_id: `ann_${uuidv4().replace(/-/g, '').substring(0, 12)}`,
-        title: 'Password reset requested',
-        content: `We received a password reset request for ${maskEmail(email.trim().toLowerCase())}. If this was you, please check your email for the reset link.`,
-        category: 'Account',
-        priority: 'normal',
-        author_id: 'system',
-        user_id: tenantData?.user_id || null,
-        is_private: true,
-        is_active: !!tenantData,
-        created_at: new Date(),
+      // Look up MongoDB user_id for session invalidation later
+      const dbUser = await db.collection('users').findOne({ email: normalizedEmail }).catch(() => null);
+      const mongoUserId = dbUser?.user_id || null;
+
+      // Invalidate any prior unused tokens for this email
+      await db.collection('password_reset_tokens').updateMany(
+        { email: normalizedEmail, used: false },
+        { $set: { used: true } }
+      );
+      await db.collection('password_reset_tokens').insertOne({
+        hashedToken,
+        email: normalizedEmail,
+        uid: tenantData.firebase_id,   // verifyTenantInFirebase returns firebase_id, not uid
+        user_id: mongoUserId,
+        expiresAt: new Date(Date.now() + 15 * 60 * 1000),
+        used: false,
+        createdAt: new Date(),
       });
-    } catch (_) { /* non-critical */ }
+
+      const backendUrl = (process.env.BACKEND_URL || 'http://localhost:8001').replace(/\/+$/, '');
+      const resetLink = `${backendUrl}/api/auth/reset-password?token=${rawToken}`;
+      const userName = tenantData.name || 'Tenant';
+
+      sendPasswordResetEmail(normalizedEmail, userName, resetLink).catch(() => {});
+
+      // Audit log
+      try {
+        await db.collection('announcements').insertOne({
+          announcement_id: `ann_${uuidv4().replace(/-/g, '').substring(0, 12)}`,
+          title: 'Password reset requested',
+          content: `A password reset link was sent to ${maskEmail(normalizedEmail)}.`,
+          category: 'Account',
+          priority: 'normal',
+          author_id: 'system',
+          user_id: tenantData.user_id || null,
+          is_private: true,
+          is_active: true,
+          created_at: new Date(),
+        });
+      } catch (_) { /* non-critical */ }
+    }
 
     res.json({ message: successMsg });
   } catch (error) {
     console.error('Forgot password error:', error);
     res.json({ message: successMsg });
+  }
+}
+
+// ─── RESET PASSWORD (GET — serve deep-link redirect page) ───────────────────
+
+function getResetPasswordPage(req, res) {
+  const { token } = req.query;
+  if (!token) {
+    return res.status(400).send(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Invalid Link</title>
+<style>body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#F3F4F6;padding:24px}
+.card{background:#fff;border-radius:20px;padding:40px 32px;max-width:420px;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.1)}
+h1{color:#1E3A5F;font-size:20px;margin-bottom:8px}p{color:#6B7280;font-size:14px}</style></head>
+<body><div class="card"><div style="font-size:48px;margin-bottom:16px">⚠️</div>
+<h1>Invalid Reset Link</h1><p>This link is missing a reset token. Please request a new password reset from the app.</p></div></body></html>`);
+  }
+
+  const safeToken = encodeURIComponent(token);
+  const prodLink  = `frontend://reset-password?token=${safeToken}`;
+  const devLink   = `exp+frontend://reset-password?token=${safeToken}`;
+
+  res.send(`<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Reset Password — LilyCrest</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,Roboto,"Segoe UI",sans-serif;background:#F3F4F6;
+         display:flex;flex-direction:column;align-items:center;justify-content:center;
+         min-height:100vh;padding:24px}
+    .card{background:#fff;border-radius:20px;padding:40px 32px;max-width:440px;width:100%;
+          box-shadow:0 4px 24px rgba(0,0,0,.10);text-align:center}
+    .icon{font-size:48px;margin-bottom:16px}
+    h1{font-size:22px;font-weight:700;color:#1E3A5F;margin-bottom:8px}
+    .sub{font-size:14px;color:#6B7280;line-height:1.6;margin-bottom:28px}
+
+    /* ── mobile section ── */
+    .mobile-section{margin-bottom:28px}
+    .divider{display:flex;align-items:center;gap:12px;margin-bottom:24px}
+    .divider hr{flex:1;border:none;border-top:1px solid #E5E7EB}
+    .divider span{font-size:12px;color:#9CA3AF;white-space:nowrap}
+
+    /* ── form ── */
+    .form-label{display:block;font-size:12px;font-weight:600;color:#1E3A5F;
+                letter-spacing:.5px;text-align:left;margin-bottom:6px}
+    .input-wrap{position:relative;margin-bottom:16px}
+    .input-wrap input{width:100%;padding:13px 44px 13px 14px;font-size:15px;color:#1F2937;
+                      border:1.5px solid #E5E7EB;border-radius:12px;background:#F8FAFC;outline:none}
+    .input-wrap input:focus{border-color:#1E3A5F}
+    .eye{position:absolute;right:12px;top:50%;transform:translateY(-50%);
+         background:none;border:none;cursor:pointer;font-size:18px;line-height:1}
+    .err{background:#FEF2F2;border:1px solid #FECACA;border-radius:10px;
+         padding:10px 14px;font-size:13px;color:#B91C1C;margin-bottom:14px;text-align:left}
+    .ok{background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;
+        padding:10px 14px;font-size:13px;color:#15803D;margin-bottom:14px;text-align:left}
+
+    /* ── buttons ── */
+    .btn{display:block;width:100%;padding:15px;border-radius:13px;font-size:15px;
+         font-weight:700;text-decoration:none;border:none;cursor:pointer;text-align:center}
+    .btn+.btn{margin-top:10px}
+    .btn-orange{background:#D4682A;color:#fff}
+    .btn-navy{background:#1E3A5F;color:#fff}
+    .btn-submit{background:#1E3A5F;color:#fff;margin-top:4px}
+    .btn-submit:disabled{opacity:.55;cursor:not-allowed}
+    .note{font-size:12px;color:#9CA3AF;margin-top:10px;line-height:1.5}
+  </style>
+</head>
+<body>
+<div class="card">
+  <div class="icon">🔑</div>
+  <h1>Reset Your Password</h1>
+  <p class="sub">This link expires in <strong>15 minutes</strong> and can only be used once.</p>
+
+  <!-- ─── Mobile: open in app ─── -->
+  <div class="mobile-section" id="mobileSection" style="display:none">
+    <a class="btn btn-orange" href="${prodLink}" id="openApp">Open LilyCrest App</a>
+    <a class="btn btn-navy" href="${devLink}" style="margin-top:10px">Open Dev Build</a>
+    <p class="note">On your phone? Tap above to set your password inside the app.</p>
+  </div>
+
+  <div class="divider" id="divider" style="display:none">
+    <hr><span>or reset here</span><hr>
+  </div>
+
+  <!-- ─── Web form (works on all devices) ─── -->
+  <div id="formSection">
+    <div id="msg"></div>
+    <label class="form-label" for="pw">NEW PASSWORD</label>
+    <div class="input-wrap">
+      <input id="pw" type="password" placeholder="At least 8 characters" autocomplete="new-password">
+      <button class="eye" type="button" onclick="toggleEye('pw','eye1')" id="eye1">👁</button>
+    </div>
+    <label class="form-label" for="pw2">CONFIRM PASSWORD</label>
+    <div class="input-wrap">
+      <input id="pw2" type="password" placeholder="Repeat your password" autocomplete="new-password">
+      <button class="eye" type="button" onclick="toggleEye('pw2','eye2')" id="eye2">👁</button>
+    </div>
+    <button class="btn btn-submit" id="submitBtn" onclick="doReset()">Reset Password</button>
+  </div>
+
+  <div id="successSection" style="display:none">
+    <div class="ok" style="text-align:center;font-size:15px">✅ Password reset successfully!<br>You can now log in with your new password.</div>
+    <p style="font-size:13px;color:#6B7280;margin-top:12px">You may close this tab.</p>
+  </div>
+</div>
+
+<script>
+  var TOKEN = ${JSON.stringify(token)};
+
+  // Show mobile section only on actual mobile devices
+  if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
+    document.getElementById('mobileSection').style.display = 'block';
+    document.getElementById('divider').style.display = 'flex';
+    // Auto-attempt deep link on mobile; fallback form stays visible
+    setTimeout(function(){ window.location.replace(${JSON.stringify(prodLink)}); }, 300);
+  }
+
+  function toggleEye(inputId, btnId) {
+    var inp = document.getElementById(inputId);
+    var btn = document.getElementById(btnId);
+    if (inp.type === 'password') { inp.type = 'text'; btn.textContent = '🙈'; }
+    else { inp.type = 'password'; btn.textContent = '👁'; }
+  }
+
+  async function doReset() {
+    var pw  = document.getElementById('pw').value;
+    var pw2 = document.getElementById('pw2').value;
+    var msg = document.getElementById('msg');
+    msg.innerHTML = '';
+
+    if (!pw || !pw2) { return showErr('Please fill in both fields.'); }
+    if (pw !== pw2)  { return showErr('Passwords do not match.'); }
+    if (pw.length < 8) { return showErr('Password must be at least 8 characters.'); }
+
+    var btn = document.getElementById('submitBtn');
+    btn.disabled = true;
+    btn.textContent = 'Resetting…';
+
+    try {
+      var resp = await fetch('/api/auth/reset-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: TOKEN, newPassword: pw })
+      });
+      var data = await resp.json();
+      if (resp.ok) {
+        document.getElementById('formSection').style.display  = 'none';
+        document.getElementById('mobileSection').style.display = 'none';
+        document.getElementById('divider').style.display = 'none';
+        document.getElementById('successSection').style.display = 'block';
+      } else {
+        showErr(data.detail || 'Failed to reset password. Please try again.');
+        btn.disabled = false; btn.textContent = 'Reset Password';
+      }
+    } catch(e) {
+      showErr('Network error. Please check your connection and try again.');
+      btn.disabled = false; btn.textContent = 'Reset Password';
+    }
+  }
+
+  function showErr(msg) {
+    document.getElementById('msg').innerHTML = '<div class="err">' + msg + '</div>';
+  }
+</script>
+</body>
+</html>`);
+}
+
+// ─── RESET PASSWORD (POST — validate token & update Firebase password) ───────
+
+async function resetPassword(req, res) {
+  try {
+    const { token, newPassword } = req.body;
+    if (!token || !newPassword) {
+      return res.status(400).json({ detail: 'Token and new password are required.' });
+    }
+
+    const passwordErrors = validateNewPassword(newPassword);
+    if (passwordErrors.length > 0) {
+      return res.status(400).json({ detail: passwordErrors[0] });
+    }
+
+    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+    const db = getDb();
+    const record = await db.collection('password_reset_tokens').findOne({
+      hashedToken,
+      used: false,
+      expiresAt: { $gt: new Date() },
+    });
+
+    if (!record) {
+      return res.status(400).json({ detail: 'This reset link is invalid or has expired. Please request a new one.' });
+    }
+
+    // Mark token used before touching Firebase (prevent replay on failure)
+    await db.collection('password_reset_tokens').updateOne(
+      { hashedToken },
+      { $set: { used: true, usedAt: new Date() } }
+    );
+
+    // Update password in Firebase via Admin SDK
+    await admin.auth().updateUser(record.uid, { password: newPassword });
+
+    // Invalidate all active sessions for this user
+    try {
+      await db.collection('sessions').deleteMany({ user_id: record.user_id });
+    } catch (_) { /* non-critical */ }
+
+    // Send confirmation email
+    sendPasswordChangedEmail(record.email, 'Tenant', 'app').catch(() => {});
+
+    res.json({ message: 'Password reset successfully. You can now log in with your new password.' });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    res.status(500).json({ detail: 'Failed to reset password. Please try again.' });
   }
 }
 
@@ -811,4 +1212,6 @@ module.exports = {
   logout,
   changePassword,
   forgotPassword,
+  getResetPasswordPage,
+  resetPassword,
 };

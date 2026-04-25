@@ -140,7 +140,7 @@ api.interceptors.response.use(
 
       // Refresh failed or no Firebase user — clear session
       try {
-        await AsyncStorage.removeItem('session_token');
+        await AsyncStorage.multiRemove(['session_token', 'session_user']);
       } catch (_) {}
     }
     

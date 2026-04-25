@@ -216,7 +216,7 @@ export default function PaymentScreen() {
                 <Text style={styles.onlineTitle}>Secure Online Payment</Text>
               </View>
               <Text style={styles.onlineDesc}>
-                You will be redirected to PayMongo's secure checkout page where you can pay via:
+                You will be redirected to PayMongo&apos;s secure checkout page where you can pay via:
               </Text>
               <View style={styles.methodsList}>
                 {['GCash', 'Maya', 'Credit/Debit Card', 'Online Banking'].map(m => (

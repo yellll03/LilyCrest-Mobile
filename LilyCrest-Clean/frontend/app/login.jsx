@@ -244,8 +244,19 @@ export default function LoginScreen() {
       const result = await googleSignIn();
 
       if (result.success) {
-        const { getFreshIdToken } = await import('../src/config/firebase');
-        const idToken = await getFreshIdToken(true);
+        // Use the idToken returned directly by Google Sign-In.
+        // Calling getFreshIdToken() after signInWithCredential fails in release
+        // builds because Firebase auth state hasn't propagated yet.
+        let idToken = result.idToken;
+
+        if (!idToken) {
+          // Last-resort: wait briefly for Firebase to settle then grab the token
+          try {
+            await new Promise(r => setTimeout(r, 800));
+            const { getFreshIdToken } = await import('../src/config/firebase');
+            idToken = await getFreshIdToken(true);
+          } catch (_) {}
+        }
 
         if (!idToken) {
           setLoginError({ message: 'Failed to get authentication token. Please try again.', type: 'network' });
@@ -308,7 +319,7 @@ export default function LoginScreen() {
         return;
       }
 
-      const loginResult = await loginWithEmail(creds.email, creds.password);
+      const loginResult = await loginWithEmail(creds.email, creds.password, { biometricLogin: true });
       if (!loginResult.success) {
         if (loginResult.status === 401 || loginResult.status === 400) {
           await clearCredentials();
@@ -350,8 +361,8 @@ export default function LoginScreen() {
           {/* Logo */}
           <View style={styles.logoContainer}>
             <Image
-              source={require('../assets/images/logo-main.png')}
-              style={styles.brandImage}
+              source={require('../assets/images/lilycrest-wordmark.png')}
+              style={styles.authLogo}
               resizeMode="contain"
               accessibilityLabel="LilyCrest logo"
             />
@@ -548,9 +559,8 @@ const styles = StyleSheet.create({
       web: { boxShadow: '0 4px 10px rgba(15, 23, 42, 0.15)' },
     }),
   },
-  logoContainer: { alignItems: 'center', marginTop: 24, marginBottom: 24 },
-  brandImage: { width: 160, height: 120, marginBottom: 8 },
-  logoText: { fontSize: 24, fontWeight: '700', color: '#1E3A5F' },
+  logoContainer: { alignItems: 'center', marginTop: 8, marginBottom: 2 },
+  authLogo: { width: 132, height: 102 },
   title: { fontSize: 28, fontWeight: '700', color: '#1E3A5F', textAlign: 'center', marginBottom: 8 },
   subtitle: { fontSize: 15, color: '#6B7280', textAlign: 'center', marginBottom: 32 },
   form: { width: '100%' },

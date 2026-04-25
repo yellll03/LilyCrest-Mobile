@@ -4,12 +4,13 @@ import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAlert } from '../src/context/AlertContext';
 import { useAuth } from '../src/context/AuthContext';
 import { useTheme } from '../src/context/ThemeContext';
-import { useAlert } from '../src/context/AlertContext';
+import { useToast } from '../src/context/ToastContext';
 import { apiService } from '../src/services/api';
 
 // ── Document types for upload picker ──
@@ -248,6 +249,7 @@ export default function MyDocumentsScreen() {
   const { user } = useAuth();
   const { colors, isDarkMode } = useTheme();
   const { showAlert } = useAlert();
+  const { showToast } = useToast();
   const [downloading, setDownloading] = useState(null);
   const [previewDoc, setPreviewDoc] = useState(null);
   const [showPreview, setShowPreview] = useState(false);
@@ -257,6 +259,7 @@ export default function MyDocumentsScreen() {
   const [uploading, setUploading] = useState(false);
   const [showUploadPicker, setShowUploadPicker] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
+  const [deletingDocId, setDeletingDocId] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
 
   // Fetch uploaded documents
@@ -315,7 +318,7 @@ export default function MyDocumentsScreen() {
         anchor.download = fileName;
         anchor.click();
         window.URL.revokeObjectURL(url);
-        showAlert({ title: 'Success', message: `${doc.title} downloaded as PDF.`, type: 'success' });
+        showToast({ type: 'success', title: 'Download Complete', message: `${doc.title} downloaded successfully.` });
       } else {
         const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
         const dl = FileSystem.createDownloadResumable(downloadUrl, fileUri, {
@@ -325,12 +328,12 @@ export default function MyDocumentsScreen() {
         if (await Sharing.isAvailableAsync()) {
           await Sharing.shareAsync(uri, { mimeType: 'application/pdf', dialogTitle: `${doc.title} PDF` });
         } else {
-          showAlert({ title: 'Saved', message: `${doc.title} saved successfully.`, type: 'success' });
+          showToast({ type: 'success', title: 'Saved', message: `${doc.title} saved successfully.` });
         }
       }
     } catch (error) {
       console.error('Download error:', error);
-      showAlert({ title: 'Error', message: 'Failed to download document. Please try again.', type: 'error' });
+      showToast({ type: 'error', title: 'Download Failed', message: 'Failed to download document. Please try again.' });
     } finally {
       setDownloading(null);
     }
@@ -369,10 +372,21 @@ export default function MyDocumentsScreen() {
       });
 
       await fetchUploadedDocs();
-      showAlert({ title: 'Upload Successful', message: `${docType.label} uploaded successfully. It will be reviewed by the admin.`, type: 'success' });
+      const uploadMessage = /payment|receipt|proof/i.test(`${docType.key} ${docType.label}`)
+        ? 'Payment proof uploaded successfully.'
+        : `${docType.label} uploaded successfully.`;
+      showToast({
+        type: 'success',
+        title: 'Upload Successful',
+        message: `${uploadMessage} It will be reviewed by the admin.`,
+      });
     } catch (error) {
       console.error('Upload error:', error);
-      showAlert({ title: 'Upload Failed', message: error?.response?.data?.detail || 'Please try again.', type: 'error' });
+      showToast({
+        type: 'error',
+        title: 'Upload Failed',
+        message: error?.response?.data?.detail || 'Please try again.',
+      });
     } finally {
       setUploading(false);
     }
@@ -380,13 +394,27 @@ export default function MyDocumentsScreen() {
 
   // ── Delete document ──
   const handleDelete = async (docId) => {
+    if (!docId || deletingDocId) return;
+
     setDeleteTarget(null);
+    setDeletingDocId(docId);
     try {
       await apiService.deleteUserDocument(docId);
       setUploadedDocs(prev => prev.filter(d => d.doc_id !== docId));
+      showToast({
+        type: 'success',
+        title: 'Deleted',
+        message: 'Successfully deleted the document.',
+      });
     } catch (error) {
       console.error('Delete error:', error);
-      showAlert({ title: 'Error', message: 'Failed to delete document.', type: 'error' });
+      showToast({
+        type: 'error',
+        title: 'Delete Failed',
+        message: 'Failed to delete document. Please try again.',
+      });
+    } finally {
+      setDeletingDocId(null);
     }
   };
 
@@ -472,7 +500,7 @@ export default function MyDocumentsScreen() {
               <TouchableOpacity
                 style={styles.uploadButton}
                 onPress={() => setShowUploadPicker(true)}
-                disabled={uploading}
+                disabled={uploading || Boolean(deletingDocId)}
               >
                 {uploading ? (
                   <ActivityIndicator size="small" color="#fff" />
@@ -581,6 +609,7 @@ export default function MyDocumentsScreen() {
                       <TouchableOpacity
                         style={styles.deleteBtn}
                         onPress={(e) => { e.stopPropagation(); setDeleteTarget(doc); }}
+                        disabled={Boolean(deletingDocId)}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       >
                         <Ionicons name="trash-outline" size={16} color="#EF4444" />
@@ -617,6 +646,7 @@ export default function MyDocumentsScreen() {
                       <TouchableOpacity
                         style={styles.deleteBtn}
                         onPress={(e) => { e.stopPropagation(); setDeleteTarget(doc); }}
+                        disabled={Boolean(deletingDocId)}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       >
                         <Ionicons name="trash-outline" size={16} color="#EF4444" />
@@ -632,7 +662,7 @@ export default function MyDocumentsScreen() {
               <View style={styles.emptyUpload}>
                 <Ionicons name="cloud-upload-outline" size={36} color={colors.textMuted} />
                 <Text style={styles.emptyUploadTitle}>No documents uploaded yet</Text>
-                <Text style={styles.emptyUploadHint}>Tap "Upload" above to submit your Valid ID or documents</Text>
+                <Text style={styles.emptyUploadHint}>Tap &quot;Upload&quot; above to submit your Valid ID or documents</Text>
               </View>
             )}
 
@@ -716,7 +746,7 @@ export default function MyDocumentsScreen() {
           <View style={styles.pickerSheet}>
             <View style={styles.pickerHandle} />
             <Text style={styles.pickerTitle}>Select Document Type</Text>
-            <Text style={styles.pickerSubtitle}>Choose the type of document you're uploading</Text>
+            <Text style={styles.pickerSubtitle}>Choose the type of document you&apos;re uploading</Text>
             <ScrollView style={styles.pickerList} showsVerticalScrollIndicator={false}>
               {UPLOAD_TYPES.map(type => (
                 <TouchableOpacity key={type.key} style={styles.pickerItem} onPress={() => handleUpload(type)} activeOpacity={0.7}>
@@ -741,13 +771,17 @@ export default function MyDocumentsScreen() {
           <View style={styles.modalContent}>
             <View style={styles.modalIconWrap}><Ionicons name="trash-outline" size={32} color="#EF4444" /></View>
             <Text style={styles.modalTitle}>Delete Document?</Text>
-            <Text style={styles.modalMessage}>Are you sure you want to delete "{deleteTarget?.label}"? This action cannot be undone.</Text>
+            <Text style={styles.modalMessage}>Are you sure you want to delete &quot;{deleteTarget?.label}&quot;? This action cannot be undone.</Text>
             <View style={styles.modalButtons}>
-              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setDeleteTarget(null)}>
+              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setDeleteTarget(null)} disabled={Boolean(deletingDocId)}>
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={styles.modalDeleteBtn} onPress={() => handleDelete(deleteTarget?.doc_id)}>
-                <Text style={styles.modalDeleteText}>Delete</Text>
+              <TouchableOpacity style={styles.modalDeleteBtn} onPress={() => handleDelete(deleteTarget?.doc_id)} disabled={Boolean(deletingDocId)}>
+                {deletingDocId === deleteTarget?.doc_id ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.modalDeleteText}>Delete</Text>
+                )}
               </TouchableOpacity>
             </View>
           </View>

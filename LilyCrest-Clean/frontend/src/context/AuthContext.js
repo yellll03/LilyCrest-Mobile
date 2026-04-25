@@ -1,50 +1,144 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { auth, getFreshIdToken, subscribeToAuthState } from '../config/firebase';
 import { api } from '../services/api';
 import {
+  arePushNotificationsEnabled,
+  clearLastNotificationResponse,
+  getLastNotificationResponseData,
+  getStoredPushToken,
   registerForPushNotifications,
+  requestPushPermissionOnFirstLaunch,
+  resolveNotificationRoute,
   savePushTokenToServer,
   setupNotificationListeners,
+  subscribeToPushTokenChanges,
 } from '../services/notifications';
+import { useToast } from './ToastContext';
 
 const AuthContext = createContext(undefined);
+const SESSION_TOKEN_KEY = 'session_token';
+const SESSION_USER_KEY = 'session_user';
 
-// Auth status: 'initializing' → 'authenticated' | 'unauthenticated'
-// This replaces the old mix of isLoading / rehydrated / authReady / signOutError
+async function persistSession(sessionToken, userData) {
+  const writes = [];
+  if (sessionToken) {
+    writes.push(AsyncStorage.setItem(SESSION_TOKEN_KEY, sessionToken));
+  }
+  if (userData) {
+    writes.push(AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(userData)));
+  }
+  await Promise.all(writes);
+}
+
+async function clearPersistedSession() {
+  await AsyncStorage.multiRemove([SESSION_TOKEN_KEY, SESSION_USER_KEY]).catch(async () => {
+    await AsyncStorage.removeItem(SESSION_TOKEN_KEY).catch(() => {});
+    await AsyncStorage.removeItem(SESSION_USER_KEY).catch(() => {});
+  });
+}
+
+async function getCachedSessionUser() {
+  try {
+    const raw = await AsyncStorage.getItem(SESSION_USER_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw);
+  } catch (_error) {
+    await AsyncStorage.removeItem(SESSION_USER_KEY).catch(() => {});
+    return null;
+  }
+}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
-  const [authStatus, setAuthStatus] = useState('initializing'); // single source of truth
+  const [authStatus, setAuthStatus] = useState('initializing');
   const [firebaseUser, setFirebaseUser] = useState(null);
   const router = useRouter();
+  const { showToast } = useToast();
   const routerRef = useRef(router);
+  const authStatusRef = useRef(authStatus);
+  const pendingNotificationRef = useRef(null);
   routerRef.current = router;
+  authStatusRef.current = authStatus;
 
-  // ── Push notification listeners (once) ──
-  useEffect(() => {
-    const cleanup = setupNotificationListeners(
-      null,
-      (data) => {
-        if (routerRef.current) {
-          if (data?.screen === 'billing') routerRef.current.push('/billing-history');
-          else if (data?.screen === 'announcements') routerRef.current.push('/(tabs)/announcements');
-          else if (data?.screen === 'services') routerRef.current.push('/(tabs)/services');
-        }
-      },
-    );
-    return () => { if (cleanup) cleanup(); };
+  const navigateFromNotification = useCallback(async (data) => {
+    const destination = resolveNotificationRoute(data);
+    if (!destination || !routerRef.current) return false;
+
+    routerRef.current.push(destination);
+    pendingNotificationRef.current = null;
+    await clearLastNotificationResponse().catch(() => {});
+    return true;
   }, []);
 
-  // ── Hydrate session on mount ──
+  const handleNotificationTap = useCallback(async (data) => {
+    if (!data) return;
+
+    if (authStatusRef.current !== 'authenticated') {
+      pendingNotificationRef.current = data;
+      return;
+    }
+
+    await navigateFromNotification(data);
+  }, [navigateFromNotification]);
+
+  useEffect(() => {
+    requestPushPermissionOnFirstLaunch().catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const cleanup = setupNotificationListeners(
+      (notification) => {
+        const title = notification?.request?.content?.title || 'New update';
+        const message = notification?.request?.content?.body || 'Open LilyCrest to view the latest update.';
+        showToast({
+          type: 'info',
+          title,
+          message,
+          duration: 3600,
+        });
+      },
+      (data) => {
+        pendingNotificationRef.current = data;
+        handleNotificationTap(data);
+      }
+    );
+
+    return () => {
+      if (cleanup) cleanup();
+    };
+  }, [handleNotificationTap, showToast]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    (async () => {
+      const data = await getLastNotificationResponseData();
+      if (cancelled || !data) return;
+
+      pendingNotificationRef.current = data;
+      await handleNotificationTap(data);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [handleNotificationTap]);
+
+  useEffect(() => {
+    if (authStatus !== 'authenticated' || !pendingNotificationRef.current) return;
+    handleNotificationTap(pendingNotificationRef.current);
+  }, [authStatus, handleNotificationTap, user?.user_id]);
+
   useEffect(() => {
     let cancelled = false;
 
     (async () => {
       try {
-        const token = await AsyncStorage.getItem('session_token');
+        const token = await AsyncStorage.getItem(SESSION_TOKEN_KEY);
         if (!token) {
+          await AsyncStorage.removeItem(SESSION_USER_KEY).catch(() => {});
           if (!cancelled) {
             setUser(null);
             setAuthStatus('unauthenticated');
@@ -52,35 +146,47 @@ export function AuthProvider({ children }) {
           return;
         }
 
-        // Validate token with backend
         const response = await api.get('/auth/me', {
           headers: { Authorization: `Bearer ${token}` },
+          timeout: 6000,
         });
 
+        await AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(response.data)).catch(() => {});
         if (!cancelled) {
           setUser(response.data);
           setAuthStatus('authenticated');
         }
-      } catch (err) {
-        console.warn('Session hydration failed:', err?.message);
-        const status = err?.response?.status;
+      } catch (error) {
+        console.warn('Session hydration failed:', error?.message);
+        const status = error?.response?.status;
+
         if (status === 401) {
-          // Token expired or invalid — clear session only
-          // Keep remember_me and last_email so the user's preference survives
-          await AsyncStorage.removeItem('session_token').catch(() => {});
+          await clearPersistedSession();
+          if (!cancelled) {
+            setUser(null);
+            setAuthStatus('unauthenticated');
+          }
+          return;
         }
+
+        const cachedUser = await getCachedSessionUser();
         if (!cancelled) {
-          setUser(null);
-          setAuthStatus('unauthenticated');
+          if (cachedUser) {
+            setUser(cachedUser);
+            setAuthStatus('authenticated');
+          } else {
+            setUser(null);
+            setAuthStatus('unauthenticated');
+          }
         }
       }
     })();
 
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
-  // ── Firebase auth state listener ──
-  // Only for Google sign-in — does NOT affect backend session
   useEffect(() => {
     const unsubscribe = subscribeToAuthState((fbUser) => {
       setFirebaseUser(fbUser);
@@ -88,13 +194,46 @@ export function AuthProvider({ children }) {
     return () => unsubscribe();
   }, []);
 
-  // ── Login with Email/Password ──
-  const loginWithEmail = async (email, password) => {
-    try {
-      const response = await api.post('/auth/login', { email, password });
-      const data = response.data;
+  useEffect(() => {
+    if (authStatus !== 'authenticated' || !user?.user_id) return undefined;
 
-      // OTP step — backend verified credentials, waiting for email code
+    let cancelled = false;
+
+    (async () => {
+      const notificationsEnabled = await arePushNotificationsEnabled();
+      const token = notificationsEnabled
+        ? await registerForPushNotifications({ requestPermission: false })
+        : await getStoredPushToken();
+
+      if (cancelled) return;
+
+      savePushTokenToServer(token, { notificationsEnabled }).catch(() => {});
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authStatus, user?.user_id]);
+
+  useEffect(() => {
+    if (authStatus !== 'authenticated' || !user?.user_id) return undefined;
+
+    return subscribeToPushTokenChanges((token, tokenData) => {
+      savePushTokenToServer(token, {
+        notificationsEnabled: true,
+        platform: tokenData?.type || undefined,
+      }).catch(() => {});
+    });
+  }, [authStatus, user?.user_id]);
+
+  const loginWithEmail = async (email, password, { biometricLogin = false } = {}) => {
+    try {
+      const { data } = await api.post('/auth/login', {
+        email,
+        password,
+        biometric_login: biometricLogin,
+      });
+
       if (data.otp_required) {
         return {
           success: false,
@@ -105,25 +244,27 @@ export function AuthProvider({ children }) {
       }
 
       const { user: userData, session_token } = data;
-      await AsyncStorage.setItem('session_token', session_token);
+      await persistSession(session_token, userData);
       setUser(userData);
       setAuthStatus('authenticated');
-
-      // Push notifications (background, non-blocking)
-      registerForPushNotifications().then(savePushTokenToServer).catch(() => {});
-
       return { success: true };
     } catch (error) {
       const status = error.response?.status;
       const detail = error.response?.data?.detail;
+      const attemptsRemaining = error.response?.data?.attempts_remaining;
 
       if (status === 400) {
-        await AsyncStorage.removeItem('session_token').catch(() => {});
+        await clearPersistedSession();
         return { success: false, status, error: detail || 'Please check your input and try again.' };
       }
       if (status === 401) {
-        await AsyncStorage.removeItem('session_token').catch(() => {});
-        return { success: false, status, error: detail || 'Invalid email or password. Please try again.' };
+        let message = detail || 'Invalid email or password. Please try again.';
+        if (Number.isInteger(attemptsRemaining) && attemptsRemaining >= 0) {
+          const suffix = `${attemptsRemaining} password attempt${attemptsRemaining !== 1 ? 's' : ''} remaining before temporary lock.`;
+          message = `${message}${message.endsWith('.') ? '' : '.'} ${suffix}`;
+        }
+        await clearPersistedSession();
+        return { success: false, status, error: message, attemptsRemaining };
       }
       if (status === 403) {
         return { success: false, status, error: detail || 'Access denied. Your account is not registered as a verified tenant. Please contact the admin office.' };
@@ -138,17 +279,24 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // ── Verify Login OTP ──
   const verifyLoginOtp = async (otpToken, otpCode) => {
+    const normalizedToken = typeof otpToken === 'string' ? otpToken.trim() : '';
+    const normalizedCode = String(otpCode ?? '').replace(/\D/g, '');
+
+    if (!normalizedToken) {
+      return { success: false, status: 400, error: 'Your verification session has expired. Please log in again.' };
+    }
+
     try {
-      const response = await api.post('/auth/login/verify-otp', { otp_token: otpToken, otp_code: otpCode });
+      const response = await api.post('/auth/login/verify-otp', {
+        otp_token: normalizedToken,
+        otp_code: normalizedCode,
+      });
       const { user: userData, session_token } = response.data;
 
-      await AsyncStorage.setItem('session_token', session_token);
+      await persistSession(session_token, userData);
       setUser(userData);
       setAuthStatus('authenticated');
-
-      registerForPushNotifications().then(savePushTokenToServer).catch(() => {});
       return { success: true };
     } catch (error) {
       const status = error.response?.status;
@@ -158,23 +306,19 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // ── Login shorthand (for components that just check true/false) ──
   const login = async (email, password) => {
     const result = await loginWithEmail(email, password);
     return result.success;
   };
 
-  // ── Register with Email/Password ──
   const registerWithEmail = async (email, password, name = '', phone = '') => {
     try {
       const response = await api.post('/auth/register', { email, password, name, phone });
       const { user: userData, session_token } = response.data;
 
-      await AsyncStorage.setItem('session_token', session_token);
+      await persistSession(session_token, userData);
       setUser(userData);
       setAuthStatus('authenticated');
-
-      registerForPushNotifications().then(savePushTokenToServer).catch(() => {});
       return { success: true };
     } catch (error) {
       const status = error.response?.status;
@@ -186,7 +330,6 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // ── Google Sign-In ──
   const signInWithGoogle = async (idToken) => {
     try {
       let tokenToUse = idToken;
@@ -201,11 +344,9 @@ export function AuthProvider({ children }) {
       const response = await api.post('/auth/google', { idToken: tokenToUse });
       const { user: userData, session_token } = response.data;
 
-      await AsyncStorage.setItem('session_token', session_token);
+      await persistSession(session_token, userData);
       setUser(userData);
       setAuthStatus('authenticated');
-
-      registerForPushNotifications().then(savePushTokenToServer).catch(() => {});
       return { success: true };
     } catch (error) {
       const status = error.response?.status;
@@ -221,63 +362,79 @@ export function AuthProvider({ children }) {
     }
   };
 
-  // ── Logout ──
   const logout = async () => {
     try {
-      const token = await AsyncStorage.getItem('session_token');
+      const token = await AsyncStorage.getItem(SESSION_TOKEN_KEY);
+      const pushToken = await getStoredPushToken();
+
       if (token) {
         await api.post('/auth/logout', {}, {
           headers: { Authorization: `Bearer ${token}` },
-        }).catch(() => {}); // best effort
+        }).catch(() => {});
       }
+
+      await savePushTokenToServer(pushToken, { notificationsEnabled: false }).catch(() => {});
     } finally {
-      await AsyncStorage.removeItem('session_token').catch(() => {});
-      // NOTE: We intentionally do NOT clear biometric credentials here.
-      // Stored credentials must survive logout so the user can sign back in
-      // with biometrics. They are cleared only when:
-      //   1. The user changes their password (change-password.jsx)
-      //   2. The user explicitly disables biometric in Settings
+      await clearPersistedSession();
       setUser(null);
       setAuthStatus('unauthenticated');
 
-      try { await auth.signOut(); } catch (_) { /* ok */ }
+      try {
+        await auth.signOut();
+      } catch (_) {
+        // Ignore Firebase sign-out failures because the backend session is already cleared.
+      }
     }
   };
 
-  // ── Re-check auth (for biometric, pull-to-refresh, etc.) ──
   const checkAuth = async () => {
     try {
-      const token = await AsyncStorage.getItem('session_token');
+      const token = await AsyncStorage.getItem(SESSION_TOKEN_KEY);
       if (!token) {
+        await AsyncStorage.removeItem(SESSION_USER_KEY).catch(() => {});
         setUser(null);
         setAuthStatus('unauthenticated');
-        return;
+        return { authenticated: false };
       }
 
       const response = await api.get('/auth/me', {
         headers: { Authorization: `Bearer ${token}` },
+        timeout: 6000,
       });
+      await AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(response.data)).catch(() => {});
       setUser(response.data);
       setAuthStatus('authenticated');
+      return { authenticated: true, restoredFromCache: false };
     } catch (error) {
       if (error?.response?.status === 401) {
-        await AsyncStorage.removeItem('session_token').catch(() => {});
+        await clearPersistedSession();
         setUser(null);
         setAuthStatus('unauthenticated');
+        return { authenticated: false };
       }
+
+      const cachedUser = await getCachedSessionUser();
+      if (cachedUser) {
+        setUser(cachedUser);
+        setAuthStatus('authenticated');
+        return { authenticated: true, restoredFromCache: true };
+      }
+
+      return { authenticated: false };
     }
   };
 
-  // ── Update user data locally ──
   const updateUser = (data) => {
-    setUser((prev) => prev ? { ...prev, ...data } : data);
+    setUser((prev) => {
+      const nextUser = prev ? { ...prev, ...data } : data;
+      AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(nextUser)).catch(() => {});
+      return nextUser;
+    });
   };
 
-  // ── Derived booleans for backward compatibility ──
   const isLoading = authStatus === 'initializing';
   const authReady = authStatus !== 'initializing';
 
-  // Block rendering until hydration completes
   if (authStatus === 'initializing') {
     return null;
   }

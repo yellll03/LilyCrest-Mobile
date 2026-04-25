@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx expo *)",
+      "Bash(node -e \"require\\('./migration_script.js'\\)\")",
+      "Bash(node -c server.js)",
+      "Bash(node -c controllers/paymongo.controller.js)"
+    ]
+  }
+}

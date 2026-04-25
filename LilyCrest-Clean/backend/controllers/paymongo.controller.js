@@ -4,6 +4,7 @@ const { ObjectId } = require('mongodb');
 const { getDb } = require('../config/database');
 const { PRESENTATION_BILLS, mapRealBill } = require('./billing.controller');
 const { notifyPaymentConfirmed } = require('../services/pushService');
+const { sendPaymentReceiptEmail } = require('../services/emailService');
 
 const PAYMONGO_BASE = 'https://api.paymongo.com/v1';
 
@@ -142,16 +143,26 @@ async function markBillPaid(db, billingId, userId, { paymentId, eventType } = {}
   }
 
   // 2. Try real 'bills' collection (billingId is the ObjectId string)
+  let objId;
+  try {
+    objId = new ObjectId(billingId);
+  } catch (_) {
+    return { existing: null, alreadyPaid: false }; // not a valid ObjectId
+  }
+
   try {
     const user = await db.collection('users').findOne({ user_id: userId });
     const mongoId = user?._id;
-    if (!mongoId) return { existing: null, alreadyPaid: false };
+    if (!mongoId) {
+      console.warn(`[markBillPaid] User not found for user_id=${userId}`);
+      return { existing: null, alreadyPaid: false };
+    }
 
-    const realBill = await db.collection('bills').findOne({ _id: new ObjectId(billingId), userId: mongoId });
+    const realBill = await db.collection('bills').findOne({ _id: objId, userId: mongoId });
     if (realBill) {
       const alreadyPaid = realBill.status === 'paid';
       await db.collection('bills').updateOne(
-        { _id: new ObjectId(billingId) },
+        { _id: objId },
         {
           $set: {
             status: 'paid',
@@ -164,12 +175,70 @@ async function markBillPaid(db, billingId, userId, { paymentId, eventType } = {}
           },
         }
       );
+      console.log(`[markBillPaid] Bill ${billingId} marked paid in bills collection`);
       return { existing: mapRealBill(realBill, userId), alreadyPaid };
     }
-  } catch (_) { /* billingId not a valid ObjectId */ }
+    console.warn(`[markBillPaid] Bill ${billingId} not found for userId=${mongoId}`);
+  } catch (err) {
+    console.error(`[markBillPaid] DB error for bill ${billingId}:`, err.message);
+  }
 
   // 3. Presentation mode (no DB update needed)
   return { existing: null, alreadyPaid: false };
+}
+
+async function sendPaymentReceiptForBill(db, {
+  userId,
+  billingId,
+  bill,
+  paymentId,
+  referenceNumber,
+  userEmailHint,
+}) {
+  try {
+    const userDoc = await db.collection('users').findOne(
+      { user_id: userId },
+      {
+        projection: {
+          _id: 0,
+          name: 1,
+          fullName: 1,
+          firstName: 1,
+          lastName: 1,
+          email: 1,
+          emailAddress: 1,
+          google_email: 1,
+        },
+      },
+    );
+
+    const userEmail = String(
+      userEmailHint || userDoc?.email || userDoc?.emailAddress || userDoc?.google_email || '',
+    ).trim();
+
+    if (!userEmail) {
+      console.warn(`[PayMongo] Skipping receipt email for bill ${billingId}: no tenant email found`);
+      return false;
+    }
+
+    const fallbackName = [userDoc?.firstName, userDoc?.lastName].filter(Boolean).join(' ').trim();
+    const userName = userDoc?.name || userDoc?.fullName || fallbackName || 'Tenant';
+    const amountPaid = Number(bill?.remaining_amount ?? bill?.total ?? bill?.amount ?? 0);
+    const description = bill?.description || `Bill ${billingId}`;
+
+    return sendPaymentReceiptEmail(userEmail, userName, {
+      billingId,
+      description,
+      amount: amountPaid,
+      paymentMethod: 'PayMongo',
+      paymentDate: new Date(),
+      referenceNumber,
+      paymentId,
+    });
+  } catch (error) {
+    console.warn(`[PayMongo] Failed to send receipt email for bill ${billingId}:`, error?.message);
+    return false;
+  }
 }
 
 // Create a PayMongo Checkout Session for a specific bill
@@ -281,30 +350,48 @@ async function getCheckoutStatus(req, res) {
     });
 
     const session = response.data?.data;
-    const paymentStatus = session?.attributes?.payment_intent?.attributes?.status || session?.attributes?.status || 'pending';
+    // payment_intent is null for e-wallet (GCash/Maya/GrabPay) payments — fall back to session status
+    const intentStatus = session?.attributes?.payment_intent?.attributes?.status;
+    const sessionStatus = session?.attributes?.status || 'pending';
+    const paymentStatus = intentStatus || sessionStatus;
     const payments = session?.attributes?.payments || [];
 
-    // Mark paid only when the payment intent is confirmed or every payment object is paid.
-    // Avoid using payments.length > 0 alone — payments can appear in non-final states.
+    const hasConfirmedPayments = payments.length > 0 && payments.every((p) => {
+      const s = p?.attributes?.status || p?.status || '';
+      return s === 'paid' || s === 'succeeded';
+    });
+
+    // 'inactive' = session closed; if it has any payments it was closed by a payment, not expiry
+    const sessionClosedWithPayment = sessionStatus === 'inactive' && payments.length > 0;
+
     const paymentConfirmed =
       paymentStatus === 'succeeded' ||
       paymentStatus === 'paid' ||
-      (payments.length > 0 && payments.every((p) => {
-        const s = p?.attributes?.status || p?.status || '';
-        return s === 'paid' || s === 'succeeded';
-      }));
+      hasConfirmedPayments ||
+      sessionClosedWithPayment;
 
     if (paymentConfirmed) {
       const billingId = session?.attributes?.metadata?.billing_id;
       const userId = session?.attributes?.metadata?.user_id;
       if (billingId && userId) {
+        const paymentId = payments[0]?.id;
+        const referenceNumber = session?.attributes?.reference_number;
+        const userEmailHint = session?.attributes?.metadata?.user_email || '';
         const db = getDb();
         const { existing, alreadyPaid } = await markBillPaid(db, billingId, userId, {
-          paymentId: payments[0]?.id,
+          paymentId,
         });
         // Push only once
         if (!alreadyPaid && existing) {
           notifyPaymentConfirmed(userId, { ...existing, status: 'paid' }).catch(() => {});
+          sendPaymentReceiptForBill(db, {
+            userId,
+            billingId,
+            bill: { ...existing, status: 'paid' },
+            paymentId,
+            referenceNumber,
+            userEmailHint,
+          }).catch(() => {});
         }
       }
     }
@@ -331,17 +418,28 @@ async function handleWebhook(req, res) {
       const checkoutData = event?.attributes?.data;
       const billingId = checkoutData?.attributes?.metadata?.billing_id;
       const userId = checkoutData?.attributes?.metadata?.user_id;
+      const userEmailHint = checkoutData?.attributes?.metadata?.user_email || '';
+      const referenceNumber = checkoutData?.attributes?.reference_number;
       const payments = checkoutData?.attributes?.payments || [];
+      const paymentId = payments[0]?.id;
 
       if (billingId && userId) {
         const db = getDb();
         const { existing, alreadyPaid } = await markBillPaid(db, billingId, userId, {
-          paymentId: payments[0]?.id,
+          paymentId,
           eventType,
         });
         console.log(`[PayMongo Webhook] Bill ${billingId} marked as paid`);
         if (!alreadyPaid && existing) {
           notifyPaymentConfirmed(userId, { ...existing, status: 'paid' }).catch(() => {});
+          sendPaymentReceiptForBill(db, {
+            userId,
+            billingId,
+            bill: { ...existing, status: 'paid' },
+            paymentId,
+            referenceNumber,
+            userEmailHint,
+          }).catch(() => {});
         }
       }
     }

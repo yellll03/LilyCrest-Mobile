@@ -1,0 +1,1232 @@
+> Task :expo-gradle-plugin:expo-autolinking-plugin-shared:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :gradle-plugin:settings-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :gradle-plugin:shared:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :gradle-plugin:shared:compileKotlin UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin-shared:compileKotlin UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin-shared:compileJava NO-SOURCE
+> Task :gradle-plugin:shared:compileJava NO-SOURCE
+> Task :expo-gradle-plugin:expo-autolinking-plugin-shared:processResources NO-SOURCE
+> Task :gradle-plugin:shared:processResources NO-SOURCE
+> Task :expo-gradle-plugin:expo-autolinking-plugin-shared:classes UP-TO-DATE
+> Task :gradle-plugin:shared:classes UP-TO-DATE
+> Task :gradle-plugin:shared:jar UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin-shared:jar UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :gradle-plugin:settings-plugin:compileKotlin UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:compileJava NO-SOURCE
+> Task :gradle-plugin:settings-plugin:pluginDescriptors UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:processResources UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:classes UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:jar UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:compileKotlin UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:compileJava NO-SOURCE
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:pluginDescriptors UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:processResources UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:classes UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:jar UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-gradle-plugin:expo-autolinking-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-module-gradle-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-dev-launcher-gradle-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-module-gradle-plugin:pluginDescriptors UP-TO-DATE
+> Task :expo-dev-launcher-gradle-plugin:pluginDescriptors UP-TO-DATE
+> Task :expo-module-gradle-plugin:processResources UP-TO-DATE
+> Task :expo-dev-launcher-gradle-plugin:processResources UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:compileKotlin UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:compileKotlin UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:compileJava NO-SOURCE
+> Task :gradle-plugin:react-native-gradle-plugin:compileJava NO-SOURCE
+> Task :gradle-plugin:react-native-gradle-plugin:pluginDescriptors UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:pluginDescriptors UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:processResources UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:processResources UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:classes UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:classes UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:jar UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:jar UP-TO-DATE
+> Task :expo-dev-launcher-gradle-plugin:compileKotlin UP-TO-DATE
+> Task :expo-dev-launcher-gradle-plugin:compileJava NO-SOURCE
+> Task :expo-dev-launcher-gradle-plugin:classes UP-TO-DATE
+> Task :expo-module-gradle-plugin:compileKotlin UP-TO-DATE
+> Task :expo-module-gradle-plugin:compileJava NO-SOURCE
+> Task :expo-module-gradle-plugin:classes UP-TO-DATE
+> Task :expo-dev-launcher-gradle-plugin:jar UP-TO-DATE
+> Task :expo-module-gradle-plugin:jar UP-TO-DATE
+
+> Configure project :app
+ ℹ️  [33mApplying gradle plugin[0m '[32mexpo-dev-launcher-gradle-plugin[0m'
+
+> Configure project :
+[32m[ExpoRootProject][0m Using the following versions:
+  - buildTools:  [32m36.0.0[0m
+  - minSdk:      [32m24[0m
+  - compileSdk:  [32m36[0m
+  - targetSdk:   [32m36[0m
+  - ndk:         [32m27.1.12297006[0m
+  - kotlin:      [32m2.1.20[0m
+  - ksp:         [32m2.1.20-2.0.1[0m
+
+> Configure project :expo
+
+Using expo modules
+  - [32mexpo-constants[0m (18.0.13)
+  - [32mexpo-dev-client[0m (6.0.20)
+  - [32mexpo-dev-launcher[0m (6.0.20)
+  - [32mexpo-dev-menu[0m (7.0.18)
+  - [32mexpo-dev-menu-interface[0m (2.0.0)
+  - [32mexpo-json-utils[0m (0.15.0)
+  - [32mexpo-manifests[0m (1.0.10)
+  - [32mexpo-modules-core[0m (3.0.29)
+  - [32mexpo-updates-interface[0m (2.0.0)
+  - [33m[📦][0m [32mexpo-application[0m (7.0.8)
+  - [33m[📦][0m [32mexpo-asset[0m (12.0.12)
+  - [33m[📦][0m [32mexpo-blur[0m (15.0.8)
+  - [33m[📦][0m [32mexpo-clipboard[0m (8.0.8)
+  - [33m[📦][0m [32mexpo-crypto[0m (15.0.8)
+  - [33m[📦][0m [32mexpo-document-picker[0m (14.0.8)
+  - [33m[📦][0m [32mexpo-file-system[0m (19.0.21)
+  - [33m[📦][0m [32mexpo-font[0m (14.0.11)
+  - [33m[📦][0m [32mexpo-haptics[0m (15.0.8)
+  - [33m[📦][0m [32mexpo-image[0m (3.0.11)
+  - [33m[📦][0m [32mexpo-image-loader[0m (6.0.0)
+  - [33m[📦][0m [32mexpo-image-picker[0m (17.0.10)
+  - [33m[📦][0m [32mexpo-keep-awake[0m (15.0.8)
+  - [33m[📦][0m [32mexpo-linear-gradient[0m (15.0.8)
+  - [33m[📦][0m [32mexpo-linking[0m (8.0.11)
+  - [33m[📦][0m [32mexpo-local-authentication[0m (17.0.8)
+  - [33m[📦][0m [32mexpo-notifications[0m (0.32.16)
+  - [33m[📦][0m [32mexpo-secure-store[0m (15.0.8)
+  - [33m[📦][0m [32mexpo-sharing[0m (14.0.8)
+  - [33m[📦][0m [32mexpo-splash-screen[0m (31.0.13)
+  - [33m[📦][0m [32mexpo-system-ui[0m (6.0.9)
+  - [33m[📦][0m [32mexpo-web-browser[0m (15.0.10)
+
+
+> Task :app:generateAutolinkingNewArchitectureFiles UP-TO-DATE
+> Task :app:generateAutolinkingPackageList UP-TO-DATE
+> Task :app:generateCodegenSchemaFromJavaScript SKIPPED
+> Task :app:generateCodegenArtifactsFromSchema SKIPPED
+> Task :app:generateReactNativeEntryPoint UP-TO-DATE
+> Task :expo:generatePackagesList UP-TO-DATE
+> Task :expo:preBuild UP-TO-DATE
+
+> Task :expo-constants:createExpoConfig
+The NODE_ENV environment variable is required but was not specified. Ensure the project is bundled with Expo CLI or NODE_ENV is set. Using only .env.local and .env
+env: load .env
+env: export EXPO_PUBLIC_BACKEND_PORT EXPO_PUBLIC_DEV_HOST EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN EXPO_PUBLIC_FIREBASE_PROJECT_ID EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID EXPO_PUBLIC_FIREBASE_API_KEY EXPO_PUBLIC_FIREBASE_WEB_API_KEY EXPO_PUBLIC_FIREBASE_ANDROID_API_KEY EXPO_PUBLIC_FIREBASE_WEB_APP_ID EXPO_PUBLIC_FIREBASE_ANDROID_APP_ID EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID EXPO_PUBLIC_GOOGLE_MAPS_API_KEY EXPO_PUBLIC_GOOGLE_ANDROID_API_KEY EXPO_PUBLIC_GOOGLE_ANDROID_CERT_HASH
+
+> Task :expo-constants:preBuild
+> Task :expo-dev-client:preBuild UP-TO-DATE
+> Task :expo-dev-launcher:preBuild UP-TO-DATE
+> Task :expo-dev-menu:preBuild UP-TO-DATE
+> Task :expo-dev-menu-interface:preBuild UP-TO-DATE
+> Task :expo-json-utils:preBuild UP-TO-DATE
+> Task :expo-manifests:preBuild UP-TO-DATE
+> Task :expo-modules-core:preBuild UP-TO-DATE
+> Task :expo-updates-interface:preBuild UP-TO-DATE
+> Task :react-native-async-storage_async-storage:generateCodegenSchemaFromJavaScript UP-TO-DATE
+> Task :react-native-async-storage_async-storage:generateCodegenArtifactsFromSchema UP-TO-DATE
+> Task :react-native-async-storage_async-storage:preBuild UP-TO-DATE
+> Task :react-native-gesture-handler:generateCodegenSchemaFromJavaScript UP-TO-DATE
+> Task :react-native-gesture-handler:generateCodegenArtifactsFromSchema UP-TO-DATE
+> Task :react-native-gesture-handler:preBuild UP-TO-DATE
+> Task :react-native-google-signin_google-signin:generateCodegenSchemaFromJavaScript UP-TO-DATE
+> Task :react-native-google-signin_google-signin:generateCodegenArtifactsFromSchema UP-TO-DATE
+> Task :react-native-google-signin_google-signin:preBuild UP-TO-DATE
+> Task :react-native-reanimated:assertMinimalReactNativeVersionTask
+> Task :react-native-reanimated:assertNewArchitectureEnabledTask SKIPPED
+> Task :react-native-reanimated:assertWorkletsVersionTask
+> Task :react-native-reanimated:generateCodegenSchemaFromJavaScript UP-TO-DATE
+> Task :react-native-reanimated:generateCodegenArtifactsFromSchema UP-TO-DATE
+> Task :react-native-reanimated:prepareReanimatedHeadersForPrefabs UP-TO-DATE
+> Task :react-native-reanimated:preBuild
+> Task :react-native-safe-area-context:generateCodegenSchemaFromJavaScript UP-TO-DATE
+> Task :react-native-safe-area-context:generateCodegenArtifactsFromSchema UP-TO-DATE
+> Task :react-native-safe-area-context:preBuild UP-TO-DATE
+> Task :react-native-screens:generateCodegenSchemaFromJavaScript UP-TO-DATE
+> Task :react-native-screens:generateCodegenArtifactsFromSchema UP-TO-DATE
+> Task :react-native-screens:preBuild UP-TO-DATE
+> Task :react-native-webview:generateCodegenSchemaFromJavaScript UP-TO-DATE
+> Task :react-native-webview:generateCodegenArtifactsFromSchema UP-TO-DATE
+> Task :react-native-webview:preBuild UP-TO-DATE
+> Task :react-native-worklets:assertMinimalReactNativeVersionTask
+> Task :react-native-worklets:assertNewArchitectureEnabledTask SKIPPED
+> Task :react-native-worklets:generateCodegenSchemaFromJavaScript UP-TO-DATE
+> Task :react-native-worklets:generateCodegenArtifactsFromSchema UP-TO-DATE
+> Task :react-native-worklets:prepareWorkletsHeadersForPrefabs UP-TO-DATE
+> Task :react-native-worklets:preBuild
+> Task :app:preBuild
+> Task :app:preReleaseBuild
+> Task :react-native-reanimated:preReleaseBuild
+> Task :react-native-worklets:preReleaseBuild
+> Task :react-native-worklets:configureCMakeRelWithDebInfo[arm64-v8a]
+> Task :react-native-worklets:generateJsonModelRelease
+> Task :react-native-worklets:prefabReleaseConfigurePackage UP-TO-DATE
+> Task :react-native-reanimated:configureCMakeRelWithDebInfo[arm64-v8a]
+> Task :react-native-reanimated:generateJsonModelRelease
+> Task :react-native-reanimated:prefabReleaseConfigurePackage UP-TO-DATE
+> Task :app:configureCMakeRelWithDebInfo[arm64-v8a]
+> Task :react-native-worklets:buildCMakeRelWithDebInfo[arm64-v8a][worklets]
+> Task :react-native-worklets:externalNativeBuildRelease
+> Task :react-native-worklets:prefabReleasePackage UP-TO-DATE
+> Task :react-native-reanimated:buildCMakeRelWithDebInfo[arm64-v8a][reanimated]
+> Task :react-native-worklets:mergeReleaseJniLibFolders UP-TO-DATE
+> Task :react-native-worklets:mergeReleaseNativeLibs UP-TO-DATE
+> Task :react-native-worklets:copyReleaseJniLibsProjectOnly UP-TO-DATE
+> Task :react-native-reanimated:externalNativeBuildRelease
+> Task :react-native-reanimated:prefabReleasePackage UP-TO-DATE
+> Task :app:buildCMakeRelWithDebInfo[arm64-v8a]
+> Task :app:mergeReleaseJniLibFolders UP-TO-DATE
+> Task :expo:preReleaseBuild UP-TO-DATE
+> Task :expo:mergeReleaseJniLibFolders UP-TO-DATE
+> Task :expo:mergeReleaseNativeLibs NO-SOURCE
+> Task :expo:copyReleaseJniLibsProjectOnly UP-TO-DATE
+> Task :expo-constants:preReleaseBuild
+> Task :expo-constants:mergeReleaseJniLibFolders UP-TO-DATE
+> Task :expo-constants:mergeReleaseNativeLibs NO-SOURCE
+> Task :expo-constants:copyReleaseJniLibsProjectOnly UP-TO-DATE
+> Task :expo-dev-client:preReleaseBuild UP-TO-DATE
+> Task :expo-dev-client:mergeReleaseJniLibFolders UP-TO-DATE
+> Task :expo-dev-client:mergeReleaseNativeLibs NO-SOURCE
+> Task :expo-dev-client:copyReleaseJniLibsProjectOnly UP-TO-DATE
+> Task :expo-dev-launcher:preReleaseBuild UP-TO-DATE
+> Task :expo-dev-launcher:mergeReleaseJniLibFolders UP-TO-DATE
+> Task :expo-dev-launcher:mergeReleaseNativeLibs NO-SOURCE
+> Task :expo-dev-launcher:copyReleaseJniLibsProjectOnly UP-TO-DATE
+> Task :expo-dev-menu:preReleaseBuild UP-TO-DATE
+> Task :expo-dev-menu:mergeReleaseJniLibFolders UP-TO-DATE
+> Task :expo-dev-menu:mergeReleaseNativeLibs NO-SOURCE
+> Task :expo-dev-menu:copyReleaseJniLibsProjectOnly UP-TO-DATE
+> Task :expo-dev-menu-interface:preReleaseBuild UP-TO-DATE
+> Task :expo-dev-menu-interface:mergeReleaseJniLibFolders UP-TO-DATE
+> Task :expo-dev-menu-interface:mergeReleaseNativeLibs NO-SOURCE
+> Task :expo-dev-menu-interface:copyReleaseJniLibsProjectOnly UP-TO-DATE
+> Task :expo-json-utils:preReleaseBuild UP-TO-DATE
+> Task :expo-json-utils:mergeReleaseJniLibFolders UP-TO-DATE
+> Task :expo-json-utils:mergeReleaseNativeLibs NO-SOURCE
+> Task :expo-json-utils:copyReleaseJniLibsProjectOnly UP-TO-DATE
+> Task :expo-manifests:preReleaseBuild UP-TO-DATE
+> Task :expo-manifests:mergeReleaseJniLibFolders UP-TO-DATE
+> Task :expo-manifests:mergeReleaseNativeLibs NO-SOURCE
+> Task :expo-manifests:copyReleaseJniLibsProjectOnly UP-TO-DATE
+> Task :expo-modules-core:preReleaseBuild UP-TO-DATE
+> Task :expo-modules-core:configureCMakeRelWithDebInfo[arm64-v8a]
+> Task :expo-modules-core:buildCMakeRelWithDebInfo[arm64-v8a]
+> Task :expo-modules-core:mergeReleaseJniLibFolders UP-TO-DATE
+> Task :expo-modules-core:mergeReleaseNativeLibs UP-TO-DATE
+> Task :expo-modules-core:copyReleaseJniLibsProjectOnly UP-TO-DATE
+> Task :expo-updates-interface:preReleaseBuild UP-TO-DATE
+> Task :expo-updates-interface:mergeReleaseJniLibFolders UP-TO-DATE
+> Task :expo-updates-interface:mergeReleaseNativeLibs NO-SOURCE
+> Task :expo-updates-interface:copyReleaseJniLibsProjectOnly UP-TO-DATE
+> Task :react-native-async-storage_async-storage:preReleaseBuild UP-TO-DATE
+> Task :react-native-async-storage_async-storage:mergeReleaseJniLibFolders UP-TO-DATE
+> Task :react-native-async-storage_async-storage:mergeReleaseNativeLibs NO-SOURCE
+> Task :react-native-async-storage_async-storage:copyReleaseJniLibsProjectOnly UP-TO-DATE
+> Task :react-native-gesture-handler:preReleaseBuild UP-TO-DATE
+> Task :react-native-gesture-handler:configureCMakeRelWithDebInfo[arm64-v8a]
+> Task :react-native-gesture-handler:buildCMakeRelWithDebInfo[arm64-v8a]
+> Task :react-native-gesture-handler:mergeReleaseJniLibFolders UP-TO-DATE
+> Task :react-native-gesture-handler:mergeReleaseNativeLibs UP-TO-DATE
+> Task :react-native-gesture-handler:copyReleaseJniLibsProjectOnly UP-TO-DATE
+> Task :react-native-google-signin_google-signin:preReleaseBuild UP-TO-DATE
+> Task :react-native-google-signin_google-signin:mergeReleaseJniLibFolders UP-TO-DATE
+> Task :react-native-google-signin_google-signin:mergeReleaseNativeLibs NO-SOURCE
+> Task :react-native-google-signin_google-signin:copyReleaseJniLibsProjectOnly UP-TO-DATE
+> Task :react-native-reanimated:mergeReleaseJniLibFolders UP-TO-DATE
+> Task :react-native-reanimated:mergeReleaseNativeLibs UP-TO-DATE
+> Task :react-native-reanimated:copyReleaseJniLibsProjectOnly UP-TO-DATE
+> Task :react-native-safe-area-context:preReleaseBuild UP-TO-DATE
+> Task :react-native-safe-area-context:mergeReleaseJniLibFolders UP-TO-DATE
+> Task :react-native-safe-area-context:mergeReleaseNativeLibs NO-SOURCE
+> Task :react-native-safe-area-context:copyReleaseJniLibsProjectOnly UP-TO-DATE
+> Task :react-native-screens:preReleaseBuild UP-TO-DATE
+> Task :react-native-screens:configureCMakeRelWithDebInfo[arm64-v8a]
+> Task :react-native-screens:buildCMakeRelWithDebInfo[arm64-v8a]
+> Task :react-native-screens:mergeReleaseJniLibFolders UP-TO-DATE
+> Task :react-native-screens:mergeReleaseNativeLibs UP-TO-DATE
+> Task :react-native-screens:copyReleaseJniLibsProjectOnly UP-TO-DATE
+> Task :react-native-webview:preReleaseBuild UP-TO-DATE
+> Task :react-native-webview:mergeReleaseJniLibFolders UP-TO-DATE
+> Task :react-native-webview:mergeReleaseNativeLibs NO-SOURCE
+> Task :react-native-webview:copyReleaseJniLibsProjectOnly UP-TO-DATE
+> Task :app:mergeReleaseNativeLibs UP-TO-DATE
+> Task :app:stripReleaseDebugSymbols UP-TO-DATE
+> Task :app:extractReleaseNativeSymbolTables UP-TO-DATE
+> Task :app:mergeReleaseNativeDebugMetadata UP-TO-DATE
+> Task :react-native-google-signin_google-signin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-google-signin_google-signin:generateReleaseBuildConfig UP-TO-DATE
+> Task :react-native-google-signin_google-signin:generateReleaseResValues UP-TO-DATE
+> Task :react-native-google-signin_google-signin:generateReleaseResources UP-TO-DATE
+> Task :react-native-google-signin_google-signin:packageReleaseResources UP-TO-DATE
+> Task :react-native-google-signin_google-signin:parseReleaseLocalResources UP-TO-DATE
+> Task :react-native-google-signin_google-signin:generateReleaseRFile UP-TO-DATE
+> Task :react-native-google-signin_google-signin:compileReleaseKotlin UP-TO-DATE
+> Task :react-native-google-signin_google-signin:javaPreCompileRelease UP-TO-DATE
+> Task :react-native-google-signin_google-signin:compileReleaseJavaWithJavac UP-TO-DATE
+> Task :react-native-google-signin_google-signin:bundleLibRuntimeToDirRelease UP-TO-DATE
+> Task :react-native-gesture-handler:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-gesture-handler:generateReleaseBuildConfig UP-TO-DATE
+> Task :react-native-gesture-handler:generateReleaseResValues UP-TO-DATE
+> Task :react-native-gesture-handler:generateReleaseResources UP-TO-DATE
+> Task :react-native-gesture-handler:packageReleaseResources UP-TO-DATE
+> Task :react-native-gesture-handler:parseReleaseLocalResources UP-TO-DATE
+> Task :react-native-gesture-handler:generateReleaseRFile UP-TO-DATE
+> Task :react-native-reanimated:generateReleaseBuildConfig UP-TO-DATE
+> Task :react-native-reanimated:generateReleaseResValues UP-TO-DATE
+> Task :react-native-reanimated:generateReleaseResources UP-TO-DATE
+> Task :react-native-reanimated:packageReleaseResources UP-TO-DATE
+> Task :react-native-reanimated:parseReleaseLocalResources UP-TO-DATE
+> Task :react-native-reanimated:generateReleaseRFile UP-TO-DATE
+> Task :react-native-reanimated:javaPreCompileRelease UP-TO-DATE
+> Task :react-native-worklets:generateReleaseBuildConfig UP-TO-DATE
+> Task :react-native-worklets:generateReleaseResValues UP-TO-DATE
+> Task :react-native-worklets:generateReleaseResources UP-TO-DATE
+> Task :react-native-worklets:packageReleaseResources UP-TO-DATE
+> Task :react-native-worklets:parseReleaseLocalResources UP-TO-DATE
+> Task :react-native-worklets:generateReleaseRFile UP-TO-DATE
+> Task :react-native-worklets:javaPreCompileRelease UP-TO-DATE
+> Task :react-native-worklets:compileReleaseJavaWithJavac UP-TO-DATE
+> Task :react-native-worklets:bundleLibCompileToJarRelease UP-TO-DATE
+> Task :react-native-reanimated:compileReleaseJavaWithJavac UP-TO-DATE
+> Task :react-native-reanimated:bundleLibCompileToJarRelease UP-TO-DATE
+> Task :react-native-gesture-handler:compileReleaseKotlin UP-TO-DATE
+> Task :react-native-gesture-handler:javaPreCompileRelease UP-TO-DATE
+> Task :react-native-gesture-handler:compileReleaseJavaWithJavac UP-TO-DATE
+> Task :react-native-gesture-handler:bundleLibRuntimeToDirRelease UP-TO-DATE
+> Task :react-native-safe-area-context:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-safe-area-context:generateReleaseBuildConfig UP-TO-DATE
+> Task :react-native-safe-area-context:generateReleaseResValues UP-TO-DATE
+> Task :react-native-safe-area-context:generateReleaseResources UP-TO-DATE
+> Task :react-native-safe-area-context:packageReleaseResources UP-TO-DATE
+> Task :react-native-safe-area-context:parseReleaseLocalResources UP-TO-DATE
+> Task :react-native-safe-area-context:generateReleaseRFile UP-TO-DATE
+> Task :react-native-safe-area-context:compileReleaseKotlin UP-TO-DATE
+> Task :react-native-safe-area-context:javaPreCompileRelease UP-TO-DATE
+> Task :react-native-safe-area-context:compileReleaseJavaWithJavac UP-TO-DATE
+> Task :react-native-safe-area-context:bundleLibRuntimeToDirRelease UP-TO-DATE
+> Task :react-native-screens:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-screens:generateReleaseBuildConfig UP-TO-DATE
+> Task :react-native-screens:generateReleaseResValues UP-TO-DATE
+> Task :react-native-screens:generateReleaseResources UP-TO-DATE
+> Task :react-native-screens:packageReleaseResources UP-TO-DATE
+> Task :react-native-screens:parseReleaseLocalResources UP-TO-DATE
+> Task :react-native-screens:generateReleaseRFile UP-TO-DATE
+> Task :react-native-screens:compileReleaseKotlin UP-TO-DATE
+> Task :react-native-screens:javaPreCompileRelease UP-TO-DATE
+> Task :react-native-screens:compileReleaseJavaWithJavac UP-TO-DATE
+> Task :react-native-screens:bundleLibRuntimeToDirRelease UP-TO-DATE
+> Task :react-native-webview:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-webview:generateReleaseBuildConfig UP-TO-DATE
+> Task :react-native-webview:generateReleaseResValues UP-TO-DATE
+> Task :react-native-webview:generateReleaseResources UP-TO-DATE
+> Task :react-native-webview:packageReleaseResources UP-TO-DATE
+> Task :react-native-webview:parseReleaseLocalResources UP-TO-DATE
+> Task :react-native-webview:generateReleaseRFile UP-TO-DATE
+> Task :react-native-webview:compileReleaseKotlin UP-TO-DATE
+> Task :react-native-webview:javaPreCompileRelease UP-TO-DATE
+> Task :react-native-webview:compileReleaseJavaWithJavac UP-TO-DATE
+> Task :react-native-webview:bundleLibRuntimeToDirRelease UP-TO-DATE
+> Task :react-native-async-storage_async-storage:generateReleaseBuildConfig UP-TO-DATE
+> Task :react-native-async-storage_async-storage:generateReleaseResValues UP-TO-DATE
+> Task :react-native-async-storage_async-storage:generateReleaseResources UP-TO-DATE
+> Task :react-native-async-storage_async-storage:packageReleaseResources UP-TO-DATE
+> Task :react-native-async-storage_async-storage:parseReleaseLocalResources UP-TO-DATE
+> Task :react-native-async-storage_async-storage:generateReleaseRFile UP-TO-DATE
+> Task :react-native-async-storage_async-storage:javaPreCompileRelease UP-TO-DATE
+> Task :react-native-async-storage_async-storage:compileReleaseJavaWithJavac UP-TO-DATE
+> Task :react-native-async-storage_async-storage:bundleLibRuntimeToDirRelease UP-TO-DATE
+> Task :expo:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo:generateReleaseBuildConfig UP-TO-DATE
+> Task :expo:generateReleaseResValues UP-TO-DATE
+> Task :expo:generateReleaseResources UP-TO-DATE
+> Task :expo:packageReleaseResources UP-TO-DATE
+> Task :expo:parseReleaseLocalResources UP-TO-DATE
+> Task :expo:generateReleaseRFile UP-TO-DATE
+> Task :expo-constants:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-constants:generateReleaseBuildConfig UP-TO-DATE
+> Task :expo-constants:generateReleaseResValues UP-TO-DATE
+> Task :expo-constants:generateReleaseResources UP-TO-DATE
+> Task :expo-constants:packageReleaseResources UP-TO-DATE
+> Task :expo-constants:parseReleaseLocalResources UP-TO-DATE
+> Task :expo-constants:generateReleaseRFile UP-TO-DATE
+> Task :expo-modules-core:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-modules-core:generateReleaseBuildConfig UP-TO-DATE
+> Task :expo-modules-core:generateReleaseResValues UP-TO-DATE
+> Task :expo-modules-core:generateReleaseResources UP-TO-DATE
+> Task :expo-modules-core:packageReleaseResources UP-TO-DATE
+> Task :expo-modules-core:parseReleaseLocalResources UP-TO-DATE
+> Task :expo-modules-core:generateReleaseRFile UP-TO-DATE
+> Task :expo-modules-core:compileReleaseKotlin UP-TO-DATE
+> Task :expo-modules-core:javaPreCompileRelease UP-TO-DATE
+> Task :expo-modules-core:compileReleaseJavaWithJavac UP-TO-DATE
+> Task :expo-modules-core:bundleLibCompileToJarRelease UP-TO-DATE
+> Task :expo-constants:compileReleaseKotlin UP-TO-DATE
+> Task :expo-constants:javaPreCompileRelease UP-TO-DATE
+> Task :expo-constants:compileReleaseJavaWithJavac
+> Task :expo-dev-client:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-dev-client:dataBindingMergeDependencyArtifactsRelease UP-TO-DATE
+> Task :expo-dev-client:generateReleaseResValues UP-TO-DATE
+> Task :expo-dev-client:generateReleaseResources UP-TO-DATE
+> Task :expo-dev-client:packageReleaseResources UP-TO-DATE
+> Task :expo-constants:bundleLibCompileToJarRelease
+> Task :expo-dev-client:parseReleaseLocalResources UP-TO-DATE
+> Task :expo-dev-client:dataBindingGenBaseClassesRelease UP-TO-DATE
+> Task :expo-dev-client:generateReleaseBuildConfig UP-TO-DATE
+> Task :expo-dev-client:generateReleaseRFile UP-TO-DATE
+> Task :expo-dev-client:compileReleaseKotlin NO-SOURCE
+> Task :expo-dev-client:javaPreCompileRelease UP-TO-DATE
+> Task :expo-dev-client:compileReleaseJavaWithJavac UP-TO-DATE
+> Task :expo-dev-client:bundleLibCompileToJarRelease UP-TO-DATE
+> Task :expo-dev-launcher:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-dev-launcher:dataBindingMergeDependencyArtifactsRelease UP-TO-DATE
+> Task :expo-dev-launcher:generateReleaseResValues UP-TO-DATE
+> Task :expo-dev-launcher:generateReleaseResources UP-TO-DATE
+> Task :expo-dev-launcher:packageReleaseResources UP-TO-DATE
+> Task :expo-dev-launcher:parseReleaseLocalResources UP-TO-DATE
+> Task :expo-dev-menu:generateReleaseResValues UP-TO-DATE
+> Task :expo-dev-menu:generateReleaseResources UP-TO-DATE
+> Task :expo-dev-menu:packageReleaseResources UP-TO-DATE
+> Task :expo-dev-menu:parseReleaseLocalResources UP-TO-DATE
+> Task :expo-dev-menu:generateReleaseRFile UP-TO-DATE
+> Task :expo-dev-menu-interface:generateReleaseResValues UP-TO-DATE
+> Task :expo-dev-menu-interface:generateReleaseResources UP-TO-DATE
+> Task :expo-dev-menu-interface:packageReleaseResources UP-TO-DATE
+> Task :expo-dev-menu-interface:parseReleaseLocalResources UP-TO-DATE
+> Task :expo-dev-menu-interface:generateReleaseRFile UP-TO-DATE
+> Task :expo-json-utils:generateReleaseResValues UP-TO-DATE
+> Task :expo-json-utils:generateReleaseResources UP-TO-DATE
+> Task :expo-json-utils:packageReleaseResources UP-TO-DATE
+> Task :expo-json-utils:parseReleaseLocalResources UP-TO-DATE
+> Task :expo-json-utils:generateReleaseRFile UP-TO-DATE
+> Task :expo-manifests:generateReleaseResValues UP-TO-DATE
+> Task :expo-manifests:generateReleaseResources UP-TO-DATE
+> Task :expo-manifests:packageReleaseResources UP-TO-DATE
+> Task :expo-manifests:parseReleaseLocalResources UP-TO-DATE
+> Task :expo-manifests:generateReleaseRFile UP-TO-DATE
+> Task :expo-updates-interface:generateReleaseResValues UP-TO-DATE
+> Task :expo-updates-interface:generateReleaseResources UP-TO-DATE
+> Task :expo-updates-interface:packageReleaseResources UP-TO-DATE
+> Task :expo-updates-interface:parseReleaseLocalResources UP-TO-DATE
+> Task :expo-updates-interface:generateReleaseRFile UP-TO-DATE
+> Task :expo-dev-launcher:dataBindingGenBaseClassesRelease UP-TO-DATE
+> Task :expo-dev-launcher:generateReleaseBuildConfig UP-TO-DATE
+> Task :expo-dev-launcher:generateReleaseRFile UP-TO-DATE
+> Task :expo-dev-launcher:checkApolloVersions UP-TO-DATE
+> Task :expo-dev-launcher:generateServiceApolloOptions UP-TO-DATE
+> Task :expo-dev-launcher:generateServiceApolloSources UP-TO-DATE
+> Task :expo-dev-menu:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-dev-menu:generateReleaseBuildConfig UP-TO-DATE
+> Task :expo-dev-menu-interface:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-dev-menu-interface:generateReleaseBuildConfig UP-TO-DATE
+> Task :expo-dev-menu-interface:compileReleaseKotlin UP-TO-DATE
+> Task :expo-dev-menu-interface:javaPreCompileRelease UP-TO-DATE
+> Task :expo-dev-menu-interface:compileReleaseJavaWithJavac
+> Task :expo-json-utils:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-json-utils:generateReleaseBuildConfig UP-TO-DATE
+> Task :expo-dev-menu-interface:bundleLibCompileToJarRelease
+> Task :expo-json-utils:compileReleaseKotlin UP-TO-DATE
+> Task :expo-json-utils:javaPreCompileRelease UP-TO-DATE
+> Task :expo-json-utils:compileReleaseJavaWithJavac
+> Task :expo-manifests:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-manifests:generateReleaseBuildConfig UP-TO-DATE
+> Task :expo-manifests:javaPreCompileRelease UP-TO-DATE
+> Task :expo-dev-menu:javaPreCompileRelease UP-TO-DATE
+> Task :expo-updates-interface:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-updates-interface:generateReleaseBuildConfig UP-TO-DATE
+> Task :expo-json-utils:bundleLibCompileToJarRelease
+> Task :expo-updates-interface:compileReleaseKotlin UP-TO-DATE
+> Task :expo-updates-interface:javaPreCompileRelease UP-TO-DATE
+> Task :expo-updates-interface:compileReleaseJavaWithJavac
+> Task :expo-dev-launcher:javaPreCompileRelease UP-TO-DATE
+> Task :expo:javaPreCompileRelease UP-TO-DATE
+> Task :react-native-reanimated:bundleLibRuntimeToDirRelease UP-TO-DATE
+> Task :react-native-worklets:bundleLibRuntimeToDirRelease UP-TO-DATE
+> Task :expo-updates-interface:bundleLibCompileToJarRelease
+> Task :expo-modules-core:bundleLibRuntimeToDirRelease UP-TO-DATE
+> Task :expo-dev-client:bundleLibRuntimeToDirRelease UP-TO-DATE
+> Task :expo-dev-menu-interface:bundleLibRuntimeToDirRelease
+> Task :expo-json-utils:bundleLibRuntimeToDirRelease
+> Task :app:checkReleaseDuplicateClasses UP-TO-DATE
+> Task :app:buildKotlinToolingMetadata UP-TO-DATE
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:generateReleaseBuildConfig UP-TO-DATE
+> Task :expo:writeReleaseAarMetadata UP-TO-DATE
+> Task :expo-constants:writeReleaseAarMetadata UP-TO-DATE
+> Task :expo-dev-client:writeReleaseAarMetadata UP-TO-DATE
+> Task :expo-dev-launcher:writeReleaseAarMetadata UP-TO-DATE
+> Task :expo-dev-menu:writeReleaseAarMetadata UP-TO-DATE
+> Task :expo-dev-menu-interface:writeReleaseAarMetadata UP-TO-DATE
+> Task :expo-constants:bundleLibRuntimeToDirRelease
+> Task :expo-json-utils:writeReleaseAarMetadata UP-TO-DATE
+> Task :expo-manifests:writeReleaseAarMetadata UP-TO-DATE
+> Task :expo-modules-core:writeReleaseAarMetadata UP-TO-DATE
+> Task :expo-updates-interface:writeReleaseAarMetadata UP-TO-DATE
+> Task :react-native-async-storage_async-storage:writeReleaseAarMetadata UP-TO-DATE
+> Task :react-native-gesture-handler:writeReleaseAarMetadata UP-TO-DATE
+> Task :react-native-google-signin_google-signin:writeReleaseAarMetadata UP-TO-DATE
+> Task :react-native-reanimated:writeReleaseAarMetadata UP-TO-DATE
+> Task :react-native-safe-area-context:writeReleaseAarMetadata UP-TO-DATE
+> Task :react-native-screens:writeReleaseAarMetadata UP-TO-DATE
+> Task :expo-updates-interface:bundleLibRuntimeToDirRelease
+> Task :react-native-webview:writeReleaseAarMetadata UP-TO-DATE
+> Task :react-native-worklets:writeReleaseAarMetadata UP-TO-DATE
+> Task :app:checkReleaseAarMetadata UP-TO-DATE
+> Task :app:createBundleReleaseJsAndAssets UP-TO-DATE
+> Task :app:generateReleaseResValues UP-TO-DATE
+> Task :app:processReleaseGoogleServices UP-TO-DATE
+> Task :app:mapReleaseSourceSetPaths UP-TO-DATE
+> Task :app:generateReleaseResources UP-TO-DATE
+
+> Task :expo-manifests:compileReleaseKotlin
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-manifests/android/src/main/java/expo/modules/manifests/core/EmbeddedManifest.kt:19:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-manifests/android/src/main/java/expo/modules/manifests/core/EmbeddedManifest.kt:19:86 'fun getLegacyID(): String' is deprecated. Prefer scopeKey or projectId depending on use case.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-manifests/android/src/main/java/expo/modules/manifests/core/ExpoUpdatesManifest.kt:16:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-manifests/android/src/main/java/expo/modules/manifests/core/Manifest.kt:13:3 Deprecations and opt-ins on a method overridden from 'Any' may not be reported.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-manifests/android/src/main/java/expo/modules/manifests/core/Manifest.kt:15:12 'fun getRawJson(): JSONObject' is deprecated. Prefer to use specific field getters.
+
+> Task :expo-manifests:compileReleaseJavaWithJavac
+> Task :expo-manifests:bundleLibCompileToJarRelease
+> Task :expo-manifests:bundleLibRuntimeToDirRelease
+> Task :app:packageReleaseResources
+> Task :app:mergeReleaseResources
+> Task :app:parseReleaseLocalResources UP-TO-DATE
+> Task :app:createReleaseCompatibleScreenManifests
+> Task :app:extractDeepLinksRelease
+> Task :expo:extractDeepLinksRelease
+> Task :expo-constants:extractDeepLinksRelease
+> Task :expo-dev-client:extractDeepLinksRelease
+> Task :expo-dev-launcher:extractDeepLinksRelease
+> Task :expo-dev-menu:extractDeepLinksRelease
+> Task :expo-dev-menu-interface:extractDeepLinksRelease
+> Task :expo-json-utils:extractDeepLinksRelease
+> Task :expo-constants:processReleaseManifest
+> Task :expo-dev-launcher:processReleaseManifest
+> Task :expo-dev-menu:processReleaseManifest
+> Task :expo-dev-menu-interface:processReleaseManifest
+> Task :expo-dev-client:processReleaseManifest
+> Task :expo:processReleaseManifest
+> Task :expo-manifests:extractDeepLinksRelease
+> Task :expo-json-utils:processReleaseManifest
+> Task :expo-modules-core:extractDeepLinksRelease
+> Task :expo-manifests:processReleaseManifest
+> Task :expo-updates-interface:extractDeepLinksRelease
+
+> Task :expo-modules-core:processReleaseManifest
+C:\Users\leigh\Desktop\LilyCrest\LilyCrest-Clean\frontend\node_modules\expo-modules-core\android\src\main\AndroidManifest.xml:8:9-11:45 Warning:
+	meta-data#com.facebook.soloader.enabled@android:value was tagged at AndroidManifest.xml:8 to replace other declarations but no other declaration present
+
+> Task :react-native-async-storage_async-storage:extractDeepLinksRelease
+> Task :expo-updates-interface:processReleaseManifest
+> Task :react-native-gesture-handler:extractDeepLinksRelease
+
+> Task :react-native-async-storage_async-storage:processReleaseManifest
+package="com.reactnativecommunity.asyncstorage" found in source AndroidManifest.xml: C:\Users\leigh\Desktop\LilyCrest\LilyCrest-Clean\frontend\node_modules\@react-native-async-storage\async-storage\android\src\main\AndroidManifest.xml.
+Setting the namespace via the package attribute in the source AndroidManifest.xml is no longer supported, and the value is ignored.
+Recommendation: remove package="com.reactnativecommunity.asyncstorage" from the source AndroidManifest.xml: C:\Users\leigh\Desktop\LilyCrest\LilyCrest-Clean\frontend\node_modules\@react-native-async-storage\async-storage\android\src\main\AndroidManifest.xml.
+
+> Task :react-native-google-signin_google-signin:extractDeepLinksRelease
+> Task :react-native-gesture-handler:processReleaseManifest
+> Task :react-native-reanimated:extractDeepLinksRelease
+
+> Task :react-native-google-signin_google-signin:processReleaseManifest
+package="com.reactnativegooglesignin" found in source AndroidManifest.xml: C:\Users\leigh\Desktop\LilyCrest\LilyCrest-Clean\frontend\node_modules\@react-native-google-signin\google-signin\android\src\main\AndroidManifest.xml.
+Setting the namespace via the package attribute in the source AndroidManifest.xml is no longer supported, and the value is ignored.
+Recommendation: remove package="com.reactnativegooglesignin" from the source AndroidManifest.xml: C:\Users\leigh\Desktop\LilyCrest\LilyCrest-Clean\frontend\node_modules\@react-native-google-signin\google-signin\android\src\main\AndroidManifest.xml.
+
+> Task :react-native-safe-area-context:extractDeepLinksRelease
+> Task :react-native-reanimated:processReleaseManifest
+> Task :react-native-screens:extractDeepLinksRelease
+
+> Task :react-native-safe-area-context:processReleaseManifest
+package="com.th3rdwave.safeareacontext" found in source AndroidManifest.xml: C:\Users\leigh\Desktop\LilyCrest\LilyCrest-Clean\frontend\node_modules\react-native-safe-area-context\android\src\main\AndroidManifest.xml.
+Setting the namespace via the package attribute in the source AndroidManifest.xml is no longer supported, and the value is ignored.
+Recommendation: remove package="com.th3rdwave.safeareacontext" from the source AndroidManifest.xml: C:\Users\leigh\Desktop\LilyCrest\LilyCrest-Clean\frontend\node_modules\react-native-safe-area-context\android\src\main\AndroidManifest.xml.
+
+> Task :react-native-webview:extractDeepLinksRelease
+> Task :react-native-screens:processReleaseManifest
+> Task :react-native-worklets:extractDeepLinksRelease
+> Task :react-native-webview:processReleaseManifest
+> Task :react-native-worklets:processReleaseManifest
+> Task :expo:compileReleaseLibraryResources
+
+> Task :app:processReleaseMainManifest
+C:\Users\leigh\Desktop\LilyCrest\LilyCrest-Clean\frontend\android\app\src\main\AndroidManifest.xml Warning:
+	activity#expo.modules.imagepicker.ExpoCropImageActivity@android:exported was tagged at AndroidManifest.xml:0 to replace other declarations but no other declaration present
+C:\Users\leigh\Desktop\LilyCrest\LilyCrest-Clean\frontend\android\app\src\main\AndroidManifest.xml Warning:
+	provider#expo.modules.filesystem.FileSystemFileProvider@android:authorities was tagged at AndroidManifest.xml:0 to replace other declarations but no other declaration present
+
+> Task :app:processReleaseManifest
+> Task :expo-constants:compileReleaseLibraryResources
+> Task :expo-dev-client:compileReleaseLibraryResources
+> Task :app:processReleaseManifestForPackage
+> Task :expo-dev-launcher:compileReleaseLibraryResources
+> Task :expo-dev-menu-interface:compileReleaseLibraryResources
+> Task :expo-json-utils:compileReleaseLibraryResources
+> Task :expo-manifests:compileReleaseLibraryResources
+> Task :expo-modules-core:compileReleaseLibraryResources
+> Task :expo-updates-interface:compileReleaseLibraryResources
+> Task :react-native-async-storage_async-storage:compileReleaseLibraryResources
+> Task :react-native-gesture-handler:compileReleaseLibraryResources
+> Task :react-native-google-signin_google-signin:compileReleaseLibraryResources
+> Task :react-native-reanimated:compileReleaseLibraryResources
+> Task :react-native-safe-area-context:compileReleaseLibraryResources
+> Task :react-native-worklets:compileReleaseLibraryResources
+> Task :react-native-webview:compileReleaseLibraryResources
+> Task :react-native-async-storage_async-storage:bundleLibCompileToJarRelease
+> Task :react-native-screens:compileReleaseLibraryResources
+> Task :expo-dev-menu:compileReleaseLibraryResources
+> Task :react-native-google-signin_google-signin:bundleLibCompileToJarRelease
+> Task :react-native-webview:bundleLibCompileToJarRelease
+> Task :react-native-safe-area-context:bundleLibCompileToJarRelease
+> Task :react-native-gesture-handler:bundleLibCompileToJarRelease
+> Task :react-native-screens:bundleLibCompileToJarRelease
+> Task :app:javaPreCompileRelease
+> Task :app:desugarReleaseFileDependencies
+> Task :app:mergeReleaseStartupProfile
+
+> Task :expo-dev-menu:compileReleaseKotlin
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-menu/android/src/main/java/com/facebook/react/devsupport/DevMenuSettingsBase.kt:6:8 'class PreferenceManager : Any' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-menu/android/src/main/java/com/facebook/react/devsupport/DevMenuSettingsBase.kt:18:51 'class PreferenceManager : Any' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-menu/android/src/main/java/com/facebook/react/devsupport/DevMenuSettingsBase.kt:18:69 'static fun getDefaultSharedPreferences(p0: Context!): SharedPreferences!' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-menu/android/src/main/java/com/facebook/react/devsupport/DevMenuSettingsBase.kt:51:13 This code uses error suppression for 'NOTHING_TO_OVERRIDE'. While it might compile and work, the compiler behavior is UNSPECIFIED and WILL NOT BE PRESERVED. Please report your use case to the Kotlin issue tracker instead: https://kotl.in/issue
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-menu/android/src/main/java/com/facebook/react/devsupport/DevMenuSettingsBase.kt:58:13 This code uses error suppression for 'NOTHING_TO_OVERRIDE'. While it might compile and work, the compiler behavior is UNSPECIFIED and WILL NOT BE PRESERVED. Please report your use case to the Kotlin issue tracker instead: https://kotl.in/issue
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-menu/android/src/main/java/expo/modules/devmenu/DevMenuPackage.kt:28:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-menu/android/src/main/java/expo/modules/devmenu/DevMenuPackage.kt:47:78 'val reactNativeHost: ReactNativeHost' is deprecated. You should not use ReactNativeHost directly in the New Architecture. Use ReactHost instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-menu/android/src/release/java/expo/modules/devmenu/DevMenuManager.kt:80:43 The corresponding parameter in the supertype 'DevMenuManagerInterface' is named 'shouldAutoLaunch'. This may cause problems when calling this function with named arguments.
+
+> Task :app:processReleaseResources
+> Task :expo-dev-menu:compileReleaseJavaWithJavac
+> Task :expo:prepareReleaseArtProfile
+> Task :expo-constants:prepareReleaseArtProfile
+> Task :expo-dev-client:prepareReleaseArtProfile
+> Task :expo-dev-launcher:prepareReleaseArtProfile
+> Task :expo-dev-menu:prepareReleaseArtProfile
+> Task :expo-dev-menu-interface:prepareReleaseArtProfile
+> Task :expo-json-utils:prepareReleaseArtProfile
+> Task :expo-manifests:prepareReleaseArtProfile
+> Task :expo-modules-core:prepareReleaseArtProfile
+> Task :expo-updates-interface:prepareReleaseArtProfile
+> Task :react-native-async-storage_async-storage:prepareReleaseArtProfile
+> Task :react-native-gesture-handler:prepareReleaseArtProfile
+> Task :react-native-google-signin_google-signin:prepareReleaseArtProfile
+> Task :react-native-reanimated:prepareReleaseArtProfile
+> Task :expo-dev-menu:bundleLibCompileToJarRelease
+> Task :react-native-safe-area-context:prepareReleaseArtProfile
+> Task :expo-dev-menu:bundleLibRuntimeToDirRelease
+> Task :react-native-screens:prepareReleaseArtProfile
+> Task :react-native-webview:prepareReleaseArtProfile
+> Task :react-native-worklets:prepareReleaseArtProfile
+> Task :react-native-google-signin_google-signin:bundleLibRuntimeToJarRelease
+> Task :react-native-safe-area-context:bundleLibRuntimeToJarRelease
+> Task :react-native-async-storage_async-storage:bundleLibRuntimeToJarRelease
+> Task :react-native-worklets:bundleLibRuntimeToJarRelease
+> Task :expo-dev-menu-interface:bundleLibRuntimeToJarRelease
+> Task :react-native-reanimated:bundleLibRuntimeToJarRelease
+> Task :expo-dev-client:bundleLibRuntimeToJarRelease
+> Task :expo-constants:bundleLibRuntimeToJarRelease
+> Task :expo-manifests:bundleLibRuntimeToJarRelease
+> Task :expo-json-utils:bundleLibRuntimeToJarRelease
+> Task :expo-updates-interface:bundleLibRuntimeToJarRelease
+> Task :app:mergeReleaseShaders
+> Task :app:compileReleaseShaders NO-SOURCE
+> Task :app:generateReleaseAssets UP-TO-DATE
+> Task :expo:mergeReleaseShaders
+> Task :expo:compileReleaseShaders NO-SOURCE
+> Task :expo:generateReleaseAssets UP-TO-DATE
+> Task :react-native-gesture-handler:bundleLibRuntimeToJarRelease
+> Task :expo:mergeReleaseAssets
+> Task :react-native-webview:bundleLibRuntimeToJarRelease
+> Task :app:mergeReleaseArtProfile
+> Task :expo-dev-menu:bundleLibRuntimeToJarRelease
+> Task :expo-constants:mergeReleaseShaders
+> Task :expo-constants:compileReleaseShaders NO-SOURCE
+> Task :expo-constants:generateReleaseAssets UP-TO-DATE
+> Task :expo-constants:mergeReleaseAssets
+> Task :expo-dev-client:mergeReleaseShaders
+> Task :expo-dev-client:compileReleaseShaders NO-SOURCE
+> Task :expo-dev-client:generateReleaseAssets UP-TO-DATE
+> Task :expo-dev-client:mergeReleaseAssets
+> Task :expo-dev-launcher:mergeReleaseShaders
+> Task :expo-dev-launcher:compileReleaseShaders NO-SOURCE
+> Task :expo-dev-launcher:generateReleaseAssets UP-TO-DATE
+> Task :expo-dev-launcher:mergeReleaseAssets
+> Task :expo-dev-menu:mergeReleaseShaders
+> Task :expo-dev-menu:compileReleaseShaders NO-SOURCE
+> Task :expo-dev-menu:generateReleaseAssets UP-TO-DATE
+> Task :expo-dev-menu:mergeReleaseAssets
+> Task :expo-dev-menu-interface:mergeReleaseShaders
+> Task :expo-dev-menu-interface:compileReleaseShaders NO-SOURCE
+> Task :expo-dev-menu-interface:generateReleaseAssets UP-TO-DATE
+> Task :expo-dev-menu-interface:mergeReleaseAssets
+> Task :expo-json-utils:mergeReleaseShaders
+> Task :expo-json-utils:compileReleaseShaders NO-SOURCE
+> Task :expo-json-utils:generateReleaseAssets UP-TO-DATE
+> Task :expo-json-utils:mergeReleaseAssets
+> Task :expo-manifests:mergeReleaseShaders
+> Task :expo-manifests:compileReleaseShaders NO-SOURCE
+> Task :expo-manifests:generateReleaseAssets UP-TO-DATE
+> Task :expo-manifests:mergeReleaseAssets
+> Task :expo-modules-core:mergeReleaseShaders
+> Task :expo-modules-core:compileReleaseShaders NO-SOURCE
+> Task :expo-modules-core:generateReleaseAssets UP-TO-DATE
+> Task :expo-modules-core:mergeReleaseAssets
+> Task :expo-updates-interface:mergeReleaseShaders
+> Task :expo-updates-interface:compileReleaseShaders NO-SOURCE
+> Task :expo-updates-interface:generateReleaseAssets UP-TO-DATE
+> Task :expo-updates-interface:mergeReleaseAssets
+> Task :react-native-async-storage_async-storage:mergeReleaseShaders
+> Task :react-native-async-storage_async-storage:compileReleaseShaders NO-SOURCE
+> Task :react-native-async-storage_async-storage:generateReleaseAssets UP-TO-DATE
+> Task :react-native-async-storage_async-storage:mergeReleaseAssets
+> Task :react-native-gesture-handler:mergeReleaseShaders
+> Task :react-native-gesture-handler:compileReleaseShaders NO-SOURCE
+> Task :react-native-gesture-handler:generateReleaseAssets UP-TO-DATE
+> Task :react-native-gesture-handler:mergeReleaseAssets
+> Task :react-native-google-signin_google-signin:mergeReleaseShaders
+> Task :react-native-google-signin_google-signin:compileReleaseShaders NO-SOURCE
+> Task :react-native-google-signin_google-signin:generateReleaseAssets UP-TO-DATE
+> Task :react-native-google-signin_google-signin:mergeReleaseAssets
+> Task :react-native-reanimated:mergeReleaseShaders
+> Task :react-native-reanimated:compileReleaseShaders NO-SOURCE
+> Task :react-native-reanimated:generateReleaseAssets UP-TO-DATE
+> Task :react-native-reanimated:mergeReleaseAssets
+> Task :react-native-safe-area-context:mergeReleaseShaders
+> Task :react-native-safe-area-context:compileReleaseShaders NO-SOURCE
+> Task :react-native-safe-area-context:generateReleaseAssets UP-TO-DATE
+> Task :react-native-safe-area-context:mergeReleaseAssets
+> Task :react-native-screens:mergeReleaseShaders
+> Task :react-native-screens:compileReleaseShaders NO-SOURCE
+> Task :react-native-screens:generateReleaseAssets UP-TO-DATE
+> Task :react-native-screens:mergeReleaseAssets
+> Task :react-native-webview:mergeReleaseShaders
+> Task :react-native-webview:compileReleaseShaders NO-SOURCE
+> Task :react-native-webview:generateReleaseAssets UP-TO-DATE
+> Task :react-native-webview:mergeReleaseAssets
+> Task :react-native-worklets:mergeReleaseShaders
+> Task :react-native-worklets:compileReleaseShaders NO-SOURCE
+> Task :react-native-worklets:generateReleaseAssets UP-TO-DATE
+> Task :react-native-worklets:mergeReleaseAssets
+> Task :app:mergeReleaseAssets
+> Task :react-native-screens:bundleLibRuntimeToJarRelease
+> Task :app:compressReleaseAssets
+> Task :app:mergeExtDexRelease
+> Task :app:extractReleaseVersionControlInfo
+> Task :app:extractProguardFiles
+> Task :expo:extractProguardFiles
+> Task :expo-constants:processReleaseJavaRes
+> Task :expo-constants:createFullJarRelease
+> Task :expo-constants:extractProguardFiles
+> Task :expo-modules-core:processReleaseJavaRes
+> Task :expo-modules-core:extractProguardFiles
+> Task :expo-modules-core:bundleLibRuntimeToJarRelease
+
+> Task :expo-dev-launcher:compileReleaseKotlin
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/DevLauncherPackage.kt:15:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/DevLauncherRecentlyOpenedAppsRegistry.kt:33:47 Unchecked cast of 'MutableMap<Any?, Any?>' to 'MutableMap<String, Any>'.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/DevLauncherRecentlyOpenedAppsRegistry.kt:51:27 'fun getRawJson(): JSONObject' is deprecated. Prefer to use specific field getters.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:37:23 'constructor(p0: String!, p1: Bitmap!, p2: Int): ActivityManager.TaskDescription' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:63:61 'static field FLAG_TRANSLUCENT_STATUS: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:92:45 'var systemUiVisibility: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:95:68 'static field SYSTEM_UI_FLAG_LIGHT_STATUS_BAR: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:99:67 'static field SYSTEM_UI_FLAG_LIGHT_STATUS_BAR: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:103:67 'static field SYSTEM_UI_FLAG_LIGHT_STATUS_BAR: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:107:15 'var systemUiVisibility: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:115:59 'static field FLAG_FULLSCREEN: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:116:61 'static field FLAG_FORCE_NOT_FULLSCREEN: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:118:59 'static field FLAG_FORCE_NOT_FULLSCREEN: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:119:61 'static field FLAG_FULLSCREEN: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:131:23 'fun replaceSystemWindowInsets(p0: Int, p1: Int, p2: Int, p3: Int): WindowInsets' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:132:25 'val systemWindowInsetLeft: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:134:25 'val systemWindowInsetRight: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:135:25 'val systemWindowInsetBottom: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:150:15 'var statusBarColor: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:160:63 'static field FLAG_TRANSLUCENT_NAVIGATION: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:161:25 'var navigationBarColor: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:171:63 'static field FLAG_TRANSLUCENT_NAVIGATION: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:175:33 'var systemUiVisibility: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:176:33 'static field SYSTEM_UI_FLAG_LIGHT_NAVIGATION_BAR: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:177:21 'var systemUiVisibility: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:190:29 'var systemUiVisibility: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:191:62 'static field SYSTEM_UI_FLAG_HIDE_NAVIGATION: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:191:101 'static field SYSTEM_UI_FLAG_FULLSCREEN: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:192:63 'static field SYSTEM_UI_FLAG_HIDE_NAVIGATION: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:192:102 'static field SYSTEM_UI_FLAG_FULLSCREEN: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:192:136 'static field SYSTEM_UI_FLAG_IMMERSIVE: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:193:70 'static field SYSTEM_UI_FLAG_HIDE_NAVIGATION: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:193:109 'static field SYSTEM_UI_FLAG_FULLSCREEN: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:193:143 'static field SYSTEM_UI_FLAG_IMMERSIVE_STICKY: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/main/java/expo/modules/devlauncher/launcher/configurators/DevLauncherExpoActivityConfigurator.kt:196:17 'var systemUiVisibility: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/release/java/expo/modules/devlauncher/DevLauncherController.kt:111:81 'val reactNativeHost: ReactNativeHost' is deprecated. You should not use ReactNativeHost directly in the New Architecture. Use ReactHost instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/release/java/expo/modules/devlauncher/launcher/DevLauncherReactNativeHost.kt:4:8 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-launcher/android/src/release/java/expo/modules/devlauncher/launcher/DevLauncherReactNativeHost.kt:8:83 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+
+> Task :expo-modules-core:generateReleaseLintModel
+> Task :expo-dev-launcher:compileReleaseJavaWithJavac
+> Task :expo-dev-launcher:bundleLibCompileToJarRelease
+> Task :expo-dev-launcher:bundleLibRuntimeToJarRelease
+> Task :expo-modules-core:createFullJarRelease
+> Task :expo-constants:prepareLintJarForPublish
+> Task :expo-modules-core:prepareLintJarForPublish
+> Task :expo-dev-client:processReleaseJavaRes NO-SOURCE
+> Task :expo-constants:generateReleaseLintModel
+> Task :expo-dev-client:createFullJarRelease
+> Task :expo-dev-client:extractProguardFiles
+> Task :expo-dev-launcher:bundleLibRuntimeToDirRelease
+> Task :expo-dev-client:generateReleaseLintModel
+> Task :expo-dev-client:prepareLintJarForPublish
+> Task :expo-dev-launcher:processReleaseJavaRes
+> Task :expo-dev-launcher:createFullJarRelease
+> Task :expo-dev-launcher:extractProguardFiles
+> Task :expo-dev-menu:processReleaseJavaRes
+> Task :expo-dev-menu:createFullJarRelease
+> Task :expo-dev-menu:extractProguardFiles
+> Task :expo-dev-menu-interface:processReleaseJavaRes
+> Task :expo-dev-menu-interface:createFullJarRelease
+> Task :expo-dev-menu-interface:extractProguardFiles
+> Task :expo-dev-menu-interface:generateReleaseLintModel
+> Task :expo-dev-menu-interface:prepareLintJarForPublish
+> Task :expo-json-utils:processReleaseJavaRes
+> Task :expo-json-utils:createFullJarRelease
+> Task :expo-json-utils:extractProguardFiles
+> Task :expo-json-utils:generateReleaseLintModel
+> Task :expo-json-utils:prepareLintJarForPublish
+> Task :expo-manifests:processReleaseJavaRes
+> Task :expo-manifests:createFullJarRelease
+> Task :expo-manifests:extractProguardFiles
+> Task :expo-manifests:generateReleaseLintModel
+> Task :expo-manifests:prepareLintJarForPublish
+> Task :expo-dev-menu:prepareLintJarForPublish
+> Task :expo-dev-menu:generateReleaseLintModel
+> Task :expo-updates-interface:processReleaseJavaRes
+> Task :expo-updates-interface:createFullJarRelease
+> Task :expo-updates-interface:extractProguardFiles
+> Task :expo-updates-interface:generateReleaseLintModel
+> Task :expo-updates-interface:prepareLintJarForPublish
+> Task :expo-dev-launcher:prepareLintJarForPublish
+
+> Task :expo:compileReleaseKotlin
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo/android/src/main/java/expo/modules/ExpoModulesPackage.kt:34:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo/android/src/main/java/expo/modules/ExpoReactHostFactory.kt:8:8 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo/android/src/main/java/expo/modules/ExpoReactHostFactory.kt:80:22 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:24:8 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:58:33 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:105:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:105:38 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:113:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:114:21 'val reactInstanceManager: ReactInstanceManager' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:168:36 'constructor(activity: Activity, reactNativeHost: ReactNativeHost?, appKey: String?, launchOptions: Bundle?, fabricEnabled: Boolean): ReactDelegate' is deprecated. Deprecated since 0.81.0, use one of the other constructors instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:279:77 'val reactInstanceManager: ReactInstanceManager' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:282:22 'val reactInstanceManager: ReactInstanceManager' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactActivityDelegateWrapper.kt:286:54 'val reactInstanceManager: ReactInstanceManager' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactNativeHostWrapper.kt:6:8 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactNativeHostWrapper.kt:15:9 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactNativeHostWrapper.kt:47:60 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactNativeHostWrapperBase.kt:7:8 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactNativeHostWrapperBase.kt:16:23 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactNativeHostWrapperBase.kt:89:16 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo/android/src/main/java/expo/modules/ReactNativeHostWrapperBase.kt:101:38 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo/android/src/main/java/expo/modules/fetch/ExpoFetchModule.kt:30:39 'constructor(reactContext: ReactContext): ForwardingCookieHandler' is deprecated. Use the default constructor.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo/android/src/main/java/expo/modules/fetch/NativeResponse.kt:42:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo/android/src/main/java/expo/modules/fetch/NativeResponse.kt:44:11 'fun deallocate(): Unit' is deprecated. Use sharedObjectDidRelease() instead.
+
+> Task :expo-dev-launcher:generateReleaseLintModel
+> Task :expo:compileReleaseJavaWithJavac
+> Task :expo:processReleaseJavaRes
+> Task :expo:bundleLibCompileToJarRelease
+> Task :expo:bundleLibRuntimeToJarRelease
+> Task :expo:bundleLibRuntimeToDirRelease
+> Task :expo:generateReleaseLintModel
+> Task :expo:createFullJarRelease
+> Task :expo:prepareLintJarForPublish
+> Task :react-native-async-storage_async-storage:processReleaseJavaRes NO-SOURCE
+> Task :react-native-async-storage_async-storage:createFullJarRelease
+> Task :react-native-async-storage_async-storage:extractProguardFiles
+> Task :react-native-async-storage_async-storage:generateReleaseLintModel
+> Task :react-native-async-storage_async-storage:prepareLintJarForPublish
+> Task :react-native-gesture-handler:processReleaseJavaRes
+> Task :react-native-gesture-handler:createFullJarRelease
+> Task :react-native-gesture-handler:extractProguardFiles
+> Task :react-native-reanimated:processReleaseJavaRes NO-SOURCE
+> Task :react-native-reanimated:createFullJarRelease
+> Task :react-native-reanimated:extractProguardFiles
+> Task :react-native-worklets:processReleaseJavaRes NO-SOURCE
+> Task :react-native-worklets:createFullJarRelease
+> Task :react-native-worklets:extractProguardFiles
+
+> Task :app:compileReleaseKotlin
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/app/src/main/java/com/lilycrest/lilycrestdorm/MainApplication.kt:9:8 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/app/src/main/java/com/lilycrest/lilycrestdorm/MainApplication.kt:21:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/app/src/main/java/com/lilycrest/lilycrestdorm/MainApplication.kt:21:33 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+
+> Task :react-native-worklets:generateReleaseLintModel
+> Task :app:compileReleaseJavaWithJavac
+> Task :app:dexBuilderRelease
+> Task :react-native-worklets:prepareLintJarForPublish
+> Task :react-native-reanimated:prepareLintJarForPublish
+> Task :react-native-reanimated:generateReleaseLintModel
+> Task :app:mergeReleaseGlobalSynthetics
+> Task :react-native-gesture-handler:generateReleaseLintModel
+> Task :react-native-gesture-handler:prepareLintJarForPublish
+> Task :react-native-google-signin_google-signin:processReleaseJavaRes
+> Task :react-native-google-signin_google-signin:createFullJarRelease
+> Task :react-native-google-signin_google-signin:extractProguardFiles
+> Task :react-native-google-signin_google-signin:generateReleaseLintModel
+> Task :react-native-google-signin_google-signin:prepareLintJarForPublish
+> Task :react-native-safe-area-context:processReleaseJavaRes
+> Task :react-native-safe-area-context:createFullJarRelease
+> Task :react-native-safe-area-context:extractProguardFiles
+> Task :react-native-safe-area-context:generateReleaseLintModel
+> Task :react-native-safe-area-context:prepareLintJarForPublish
+> Task :react-native-screens:processReleaseJavaRes
+> Task :react-native-screens:createFullJarRelease
+> Task :react-native-screens:extractProguardFiles
+> Task :react-native-screens:generateReleaseLintModel
+> Task :react-native-screens:prepareLintJarForPublish
+> Task :react-native-webview:processReleaseJavaRes
+> Task :react-native-webview:createFullJarRelease
+> Task :react-native-webview:extractProguardFiles
+> Task :react-native-webview:generateReleaseLintModel
+> Task :react-native-webview:prepareLintJarForPublish
+> Task :react-native-google-signin_google-signin:stripReleaseDebugSymbols NO-SOURCE
+> Task :app:generateReleaseLintVitalReportModel
+> Task :react-native-google-signin_google-signin:copyReleaseJniLibsProjectAndLocalJars
+> Task :react-native-google-signin_google-signin:extractDeepLinksForAarRelease
+> Task :app:mergeDexRelease
+> Task :react-native-google-signin_google-signin:extractReleaseAnnotations
+> Task :react-native-google-signin_google-signin:mergeReleaseGeneratedProguardFiles
+> Task :react-native-google-signin_google-signin:mergeReleaseConsumerProguardFiles
+> Task :react-native-gesture-handler:extractDeepLinksForAarRelease
+> Task :react-native-gesture-handler:extractReleaseAnnotations
+> Task :react-native-gesture-handler:mergeReleaseGeneratedProguardFiles
+> Task :react-native-gesture-handler:mergeReleaseConsumerProguardFiles
+> Task :react-native-safe-area-context:stripReleaseDebugSymbols NO-SOURCE
+> Task :react-native-safe-area-context:copyReleaseJniLibsProjectAndLocalJars
+> Task :react-native-safe-area-context:extractDeepLinksForAarRelease
+> Task :react-native-safe-area-context:extractReleaseAnnotations
+> Task :react-native-safe-area-context:mergeReleaseGeneratedProguardFiles
+> Task :react-native-safe-area-context:mergeReleaseConsumerProguardFiles
+> Task :react-native-screens:extractDeepLinksForAarRelease
+> Task :react-native-gesture-handler:stripReleaseDebugSymbols
+> Task :react-native-safe-area-context:mergeReleaseJavaResource
+> Task :react-native-gesture-handler:mergeReleaseJavaResource
+> Task :react-native-google-signin_google-signin:mergeReleaseJavaResource
+> Task :react-native-screens:extractReleaseAnnotations
+> Task :react-native-screens:stripReleaseDebugSymbols
+> Task :react-native-google-signin_google-signin:syncReleaseLibJars
+> Task :react-native-google-signin_google-signin:bundleReleaseLocalLintAar
+> Task :react-native-gesture-handler:copyReleaseJniLibsProjectAndLocalJars
+> Task :react-native-gesture-handler:syncReleaseLibJars
+> Task :react-native-gesture-handler:bundleReleaseLocalLintAar
+> Task :react-native-safe-area-context:syncReleaseLibJars
+> Task :react-native-safe-area-context:bundleReleaseLocalLintAar
+> Task :react-native-screens:copyReleaseJniLibsProjectAndLocalJars
+> Task :react-native-screens:mergeReleaseGeneratedProguardFiles
+> Task :react-native-screens:mergeReleaseConsumerProguardFiles
+> Task :react-native-webview:stripReleaseDebugSymbols NO-SOURCE
+> Task :react-native-webview:copyReleaseJniLibsProjectAndLocalJars
+> Task :react-native-webview:extractDeepLinksForAarRelease
+> Task :react-native-screens:mergeReleaseJavaResource
+> Task :react-native-webview:extractReleaseAnnotations
+> Task :react-native-screens:syncReleaseLibJars
+> Task :react-native-screens:bundleReleaseLocalLintAar
+> Task :react-native-webview:mergeReleaseGeneratedProguardFiles
+> Task :react-native-webview:mergeReleaseConsumerProguardFiles
+> Task :app:compileReleaseArtProfile
+> Task :react-native-async-storage_async-storage:stripReleaseDebugSymbols NO-SOURCE
+> Task :react-native-async-storage_async-storage:copyReleaseJniLibsProjectAndLocalJars
+> Task :react-native-async-storage_async-storage:extractDeepLinksForAarRelease
+> Task :react-native-webview:mergeReleaseJavaResource
+> Task :react-native-async-storage_async-storage:extractReleaseAnnotations
+> Task :react-native-webview:syncReleaseLibJars
+> Task :react-native-webview:bundleReleaseLocalLintAar
+> Task :react-native-async-storage_async-storage:mergeReleaseGeneratedProguardFiles
+> Task :react-native-async-storage_async-storage:mergeReleaseConsumerProguardFiles
+> Task :expo:stripReleaseDebugSymbols NO-SOURCE
+> Task :expo:copyReleaseJniLibsProjectAndLocalJars
+> Task :react-native-async-storage_async-storage:mergeReleaseJavaResource
+> Task :expo:extractDeepLinksForAarRelease
+> Task :react-native-async-storage_async-storage:syncReleaseLibJars
+> Task :react-native-async-storage_async-storage:bundleReleaseLocalLintAar
+> Task :expo:extractReleaseAnnotations
+> Task :expo:mergeReleaseGeneratedProguardFiles
+> Task :expo:mergeReleaseConsumerProguardFiles
+> Task :react-native-reanimated:extractDeepLinksForAarRelease
+> Task :expo:mergeReleaseJavaResource
+> Task :react-native-reanimated:extractReleaseAnnotations
+> Task :expo:syncReleaseLibJars
+> Task :react-native-reanimated:stripReleaseDebugSymbols
+> Task :expo:bundleReleaseLocalLintAar
+> Task :react-native-reanimated:mergeReleaseGeneratedProguardFiles
+> Task :react-native-reanimated:mergeReleaseConsumerProguardFiles
+> Task :react-native-reanimated:mergeReleaseJavaResource
+> Task :react-native-worklets:extractDeepLinksForAarRelease
+> Task :react-native-reanimated:syncReleaseLibJars
+> Task :react-native-worklets:stripReleaseDebugSymbols
+> Task :react-native-worklets:extractReleaseAnnotations
+> Task :react-native-worklets:mergeReleaseGeneratedProguardFiles
+> Task :react-native-worklets:mergeReleaseConsumerProguardFiles
+> Task :expo-dev-launcher:stripReleaseDebugSymbols NO-SOURCE
+> Task :react-native-reanimated:copyReleaseJniLibsProjectAndLocalJars
+> Task :expo-dev-launcher:copyReleaseJniLibsProjectAndLocalJars
+> Task :react-native-worklets:mergeReleaseJavaResource
+> Task :react-native-worklets:copyReleaseJniLibsProjectAndLocalJars
+> Task :react-native-reanimated:bundleReleaseLocalLintAar
+> Task :react-native-worklets:syncReleaseLibJars
+> Task :react-native-worklets:bundleReleaseLocalLintAar
+> Task :expo-dev-launcher:extractDeepLinksForAarRelease
+> Task :expo-dev-launcher:extractReleaseAnnotations
+> Task :expo-dev-launcher:mergeReleaseGeneratedProguardFiles
+> Task :expo-dev-launcher:mergeReleaseConsumerProguardFiles
+> Task :expo-dev-menu:stripReleaseDebugSymbols NO-SOURCE
+> Task :expo-dev-menu:copyReleaseJniLibsProjectAndLocalJars
+> Task :expo-dev-menu:extractDeepLinksForAarRelease
+> Task :expo-dev-launcher:mergeReleaseJavaResource
+> Task :expo-dev-menu:extractReleaseAnnotations
+> Task :expo-dev-launcher:syncReleaseLibJars
+> Task :expo-dev-launcher:bundleReleaseLocalLintAar
+> Task :expo-dev-menu:mergeReleaseGeneratedProguardFiles
+> Task :expo-dev-menu:mergeReleaseConsumerProguardFiles
+> Task :expo-dev-menu-interface:stripReleaseDebugSymbols NO-SOURCE
+> Task :expo-dev-menu-interface:copyReleaseJniLibsProjectAndLocalJars
+> Task :expo-dev-menu-interface:extractDeepLinksForAarRelease
+> Task :expo-dev-menu:mergeReleaseJavaResource
+> Task :expo-dev-menu-interface:extractReleaseAnnotations
+> Task :expo-dev-menu:syncReleaseLibJars
+> Task :expo-dev-menu:bundleReleaseLocalLintAar
+> Task :expo-dev-menu-interface:mergeReleaseGeneratedProguardFiles
+> Task :expo-dev-menu-interface:mergeReleaseConsumerProguardFiles
+> Task :expo-dev-menu-interface:mergeReleaseJavaResource
+> Task :expo-modules-core:extractDeepLinksForAarRelease
+> Task :expo-dev-menu-interface:syncReleaseLibJars
+> Task :expo-dev-menu-interface:bundleReleaseLocalLintAar
+> Task :expo-modules-core:stripReleaseDebugSymbols
+> Task :expo-modules-core:extractReleaseAnnotations
+> Task :expo-modules-core:mergeReleaseGeneratedProguardFiles
+> Task :expo-modules-core:copyReleaseJniLibsProjectAndLocalJars
+> Task :expo-modules-core:mergeReleaseConsumerProguardFiles
+> Task :expo-constants:stripReleaseDebugSymbols NO-SOURCE
+> Task :expo-constants:copyReleaseJniLibsProjectAndLocalJars
+> Task :expo-constants:extractDeepLinksForAarRelease
+> Task :expo-constants:extractReleaseAnnotations
+> Task :expo-constants:mergeReleaseGeneratedProguardFiles
+> Task :expo-modules-core:mergeReleaseJavaResource
+> Task :expo-constants:mergeReleaseConsumerProguardFiles
+> Task :expo-modules-core:syncReleaseLibJars
+> Task :expo-modules-core:bundleReleaseLocalLintAar
+> Task :expo-dev-client:stripReleaseDebugSymbols NO-SOURCE
+> Task :expo-dev-client:copyReleaseJniLibsProjectAndLocalJars
+> Task :expo-constants:mergeReleaseJavaResource
+> Task :expo-dev-client:extractDeepLinksForAarRelease
+> Task :expo-constants:syncReleaseLibJars
+> Task :expo-constants:bundleReleaseLocalLintAar
+> Task :expo-dev-client:extractReleaseAnnotations
+> Task :expo-dev-client:mergeReleaseGeneratedProguardFiles
+> Task :expo-dev-client:mergeReleaseConsumerProguardFiles
+> Task :expo-manifests:stripReleaseDebugSymbols NO-SOURCE
+> Task :expo-manifests:copyReleaseJniLibsProjectAndLocalJars
+> Task :expo-dev-client:mergeReleaseJavaResource
+> Task :expo-manifests:extractDeepLinksForAarRelease
+> Task :expo-dev-client:syncReleaseLibJars
+> Task :expo-dev-client:bundleReleaseLocalLintAar
+> Task :expo-manifests:extractReleaseAnnotations
+> Task :expo-manifests:mergeReleaseGeneratedProguardFiles
+> Task :expo-manifests:mergeReleaseConsumerProguardFiles
+> Task :expo-json-utils:stripReleaseDebugSymbols NO-SOURCE
+> Task :expo-json-utils:copyReleaseJniLibsProjectAndLocalJars
+> Task :expo-manifests:mergeReleaseJavaResource
+> Task :expo-json-utils:extractDeepLinksForAarRelease
+> Task :expo-manifests:syncReleaseLibJars
+> Task :expo-manifests:bundleReleaseLocalLintAar
+> Task :expo-json-utils:extractReleaseAnnotations
+> Task :expo-json-utils:mergeReleaseGeneratedProguardFiles
+> Task :expo-json-utils:mergeReleaseConsumerProguardFiles
+> Task :expo-updates-interface:stripReleaseDebugSymbols NO-SOURCE
+> Task :expo-updates-interface:copyReleaseJniLibsProjectAndLocalJars
+> Task :expo-updates-interface:extractDeepLinksForAarRelease
+> Task :expo-json-utils:mergeReleaseJavaResource
+> Task :expo-updates-interface:extractReleaseAnnotations
+> Task :expo-json-utils:syncReleaseLibJars
+> Task :expo-json-utils:bundleReleaseLocalLintAar
+> Task :expo-updates-interface:mergeReleaseGeneratedProguardFiles
+> Task :expo-updates-interface:mergeReleaseConsumerProguardFiles
+> Task :expo-updates-interface:mergeReleaseJavaResource
+> Task :expo-constants:writeReleaseLintModelMetadata
+> Task :expo-updates-interface:syncReleaseLibJars
+> Task :expo-updates-interface:bundleReleaseLocalLintAar
+> Task :expo-dev-client:writeReleaseLintModelMetadata
+> Task :expo-dev-launcher:writeReleaseLintModelMetadata
+> Task :expo-dev-menu:writeReleaseLintModelMetadata
+> Task :expo-dev-menu-interface:writeReleaseLintModelMetadata
+> Task :expo-json-utils:writeReleaseLintModelMetadata
+> Task :expo-manifests:writeReleaseLintModelMetadata
+> Task :expo-modules-core:writeReleaseLintModelMetadata
+> Task :expo-updates-interface:writeReleaseLintModelMetadata
+> Task :expo:writeReleaseLintModelMetadata
+> Task :react-native-async-storage_async-storage:writeReleaseLintModelMetadata
+> Task :react-native-reanimated:writeReleaseLintModelMetadata
+> Task :react-native-worklets:writeReleaseLintModelMetadata
+> Task :react-native-gesture-handler:writeReleaseLintModelMetadata
+> Task :react-native-google-signin_google-signin:writeReleaseLintModelMetadata
+> Task :react-native-safe-area-context:writeReleaseLintModelMetadata
+> Task :react-native-screens:writeReleaseLintModelMetadata
+> Task :react-native-webview:writeReleaseLintModelMetadata
+> Task :expo:generateReleaseLintVitalModel
+> Task :expo-constants:generateReleaseLintVitalModel
+> Task :expo-dev-client:generateReleaseLintVitalModel
+> Task :expo-dev-launcher:generateReleaseLintVitalModel
+> Task :expo-dev-menu:generateReleaseLintVitalModel
+> Task :expo-dev-menu-interface:generateReleaseLintVitalModel
+> Task :expo-json-utils:generateReleaseLintVitalModel
+> Task :expo-manifests:generateReleaseLintVitalModel
+> Task :expo-modules-core:generateReleaseLintVitalModel
+> Task :expo-updates-interface:generateReleaseLintVitalModel
+> Task :react-native-async-storage_async-storage:generateReleaseLintVitalModel
+> Task :react-native-gesture-handler:generateReleaseLintVitalModel
+> Task :react-native-google-signin_google-signin:generateReleaseLintVitalModel
+> Task :react-native-reanimated:generateReleaseLintVitalModel
+> Task :react-native-safe-area-context:generateReleaseLintVitalModel
+> Task :react-native-screens:generateReleaseLintVitalModel
+> Task :react-native-webview:generateReleaseLintVitalModel
+> Task :react-native-worklets:generateReleaseLintVitalModel
+> Task :app:processReleaseJavaRes
+> Task :app:collectReleaseDependencies
+> Task :app:sdkReleaseDependencyData
+> Task :app:validateSigningRelease
+> Task :app:writeReleaseAppMetadata
+> Task :app:writeReleaseSigningConfigVersions
+> Task :expo:bundleReleaseAar
+> Task :expo:mapReleaseSourceSetPaths
+> Task :app:mergeReleaseJavaResource
+> Task :expo:mergeReleaseResources
+> Task :expo-constants:bundleReleaseAar
+> Task :expo-constants:mapReleaseSourceSetPaths
+> Task :expo-constants:mergeReleaseResources
+> Task :expo-dev-client:bundleReleaseAar
+> Task :expo-dev-client:mapReleaseSourceSetPaths
+> Task :expo-dev-client:mergeReleaseResources
+> Task :expo-dev-launcher:bundleReleaseAar
+> Task :expo-dev-launcher:mapReleaseSourceSetPaths
+> Task :expo-constants:verifyReleaseResources
+> Task :expo-dev-client:verifyReleaseResources
+> Task :expo-dev-client:lintVitalAnalyzeRelease
+> Task :expo-constants:lintVitalAnalyzeRelease
+> Task :expo:verifyReleaseResources
+> Task :expo-dev-launcher:mergeReleaseResources
+> Task :expo:assembleRelease
+> Task :expo-constants:assembleRelease
+> Task :expo-dev-client:assembleRelease
+> Task :expo-dev-menu:bundleReleaseAar
+> Task :expo-dev-menu:mapReleaseSourceSetPaths
+> Task :expo-dev-menu:mergeReleaseResources
+> Task :expo-dev-menu-interface:bundleReleaseAar
+> Task :expo-dev-launcher:verifyReleaseResources
+> Task :expo-dev-menu-interface:mapReleaseSourceSetPaths
+> Task :expo-dev-launcher:assembleRelease
+> Task :expo:lintVitalAnalyzeRelease
+> Task :expo-dev-menu-interface:mergeReleaseResources
+> Task :expo-dev-menu:verifyReleaseResources
+> Task :expo-dev-menu:assembleRelease
+> Task :expo-json-utils:bundleReleaseAar
+> Task :expo-json-utils:mapReleaseSourceSetPaths
+> Task :expo-json-utils:mergeReleaseResources
+> Task :app:optimizeReleaseResources
+> Task :expo-manifests:bundleReleaseAar
+> Task :expo-manifests:mapReleaseSourceSetPaths
+> Task :expo-manifests:mergeReleaseResources
+> Task :expo-json-utils:verifyReleaseResources
+> Task :expo-modules-core:bundleReleaseAar
+> Task :expo-json-utils:assembleRelease
+> Task :expo-modules-core:mapReleaseSourceSetPaths
+> Task :expo-manifests:verifyReleaseResources
+> Task :expo-dev-menu-interface:verifyReleaseResources
+> Task :expo-modules-core:mergeReleaseResources
+> Task :expo-dev-menu-interface:assembleRelease
+> Task :expo-manifests:assembleRelease
+> Task :expo-updates-interface:bundleReleaseAar
+> Task :expo-updates-interface:mapReleaseSourceSetPaths
+> Task :expo-updates-interface:mergeReleaseResources
+> Task :react-native-async-storage_async-storage:bundleReleaseAar
+> Task :react-native-async-storage_async-storage:mapReleaseSourceSetPaths
+> Task :expo-updates-interface:verifyReleaseResources
+> Task :expo-dev-menu-interface:lintVitalAnalyzeRelease
+> Task :expo-modules-core:verifyReleaseResources
+> Task :react-native-async-storage_async-storage:mergeReleaseResources
+> Task :expo-modules-core:assembleRelease
+> Task :expo-updates-interface:assembleRelease
+> Task :react-native-gesture-handler:bundleReleaseAar
+> Task :react-native-gesture-handler:mapReleaseSourceSetPaths
+> Task :react-native-async-storage_async-storage:verifyReleaseResources
+> Task :react-native-gesture-handler:mergeReleaseResources
+> Task :react-native-async-storage_async-storage:assembleRelease
+> Task :react-native-google-signin_google-signin:bundleReleaseAar
+> Task :react-native-google-signin_google-signin:mapReleaseSourceSetPaths
+> Task :expo-json-utils:lintVitalAnalyzeRelease
+> Task :expo-dev-launcher:lintVitalAnalyzeRelease
+> Task :react-native-gesture-handler:verifyReleaseResources
+> Task :react-native-google-signin_google-signin:mergeReleaseResources
+> Task :react-native-gesture-handler:assembleRelease
+> Task :expo-dev-menu:lintVitalAnalyzeRelease
+> Task :react-native-google-signin_google-signin:verifyReleaseResources
+> Task :expo-manifests:lintVitalAnalyzeRelease
+> Task :react-native-reanimated:bundleReleaseAar
+> Task :react-native-google-signin_google-signin:assembleRelease
+> Task :react-native-reanimated:mapReleaseSourceSetPaths
+> Task :expo-updates-interface:lintVitalAnalyzeRelease
+> Task :react-native-reanimated:mergeReleaseResources
+> Task :react-native-safe-area-context:bundleReleaseAar
+> Task :react-native-safe-area-context:mapReleaseSourceSetPaths
+> Task :react-native-safe-area-context:mergeReleaseResources
+> Task :react-native-screens:bundleReleaseAar
+> Task :react-native-reanimated:verifyReleaseResources
+> Task :react-native-screens:mapReleaseSourceSetPaths
+> Task :react-native-reanimated:assembleRelease
+> Task :react-native-safe-area-context:verifyReleaseResources
+> Task :react-native-gesture-handler:lintVitalAnalyzeRelease
+> Task :react-native-screens:mergeReleaseResources
+> Task :react-native-safe-area-context:assembleRelease
+> Task :react-native-webview:bundleReleaseAar
+> Task :react-native-webview:mapReleaseSourceSetPaths
+> Task :react-native-google-signin_google-signin:lintVitalAnalyzeRelease
+> Task :react-native-webview:mergeReleaseResources
+> Task :react-native-worklets:bundleReleaseAar
+> Task :react-native-worklets:mapReleaseSourceSetPaths
+> Task :react-native-screens:verifyReleaseResources
+> Task :react-native-webview:verifyReleaseResources
+> Task :react-native-reanimated:lintVitalAnalyzeRelease
+> Task :react-native-async-storage_async-storage:lintVitalAnalyzeRelease
+> Task :react-native-worklets:mergeReleaseResources
+> Task :react-native-screens:assembleRelease
+> Task :react-native-webview:assembleRelease
+> Task :expo-modules-core:lintVitalAnalyzeRelease
+> Task :react-native-worklets:verifyReleaseResources
+> Task :react-native-worklets:assembleRelease
+> Task :react-native-safe-area-context:lintVitalAnalyzeRelease
+> Task :react-native-webview:lintVitalAnalyzeRelease
+> Task :react-native-screens:lintVitalAnalyzeRelease
+> Task :react-native-worklets:lintVitalAnalyzeRelease
+> Task :app:lintVitalAnalyzeRelease
+> Task :app:lintVitalReportRelease
+> Task :app:lintVitalRelease
+> Task :app:packageRelease
+> Task :app:createReleaseApkListingFileRedirect
+> Task :app:assembleRelease
+
+[Incubating] Problems report is available at: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/build/reports/problems/problems-report.html
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/8.14.3/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD SUCCESSFUL in 3m 16s
+872 actionable tasks: 577 executed, 295 up-to-date
+The Daemon will expire after the build after running out of JVM Metaspace.
+The project memory settings are likely not configured or are configured to an insufficient value.
+The daemon will restart for the next build, which may increase subsequent build times.
+These settings can be adjusted by setting 'org.gradle.jvmargs' in 'gradle.properties'.
+The currently configured max heap space is '2 GiB' and the configured max metaspace is '512 MiB'.
+For more information on how to set these values, please refer to https://docs.gradle.org/8.14.3/userguide/build_environment.html#sec:configuring_jvm_memory in the Gradle documentation.
+To disable this warning, set 'org.gradle.daemon.performance.disable-logging=true'.
+Daemon will be stopped at the end of the build after running out of JVM Metaspace

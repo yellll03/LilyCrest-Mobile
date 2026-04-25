@@ -1,10 +1,17 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../src/context/ThemeContext';
 import { useAlert } from '../src/context/AlertContext';
+import { useToast } from '../src/context/ToastContext';
+import {
+  getStoredPushToken,
+  registerForPushNotifications,
+  savePushTokenToServer,
+  setPushNotificationsEnabled,
+} from '../src/services/notifications';
 import { clearCredentials } from '../src/services/secureCredentials';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
@@ -13,7 +20,9 @@ export default function SettingsScreen() {
   const router = useRouter();
   const { isDarkMode, toggleDarkMode, colors } = useTheme();
   const { showAlert } = useAlert();
+  const { showToast } = useToast();
   const [notifications, setNotifications] = useState(true);
+  const [notificationSaving, setNotificationSaving] = useState(false);
   const [biometrics, setBiometrics] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricType, setBiometricType] = useState('Biometric');
@@ -48,14 +57,54 @@ export default function SettingsScreen() {
   };
 
   const handleNotificationToggle = async (value) => {
+    if (notificationSaving) return;
+
+    const previousValue = notifications;
     setNotifications(value);
-    await AsyncStorage.setItem('notifications', value.toString());
-    if (value) {
-      showAlert({
-        title: 'Notifications Enabled',
-        message: 'You will receive important updates about billing, announcements, and maintenance.',
-        type: 'success',
+    setNotificationSaving(true);
+
+    try {
+      await setPushNotificationsEnabled(value);
+
+      if (value) {
+        const token = await registerForPushNotifications({ requestPermission: true });
+        if (!token) {
+          await setPushNotificationsEnabled(false);
+          setNotifications(false);
+          showToast({
+            type: 'warning',
+            title: 'Notifications Blocked',
+            message: 'Allow notifications in your device settings to receive LilyCrest updates.',
+          });
+          return;
+        }
+
+        await savePushTokenToServer(token, { notificationsEnabled: true });
+        showToast({
+          type: 'success',
+          title: 'Notifications Enabled',
+          message: 'This device will now receive billing, announcement, maintenance, and chat updates.',
+        });
+        return;
+      }
+
+      const storedToken = await getStoredPushToken();
+      await savePushTokenToServer(storedToken, { notificationsEnabled: false });
+      showToast({
+        type: 'info',
+        title: 'Notifications Paused',
+        message: 'This device will stop receiving LilyCrest push notifications.',
       });
+    } catch (_error) {
+      await setPushNotificationsEnabled(previousValue);
+      setNotifications(previousValue);
+      showToast({
+        type: 'error',
+        title: 'Update Failed',
+        message: 'Could not update notification settings. Please try again.',
+      });
+    } finally {
+      setNotificationSaving(false);
     }
   };
 
@@ -144,12 +193,15 @@ export default function SettingsScreen() {
               </View>
               <View>
                 <Text style={styles.settingLabel}>Push Notifications</Text>
-                <Text style={styles.settingDescription}>Receive important updates</Text>
+                <Text style={styles.settingDescription}>
+                  {notificationSaving ? 'Saving your preference...' : 'Receive important updates'}
+                </Text>
               </View>
             </View>
             <Switch 
               value={notifications} 
               onValueChange={handleNotificationToggle} 
+              disabled={notificationSaving}
               trackColor={{ false: colors.border, true: '#3B82F6' }} 
               thumbColor="#FFFFFF" 
             />

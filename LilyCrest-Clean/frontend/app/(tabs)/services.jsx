@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
-import { Link, useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { Link, useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Image,
@@ -18,8 +18,8 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import LilyFlowerIcon from '../../src/components/assistant/LilyFlowerIcon';
-import { useAlert } from '../../src/context/AlertContext';
 import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
+import { useToast } from '../../src/context/ToastContext';
 import { apiService } from '../../src/services/api';
 import { pickFromCamera, pickFromLibrary } from '../../src/utils/attachmentPicker';
 
@@ -55,11 +55,13 @@ const RESOLUTION_ESTIMATES = {
 };
 
 const STATUS_STEPS = ['pending', 'viewed', 'in_progress', 'resolved'];
+const MIN_DESCRIPTION_LENGTH = 10;
+const ACTIVE_STATUSES = ['pending', 'viewed', 'in_progress'];
+const RESOLVED_STATUSES = ['completed', 'resolved', 'rejected'];
 
 export default function ServicesScreen() {
-  const router = useRouter();
   const { colors } = useTheme();
-  const { showAlert } = useAlert();
+  const { showToast } = useToast();
   const styles = useThemedStyles((c) => StyleSheet.create({
     container: { flex: 1, backgroundColor: c.background },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: c.background },
@@ -176,6 +178,7 @@ export default function ServicesScreen() {
   const [attachments, setAttachments] = useState([]);
   const [banner, setBanner] = useState(null);
   const [fieldErrors, setFieldErrors] = useState({ type: '', description: '' });
+  const [fieldTouched, setFieldTouched] = useState({ type: false, description: false });
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
 
@@ -192,14 +195,60 @@ export default function ServicesScreen() {
   const [reopenNote, setReopenNote] = useState('');
   // Search
   const [searchQuery, setSearchQuery] = useState('');
-  const isDirty = selectedType || description.trim().length > 0 || attachments.length > 0;
+  const bannerTimerRef = useRef(null);
+  const isDirty = useMemo(() => Boolean(selectedType) || description.trim().length > 0 || attachments.length > 0, [attachments.length, description, selectedType]);
+  const createFormErrors = useMemo(() => ({
+    type: selectedType ? '' : 'Please select a service type',
+    description: description.trim().length < MIN_DESCRIPTION_LENGTH ? `Please describe your concern (min ${MIN_DESCRIPTION_LENGTH} characters)` : '',
+  }), [description, selectedType]);
+  const isCreateFormValid = !createFormErrors.type && !createFormErrors.description;
+
+  const showBannerMessage = useCallback((type, text, { withToast = true } = {}) => {
+    setBanner({ type, text });
+
+    if (bannerTimerRef.current) {
+      clearTimeout(bannerTimerRef.current);
+    }
+
+    bannerTimerRef.current = setTimeout(() => {
+      setBanner(null);
+      bannerTimerRef.current = null;
+    }, 3200);
+
+    if (withToast) {
+      const title =
+        type === 'success'
+          ? 'Success'
+          : type === 'error'
+            ? 'Something Went Wrong'
+            : type === 'warning'
+              ? 'Check Your Form'
+              : 'Notice';
+      showToast({ type, title, message: text });
+    }
+  }, [showToast]);
+
+  useEffect(() => {
+    return () => {
+      if (bannerTimerRef.current) {
+        clearTimeout(bannerTimerRef.current);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    setFieldErrors({
+      type: hasAttemptedSubmit || fieldTouched.type ? createFormErrors.type : '',
+      description: hasAttemptedSubmit || fieldTouched.description ? createFormErrors.description : '',
+    });
+  }, [createFormErrors, fieldTouched.description, fieldTouched.type, hasAttemptedSubmit]);
 
   const confirmCloseModal = () => {
     if (!isDirty && !hasAttemptedSubmit) { setShowModal(false); return; }
     setShowDiscardConfirm(true);
   };
 
-  const fetchRequests = async () => {
+  const fetchRequests = useCallback(async () => {
     try {
       const response = await apiService.getMyMaintenance();
       // Force new array to trigger rerender even if values are identical
@@ -210,11 +259,11 @@ export default function ServicesScreen() {
       setIsLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     fetchRequests();
-  }, []);
+  }, [fetchRequests]);
 
   useFocusEffect(
     useCallback(() => {
@@ -223,23 +272,21 @@ export default function ServicesScreen() {
       // Also poll while this tab is focused
       const interval = setInterval(() => { fetchRequests(); }, 60000);
       return () => clearInterval(interval);
-    }, [])
+    }, [fetchRequests])
   );
 
   const onRefresh = useCallback(() => {
     setRefreshing(true);
     fetchRequests();
-  }, []);
+  }, [fetchRequests]);
 
   const handleSubmit = async () => {
     setHasAttemptedSubmit(true);
-    const nextErrors = {
-      type: selectedType ? '' : 'Please select a service type',
-      description: description.trim().length < 10 ? 'Please describe your concern (min 10 characters)' : '',
-    };
+    const nextErrors = createFormErrors;
+    setFieldTouched({ type: true, description: true });
     setFieldErrors(nextErrors);
     if (nextErrors.type || nextErrors.description) {
-      setBanner({ type: 'warning', text: 'Please complete the required fields before submitting.' });
+      showBannerMessage('warning', 'Please complete the required fields before submitting.', { withToast: false });
       return;
     }
 
@@ -252,25 +299,31 @@ export default function ServicesScreen() {
         attachments: attachments.map(({ name, uri, type }) => ({ name, uri, type })),
       };
       await apiService.createMaintenance(payload);
-      setBanner({ type: 'success', text: 'Request submitted. We will update you once it is assigned.' });
+      showBannerMessage('success', 'Maintenance request submitted successfully.');
       setShowModal(false);
       resetForm();
       fetchRequests();
     } catch (error) {
-      setBanner({ type: 'error', text: 'Failed to submit request. Please try again.' });
+      showBannerMessage('error', error?.response?.data?.detail || 'Failed to submit request. Please try again.');
     } finally {
       setSubmitting(false);
-      setTimeout(() => setBanner(null), 3200);
     }
   };
 
-  const resetForm = () => { setSelectedType(null); setSelectedUrgency('normal'); setDescription(''); setAttachments([]); };
+  const resetForm = () => {
+    setSelectedType(null);
+    setSelectedUrgency('normal');
+    setDescription('');
+    setAttachments([]);
+    setFieldTouched({ type: false, description: false });
+    setFieldErrors({ type: '', description: '' });
+    setHasAttemptedSubmit(false);
+  };
 
   const discardAndClose = () => {
     resetForm();
     setShowModal(false);
     setShowDiscardConfirm(false);
-    setHasAttemptedSubmit(false);
   };
 
   const handleAttach = async (pickerFn) => {
@@ -278,7 +331,7 @@ export default function ServicesScreen() {
       const file = await pickerFn();
       if (file) setAttachments((prev) => [...prev, file]);
     } catch (err) {
-      showAlert({ title: 'Attachment Failed', message: err?.message || 'Unable to add attachment.', type: 'error' });
+      showBannerMessage('error', err?.message || 'Unable to add attachment.');
     }
   };
 
@@ -320,8 +373,8 @@ export default function ServicesScreen() {
   };
 
   const saveEdit = async () => {
-    if (!editDescription.trim() || editDescription.trim().length < 10) {
-      showAlert({ title: 'Validation', message: 'Description must be at least 10 characters.', type: 'warning' });
+    if (!editDescription.trim() || editDescription.trim().length < MIN_DESCRIPTION_LENGTH) {
+      showBannerMessage('warning', `Description must be at least ${MIN_DESCRIPTION_LENGTH} characters.`, { withToast: false });
       return;
     }
     setSaving(true);
@@ -331,16 +384,14 @@ export default function ServicesScreen() {
         urgency: editUrgency,
         description: editDescription.trim(),
       });
-      setBanner({ type: 'success', text: 'Request updated successfully.' });
+      showBannerMessage('success', 'Maintenance request updated successfully.');
       setEditMode(false);
       setShowDetailModal(false);
       fetchRequests();
     } catch (e) {
-      const msg = e?.response?.data?.detail || 'Failed to update request.';
-      showAlert({ title: 'Error', message: msg, type: 'error' });
+      showBannerMessage('error', e?.response?.data?.detail || 'Failed to update request.');
     } finally {
       setSaving(false);
-      setTimeout(() => setBanner(null), 3200);
     }
   };
 
@@ -348,16 +399,14 @@ export default function ServicesScreen() {
     setSaving(true);
     try {
       await apiService.cancelMaintenance(detailRequest.request_id);
-      setBanner({ type: 'success', text: 'Request cancelled.' });
+      showBannerMessage('success', 'Successfully deleted the request.');
       setShowCancelConfirm(false);
       setShowDetailModal(false);
       fetchRequests();
     } catch (e) {
-      const msg = e?.response?.data?.detail || 'Failed to cancel request.';
-      showAlert({ title: 'Error', message: msg, type: 'error' });
+      showBannerMessage('error', e?.response?.data?.detail || 'Failed to delete request. Please try again.');
     } finally {
       setSaving(false);
-      setTimeout(() => setBanner(null), 3200);
     }
   };
 
@@ -365,17 +414,15 @@ export default function ServicesScreen() {
     setSaving(true);
     try {
       await apiService.reopenMaintenance(detailRequest.request_id, { reopen_note: reopenNote.trim() || undefined });
-      setBanner({ type: 'success', text: 'Request reopened.' });
+      showBannerMessage('success', 'Maintenance request reopened successfully.');
       setShowReopenModal(false);
       setShowDetailModal(false);
       setReopenNote('');
       fetchRequests();
     } catch (e) {
-      const msg = e?.response?.data?.detail || 'Failed to reopen request.';
-      showAlert({ title: 'Error', message: msg, type: 'error' });
+      showBannerMessage('error', e?.response?.data?.detail || 'Failed to reopen request. Please try again.');
     } finally {
       setSaving(false);
-      setTimeout(() => setBanner(null), 3200);
     }
   };
 
@@ -388,22 +435,24 @@ export default function ServicesScreen() {
     setShowModal(true);
   };
 
-  if (isLoading) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color={colors.primary} /></View>;
-
-  const filterBySearch = (list) => {
-    if (!searchQuery.trim()) return list;
-    const q = searchQuery.toLowerCase();
-    return list.filter(r => {
-      const typeLabel = getTypeInfo(r.request_type).label.toLowerCase();
-      return typeLabel.includes(q) || (r.description || '').toLowerCase().includes(q);
+  const normalizedSearchQuery = searchQuery.trim().toLowerCase();
+  const filterBySearch = useCallback((list) => {
+    if (!normalizedSearchQuery) return list;
+    return list.filter((request) => {
+      const typeLabel = getTypeInfo(request.request_type).label.toLowerCase();
+      return typeLabel.includes(normalizedSearchQuery) || (request.description || '').toLowerCase().includes(normalizedSearchQuery);
     });
-  };
-  const activeStatuses = ['pending', 'viewed', 'in_progress'];
-  const resolvedStatuses = ['completed', 'resolved', 'rejected'];
-  const activeRequests = filterBySearch(requests.filter(r => activeStatuses.includes((r.status || 'pending').toLowerCase())));
-  const resolvedRequests = filterBySearch(requests.filter(r => resolvedStatuses.includes((r.status || '').toLowerCase())));
-  const cancelledRequests = filterBySearch(requests.filter(r => (r.status || '').toLowerCase() === 'cancelled'));
-  const currentList = activeTab === 'active' ? activeRequests : activeTab === 'resolved' ? resolvedRequests : cancelledRequests;
+  }, [normalizedSearchQuery]);
+  const activeRequests = useMemo(() => filterBySearch(requests.filter((request) => ACTIVE_STATUSES.includes((request.status || 'pending').toLowerCase()))), [filterBySearch, requests]);
+  const resolvedRequests = useMemo(() => filterBySearch(requests.filter((request) => RESOLVED_STATUSES.includes((request.status || '').toLowerCase()))), [filterBySearch, requests]);
+  const cancelledRequests = useMemo(() => filterBySearch(requests.filter((request) => (request.status || '').toLowerCase() === 'cancelled')), [filterBySearch, requests]);
+  const currentList = useMemo(() => {
+    if (activeTab === 'resolved') return resolvedRequests;
+    if (activeTab === 'cancelled') return cancelledRequests;
+    return activeRequests;
+  }, [activeRequests, activeTab, cancelledRequests, resolvedRequests]);
+
+  if (isLoading) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color={colors.primary} /></View>;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -560,7 +609,14 @@ export default function ServicesScreen() {
                 <Text style={styles.modalSectionTitle}>Select Service Type</Text>
                 <View style={styles.typeGrid}>
                   {REQUEST_TYPES.map((type) => (
-                    <TouchableOpacity key={type.id} style={[styles.typeItem, selectedType === type.id && styles.typeItemSelected]} onPress={() => setSelectedType(type.id)}>
+                    <TouchableOpacity
+                      key={type.id}
+                      style={[styles.typeItem, selectedType === type.id && styles.typeItemSelected]}
+                      onPress={() => {
+                        setSelectedType(type.id);
+                        setFieldTouched((prev) => ({ ...prev, type: true }));
+                      }}
+                    >
                       <View style={[styles.typeIcon, { backgroundColor: selectedType === type.id ? type.color : `${type.color}15` }]}>
                         <Ionicons name={type.icon} size={20} color={selectedType === type.id ? '#FFFFFF' : type.color} />
                       </View>
@@ -590,10 +646,8 @@ export default function ServicesScreen() {
                   value={description}
                   onChangeText={(val) => {
                     setDescription(val);
-                    if (fieldErrors.description && val.trim().length >= 10) {
-                      setFieldErrors((prev) => ({ ...prev, description: '' }));
-                    }
                   }}
+                  onBlur={() => setFieldTouched((prev) => ({ ...prev, description: true }))}
                 />
                 {fieldErrors.description ? <Text style={styles.fieldError}>{fieldErrors.description}</Text> : null}
                 <Text style={styles.modalSectionTitle}>Add Photos (optional)</Text>
@@ -620,7 +674,11 @@ export default function ServicesScreen() {
                     ))}
                   </View>
                 )}
-                <TouchableOpacity style={[styles.submitButton, submitting && styles.submitButtonDisabled]} onPress={handleSubmit} disabled={submitting}>
+                <TouchableOpacity
+                  style={[styles.submitButton, (submitting || !isCreateFormValid) && styles.submitButtonDisabled]}
+                  onPress={handleSubmit}
+                  disabled={submitting || !isCreateFormValid}
+                >
                   {submitting ? <ActivityIndicator color={colors.surface} /> : <><Ionicons name="send" size={20} color={colors.surface} /><Text style={styles.submitButtonText}>Submit Request</Text></>}
                 </TouchableOpacity>
               </ScrollView>

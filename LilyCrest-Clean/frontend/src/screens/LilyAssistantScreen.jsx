@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import InquiryCard from '../components/assistant/InquiryCard';
@@ -56,7 +56,7 @@ function TypingIndicator() {
 
   return (
     <View style={typingStyles.row}>
-      <View style={typingStyles.avatarSmall}><LilyFlowerIcon size={16} glow={false} /></View>
+      <View style={typingStyles.avatarSmall}><LilyFlowerIcon size={20} glow={false} /></View>
       <View style={typingStyles.bubble}>
         {[dot1, dot2, dot3].map((dot, i) => (
           <Animated.View key={i} style={[typingStyles.dot, { opacity: dot }]} />
@@ -69,7 +69,7 @@ function TypingIndicator() {
 
 const typingStyles = StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 10, paddingHorizontal: 8 },
-  avatarSmall: { width: 30, height: 30, borderRadius: 15, backgroundColor: '#0f172a', justifyContent: 'center', alignItems: 'center' },
+  avatarSmall: { width: 34, height: 34, borderRadius: 17, backgroundColor: '#16213b', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.08)' },
   bubble: { flexDirection: 'row', gap: 6, backgroundColor: '#ffffff', borderRadius: 16, paddingHorizontal: 14, paddingVertical: 10, borderWidth: 1, borderColor: '#e2e8f0' },
   dot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#E0793A' },
   label: { color: '#94a3b8', fontSize: 12, fontWeight: '600', fontStyle: 'italic' },
@@ -544,7 +544,10 @@ export default function LilyAssistantScreen() {
     handleSend(prompt);
   };
 
-  const filteredInquiries = inquiries.filter((item) => (filter === 'all' ? true : item.status === filter));
+  const filteredInquiries = useMemo(
+    () => inquiries.filter((item) => (filter === 'all' ? true : item.status === filter)),
+    [filter, inquiries]
+  );
 
   const renderInquiryDetail = () => {
     if (!selectedInquiry) return null;
@@ -637,7 +640,10 @@ export default function LilyAssistantScreen() {
     );
   };
 
-  const hasStartedChat = hasInteracted || messages.length > 0 || inputValue.trim().length > 0 || attachments.length > 0;
+  const hasStartedChat = useMemo(
+    () => hasInteracted || messages.length > 0 || inputValue.trim().length > 0 || attachments.length > 0,
+    [attachments.length, hasInteracted, inputValue, messages.length]
+  );
   const showIntro = true; // keep header + suggested questions visible even after chat starts
 
   return (
@@ -648,7 +654,7 @@ export default function LilyAssistantScreen() {
       <Animated.View style={[styles.header, { paddingTop: insets.top + 10, transform: [{ translateY: headerShift }] }]}>
         <View style={styles.headerLeft}>
           <View style={styles.headerAvatar}>
-            <LilyFlowerIcon size={28} glow={false} pulse={isSending} />
+            <LilyFlowerIcon size={50} glow={false} pulse={isSending} />
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.headerTitle}>Lily</Text>
@@ -706,11 +712,11 @@ export default function LilyAssistantScreen() {
               <View style={styles.heroCard}>
                 <View style={styles.heroRow}>
                   <View style={styles.heroBadge}>
-                    <LilyFlowerIcon size={32} glow={false} pulse />
+                    <LilyFlowerIcon size={58} glow={false} pulse />
                   </View>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.heroTitle}>Hi{user?.name ? `, ${user.name.split(' ')[0]}` : ''}!</Text>
-                    <Text style={styles.heroSubtitle}>I'm Lily, your AI assistant. How can I help you today?</Text>
+                    <Text style={styles.heroSubtitle}>I&apos;m Lily, your AI assistant. How can I help you today?</Text>
                   </View>
                 </View>
                 <View style={styles.heroTopics}>
@@ -934,14 +940,14 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#0f172a',
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: '#16213b',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(212,148,42,0.4)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   headerTitle: {
     color: '#f8fafc',
@@ -1045,14 +1051,18 @@ const styles = StyleSheet.create({
   },
   heroRow: { flexDirection: 'row', alignItems: 'center', gap: 14, marginBottom: 16 },
   heroBadge: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#0f172a',
+    width: 70,
+    height: 70,
+    borderRadius: 35,
+    backgroundColor: '#16213b',
     justifyContent: 'center',
     alignItems: 'center',
-    borderWidth: 2,
-    borderColor: 'rgba(212,148,42,0.3)',
+    borderWidth: 1,
+    borderColor: 'rgba(212,226,255,0.2)',
+    ...Platform.select({
+      ios: { shadowColor: '#0f172a', shadowOpacity: 0.18, shadowOffset: { width: 0, height: 6 }, shadowRadius: 12 },
+      android: { elevation: 5 },
+    }),
   },
   heroTitle: { color: '#0f172a', fontSize: 20, fontWeight: '800', marginBottom: 2 },
   heroSubtitle: { color: '#64748b', fontSize: 13, lineHeight: 19 },

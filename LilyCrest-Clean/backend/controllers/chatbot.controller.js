@@ -13,6 +13,10 @@ const {
   liveChatQueue,
   chatSessions,
 } = require('../services/gemini.service');
+const {
+  notifyAdminChatAccepted,
+  notifyChatbotReply,
+} = require('../services/pushService');
 
 function sanitizeResponse(text = '') {
   const withoutFences = text.replace(/```[\s\S]*?```/g, (block) => block.replace(/```/g, ''));
@@ -449,6 +453,7 @@ async function acceptLiveChat(req, res) {
     liveChat.messages.push({ sender: 'system', content: `${liveChat.admin_name} has joined the chat.`, timestamp: new Date() });
 
     await db.collection('live_chat_requests').updateOne({ session_id }, { $set: { status: 'active', admin_id: req.user.user_id, admin_name: liveChat.admin_name } });
+    notifyAdminChatAccepted(liveChat.user_id, liveChat.admin_name, session_id).catch(() => {});
     res.json({ success: true, chat_history: liveChat.chat_history, user_name: liveChat.user_name, reason: liveChat.reason });
   } catch (error) {
     res.status(500).json({ error: 'Failed to accept chat' });
@@ -472,6 +477,11 @@ async function sendAdminMessage(req, res) {
     if (!liveChat || liveChat.status !== 'active') return res.status(404).json({ error: 'Active chat session not found' });
 
     liveChat.messages.push({ sender: 'admin', admin_name: adminUser?.name || 'Admin', content: normalizedMessage.value, timestamp: new Date() });
+    notifyChatbotReply(liveChat.user_id, {
+      adminName: adminUser?.name || 'Admin',
+      message: normalizedMessage.value,
+      sessionId: normalizedSession.value,
+    }).catch(() => {});
     res.json({ success: true });
   } catch (error) {
     res.status(500).json({ error: 'Failed to send message' });

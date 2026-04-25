@@ -1,0 +1,1246 @@
+> Task :gradle-plugin:settings-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-gradle-plugin:expo-autolinking-plugin-shared:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :gradle-plugin:shared:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :gradle-plugin:shared:compileKotlin UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin-shared:compileKotlin UP-TO-DATE
+> Task :gradle-plugin:shared:compileJava NO-SOURCE
+> Task :expo-gradle-plugin:expo-autolinking-plugin-shared:compileJava NO-SOURCE
+> Task :gradle-plugin:shared:processResources NO-SOURCE
+> Task :expo-gradle-plugin:expo-autolinking-plugin-shared:processResources NO-SOURCE
+> Task :gradle-plugin:shared:classes UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin-shared:classes UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin-shared:jar UP-TO-DATE
+> Task :gradle-plugin:shared:jar UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :gradle-plugin:settings-plugin:compileKotlin UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:compileJava NO-SOURCE
+> Task :gradle-plugin:settings-plugin:pluginDescriptors UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:processResources UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:classes UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:compileKotlin UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:compileJava NO-SOURCE
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:pluginDescriptors UP-TO-DATE
+> Task :gradle-plugin:settings-plugin:jar UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:processResources UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:classes UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-settings-plugin:jar UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :gradle-plugin:react-native-gradle-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-module-gradle-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-dev-launcher-gradle-plugin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-module-gradle-plugin:pluginDescriptors UP-TO-DATE
+> Task :expo-dev-launcher-gradle-plugin:pluginDescriptors UP-TO-DATE
+> Task :expo-module-gradle-plugin:processResources UP-TO-DATE
+> Task :expo-dev-launcher-gradle-plugin:processResources UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:compileKotlin UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:compileKotlin UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:compileJava NO-SOURCE
+> Task :gradle-plugin:react-native-gradle-plugin:compileJava NO-SOURCE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:pluginDescriptors UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:pluginDescriptors UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:processResources UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:classes UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:processResources UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:classes UP-TO-DATE
+> Task :gradle-plugin:react-native-gradle-plugin:jar UP-TO-DATE
+> Task :expo-gradle-plugin:expo-autolinking-plugin:jar UP-TO-DATE
+> Task :expo-dev-launcher-gradle-plugin:compileKotlin UP-TO-DATE
+> Task :expo-dev-launcher-gradle-plugin:compileJava NO-SOURCE
+> Task :expo-module-gradle-plugin:compileKotlin UP-TO-DATE
+> Task :expo-dev-launcher-gradle-plugin:classes UP-TO-DATE
+> Task :expo-module-gradle-plugin:compileJava NO-SOURCE
+> Task :expo-module-gradle-plugin:classes UP-TO-DATE
+> Task :expo-dev-launcher-gradle-plugin:jar UP-TO-DATE
+> Task :expo-module-gradle-plugin:jar UP-TO-DATE
+
+> Configure project :app
+ ℹ️  [33mApplying gradle plugin[0m '[32mexpo-dev-launcher-gradle-plugin[0m'
+
+> Configure project :
+[32m[ExpoRootProject][0m Using the following versions:
+  - buildTools:  [32m36.0.0[0m
+  - minSdk:      [32m24[0m
+  - compileSdk:  [32m36[0m
+  - targetSdk:   [32m36[0m
+  - ndk:         [32m27.1.12297006[0m
+  - kotlin:      [32m2.1.20[0m
+  - ksp:         [32m2.1.20-2.0.1[0m
+
+> Configure project :expo
+
+Using expo modules
+  - [32mexpo-constants[0m (18.0.13)
+  - [32mexpo-dev-client[0m (6.0.20)
+  - [32mexpo-dev-launcher[0m (6.0.20)
+  - [32mexpo-dev-menu[0m (7.0.18)
+  - [32mexpo-dev-menu-interface[0m (2.0.0)
+  - [32mexpo-json-utils[0m (0.15.0)
+  - [32mexpo-manifests[0m (1.0.10)
+  - [32mexpo-modules-core[0m (3.0.29)
+  - [32mexpo-updates-interface[0m (2.0.0)
+  - [33m[📦][0m [32mexpo-application[0m (7.0.8)
+  - [33m[📦][0m [32mexpo-asset[0m (12.0.12)
+  - [33m[📦][0m [32mexpo-blur[0m (15.0.8)
+  - [33m[📦][0m [32mexpo-clipboard[0m (8.0.8)
+  - [33m[📦][0m [32mexpo-crypto[0m (15.0.8)
+  - [33m[📦][0m [32mexpo-document-picker[0m (14.0.8)
+  - [33m[📦][0m [32mexpo-file-system[0m (19.0.21)
+  - [33m[📦][0m [32mexpo-font[0m (14.0.11)
+  - [33m[📦][0m [32mexpo-haptics[0m (15.0.8)
+  - [33m[📦][0m [32mexpo-image[0m (3.0.11)
+  - [33m[📦][0m [32mexpo-image-loader[0m (6.0.0)
+  - [33m[📦][0m [32mexpo-image-picker[0m (17.0.10)
+  - [33m[📦][0m [32mexpo-keep-awake[0m (15.0.8)
+  - [33m[📦][0m [32mexpo-linear-gradient[0m (15.0.8)
+  - [33m[📦][0m [32mexpo-linking[0m (8.0.11)
+  - [33m[📦][0m [32mexpo-local-authentication[0m (17.0.8)
+  - [33m[📦][0m [32mexpo-notifications[0m (0.32.16)
+  - [33m[📦][0m [32mexpo-secure-store[0m (15.0.8)
+  - [33m[📦][0m [32mexpo-sharing[0m (14.0.8)
+  - [33m[📦][0m [32mexpo-splash-screen[0m (31.0.13)
+  - [33m[📦][0m [32mexpo-system-ui[0m (6.0.9)
+  - [33m[📦][0m [32mexpo-web-browser[0m (15.0.10)
+
+
+> Task :app:generateAutolinkingNewArchitectureFiles
+> Task :app:generateAutolinkingPackageList
+> Task :app:generateCodegenSchemaFromJavaScript SKIPPED
+> Task :app:generateCodegenArtifactsFromSchema SKIPPED
+> Task :app:generateReactNativeEntryPoint
+> Task :expo:generatePackagesList
+> Task :expo:preBuild
+
+> Task :expo-constants:createExpoConfig
+The NODE_ENV environment variable is required but was not specified. Ensure the project is bundled with Expo CLI or NODE_ENV is set. Using only .env.local and .env
+env: load .env
+env: export EXPO_PUBLIC_BACKEND_PORT EXPO_PUBLIC_DEV_HOST EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN EXPO_PUBLIC_FIREBASE_PROJECT_ID EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID EXPO_PUBLIC_FIREBASE_API_KEY EXPO_PUBLIC_FIREBASE_WEB_API_KEY EXPO_PUBLIC_FIREBASE_ANDROID_API_KEY EXPO_PUBLIC_FIREBASE_WEB_APP_ID EXPO_PUBLIC_FIREBASE_ANDROID_APP_ID EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID EXPO_PUBLIC_GOOGLE_MAPS_API_KEY EXPO_PUBLIC_GOOGLE_ANDROID_API_KEY EXPO_PUBLIC_GOOGLE_ANDROID_CERT_HASH
+
+> Task :expo-constants:preBuild
+> Task :expo-dev-client:preBuild UP-TO-DATE
+> Task :expo-dev-launcher:preBuild UP-TO-DATE
+> Task :expo-dev-menu:preBuild UP-TO-DATE
+> Task :expo-dev-menu-interface:preBuild UP-TO-DATE
+> Task :expo-json-utils:preBuild UP-TO-DATE
+> Task :expo-manifests:preBuild UP-TO-DATE
+> Task :expo-modules-core:preBuild UP-TO-DATE
+> Task :expo-updates-interface:preBuild UP-TO-DATE
+> Task :react-native-async-storage_async-storage:generateCodegenSchemaFromJavaScript
+> Task :react-native-async-storage_async-storage:generateCodegenArtifactsFromSchema
+> Task :react-native-async-storage_async-storage:preBuild
+> Task :react-native-gesture-handler:generateCodegenSchemaFromJavaScript
+> Task :react-native-gesture-handler:generateCodegenArtifactsFromSchema
+> Task :react-native-gesture-handler:preBuild
+> Task :react-native-google-signin_google-signin:generateCodegenSchemaFromJavaScript
+> Task :react-native-google-signin_google-signin:generateCodegenArtifactsFromSchema
+> Task :react-native-google-signin_google-signin:preBuild
+> Task :react-native-reanimated:assertMinimalReactNativeVersionTask
+> Task :react-native-reanimated:assertNewArchitectureEnabledTask SKIPPED
+> Task :react-native-reanimated:assertWorkletsVersionTask
+> Task :react-native-reanimated:generateCodegenSchemaFromJavaScript
+> Task :react-native-reanimated:generateCodegenArtifactsFromSchema
+> Task :react-native-reanimated:prepareReanimatedHeadersForPrefabs
+> Task :react-native-reanimated:preBuild
+> Task :react-native-safe-area-context:generateCodegenSchemaFromJavaScript
+> Task :react-native-safe-area-context:generateCodegenArtifactsFromSchema
+> Task :react-native-safe-area-context:preBuild
+> Task :react-native-screens:generateCodegenSchemaFromJavaScript
+> Task :react-native-screens:generateCodegenArtifactsFromSchema
+> Task :react-native-screens:preBuild
+> Task :react-native-webview:generateCodegenSchemaFromJavaScript
+> Task :react-native-webview:generateCodegenArtifactsFromSchema
+> Task :react-native-webview:preBuild
+> Task :react-native-worklets:assertMinimalReactNativeVersionTask
+> Task :react-native-worklets:assertNewArchitectureEnabledTask SKIPPED
+> Task :react-native-worklets:generateCodegenSchemaFromJavaScript
+> Task :react-native-worklets:generateCodegenArtifactsFromSchema
+> Task :react-native-worklets:prepareWorkletsHeadersForPrefabs
+> Task :react-native-worklets:preBuild
+> Task :app:preBuild
+> Task :app:preReleaseBuild
+> Task :react-native-reanimated:preReleaseBuild
+> Task :react-native-worklets:preReleaseBuild
+> Task :react-native-worklets:configureCMakeRelWithDebInfo[arm64-v8a]
+> Task :react-native-worklets:generateJsonModelRelease
+> Task :react-native-worklets:prefabReleaseConfigurePackage UP-TO-DATE
+> Task :react-native-reanimated:configureCMakeRelWithDebInfo[arm64-v8a]
+> Task :react-native-reanimated:generateJsonModelRelease
+> Task :react-native-reanimated:prefabReleaseConfigurePackage UP-TO-DATE
+
+> Task :app:configureCMakeRelWithDebInfo[arm64-v8a]
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineSystem.cmake:146 (include)
+C/C++:   CMakeLists.txt:28 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android-legacy.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:55 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineSystem.cmake:146 (include)
+C/C++:   CMakeLists.txt:28 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/app/.cxx/RelWithDebInfo/61z3226b/arm64-v8a/CMakeFiles/4.3.2/CMakeSystem.cmake:6 (include)
+C/C++:   CMakeLists.txt:28 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/flags.cmake:18 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Android-Clang.cmake:23 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Android-Clang-C.cmake:1 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeCInformation.cmake:48 (include)
+C/C++:   CMakeLists.txt:28 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/app/.cxx/RelWithDebInfo/61z3226b/arm64-v8a/CMakeFiles/4.3.2/CMakeSystem.cmake:6 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/app/.cxx/RelWithDebInfo/61z3226b/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-0kf0z7/CMakeLists.txt:4 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android-legacy.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:55 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/app/.cxx/RelWithDebInfo/61z3226b/arm64-v8a/CMakeFiles/4.3.2/CMakeSystem.cmake:6 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/app/.cxx/RelWithDebInfo/61z3226b/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-0kf0z7/CMakeLists.txt:4 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/flags.cmake:18 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Android-Clang.cmake:23 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Android-Clang-C.cmake:1 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeCInformation.cmake:48 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/app/.cxx/RelWithDebInfo/61z3226b/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-0kf0z7/CMakeLists.txt:4 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/app/.cxx/RelWithDebInfo/61z3226b/arm64-v8a/CMakeFiles/4.3.2/CMakeSystem.cmake:6 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/app/.cxx/RelWithDebInfo/61z3226b/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-n0drdq/CMakeLists.txt:4 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android-legacy.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:55 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/app/.cxx/RelWithDebInfo/61z3226b/arm64-v8a/CMakeFiles/4.3.2/CMakeSystem.cmake:6 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/app/.cxx/RelWithDebInfo/61z3226b/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-n0drdq/CMakeLists.txt:4 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/flags.cmake:18 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Android-Clang.cmake:23 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Android-Clang-CXX.cmake:1 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeCXXInformation.cmake:48 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/app/.cxx/RelWithDebInfo/61z3226b/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-n0drdq/CMakeLists.txt:4 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/app/.cxx/RelWithDebInfo/61z3226b/arm64-v8a/CMakeFiles/4.3.2/CMakeSystem.cmake:6 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/app/.cxx/RelWithDebInfo/61z3226b/arm64-v8a/CMakeFiles/_CMakeLTOTest-CXX/src/CMakeLists.txt:2 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android-legacy.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:55 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/app/.cxx/RelWithDebInfo/61z3226b/arm64-v8a/CMakeFiles/4.3.2/CMakeSystem.cmake:6 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/app/.cxx/RelWithDebInfo/61z3226b/arm64-v8a/CMakeFiles/_CMakeLTOTest-CXX/src/CMakeLists.txt:2 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/flags.cmake:18 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Android-Clang.cmake:23 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Android-Clang-CXX.cmake:1 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeCXXInformation.cmake:48 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/app/.cxx/RelWithDebInfo/61z3226b/arm64-v8a/CMakeFiles/_CMakeLTOTest-CXX/src/CMakeLists.txt:2 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/app/.cxx/RelWithDebInfo/61z3226b/arm64-v8a/CMakeFiles/4.3.2/CMakeSystem.cmake:6 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/app/.cxx/RelWithDebInfo/61z3226b/arm64-v8a/CMakeFiles/_CMakeLTOTest-C/src/CMakeLists.txt:2 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android-legacy.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:55 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/app/.cxx/RelWithDebInfo/61z3226b/arm64-v8a/CMakeFiles/4.3.2/CMakeSystem.cmake:6 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/app/.cxx/RelWithDebInfo/61z3226b/arm64-v8a/CMakeFiles/_CMakeLTOTest-C/src/CMakeLists.txt:2 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/flags.cmake:18 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Android-Clang.cmake:23 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Android-Clang-C.cmake:1 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeCInformation.cmake:48 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/app/.cxx/RelWithDebInfo/61z3226b/arm64-v8a/CMakeFiles/_CMakeLTOTest-C/src/CMakeLists.txt:2 (project)
+C/C++: CMake Warning in C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/@react-native-async-storage/async-storage/android/build/generated/source/codegen/jni/CMakeLists.txt:
+C/C++:   The object file directory
+C/C++:     C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/app/.cxx/RelWithDebInfo/61z3226b/arm64-v8a/rnasyncstorage_autolinked_build/CMakeFiles/react_codegen_rnasyncstorage.dir/./
+C/C++:   has 187 characters.  The maximum full path to an object file is 250
+C/C++:   characters (see CMAKE_OBJECT_PATH_MAX).  Object file
+C/C++:     29c6ac0a1dd6ebb9204efeee5b088e58/rnasyncstorageJSI-generated.cpp.o
+C/C++:   cannot be safely placed under this directory.  The build may not work
+C/C++:   correctly.
+C/C++: CMake Warning in C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/@react-native-google-signin/google-signin/android/build/generated/source/codegen/jni/CMakeLists.txt:
+C/C++:   The object file directory
+C/C++:     C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/app/.cxx/RelWithDebInfo/61z3226b/arm64-v8a/RNGoogleSignInCGen_autolinked_build/CMakeFiles/react_codegen_RNGoogleSignInCGen.dir/./
+C/C++:   has 195 characters.  The maximum full path to an object file is 250
+C/C++:   characters (see CMAKE_OBJECT_PATH_MAX).  Object file
+C/C++:     1d35ed449d7ed1132b7810290d98901f/ComponentDescriptors.cpp.o
+C/C++:   cannot be safely placed under this directory.  The build may not work
+C/C++:   correctly.
+C/C++: CMake Warning in C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-gesture-handler/android/build/generated/source/codegen/jni/CMakeLists.txt:
+C/C++:   The object file directory
+C/C++:     C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/app/.cxx/RelWithDebInfo/61z3226b/arm64-v8a/rngesturehandler_codegen_autolinked_build/CMakeFiles/react_codegen_rngesturehandler_codegen.dir/./
+C/C++:   has 207 characters.  The maximum full path to an object file is 250
+C/C++:   characters (see CMAKE_OBJECT_PATH_MAX).  Object file
+C/C++:     bac033cd950586cef66695376748dd33/ComponentDescriptors.cpp.o
+C/C++:   cannot be safely placed under this directory.  The build may not work
+C/C++:   correctly.
+C/C++: CMake Warning in C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/build/generated/source/codegen/jni/CMakeLists.txt:
+C/C++:   The object file directory
+C/C++:     C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/app/.cxx/RelWithDebInfo/61z3226b/arm64-v8a/RNCWebViewSpec_autolinked_build/CMakeFiles/react_codegen_RNCWebViewSpec.dir/./
+C/C++:   has 187 characters.  The maximum full path to an object file is 250
+C/C++:   characters (see CMAKE_OBJECT_PATH_MAX).  Object file
+C/C++:     68c0b361f082d70d15ec3e1cd2e973b0/RNCWebViewSpecJSI-generated.cpp.o
+C/C++:   cannot be safely placed under this directory.  The build may not work
+C/C++:   correctly.
+C/C++: CMake Warning in C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-safe-area-context/android/src/main/jni/CMakeLists.txt:
+C/C++:   The object file directory
+C/C++:     C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/app/.cxx/RelWithDebInfo/61z3226b/arm64-v8a/safeareacontext_autolinked_build/CMakeFiles/react_codegen_safeareacontext.dir/./
+C/C++:   has 189 characters.  The maximum full path to an object file is 250
+C/C++:   characters (see CMAKE_OBJECT_PATH_MAX).  Object file
+C/C++:     15485835dccaee1fd473611c699a61ba/safeareacontextJSI-generated.cpp.o
+C/C++:   cannot be safely placed under this directory.  The build may not work
+C/C++:   correctly.
+C/C++: CMake Warning in C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/jni/CMakeLists.txt:
+C/C++:   The object file directory
+C/C++:     C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/app/.cxx/RelWithDebInfo/61z3226b/arm64-v8a/rnscreens_autolinked_build/CMakeFiles/react_codegen_rnscreens.dir/./
+C/C++:   has 177 characters.  The maximum full path to an object file is 250
+C/C++:   characters (see CMAKE_OBJECT_PATH_MAX).  Object file
+C/C++:     daeaea93e0b6a5aa4d4087dcd87eab79/RNSScreenStackHeaderConfigShadowNode.cpp.o
+C/C++:   cannot be safely placed under this directory.  The build may not work
+C/C++:   correctly.
+
+> Task :react-native-worklets:buildCMakeRelWithDebInfo[arm64-v8a][worklets]
+> Task :react-native-worklets:externalNativeBuildRelease
+> Task :react-native-worklets:prefabReleasePackage
+> Task :react-native-reanimated:buildCMakeRelWithDebInfo[arm64-v8a][reanimated]
+> Task :react-native-worklets:mergeReleaseJniLibFolders
+> Task :app:mergeReleaseJniLibFolders
+> Task :expo:preReleaseBuild
+> Task :expo:mergeReleaseJniLibFolders
+> Task :expo:mergeReleaseNativeLibs NO-SOURCE
+> Task :expo-constants:preReleaseBuild
+> Task :expo:copyReleaseJniLibsProjectOnly
+> Task :expo-constants:mergeReleaseJniLibFolders
+> Task :expo-constants:mergeReleaseNativeLibs NO-SOURCE
+> Task :expo-dev-client:preReleaseBuild UP-TO-DATE
+> Task :expo-constants:copyReleaseJniLibsProjectOnly
+> Task :react-native-worklets:mergeReleaseNativeLibs
+> Task :expo-dev-client:mergeReleaseJniLibFolders
+> Task :expo-dev-client:mergeReleaseNativeLibs NO-SOURCE
+> Task :expo-dev-launcher:preReleaseBuild UP-TO-DATE
+> Task :expo-dev-client:copyReleaseJniLibsProjectOnly
+> Task :expo-dev-launcher:mergeReleaseJniLibFolders
+> Task :expo-dev-launcher:mergeReleaseNativeLibs NO-SOURCE
+> Task :expo-dev-menu:preReleaseBuild UP-TO-DATE
+> Task :expo-dev-launcher:copyReleaseJniLibsProjectOnly
+> Task :expo-dev-menu:mergeReleaseJniLibFolders
+> Task :expo-dev-menu:mergeReleaseNativeLibs NO-SOURCE
+> Task :expo-dev-menu-interface:preReleaseBuild UP-TO-DATE
+> Task :expo-dev-menu:copyReleaseJniLibsProjectOnly
+> Task :react-native-worklets:copyReleaseJniLibsProjectOnly
+> Task :expo-dev-menu-interface:mergeReleaseJniLibFolders
+> Task :react-native-reanimated:externalNativeBuildRelease
+> Task :react-native-reanimated:prefabReleasePackage
+> Task :app:buildCMakeRelWithDebInfo[arm64-v8a]
+> Task :expo-dev-menu-interface:mergeReleaseNativeLibs NO-SOURCE
+> Task :expo-json-utils:preReleaseBuild UP-TO-DATE
+> Task :expo-dev-menu-interface:copyReleaseJniLibsProjectOnly
+> Task :expo-json-utils:mergeReleaseJniLibFolders
+> Task :expo-json-utils:mergeReleaseNativeLibs NO-SOURCE
+> Task :expo-manifests:preReleaseBuild UP-TO-DATE
+> Task :expo-json-utils:copyReleaseJniLibsProjectOnly
+> Task :expo-manifests:mergeReleaseJniLibFolders
+> Task :expo-manifests:mergeReleaseNativeLibs NO-SOURCE
+> Task :expo-modules-core:preReleaseBuild UP-TO-DATE
+> Task :expo-manifests:copyReleaseJniLibsProjectOnly
+
+> Task :expo-modules-core:configureCMakeRelWithDebInfo[arm64-v8a]
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineSystem.cmake:146 (include)
+C/C++:   CMakeLists.txt:3 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android-legacy.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:55 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineSystem.cmake:146 (include)
+C/C++:   CMakeLists.txt:3 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   .cxx/RelWithDebInfo/3556i1mv/arm64-v8a/CMakeFiles/4.3.2/CMakeSystem.cmake:6 (include)
+C/C++:   CMakeLists.txt:3 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/flags.cmake:18 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Android-Clang.cmake:23 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Android-Clang-C.cmake:1 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeCInformation.cmake:48 (include)
+C/C++:   CMakeLists.txt:3 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-modules-core/android/.cxx/RelWithDebInfo/3556i1mv/arm64-v8a/CMakeFiles/4.3.2/CMakeSystem.cmake:6 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-modules-core/android/.cxx/RelWithDebInfo/3556i1mv/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-09xi6t/CMakeLists.txt:4 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android-legacy.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:55 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-modules-core/android/.cxx/RelWithDebInfo/3556i1mv/arm64-v8a/CMakeFiles/4.3.2/CMakeSystem.cmake:6 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-modules-core/android/.cxx/RelWithDebInfo/3556i1mv/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-09xi6t/CMakeLists.txt:4 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/flags.cmake:18 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Android-Clang.cmake:23 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Android-Clang-C.cmake:1 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeCInformation.cmake:48 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-modules-core/android/.cxx/RelWithDebInfo/3556i1mv/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-09xi6t/CMakeLists.txt:4 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-modules-core/android/.cxx/RelWithDebInfo/3556i1mv/arm64-v8a/CMakeFiles/4.3.2/CMakeSystem.cmake:6 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-modules-core/android/.cxx/RelWithDebInfo/3556i1mv/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-ej0539/CMakeLists.txt:4 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android-legacy.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:55 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-modules-core/android/.cxx/RelWithDebInfo/3556i1mv/arm64-v8a/CMakeFiles/4.3.2/CMakeSystem.cmake:6 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-modules-core/android/.cxx/RelWithDebInfo/3556i1mv/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-ej0539/CMakeLists.txt:4 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/flags.cmake:18 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Android-Clang.cmake:23 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Android-Clang-CXX.cmake:1 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeCXXInformation.cmake:48 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-modules-core/android/.cxx/RelWithDebInfo/3556i1mv/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-ej0539/CMakeLists.txt:4 (project)
+
+> Task :expo-modules-core:buildCMakeRelWithDebInfo[arm64-v8a]
+> Task :expo-modules-core:mergeReleaseJniLibFolders
+> Task :expo-updates-interface:preReleaseBuild UP-TO-DATE
+> Task :expo-updates-interface:mergeReleaseJniLibFolders
+> Task :expo-updates-interface:mergeReleaseNativeLibs NO-SOURCE
+> Task :react-native-async-storage_async-storage:preReleaseBuild
+> Task :expo-updates-interface:copyReleaseJniLibsProjectOnly
+> Task :react-native-async-storage_async-storage:mergeReleaseJniLibFolders
+> Task :react-native-async-storage_async-storage:mergeReleaseNativeLibs NO-SOURCE
+> Task :react-native-gesture-handler:preReleaseBuild
+> Task :react-native-async-storage_async-storage:copyReleaseJniLibsProjectOnly
+> Task :expo-modules-core:mergeReleaseNativeLibs
+
+> Task :react-native-gesture-handler:configureCMakeRelWithDebInfo[arm64-v8a]
+C/C++: CMake Warning (dev) at CMakeLists.txt:1 (project):
+C/C++:   cmake_minimum_required() should be called prior to this top-level project()
+C/C++:   call.  Please see the cmake-commands(7) manual for usage documentation of
+C/C++:   both commands.
+C/C++: This warning is for project developers.  Use -Wno-dev to suppress it.
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineSystem.cmake:146 (include)
+C/C++:   CMakeLists.txt:1 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android-legacy.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:55 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineSystem.cmake:146 (include)
+C/C++:   CMakeLists.txt:1 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-gesture-handler/android/.cxx/RelWithDebInfo/4c3e731m/arm64-v8a/CMakeFiles/4.3.2/CMakeSystem.cmake:6 (include)
+C/C++:   CMakeLists.txt:1 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/flags.cmake:18 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Android-Clang.cmake:23 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Android-Clang-C.cmake:1 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeCInformation.cmake:48 (include)
+C/C++:   CMakeLists.txt:1 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-gesture-handler/android/.cxx/RelWithDebInfo/4c3e731m/arm64-v8a/CMakeFiles/4.3.2/CMakeSystem.cmake:6 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-gesture-handler/android/.cxx/RelWithDebInfo/4c3e731m/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-31sqm2/CMakeLists.txt:4 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android-legacy.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:55 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-gesture-handler/android/.cxx/RelWithDebInfo/4c3e731m/arm64-v8a/CMakeFiles/4.3.2/CMakeSystem.cmake:6 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-gesture-handler/android/.cxx/RelWithDebInfo/4c3e731m/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-31sqm2/CMakeLists.txt:4 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/flags.cmake:18 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Android-Clang.cmake:23 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Android-Clang-C.cmake:1 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeCInformation.cmake:48 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-gesture-handler/android/.cxx/RelWithDebInfo/4c3e731m/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-31sqm2/CMakeLists.txt:4 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-gesture-handler/android/.cxx/RelWithDebInfo/4c3e731m/arm64-v8a/CMakeFiles/4.3.2/CMakeSystem.cmake:6 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-gesture-handler/android/.cxx/RelWithDebInfo/4c3e731m/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-565mfx/CMakeLists.txt:4 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android-legacy.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:55 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-gesture-handler/android/.cxx/RelWithDebInfo/4c3e731m/arm64-v8a/CMakeFiles/4.3.2/CMakeSystem.cmake:6 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-gesture-handler/android/.cxx/RelWithDebInfo/4c3e731m/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-565mfx/CMakeLists.txt:4 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/flags.cmake:18 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Android-Clang.cmake:23 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Android-Clang-CXX.cmake:1 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeCXXInformation.cmake:48 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-gesture-handler/android/.cxx/RelWithDebInfo/4c3e731m/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-565mfx/CMakeLists.txt:4 (project)
+C/C++: CMake Deprecation Warning at CMakeLists.txt:2 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+
+> Task :expo-modules-core:copyReleaseJniLibsProjectOnly
+> Task :react-native-gesture-handler:buildCMakeRelWithDebInfo[arm64-v8a]
+> Task :react-native-gesture-handler:mergeReleaseJniLibFolders
+> Task :react-native-google-signin_google-signin:preReleaseBuild
+> Task :react-native-google-signin_google-signin:mergeReleaseJniLibFolders
+> Task :react-native-google-signin_google-signin:mergeReleaseNativeLibs NO-SOURCE
+> Task :react-native-gesture-handler:mergeReleaseNativeLibs
+> Task :react-native-google-signin_google-signin:copyReleaseJniLibsProjectOnly
+> Task :react-native-reanimated:mergeReleaseJniLibFolders
+> Task :react-native-safe-area-context:preReleaseBuild
+> Task :react-native-gesture-handler:copyReleaseJniLibsProjectOnly
+> Task :react-native-safe-area-context:mergeReleaseJniLibFolders
+> Task :react-native-safe-area-context:mergeReleaseNativeLibs NO-SOURCE
+> Task :react-native-screens:preReleaseBuild
+> Task :react-native-safe-area-context:copyReleaseJniLibsProjectOnly
+> Task :react-native-reanimated:mergeReleaseNativeLibs
+
+> Task :react-native-screens:configureCMakeRelWithDebInfo[arm64-v8a]
+C/C++: CMake Deprecation Warning at CMakeLists.txt:1 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineSystem.cmake:146 (include)
+C/C++:   CMakeLists.txt:3 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android-legacy.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:55 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeDetermineSystem.cmake:146 (include)
+C/C++:   CMakeLists.txt:3 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   .cxx/RelWithDebInfo/686t5t2k/arm64-v8a/CMakeFiles/4.3.2/CMakeSystem.cmake:6 (include)
+C/C++:   CMakeLists.txt:3 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/flags.cmake:18 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Android-Clang.cmake:23 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Android-Clang-C.cmake:1 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeCInformation.cmake:48 (include)
+C/C++:   CMakeLists.txt:3 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/.cxx/RelWithDebInfo/686t5t2k/arm64-v8a/CMakeFiles/4.3.2/CMakeSystem.cmake:6 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/.cxx/RelWithDebInfo/686t5t2k/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-om91jm/CMakeLists.txt:4 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android-legacy.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:55 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/.cxx/RelWithDebInfo/686t5t2k/arm64-v8a/CMakeFiles/4.3.2/CMakeSystem.cmake:6 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/.cxx/RelWithDebInfo/686t5t2k/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-om91jm/CMakeLists.txt:4 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/flags.cmake:18 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Android-Clang.cmake:23 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Android-Clang-C.cmake:1 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeCInformation.cmake:48 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/.cxx/RelWithDebInfo/686t5t2k/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-om91jm/CMakeLists.txt:4 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/.cxx/RelWithDebInfo/686t5t2k/arm64-v8a/CMakeFiles/4.3.2/CMakeSystem.cmake:6 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/.cxx/RelWithDebInfo/686t5t2k/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-fqxxtw/CMakeLists.txt:4 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android-legacy.toolchain.cmake:35 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/android.toolchain.cmake:55 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/.cxx/RelWithDebInfo/686t5t2k/arm64-v8a/CMakeFiles/4.3.2/CMakeSystem.cmake:6 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/.cxx/RelWithDebInfo/686t5t2k/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-fqxxtw/CMakeLists.txt:4 (project)
+C/C++: CMake Deprecation Warning at C:/Users/leigh/AppData/Local/Android/Sdk/ndk/27.1.12297006/build/cmake/flags.cmake:18 (cmake_minimum_required):
+C/C++:   Compatibility with CMake < 3.10 will be removed from a future version of
+C/C++:   CMake.
+C/C++:   Update the VERSION argument <min> value.  Or, use the <min>...<max> syntax
+C/C++:   to tell CMake that the project requires at least <min> but has been updated
+C/C++:   to work with policies introduced by <max> or earlier.
+C/C++: Call Stack (most recent call first):
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Android-Clang.cmake:23 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/Platform/Android-Clang-CXX.cmake:1 (include)
+C/C++:   C:/Program Files/CMake/share/cmake-4.3/Modules/CMakeCXXInformation.cmake:48 (include)
+C/C++:   C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/.cxx/RelWithDebInfo/686t5t2k/arm64-v8a/CMakeFiles/CMakeScratch/TryCompile-fqxxtw/CMakeLists.txt:4 (project)
+
+> Task :react-native-reanimated:copyReleaseJniLibsProjectOnly
+> Task :react-native-screens:buildCMakeRelWithDebInfo[arm64-v8a]
+> Task :react-native-screens:mergeReleaseJniLibFolders
+> Task :react-native-webview:preReleaseBuild
+> Task :react-native-screens:mergeReleaseNativeLibs
+> Task :react-native-webview:mergeReleaseJniLibFolders
+> Task :react-native-webview:mergeReleaseNativeLibs NO-SOURCE
+> Task :react-native-google-signin_google-signin:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-screens:copyReleaseJniLibsProjectOnly
+> Task :react-native-webview:copyReleaseJniLibsProjectOnly
+> Task :react-native-google-signin_google-signin:generateReleaseBuildConfig
+> Task :react-native-google-signin_google-signin:generateReleaseResValues
+> Task :react-native-google-signin_google-signin:generateReleaseResources
+> Task :react-native-google-signin_google-signin:packageReleaseResources
+> Task :react-native-gesture-handler:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-google-signin_google-signin:javaPreCompileRelease
+> Task :react-native-gesture-handler:generateReleaseBuildConfig
+> Task :react-native-gesture-handler:generateReleaseResValues
+> Task :react-native-gesture-handler:generateReleaseResources
+> Task :react-native-gesture-handler:packageReleaseResources
+> Task :react-native-reanimated:generateReleaseBuildConfig
+> Task :react-native-reanimated:generateReleaseResValues
+> Task :react-native-google-signin_google-signin:parseReleaseLocalResources
+> Task :react-native-gesture-handler:parseReleaseLocalResources
+> Task :react-native-reanimated:generateReleaseResources
+> Task :react-native-reanimated:packageReleaseResources
+> Task :react-native-reanimated:javaPreCompileRelease
+> Task :react-native-reanimated:parseReleaseLocalResources
+> Task :react-native-worklets:generateReleaseBuildConfig
+> Task :react-native-worklets:generateReleaseResValues
+> Task :react-native-worklets:generateReleaseResources
+> Task :react-native-worklets:packageReleaseResources
+> Task :react-native-worklets:parseReleaseLocalResources
+> Task :react-native-worklets:javaPreCompileRelease
+> Task :react-native-gesture-handler:javaPreCompileRelease
+> Task :react-native-safe-area-context:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-safe-area-context:generateReleaseBuildConfig
+> Task :react-native-safe-area-context:generateReleaseResValues
+> Task :react-native-safe-area-context:generateReleaseResources
+> Task :react-native-google-signin_google-signin:generateReleaseRFile
+> Task :react-native-worklets:generateReleaseRFile
+> Task :react-native-gesture-handler:generateReleaseRFile
+> Task :react-native-reanimated:generateReleaseRFile
+> Task :react-native-safe-area-context:packageReleaseResources
+> Task :app:mergeReleaseNativeLibs
+> Task :app:stripReleaseDebugSymbols
+
+> Task :react-native-google-signin_google-signin:compileReleaseKotlin
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/@react-native-google-signin/google-signin/android/src/main/java/com/reactnativegooglesignin/ErrorDto.kt:3:8 'class GoogleSignInStatusCodes : CommonStatusCodes' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/@react-native-google-signin/google-signin/android/src/main/java/com/reactnativegooglesignin/ErrorDto.kt:23:31 Condition is always 'true'.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/@react-native-google-signin/google-signin/android/src/main/java/com/reactnativegooglesignin/ErrorDto.kt:24:16 'class GoogleSignInStatusCodes : CommonStatusCodes' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/@react-native-google-signin/google-signin/android/src/main/java/com/reactnativegooglesignin/ErrorDto.kt:29:33 'class GoogleSignInStatusCodes : CommonStatusCodes' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/@react-native-google-signin/google-signin/android/src/main/java/com/reactnativegooglesignin/ErrorDto.kt:30:38 'class GoogleSignInStatusCodes : CommonStatusCodes' is deprecated. Deprecated in Java.
+
+> Task :react-native-worklets:compileReleaseJavaWithJavac
+Note: C:\Users\leigh\Desktop\LilyCrest\LilyCrest-Clean\frontend\node_modules\react-native-worklets\android\src\main\java\com\swmansion\worklets\WorkletsPackage.java uses unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+
+> Task :app:extractReleaseNativeSymbolTables
+
+> Task :react-native-google-signin_google-signin:compileReleaseJavaWithJavac
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: C:\Users\leigh\Desktop\LilyCrest\LilyCrest-Clean\frontend\node_modules\@react-native-google-signin\google-signin\android\src\main\java\com\reactnativegooglesignin\RNGoogleSigninModule.java uses unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+
+> Task :react-native-screens:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-safe-area-context:javaPreCompileRelease
+> Task :react-native-safe-area-context:parseReleaseLocalResources
+> Task :react-native-screens:generateReleaseBuildConfig
+> Task :react-native-screens:generateReleaseResValues
+> Task :react-native-worklets:bundleLibCompileToJarRelease
+> Task :react-native-safe-area-context:generateReleaseRFile
+> Task :react-native-google-signin_google-signin:bundleLibRuntimeToDirRelease
+> Task :react-native-screens:generateReleaseResources
+> Task :app:mergeReleaseNativeDebugMetadata
+
+> Task :react-native-reanimated:compileReleaseJavaWithJavac
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: Some input files use unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+
+> Task :react-native-reanimated:bundleLibCompileToJarRelease
+> Task :react-native-screens:packageReleaseResources
+> Task :react-native-webview:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :react-native-screens:javaPreCompileRelease
+> Task :react-native-webview:generateReleaseBuildConfig
+> Task :react-native-screens:parseReleaseLocalResources
+> Task :react-native-webview:generateReleaseResValues
+> Task :react-native-webview:generateReleaseResources
+> Task :react-native-screens:generateReleaseRFile
+> Task :react-native-webview:packageReleaseResources
+> Task :react-native-webview:javaPreCompileRelease
+> Task :react-native-webview:parseReleaseLocalResources
+> Task :react-native-async-storage_async-storage:generateReleaseBuildConfig
+> Task :react-native-async-storage_async-storage:generateReleaseResValues
+> Task :react-native-webview:generateReleaseRFile
+> Task :react-native-async-storage_async-storage:generateReleaseResources
+> Task :react-native-async-storage_async-storage:packageReleaseResources
+> Task :react-native-async-storage_async-storage:parseReleaseLocalResources
+> Task :react-native-async-storage_async-storage:javaPreCompileRelease
+> Task :expo:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo:generateReleaseBuildConfig
+> Task :react-native-async-storage_async-storage:generateReleaseRFile
+> Task :expo:generateReleaseResValues
+
+> Task :react-native-async-storage_async-storage:compileReleaseJavaWithJavac
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+Note: C:\Users\leigh\Desktop\LilyCrest\LilyCrest-Clean\frontend\node_modules\@react-native-async-storage\async-storage\android\src\javaPackage\java\com\reactnativecommunity\asyncstorage\AsyncStoragePackage.java uses unchecked or unsafe operations.
+Note: Recompile with -Xlint:unchecked for details.
+
+> Task :expo:generateReleaseResources
+> Task :expo:packageReleaseResources
+> Task :expo-constants:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo:parseReleaseLocalResources
+> Task :expo-constants:generateReleaseBuildConfig
+> Task :react-native-async-storage_async-storage:bundleLibRuntimeToDirRelease
+> Task :expo-constants:generateReleaseResValues
+> Task :expo:generateReleaseRFile
+> Task :expo-constants:generateReleaseResources
+> Task :expo-constants:packageReleaseResources
+> Task :expo-modules-core:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-constants:parseReleaseLocalResources
+> Task :expo-modules-core:generateReleaseBuildConfig
+> Task :expo-modules-core:generateReleaseResValues
+> Task :expo-constants:generateReleaseRFile
+> Task :expo-modules-core:generateReleaseResources
+> Task :expo-modules-core:packageReleaseResources
+> Task :expo-modules-core:parseReleaseLocalResources
+> Task :expo-modules-core:javaPreCompileRelease
+> Task :expo-constants:javaPreCompileRelease
+> Task :expo-dev-client:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-modules-core:generateReleaseRFile
+> Task :expo-dev-client:dataBindingMergeDependencyArtifactsRelease
+> Task :expo-dev-client:generateReleaseResValues
+> Task :expo-dev-client:generateReleaseResources
+> Task :expo-dev-client:packageReleaseResources
+> Task :expo-dev-client:parseReleaseLocalResources
+> Task :expo-dev-client:generateReleaseBuildConfig
+> Task :expo-dev-client:dataBindingGenBaseClassesRelease
+> Task :expo-dev-launcher:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-dev-client:javaPreCompileRelease
+> Task :expo-dev-client:generateReleaseRFile
+> Task :expo-dev-launcher:dataBindingMergeDependencyArtifactsRelease
+> Task :expo-dev-launcher:generateReleaseResValues
+> Task :expo-dev-launcher:generateReleaseResources
+> Task :expo-dev-launcher:packageReleaseResources
+> Task :expo-dev-menu:generateReleaseResValues
+> Task :expo-dev-menu:generateReleaseResources
+> Task :expo-dev-launcher:parseReleaseLocalResources
+> Task :expo-dev-menu:packageReleaseResources
+> Task :expo-dev-menu-interface:generateReleaseResValues
+> Task :expo-dev-menu-interface:generateReleaseResources
+> Task :expo-dev-menu:parseReleaseLocalResources
+> Task :expo-dev-menu-interface:packageReleaseResources
+> Task :expo-json-utils:generateReleaseResValues
+> Task :expo-dev-menu-interface:parseReleaseLocalResources
+> Task :expo-dev-menu:generateReleaseRFile
+> Task :expo-json-utils:generateReleaseResources
+> Task :expo-dev-menu-interface:generateReleaseRFile
+> Task :expo-json-utils:packageReleaseResources
+> Task :expo-json-utils:parseReleaseLocalResources
+> Task :expo-manifests:generateReleaseResValues
+> Task :expo-manifests:generateReleaseResources
+> Task :expo-json-utils:generateReleaseRFile
+> Task :expo-manifests:packageReleaseResources
+> Task :expo-updates-interface:generateReleaseResValues
+> Task :expo-manifests:parseReleaseLocalResources
+> Task :expo-updates-interface:generateReleaseResources
+> Task :expo-manifests:generateReleaseRFile
+> Task :expo-updates-interface:packageReleaseResources
+> Task :expo-updates-interface:parseReleaseLocalResources
+> Task :expo-dev-launcher:generateReleaseBuildConfig
+> Task :expo-updates-interface:generateReleaseRFile
+> Task :expo-dev-launcher:generateReleaseRFile
+> Task :expo-dev-launcher:dataBindingGenBaseClassesRelease
+> Task :expo-dev-launcher:checkApolloVersions
+> Task :expo-dev-launcher:generateServiceApolloOptions
+> Task :expo-dev-menu:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-dev-menu:generateReleaseBuildConfig
+> Task :expo-dev-menu-interface:checkKotlinGradlePluginConfigurationErrors SKIPPED
+
+> Task :react-native-safe-area-context:compileReleaseKotlin
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-safe-area-context/android/src/main/java/com/th3rdwave/safeareacontext/SafeAreaView.kt:59:23 'val uiImplementation: UIImplementation!' is deprecated. Deprecated in Java.
+
+> Task :expo-dev-menu-interface:generateReleaseBuildConfig
+> Task :expo-json-utils:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-dev-menu-interface:javaPreCompileRelease
+
+> Task :react-native-webview:compileReleaseKotlin
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:22:8 'object MapBuilder : Any' is deprecated. Use Kotlin's built-in collections extensions.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:82:18 'var allowFileAccessFromFileURLs: Boolean' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:83:18 'var allowUniversalAccessFromFileURLs: Boolean' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:125:21 'fun allowScanningByMediaScanner(): Unit' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:162:36 'var systemUiVisibility: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:301:14 'object MapBuilder : Any' is deprecated. Use Kotlin's built-in collections extensions.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:351:34 Condition is always 'true'.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:370:38 'var allowUniversalAccessFromFileURLs: Boolean' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:431:51 Unchecked cast of 'Any?' to 'HashMap<String, String>'.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:487:23 'var savePassword: Boolean' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:488:23 'var saveFormData: Boolean' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:558:23 'var allowFileAccessFromFileURLs: Boolean' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:603:52 'static field FORCE_DARK_ON: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:603:89 'static field FORCE_DARK_OFF: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:604:35 'static fun setForceDark(p0: @NonNull() WebSettings, p1: Int): Unit' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:613:35 'static fun setForceDarkStrategy(p0: @NonNull() WebSettings, p1: Int): Unit' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:615:39 'static field DARK_STRATEGY_PREFER_WEB_THEME_OVER_USER_AGENT_DARKENING: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:659:65 Unchecked cast of 'ArrayList<Any?>' to 'List<Map<String, String>>'.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/RNCWebViewManagerImpl.kt:680:23 'var saveFormData: Boolean' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopCustomMenuSelectionEvent.kt:5:8 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopCustomMenuSelectionEvent.kt:11:3 'constructor<T : Event<T>>(viewTag: Int): Event<T>' is deprecated. Use constructor with explicit surfaceId instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopCustomMenuSelectionEvent.kt:22:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopCustomMenuSelectionEvent.kt:22:42 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopCustomMenuSelectionEvent.kt:23:21 'fun receiveEvent(targetTag: Int, eventName: String, params: WritableMap?): Unit' is deprecated. Use [RCTModernEventEmitter.receiveEvent] instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopHttpErrorEvent.kt:5:8 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopHttpErrorEvent.kt:11:3 'constructor<T : Event<T>>(viewTag: Int): Event<T>' is deprecated. Use constructor with explicit surfaceId instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopHttpErrorEvent.kt:22:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopHttpErrorEvent.kt:22:42 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopHttpErrorEvent.kt:23:21 'fun receiveEvent(targetTag: Int, eventName: String, params: WritableMap?): Unit' is deprecated. Use [RCTModernEventEmitter.receiveEvent] instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingErrorEvent.kt:5:8 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingErrorEvent.kt:11:3 'constructor<T : Event<T>>(viewTag: Int): Event<T>' is deprecated. Use constructor with explicit surfaceId instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingErrorEvent.kt:22:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingErrorEvent.kt:22:42 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingErrorEvent.kt:23:21 'fun receiveEvent(targetTag: Int, eventName: String, params: WritableMap?): Unit' is deprecated. Use [RCTModernEventEmitter.receiveEvent] instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingFinishEvent.kt:5:8 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingFinishEvent.kt:11:3 'constructor<T : Event<T>>(viewTag: Int): Event<T>' is deprecated. Use constructor with explicit surfaceId instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingFinishEvent.kt:22:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingFinishEvent.kt:22:42 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingFinishEvent.kt:23:21 'fun receiveEvent(targetTag: Int, eventName: String, params: WritableMap?): Unit' is deprecated. Use [RCTModernEventEmitter.receiveEvent] instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingProgressEvent.kt:5:8 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingProgressEvent.kt:11:3 'constructor<T : Event<T>>(viewTag: Int): Event<T>' is deprecated. Use constructor with explicit surfaceId instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingProgressEvent.kt:22:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingProgressEvent.kt:22:42 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingProgressEvent.kt:23:21 'fun receiveEvent(targetTag: Int, eventName: String, params: WritableMap?): Unit' is deprecated. Use [RCTModernEventEmitter.receiveEvent] instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingStartEvent.kt:5:8 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingStartEvent.kt:11:3 'constructor<T : Event<T>>(viewTag: Int): Event<T>' is deprecated. Use constructor with explicit surfaceId instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingStartEvent.kt:22:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingStartEvent.kt:22:42 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopLoadingStartEvent.kt:23:21 'fun receiveEvent(targetTag: Int, eventName: String, params: WritableMap?): Unit' is deprecated. Use [RCTModernEventEmitter.receiveEvent] instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopMessageEvent.kt:5:8 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopMessageEvent.kt:10:75 'constructor<T : Event<T>>(viewTag: Int): Event<T>' is deprecated. Use constructor with explicit surfaceId instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopMessageEvent.kt:21:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopMessageEvent.kt:21:42 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopMessageEvent.kt:22:21 'fun receiveEvent(targetTag: Int, eventName: String, params: WritableMap?): Unit' is deprecated. Use [RCTModernEventEmitter.receiveEvent] instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopNewWindowEvent.kt:5:8 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopNewWindowEvent.kt:11:3 'constructor<T : Event<T>>(viewTag: Int): Event<T>' is deprecated. Use constructor with explicit surfaceId instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopNewWindowEvent.kt:22:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopNewWindowEvent.kt:22:42 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopNewWindowEvent.kt:23:21 'fun receiveEvent(targetTag: Int, eventName: String, params: WritableMap?): Unit' is deprecated. Use [RCTModernEventEmitter.receiveEvent] instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopRenderProcessGoneEvent.kt:5:8 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopRenderProcessGoneEvent.kt:12:3 'constructor<T : Event<T>>(viewTag: Int): Event<T>' is deprecated. Use constructor with explicit surfaceId instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopRenderProcessGoneEvent.kt:23:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopRenderProcessGoneEvent.kt:23:42 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopRenderProcessGoneEvent.kt:24:21 'fun receiveEvent(targetTag: Int, eventName: String, params: WritableMap?): Unit' is deprecated. Use [RCTModernEventEmitter.receiveEvent] instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopShouldStartLoadWithRequestEvent.kt:5:8 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopShouldStartLoadWithRequestEvent.kt:10:89 'constructor<T : Event<T>>(viewTag: Int): Event<T>' is deprecated. Use constructor with explicit surfaceId instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopShouldStartLoadWithRequestEvent.kt:27:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopShouldStartLoadWithRequestEvent.kt:27:42 'interface RCTEventEmitter : JavaScriptModule' is deprecated. Use [RCTModernEventEmitter] instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-webview/android/src/main/java/com/reactnativecommunity/webview/events/TopShouldStartLoadWithRequestEvent.kt:28:21 'fun receiveEvent(targetTag: Int, eventName: String, params: WritableMap?): Unit' is deprecated. Use [RCTModernEventEmitter.receiveEvent] instead.
+
+> Task :expo-json-utils:generateReleaseBuildConfig
+
+> Task :expo-dev-launcher:generateServiceApolloSources
+w: C:\Users\leigh\Desktop\LilyCrest\LilyCrest-Clean\frontend\node_modules\expo-dev-launcher\android\src\main\graphql\GetBranches.graphql: (21, 11): Apollo: Use of deprecated field `runtimeVersion`
+w: C:\Users\leigh\Desktop\LilyCrest\LilyCrest-Clean\frontend\node_modules\expo-dev-launcher\android\src\main\graphql\GetBranches.graphql: (34, 3): Apollo: Variable `platform` is unused
+w: C:\Users\leigh\Desktop\LilyCrest\LilyCrest-Clean\frontend\node_modules\expo-dev-launcher\android\src\main\graphql\GetUpdates.graphql: (14, 11): Apollo: Use of deprecated field `runtimeVersion`
+
+> Task :react-native-safe-area-context:compileReleaseJavaWithJavac
+> Task :react-native-safe-area-context:bundleLibRuntimeToDirRelease
+
+> Task :react-native-webview:compileReleaseJavaWithJavac
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+
+> Task :expo-manifests:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-json-utils:javaPreCompileRelease
+> Task :expo-manifests:generateReleaseBuildConfig
+> Task :expo-manifests:javaPreCompileRelease
+> Task :expo-updates-interface:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :expo-dev-menu:javaPreCompileRelease
+> Task :expo-updates-interface:generateReleaseBuildConfig
+> Task :expo-updates-interface:javaPreCompileRelease
+> Task :expo-dev-launcher:javaPreCompileRelease
+> Task :expo:javaPreCompileRelease
+> Task :react-native-webview:bundleLibRuntimeToDirRelease
+> Task :react-native-worklets:bundleLibRuntimeToDirRelease
+> Task :react-native-reanimated:bundleLibRuntimeToDirRelease
+> Task :app:buildKotlinToolingMetadata
+> Task :app:checkKotlinGradlePluginConfigurationErrors SKIPPED
+> Task :app:generateReleaseBuildConfig
+> Task :expo:writeReleaseAarMetadata
+> Task :expo-constants:writeReleaseAarMetadata
+> Task :expo-dev-client:writeReleaseAarMetadata
+> Task :expo-dev-launcher:writeReleaseAarMetadata
+> Task :expo-dev-menu:writeReleaseAarMetadata
+> Task :expo-dev-menu-interface:writeReleaseAarMetadata
+> Task :expo-json-utils:writeReleaseAarMetadata
+> Task :expo-manifests:writeReleaseAarMetadata
+> Task :expo-modules-core:writeReleaseAarMetadata
+> Task :expo-updates-interface:writeReleaseAarMetadata
+> Task :react-native-async-storage_async-storage:writeReleaseAarMetadata
+> Task :react-native-gesture-handler:writeReleaseAarMetadata
+> Task :react-native-google-signin_google-signin:writeReleaseAarMetadata
+> Task :react-native-reanimated:writeReleaseAarMetadata
+> Task :react-native-safe-area-context:writeReleaseAarMetadata
+> Task :react-native-screens:writeReleaseAarMetadata
+> Task :react-native-webview:writeReleaseAarMetadata
+> Task :react-native-worklets:writeReleaseAarMetadata
+> Task :app:checkReleaseDuplicateClasses
+> Task :app:checkReleaseAarMetadata
+
+> Task :react-native-gesture-handler:compileReleaseKotlin
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-gesture-handler/android/src/main/java/com/swmansion/gesturehandler/react/RNGestureHandlerRootView.kt:41:43 The corresponding parameter in the supertype 'ReactViewGroup' is named 'ev'. This may cause problems when calling this function with named arguments.
+
+> Task :app:createBundleReleaseJsAndAssets
+env: load .env
+env: export EXPO_PUBLIC_BACKEND_PORT EXPO_PUBLIC_DEV_HOST EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN EXPO_PUBLIC_FIREBASE_PROJECT_ID EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID EXPO_PUBLIC_FIREBASE_API_KEY EXPO_PUBLIC_FIREBASE_WEB_API_KEY EXPO_PUBLIC_FIREBASE_ANDROID_API_KEY EXPO_PUBLIC_FIREBASE_WEB_APP_ID EXPO_PUBLIC_FIREBASE_ANDROID_APP_ID EXPO_PUBLIC_FIREBASE_MEASUREMENT_ID EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID EXPO_PUBLIC_GOOGLE_MAPS_API_KEY EXPO_PUBLIC_GOOGLE_ANDROID_API_KEY EXPO_PUBLIC_GOOGLE_ANDROID_CERT_HASH
+
+> Task :react-native-screens:compileReleaseKotlin
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/RNScreensPackage.kt:56:9 The corresponding parameter in the supertype 'BaseReactPackage' is named 'name'. This may cause problems when calling this function with named arguments.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/RNScreensPackage.kt:57:9 The corresponding parameter in the supertype 'BaseReactPackage' is named 'reactContext'. This may cause problems when calling this function with named arguments.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/RNScreensPackage.kt:70:17 'constructor(name: String, className: String, canOverrideExistingModule: Boolean, needsEagerInit: Boolean, hasConstants: Boolean, isCxxModule: Boolean, isTurboModule: Boolean): ReactModuleInfo' is deprecated. This constructor is deprecated and will be removed in the future. Use ReactModuleInfo(String, String, boolean, boolean, boolean, boolean)].
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/Screen.kt:48:77 Unchecked cast of '(CoordinatorLayout.Behavior<View!>?..CoordinatorLayout.Behavior<*>?)' to 'BottomSheetBehavior<Screen>'.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/Screen.kt:383:36 'fun setTranslucent(screen: Screen, activity: Activity?, context: ReactContext?): Unit' is deprecated. For apps targeting SDK 35 or above this prop has no effect because edge-to-edge is enabled by default and the status bar is always translucent.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/Screen.kt:402:36 'fun setColor(screen: Screen, activity: Activity?, context: ReactContext?): Unit' is deprecated. For apps targeting SDK 35 or above this prop has no effect because edge-to-edge is enabled by default and the status bar is always translucent.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/Screen.kt:420:36 'fun setNavigationBarColor(screen: Screen, activity: Activity?): Unit' is deprecated. For all apps targeting Android SDK 35 or above edge-to-edge is enabled by default.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/Screen.kt:437:36 'fun setNavigationBarTranslucent(screen: Screen, activity: Activity?): Unit' is deprecated. For all apps targeting Android SDK 35 or above edge-to-edge is enabled by default.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenStackFragment.kt:217:31 'var targetElevation: Float' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenStackFragment.kt:220:13 'fun setHasOptionsMenu(p0: Boolean): Unit' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenStackFragment.kt:397:18 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenStackFragment.kt:404:22 'fun onPrepareOptionsMenu(p0: Menu): Unit' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenStackFragment.kt:407:18 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenStackFragment.kt:412:22 'fun onCreateOptionsMenu(p0: Menu, p1: MenuInflater): Unit' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenStackHeaderConfig.kt:435:18 'val reactNativeHost: ReactNativeHost' is deprecated. You should not use ReactNativeHost directly in the New Architecture. Use ReactHost instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenViewManager.kt:203:14 'var statusBarColor: Int?' is deprecated. For apps targeting SDK 35 or above this prop has no effect because edge-to-edge is enabled by default and the status bar is always translucent.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenViewManager.kt:220:14 'var isStatusBarTranslucent: Boolean?' is deprecated. For apps targeting SDK 35 or above this prop has no effect because edge-to-edge is enabled by default and the status bar is always translucent.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenViewManager.kt:237:14 'var navigationBarColor: Int?' is deprecated. For all apps targeting Android SDK 35 or above edge-to-edge is enabled by default.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenViewManager.kt:246:14 'var isNavigationBarTranslucent: Boolean?' is deprecated. For all apps targeting Android SDK 35 or above edge-to-edge is enabled by default.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:55:42 'fun replaceSystemWindowInsets(p0: Int, p1: Int, p2: Int, p3: Int): WindowInsetsCompat' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:56:39 'val systemWindowInsetLeft: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:58:39 'val systemWindowInsetRight: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:59:39 'val systemWindowInsetBottom: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:102:53 'var statusBarColor: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:106:37 'var statusBarColor: Int?' is deprecated. For apps targeting SDK 35 or above this prop has no effect because edge-to-edge is enabled by default and the status bar is always translucent.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:113:48 'var statusBarColor: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:116:32 'var statusBarColor: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:162:49 'var isStatusBarTranslucent: Boolean?' is deprecated. For apps targeting SDK 35 or above this prop has no effect because edge-to-edge is enabled by default and the status bar is always translucent.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:218:43 'var navigationBarColor: Int?' is deprecated. For all apps targeting Android SDK 35 or above edge-to-edge is enabled by default.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:218:72 'var navigationBarColor: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:224:16 'var navigationBarColor: Int' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:241:55 'var isNavigationBarTranslucent: Boolean?' is deprecated. For all apps targeting Android SDK 35 or above edge-to-edge is enabled by default.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:283:13 'fun setColor(screen: Screen, activity: Activity?, context: ReactContext?): Unit' is deprecated. For apps targeting SDK 35 or above this prop has no effect because edge-to-edge is enabled by default and the status bar is always translucent.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:285:13 'fun setTranslucent(screen: Screen, activity: Activity?, context: ReactContext?): Unit' is deprecated. For apps targeting SDK 35 or above this prop has no effect because edge-to-edge is enabled by default and the status bar is always translucent.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:289:13 'fun setNavigationBarColor(screen: Screen, activity: Activity?): Unit' is deprecated. For all apps targeting Android SDK 35 or above edge-to-edge is enabled by default.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:290:13 'fun setNavigationBarTranslucent(screen: Screen, activity: Activity?): Unit' is deprecated. For all apps targeting Android SDK 35 or above edge-to-edge is enabled by default.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:354:42 'var statusBarColor: Int?' is deprecated. For apps targeting SDK 35 or above this prop has no effect because edge-to-edge is enabled by default and the status bar is always translucent.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:356:48 'var isStatusBarTranslucent: Boolean?' is deprecated. For apps targeting SDK 35 or above this prop has no effect because edge-to-edge is enabled by default and the status bar is always translucent.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:359:57 'var navigationBarColor: Int?' is deprecated. For all apps targeting Android SDK 35 or above edge-to-edge is enabled by default.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/ScreenWindowTraits.kt:360:63 'var isNavigationBarTranslucent: Boolean?' is deprecated. For all apps targeting Android SDK 35 or above edge-to-edge is enabled by default.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/BottomSheetDialogRootView.kt:7:8 'object ReactFeatureFlags : Any' is deprecated. Use com.facebook.react.internal.featureflags.ReactNativeFeatureFlags instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/BottomSheetDialogRootView.kt:25:13 'object ReactFeatureFlags : Any' is deprecated. Use com.facebook.react.internal.featureflags.ReactNativeFeatureFlags instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/BottomSheetDialogRootView.kt:32:9 The corresponding parameter in the supertype 'ReactViewGroup' is named 'left'. This may cause problems when calling this function with named arguments.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/BottomSheetDialogRootView.kt:33:9 The corresponding parameter in the supertype 'ReactViewGroup' is named 'top'. This may cause problems when calling this function with named arguments.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/BottomSheetDialogRootView.kt:34:9 The corresponding parameter in the supertype 'ReactViewGroup' is named 'right'. This may cause problems when calling this function with named arguments.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/BottomSheetDialogRootView.kt:35:9 The corresponding parameter in the supertype 'ReactViewGroup' is named 'bottom'. This may cause problems when calling this function with named arguments.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/BottomSheetDialogRootView.kt:71:9 The corresponding parameter in the supertype 'RootView' is named 'childView'. This may cause problems when calling this function with named arguments.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/BottomSheetDialogRootView.kt:72:9 The corresponding parameter in the supertype 'RootView' is named 'ev'. This may cause problems when calling this function with named arguments.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/BottomSheetDialogRootView.kt:79:46 The corresponding parameter in the supertype 'RootView' is named 'ev'. This may cause problems when calling this function with named arguments.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/BottomSheetDialogRootView.kt:83:9 The corresponding parameter in the supertype 'RootView' is named 'childView'. This may cause problems when calling this function with named arguments.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/BottomSheetDialogRootView.kt:84:9 The corresponding parameter in the supertype 'RootView' is named 'ev'. This may cause problems when calling this function with named arguments.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/BottomSheetDialogRootView.kt:95:34 The corresponding parameter in the supertype 'RootView' is named 't'. This may cause problems when calling this function with named arguments.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/DimmingView.kt:63:9 The corresponding parameter in the supertype 'ReactCompoundView' is named 'touchX'. This may cause problems when calling this function with named arguments.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/DimmingView.kt:64:9 The corresponding parameter in the supertype 'ReactCompoundView' is named 'touchY'. This may cause problems when calling this function with named arguments.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/DimmingView.kt:68:9 The corresponding parameter in the supertype 'ReactCompoundViewGroup' is named 'touchX'. This may cause problems when calling this function with named arguments.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/bottomsheet/DimmingView.kt:69:9 The corresponding parameter in the supertype 'ReactCompoundViewGroup' is named 'touchY'. This may cause problems when calling this function with named arguments.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/react-native-screens/android/src/main/java/com/swmansion/rnscreens/gamma/tabs/TabsHostViewManager.kt:37:9 The corresponding parameter in the supertype 'TabsHostViewManager' is named 'view'. This may cause problems when calling this function with named arguments.
+
+> Task :app:createBundleReleaseJsAndAssets
+Starting Metro Bundler
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+
+> Task :expo-modules-core:compileReleaseKotlin
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-modules-core/android/src/main/java/expo/modules/adapters/react/apploader/RNHeadlessAppLoader.kt:48:87 'val reactNativeHost: ReactNativeHost' is deprecated. You should not use ReactNativeHost directly in the New Architecture. Use ReactHost instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-modules-core/android/src/main/java/expo/modules/adapters/react/apploader/RNHeadlessAppLoader.kt:91:85 'val reactNativeHost: ReactNativeHost' is deprecated. You should not use ReactNativeHost directly in the New Architecture. Use ReactHost instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-modules-core/android/src/main/java/expo/modules/adapters/react/apploader/RNHeadlessAppLoader.kt:120:83 'val reactNativeHost: ReactNativeHost' is deprecated. You should not use ReactNativeHost directly in the New Architecture. Use ReactHost instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-modules-core/android/src/main/java/expo/modules/apploader/AppLoaderProvider.kt:34:52 Unchecked cast of 'Class<*>!' to 'Class<out HeadlessAppLoader>'.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/AppContext.kt:30:8 'typealias ErrorManagerModule = JSLoggerModule' is deprecated. Use JSLoggerModule instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/AppContext.kt:253:21 'typealias ErrorManagerModule = JSLoggerModule' is deprecated. Use JSLoggerModule instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/AppContext.kt:343:21 'val DEFAULT: Int' is deprecated. UIManagerType.DEFAULT will be deleted in the next release of React Native. Use [LEGACY] instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/defaultmodules/NativeModulesProxyModule.kt:16:5 'fun Constants(legacyConstantsProvider: () -> Map<String, Any?>): Unit' is deprecated. Use `Constant` or `Property` instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/jni/PromiseImpl.kt:65:51 'val errorManager: JSLoggerModule?' is deprecated. Use AppContext.jsLogger instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/jni/PromiseImpl.kt:69:22 'fun reportExceptionToLogBox(codedException: CodedException): Unit' is deprecated. Use appContext.jsLogger.error(...) instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/views/ViewDefinitionBuilder.kt:464:16 'val errorManager: JSLoggerModule?' is deprecated. Use AppContext.jsLogger instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/views/ViewDefinitionBuilder.kt:464:30 'fun reportExceptionToLogBox(codedException: CodedException): Unit' is deprecated. Use appContext.jsLogger.error(...) instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/views/ViewManagerDefinition.kt:41:16 'val errorManager: JSLoggerModule?' is deprecated. Use AppContext.jsLogger instead.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-modules-core/android/src/main/java/expo/modules/kotlin/views/ViewManagerDefinition.kt:41:30 'fun reportExceptionToLogBox(codedException: CodedException): Unit' is deprecated. Use appContext.jsLogger.error(...) instead.
+
+> Task :app:createBundleReleaseJsAndAssets
+Android node_modules\expo-router\entry.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android node_modules\expo-router\entry.js ▓▓░░░░░░░░░░░░░░ 17.7% ( 51/133)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓░░░░░░░░░░░ 36.4% (270/463)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓░░░░░░░░░ 45.8% (425/628)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓░░░░░░░░░ 48.1% (473/700)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓░░░ 85.1% (1251/1380)
+Android node_modules\expo-router\entry.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 96.0% (1762/1810)
+Android Bundled 25615ms node_modules\expo-router\entry.js (1990 modules)
+Writing bundle output to: android\app\build\generated\assets\createBundleReleaseJsAndAssets\index.android.bundle
+Writing sourcemap output to: android\app\build\intermediates\sourcemaps\react\release\index.android.bundle.packager.map
+Copying 60 asset files
+Done writing bundle output
+Done writing sourcemap output
+
+> Task :react-native-gesture-handler:compileReleaseJavaWithJavac
+> Task :react-native-gesture-handler:bundleLibRuntimeToDirRelease
+> Task :react-native-screens:compileReleaseJavaWithJavac
+> Task :react-native-screens:bundleLibRuntimeToDirRelease
+
+> Task :expo-modules-core:compileReleaseJavaWithJavac
+Note: Some input files use or override a deprecated API.
+Note: Recompile with -Xlint:deprecation for details.
+
+> Task :app:generateReleaseResValues
+> Task :app:processReleaseGoogleServices
+> Task :app:mapReleaseSourceSetPaths
+> Task :app:generateReleaseResources
+> Task :expo-modules-core:bundleLibCompileToJarRelease
+> Task :expo-modules-core:bundleLibRuntimeToDirRelease
+> Task :expo-dev-client:compileReleaseKotlin NO-SOURCE
+> Task :expo-dev-client:compileReleaseJavaWithJavac
+> Task :expo-dev-client:bundleLibCompileToJarRelease
+> Task :expo-dev-client:bundleLibRuntimeToDirRelease
+> Task :app:packageReleaseResources
+> Task :app:mergeReleaseResources FAILED
+> Task :app:parseReleaseLocalResources
+
+> Task :expo-constants:compileReleaseKotlin
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-constants/android/src/main/java/expo/modules/constants/ConstantsModule.kt:12:5 'fun Constants(legacyConstantsProvider: () -> Map<String, Any?>): Unit' is deprecated. Use `Constant` or `Property` instead.
+
+> Task :expo-json-utils:compileReleaseKotlin
+> Task :expo-updates-interface:compileReleaseKotlin
+
+> Task :expo-dev-menu-interface:compileReleaseKotlin
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-menu-interface/android/src/main/java/expo/interfaces/devmenu/DevMenuInterfacePackage.kt:14:16 This declaration overrides a deprecated member but is not marked as deprecated itself. Add the '@Deprecated' annotation or suppress the diagnostic.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-menu-interface/android/src/main/java/expo/interfaces/devmenu/ReactHostWrapper.kt:5:8 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-menu-interface/android/src/main/java/expo/interfaces/devmenu/ReactHostWrapper.kt:19:41 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+w: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/node_modules/expo-dev-menu-interface/android/src/main/java/expo/interfaces/devmenu/ReactHostWrapper.kt:20:33 'class ReactNativeHost : Any' is deprecated. Deprecated in Java.
+
+[Incubating] Problems report is available at: file:///C:/Users/leigh/Desktop/LilyCrest/LilyCrest-Clean/frontend/android/build/reports/problems/problems-report.html
+
+FAILURE: Build failed with an exception.
+
+* What went wrong:
+Execution failed for task ':app:mergeReleaseResources'.
+> A failure occurred while executing com.android.build.gradle.internal.res.Aapt2CompileRunnable
+   > Android resource compilation failed
+     ERROR: C:\Users\leigh\Desktop\LilyCrest\LilyCrest-Clean\frontend\android\app\build\generated\res\createBundleReleaseJsAndAssets\drawable-mdpi\assets_images_splashimage.png: AAPT: error: file failed to compile.
+         
+
+* Try:
+> Run with --stacktrace option to get the stack trace.
+> Run with --info or --debug option to get more log output.
+> Run with --scan to get full insights.
+> Get more help at https://help.gradle.org.
+
+Deprecated Gradle features were used in this build, making it incompatible with Gradle 9.0.
+
+You can use '--warning-mode all' to show the individual deprecation warnings and determine if they come from your own scripts or plugins.
+
+For more on this, please refer to https://docs.gradle.org/8.14.3/userguide/command_line_interface.html#sec:command_line_warnings in the Gradle documentation.
+
+BUILD FAILED in 3m 56s
+315 actionable tasks: 285 executed, 30 up-to-date

@@ -1,3 +1,4 @@
+/* eslint-env node */
 // Delete image files with & in their names that crash metro's asset resolver
 const fs = require('fs');
 const path = require('path');

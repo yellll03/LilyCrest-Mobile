@@ -4,36 +4,43 @@ import * as LocalAuthentication from 'expo-local-authentication';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
-  KeyboardAvoidingView,
-  Platform,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View,
+    ActivityIndicator,
+    KeyboardAvoidingView,
+    Platform,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAuth } from '../src/context/AuthContext';
 import { useAlert } from '../src/context/AlertContext';
-import { saveCredentials } from '../src/services/secureCredentials';
+import { useAuth } from '../src/context/AuthContext';
+import { useToast } from '../src/context/ToastContext';
 import { apiService } from '../src/services/api';
+import { saveCredentials } from '../src/services/secureCredentials';
 
 const OTP_LENGTH = 6;
 const RESEND_COOLDOWN = 60; // seconds
+
+function readParam(value, fallback = '') {
+  if (Array.isArray(value)) return value[0] ?? fallback;
+  return value ?? fallback;
+}
 
 export default function OtpVerifyScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { verifyLoginOtp } = useAuth();
   const { showAlert } = useAlert();
+  const { showToast } = useToast();
 
-  const otpToken = params.otp_token;
-  const maskedEmail = params.masked_email || 'your email';
-  const rememberMe = params.remember_me === 'true';
-  const savedEmail = params.email;
-  const savedPassword = params.password;
+  const otpToken = readParam(params.otp_token, '');
+  const maskedEmail = readParam(params.masked_email, 'your email');
+  const rememberMe = readParam(params.remember_me, 'false') === 'true';
+  const savedEmail = readParam(params.email, '');
+  const savedPassword = readParam(params.password, '');
 
   const [digits, setDigits] = useState(Array(OTP_LENGTH).fill(''));
   const [isLoading, setIsLoading] = useState(false);
@@ -64,24 +71,32 @@ export default function OtpVerifyScreen() {
   };
 
   const handleDigitChange = (text, index) => {
-    // Accept paste of full 6-digit code
-    const cleaned = text.replace(/\D/g, '');
-    if (cleaned.length === OTP_LENGTH) {
-      const arr = cleaned.split('');
-      setDigits(arr);
+    // Android autofill and fast typing can inject multiple digits into one box.
+    // Distribute any digit chunk across the remaining boxes instead of dropping digits.
+    const cleaned = String(text || '').replace(/\D/g, '');
+    const next = [...digits];
+
+    if (!cleaned) {
+      next[index] = '';
+      setDigits(next);
       setError(null);
-      inputRefs.current[OTP_LENGTH - 1]?.focus();
       return;
     }
 
-    const char = cleaned.slice(-1);
-    const next = [...digits];
-    next[index] = char;
+    const available = OTP_LENGTH - index;
+    const incomingChars = cleaned.slice(0, available).split('');
+    incomingChars.forEach((char, offset) => {
+      next[index + offset] = char;
+    });
+
     setDigits(next);
     setError(null);
 
-    if (char && index < OTP_LENGTH - 1) {
-      inputRefs.current[index + 1]?.focus();
+    const nextIndex = index + incomingChars.length;
+    if (nextIndex < OTP_LENGTH) {
+      inputRefs.current[nextIndex]?.focus();
+    } else {
+      inputRefs.current[OTP_LENGTH - 1]?.focus();
     }
   };
 
@@ -95,7 +110,12 @@ export default function OtpVerifyScreen() {
   };
 
   const handleVerify = async () => {
-    const code = digits.join('');
+    if (!otpToken) {
+      setError('Your verification session has expired. Please log in again.');
+      return;
+    }
+
+    const code = digits.join('').replace(/\D/g, '');
     if (code.length !== OTP_LENGTH) {
       setError('Please enter the complete 6-digit code.');
       return;
@@ -167,6 +187,10 @@ export default function OtpVerifyScreen() {
   };
 
   const handleResend = async () => {
+    if (!otpToken) {
+      setError('Your verification session has expired. Please log in again.');
+      return;
+    }
     if (cooldown > 0 || isResending) return;
     setIsResending(true);
     setError(null);
@@ -174,6 +198,11 @@ export default function OtpVerifyScreen() {
       await apiService.resendLoginOtp(otpToken);
       setDigits(Array(OTP_LENGTH).fill(''));
       startCooldown();
+      showToast({
+        type: 'success',
+        title: 'Code Sent',
+        message: 'A new verification code was sent. Use the latest email you received.',
+      });
       setTimeout(() => inputRefs.current[0]?.focus(), 100);
     } catch (err) {
       const detail = err?.response?.data?.detail;
@@ -258,7 +287,7 @@ export default function OtpVerifyScreen() {
 
           {/* Resend */}
           <View style={styles.resendRow}>
-            <Text style={styles.resendLabel}>Didn't receive the code? </Text>
+            <Text style={styles.resendLabel}>Didn&apos;t receive the code? </Text>
             {cooldown > 0 ? (
               <Text style={styles.resendCooldown}>Resend in {cooldown}s</Text>
             ) : (
@@ -275,7 +304,7 @@ export default function OtpVerifyScreen() {
           <View style={styles.infoBox}>
             <Ionicons name="information-circle-outline" size={16} color="#6B7280" />
             <Text style={styles.infoText}>
-              The code expires in 10 minutes. Check your spam folder if you don't see it.
+              The code expires in 10 minutes. If you requested more than one code, use the newest email you received.
             </Text>
           </View>
 

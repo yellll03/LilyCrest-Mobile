@@ -83,6 +83,11 @@ def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
 android {
     ndkVersion rootProject.ext.ndkVersion
+    externalNativeBuild {
+        cmake {
+            version "4.3.2+"
+        }
+    }
 
     buildToolsVersion rootProject.ext.buildToolsVersion
     compileSdk rootProject.ext.compileSdkVersion
@@ -96,6 +101,10 @@ android {
         versionName "1.0.0"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
+
+        ndk {
+            abiFilters "arm64-v8a"
+        }
     }
     signingConfigs {
         debug {
@@ -182,3 +191,34 @@ dependencies {
 }
 
 apply plugin: 'com.google.gms.google-services'
+
+gradle.projectsEvaluated {
+    def workletsProject = findProject(":react-native-worklets")
+    def reanimatedProject = findProject(":react-native-reanimated")
+
+    if (workletsProject != null && reanimatedProject != null) {
+        def releasePrefabTask = workletsProject.tasks.findByName("prefabReleasePackage")
+        def releaseConfigureTask = reanimatedProject.tasks.findByName("configureCMakeRelWithDebInfo[arm64-v8a]")
+        if (releasePrefabTask != null && releaseConfigureTask != null) {
+            releaseConfigureTask.dependsOn(releasePrefabTask)
+        }
+
+        def debugPrefabTask = workletsProject.tasks.findByName("prefabDebugPackage")
+        def debugConfigureTask = reanimatedProject.tasks.findByName("configureCMakeDebug[arm64-v8a]")
+        if (debugPrefabTask != null && debugConfigureTask != null) {
+            debugConfigureTask.dependsOn(debugPrefabTask)
+        }
+
+        def reanimatedReleasePrefabTask = reanimatedProject.tasks.findByName("prefabReleasePackage")
+        def appReleaseConfigureTask = tasks.findByName("configureCMakeRelWithDebInfo[arm64-v8a]")
+        if (reanimatedReleasePrefabTask != null && appReleaseConfigureTask != null) {
+            appReleaseConfigureTask.dependsOn(reanimatedReleasePrefabTask)
+        }
+
+        def reanimatedDebugPrefabTask = reanimatedProject.tasks.findByName("prefabDebugPackage")
+        def appDebugConfigureTask = tasks.findByName("configureCMakeDebug[arm64-v8a]")
+        if (reanimatedDebugPrefabTask != null && appDebugConfigureTask != null) {
+            appDebugConfigureTask.dependsOn(reanimatedDebugPrefabTask)
+        }
+    }
+}

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../src/context/AuthContext';
@@ -13,7 +13,7 @@ export default function ChangePasswordScreen() {
   const router = useRouter();
   const { colors, isDarkMode } = useTheme();
   const { showAlert } = useAlert();
-  const { user, logout } = useAuth();
+  const { logout } = useAuth();
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -22,6 +22,7 @@ export default function ChangePasswordScreen() {
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({});
+  const [touched, setTouched] = useState({ current: false, new: false, confirm: false });
 
   const validatePassword = (password) => {
     const checks = {
@@ -34,26 +35,56 @@ export default function ChangePasswordScreen() {
     return checks;
   };
 
-  const passwordChecks = validatePassword(newPassword);
+  const passwordChecks = useMemo(() => validatePassword(newPassword), [newPassword]);
   const isPasswordValid = Object.values(passwordChecks).every(Boolean);
+  const isSameAsCurrent = Boolean(currentPassword) && currentPassword === newPassword;
+  const doPasswordsMatch = Boolean(confirmPassword) && newPassword === confirmPassword;
+  const canSubmit = Boolean(currentPassword) && Boolean(confirmPassword) && isPasswordValid && doPasswordsMatch && !isSameAsCurrent;
+
+  useEffect(() => {
+    const nextErrors = {};
+
+    if (touched.current) {
+      nextErrors.current = currentPassword ? '' : 'Current password is required';
+    }
+
+    if (touched.new) {
+      if (!newPassword) nextErrors.new = 'New password is required';
+      else if (!isPasswordValid) nextErrors.new = 'Password does not meet requirements';
+      else if (isSameAsCurrent) nextErrors.new = 'New password must be different from your current password';
+      else nextErrors.new = '';
+    }
+
+    if (touched.confirm) {
+      if (!confirmPassword) nextErrors.confirm = 'Please confirm your new password';
+      else if (!doPasswordsMatch) nextErrors.confirm = 'Passwords do not match';
+      else nextErrors.confirm = '';
+    }
+
+    setErrors((prev) => ({ ...prev, ...nextErrors }));
+  }, [confirmPassword, currentPassword, doPasswordsMatch, isPasswordValid, isSameAsCurrent, newPassword, touched]);
 
   const handleChangePassword = async () => {
-    setErrors({});
-    
-    if (!currentPassword) {
-      setErrors(prev => ({ ...prev, current: 'Current password is required' }));
-      return;
-    }
-    if (!isPasswordValid) {
-      setErrors(prev => ({ ...prev, new: 'Password does not meet requirements' }));
-      return;
-    }
-    if (newPassword !== confirmPassword) {
-      setErrors(prev => ({ ...prev, confirm: 'Passwords do not match' }));
-      return;
-    }
-    if (currentPassword === newPassword) {
-      setErrors(prev => ({ ...prev, new: 'New password must be different from your current password' }));
+    const nextErrors = {
+      current: currentPassword ? '' : 'Current password is required',
+      new: !newPassword
+        ? 'New password is required'
+        : !isPasswordValid
+          ? 'Password does not meet requirements'
+          : isSameAsCurrent
+            ? 'New password must be different from your current password'
+            : '',
+      confirm: !confirmPassword
+        ? 'Please confirm your new password'
+        : !doPasswordsMatch
+          ? 'Passwords do not match'
+          : '',
+    };
+
+    setTouched({ current: true, new: true, confirm: true });
+    setErrors(nextErrors);
+
+    if (nextErrors.current || nextErrors.new || nextErrors.confirm) {
       return;
     }
     
@@ -69,7 +100,7 @@ export default function ChangePasswordScreen() {
 
       // Show premium styled alert then force re-login
       showAlert({
-        title: '🔒 Password Changed Successfully',
+        title: 'Password Changed Successfully',
         message: 'Your password has been updated. For your security, you will be signed out and need to log in again with your new password.\n\nA confirmation email has also been sent to your registered address.',
         type: 'success',
         buttons: [{
@@ -135,6 +166,7 @@ export default function ChangePasswordScreen() {
                 placeholderTextColor={colors.textMuted}
                 value={currentPassword}
                 onChangeText={setCurrentPassword}
+                onBlur={() => setTouched((prev) => ({ ...prev, current: true }))}
                 secureTextEntry={!showCurrentPassword}
               />
               <TouchableOpacity onPress={() => setShowCurrentPassword(!showCurrentPassword)}>
@@ -155,6 +187,7 @@ export default function ChangePasswordScreen() {
                 placeholderTextColor={colors.textMuted}
                 value={newPassword}
                 onChangeText={setNewPassword}
+                onBlur={() => setTouched((prev) => ({ ...prev, new: true }))}
                 secureTextEntry={!showNewPassword}
               />
               <TouchableOpacity onPress={() => setShowNewPassword(!showNewPassword)}>
@@ -199,6 +232,7 @@ export default function ChangePasswordScreen() {
                 placeholderTextColor={colors.textMuted}
                 value={confirmPassword}
                 onChangeText={setConfirmPassword}
+                onBlur={() => setTouched((prev) => ({ ...prev, confirm: true }))}
                 secureTextEntry={!showConfirmPassword}
               />
               <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
@@ -206,7 +240,7 @@ export default function ChangePasswordScreen() {
               </TouchableOpacity>
             </View>
             {errors.confirm && <Text style={styles.errorText}>{errors.confirm}</Text>}
-            {confirmPassword && newPassword === confirmPassword && (
+            {confirmPassword && doPasswordsMatch && !errors.confirm && (
               <View style={styles.matchIndicator}>
                 <Ionicons name="checkmark-circle" size={16} color="#22C55E" />
                 <Text style={styles.matchText}>Passwords match</Text>
@@ -215,9 +249,9 @@ export default function ChangePasswordScreen() {
           </View>
 
           <TouchableOpacity 
-            style={[styles.updateButton, (!isPasswordValid || newPassword !== confirmPassword || !currentPassword) && styles.updateButtonDisabled]} 
+            style={[styles.updateButton, (!canSubmit || isLoading) && styles.updateButtonDisabled]} 
             onPress={handleChangePassword}
-            disabled={isLoading || !isPasswordValid || newPassword !== confirmPassword || !currentPassword}
+            disabled={isLoading || !canSubmit}
           >
             {isLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.updateButtonText}>Update Password</Text>}
           </TouchableOpacity>

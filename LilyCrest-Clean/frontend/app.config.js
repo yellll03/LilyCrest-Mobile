@@ -2,7 +2,7 @@ const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
 module.exports = {
   expo: {
-    name: 'frontend',
+    name: 'LilyCrest',
     slug: 'frontend',
     version: '1.0.0',
     orientation: 'portrait',
@@ -50,7 +50,13 @@ module.exports = {
     plugins: [
       'expo-router',
       'expo-dev-client',
-      'expo-notifications',
+      [
+        'expo-notifications',
+        {
+          defaultChannel: 'default',
+          enableBackgroundRemoteNotifications: true,
+        },
+      ],
       'expo-secure-store',
       [
         'expo-splash-screen',
@@ -65,6 +71,7 @@ module.exports = {
     experiments: {
       typedRoutes: true,
     },
+    owner: 'leigh_23',
     extra: {
       router: {},
       eas: {

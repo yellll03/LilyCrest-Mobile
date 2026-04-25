@@ -3,26 +3,26 @@ import { format } from 'date-fns';
 import { Link, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Animated,
-  Image,
-  Keyboard,
-  Linking,
-  Platform,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    Animated,
+    Image,
+    Keyboard,
+    Linking,
+    Platform,
+    RefreshControl,
+    ScrollView,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import AppHeader from '../../src/components/AppHeader';
+import PropertyShowcase from '../../src/components/PropertyShowcase';
 import StyledModal from '../../src/components/StyledModal';
 import LilyFlowerIcon from '../../src/components/assistant/LilyFlowerIcon';
 import { useAuth } from '../../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
 import { apiService } from '../../src/services/api';
-import PropertyShowcase from '../../src/components/PropertyShowcase';
 
 // ── Helpers ──────────────────────────────────────────────────
 function safeFormatDate(dateStr, fmt = 'MMM dd, yyyy') {
@@ -145,11 +145,11 @@ export default function HomeScreen() {
   const maintenanceItems = useMemo(() => dashboardData?.maintenance?.items || dashboardData?.maintenance?.list || dashboardData?.maintenance || [], [dashboardData]);
   const activeMaintenanceCount = useMemo(() => {
     if (typeof maintenanceSummary?.active_count === 'number') return maintenanceSummary.active_count;
-    const activeStatuses = ['pending', 'in_progress', 'open'];
+    if (typeof dashboardData?.active_maintenance_count === 'number') return dashboardData.active_maintenance_count;
+    const activeStatuses = ['pending', 'viewed', 'in_progress', 'open'];
     if (Array.isArray(maintenanceItems) && maintenanceItems.length) {
       return maintenanceItems.filter((m) => activeStatuses.includes((m.status || '').toLowerCase())).length;
     }
-    if (dashboardData?.active_maintenance_count != null) return dashboardData.active_maintenance_count;
     return 0;
   }, [maintenanceItems, maintenanceSummary, dashboardData]);
 

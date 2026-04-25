@@ -1,418 +1,506 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
-import { usePathname, useRouter } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'expo-router';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Animated,
-    Dimensions,
-    Easing,
-    ImageBackground,
-    Platform,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Animated,
+  Dimensions,
+  FlatList,
+  Image,
+  ImageBackground,
+  Platform,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../src/context/AuthContext';
-import { useTheme } from '../src/context/ThemeContext';
 import { getCredentials, hasStoredCredentials } from '../src/services/secureCredentials';
 
 const { width, height } = Dimensions.get('window');
 
-export default function SplashScreen() {
-  const router = useRouter();
-  const pathname = usePathname();
-  const { user, isLoading, checkAuth, loginWithEmail } = useAuth();
-  const { colors } = useTheme();
-  const [checking, setChecking] = useState(true);
-  const [showContent, setShowContent] = useState(false);
+const SLIDES = [
+  {
+    id: '1',
+    icon: 'home-outline',
+    label: 'Smart Living',
+    title: 'Smart Living',
+    description:
+      'Experience modern dormitory life with seamless digital solutions designed for your comfort and convenience.',
+  },
+  {
+    id: '2',
+    icon: 'shield-checkmark-outline',
+    label: 'Secure Stay',
+    title: 'Secure Stay',
+    description:
+      'Your safety is our top priority. Verified tenants, secure access, and real-time communication with admin.',
+  },
+  {
+    id: '3',
+    icon: 'bar-chart-outline',
+    label: 'Easy Management',
+    title: 'Easy Management',
+    description:
+      'Pay bills, file maintenance requests, and manage your entire stay — all from the palm of your hand.',
+  },
+];
 
-  // Auto-biometric: try to authenticate with stored credentials on app launch
-  const tryAutoBiometric = async () => {
+const NAVY = '#0D1B3E';
+const ORANGE = '#D4682A';
+const ORANGE_LIGHT = '#E07840';
+
+export default function OnboardingScreen() {
+  const router = useRouter();
+  const { user, authStatus, loginWithEmail } = useAuth();
+  const [isAutoBiometricLoading, setIsAutoBiometricLoading] = useState(false);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const flatListRef = useRef(null);
+  const fadeAnim = useRef(new Animated.Value(0)).current;
+  const slideUpAnim = useRef(new Animated.Value(40)).current;
+
+  // ── Auth check + auto biometric ──────────────────────────────────────────
+  const tryAutoBiometric = useCallback(async () => {
     try {
       const bioSetting = await AsyncStorage.getItem('biometricLogin');
       if (bioSetting !== 'true') return;
-
       const hasCreds = await hasStoredCredentials();
       if (!hasCreds) return;
-
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
       const isEnrolled = await LocalAuthentication.isEnrolledAsync();
       if (!hasHardware || !isEnrolled) return;
-
-      // Prompt biometric
       const authResult = await LocalAuthentication.authenticateAsync({
         promptMessage: 'Sign in to LilyCrest',
         cancelLabel: 'Use Password',
         disableDeviceFallback: false,
       });
-
-      if (!authResult.success) return; // User cancelled — proceed to login screen
-
-      // Retrieve and use stored credentials
+      if (!authResult.success) return;
       const creds = await getCredentials();
       if (!creds) return;
-
-      const result = await loginWithEmail(creds.email, creds.password);
-      if (result.success) {
-        console.log('[AutoBiometric] ✓ Signed in automatically');
-        // User will be redirected by the useEffect that watches `user`
-      } else {
-        console.log('[AutoBiometric] Stored credentials invalid — user will see login');
-      }
+      await loginWithEmail(creds.email, creds.password, { biometricLogin: true });
     } catch (err) {
       console.warn('[AutoBiometric] Skipped:', err?.message);
     }
-  };
-  // Animation values
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const slideAnim = useRef(new Animated.Value(50)).current;
-  const scaleAnim = useRef(new Animated.Value(0.8)).current;
-  const buttonFade = useRef(new Animated.Value(0)).current;
-  const logoRotate = useRef(new Animated.Value(0)).current;
-
-  // Use native driver only on native platforms
-  const useNativeDriver = Platform.OS !== 'web';
+  }, [loginWithEmail]);
 
   useEffect(() => {
-    const init = async () => {
-      await checkAuth();
-
-      // If no valid session, try auto-biometric login
-      const token = await AsyncStorage.getItem('session_token');
-      if (!token) {
-        await tryAutoBiometric();
-      }
-
-      setChecking(false);
-    };
-    init();
-
-    // Show content after a short delay for web
-    setTimeout(() => setShowContent(true), 100);
-
-    // Start animations
-    Animated.sequence([
-      Animated.parallel([
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 800,
-          useNativeDriver,
-          easing: Easing.out(Easing.cubic),
-        }),
-        Animated.timing(scaleAnim, {
-          toValue: 1,
-          duration: 800,
-          useNativeDriver,
-          easing: Easing.out(Easing.back(1.5)),
-        }),
-      ]),
-      Animated.parallel([
-        Animated.timing(slideAnim, {
-          toValue: 0,
-          duration: 600,
-          useNativeDriver,
-          easing: Easing.out(Easing.cubic),
-        }),
-        Animated.timing(buttonFade, {
-          toValue: 1,
-          duration: 600,
-          useNativeDriver,
-        }),
-      ]),
+    Animated.parallel([
+      Animated.timing(fadeAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
+      Animated.timing(slideUpAnim, { toValue: 0, duration: 900, useNativeDriver: true }),
     ]).start();
+  }, [fadeAnim, slideUpAnim]);
 
-    // Subtle logo rotation (only on native)
-    if (Platform.OS !== 'web') {
-      Animated.loop(
-        Animated.sequence([
-          Animated.timing(logoRotate, {
-            toValue: 1,
-            duration: 3000,
-            useNativeDriver: true,
-            easing: Easing.inOut(Easing.sin),
-          }),
-          Animated.timing(logoRotate, {
-            toValue: 0,
-            duration: 3000,
-            useNativeDriver: true,
-            easing: Easing.inOut(Easing.sin),
-          }),
-        ])
-      ).start();
-    }
-  }, []);
+  const hasAttemptedAutoBiometric = useRef(false);
+  useEffect(() => {
+    if (authStatus !== 'unauthenticated' || hasAttemptedAutoBiometric.current) return undefined;
 
-  // Auto-redirect to home if user is already authenticated (app launch only)
+    let cancelled = false;
+
+    const maybeAutoLogin = async () => {
+      hasAttemptedAutoBiometric.current = true;
+      const token = await AsyncStorage.getItem('session_token');
+      if (token) return;
+
+      if (!cancelled) setIsAutoBiometricLoading(true);
+      await tryAutoBiometric();
+      if (!cancelled) setIsAutoBiometricLoading(false);
+    };
+
+    maybeAutoLogin();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [authStatus, tryAutoBiometric]);
+
   const hasRedirected = useRef(false);
   useEffect(() => {
-    if (!checking && !isLoading && user && !hasRedirected.current) {
+    if (authStatus === 'authenticated' && user && !hasRedirected.current) {
       hasRedirected.current = true;
-      const timeout = setTimeout(() => {
-        router.replace('/(tabs)/home');
-      }, 100);
-      return () => clearTimeout(timeout);
+      setTimeout(() => router.replace('/(tabs)/home'), 100);
     }
-  }, [checking, isLoading, user]);
+  }, [authStatus, router, user]);
 
-  if (checking || isLoading) {
+  const checking = authStatus === 'initializing' || isAutoBiometricLoading;
+
+  // ── Slide render ─────────────────────────────────────────────────────────
+  const renderSlide = useCallback(({ item }) => (
+    <View style={styles.slide}>
+      <View style={styles.slideIconWrap}>
+        <Ionicons name={item.icon} size={44} color={ORANGE} />
+      </View>
+      <Text style={styles.slideTitle}>{item.title}</Text>
+      <Text style={styles.slideDesc}>{item.description}</Text>
+    </View>
+  ), []);
+
+  const handleScroll = useCallback((e) => {
+    const idx = Math.round(e.nativeEvent.contentOffset.x / width);
+    setActiveIndex(idx);
+  }, []);
+
+  const goNext = useCallback(() => {
+    if (activeIndex < SLIDES.length - 1) {
+      flatListRef.current?.scrollToIndex({ index: activeIndex + 1, animated: true });
+    } else {
+      router.push('/login');
+    }
+  }, [activeIndex, router]);
+
+  // ── Loading state ────────────────────────────────────────────────────────
+  if (checking) {
     return (
-      <View style={styles.loadingContainer}>
-        <View style={styles.loadingLogo}>
-          <View style={styles.logoIconLarge}>
-            <Ionicons name="home" size={48} color="#D4682A" />
-          </View>
-          <Text style={styles.loadingText}>Lilycrest</Text>
-        </View>
-        <ActivityIndicator size="large" color={colors.primary} style={styles.spinner} />
+      <View style={styles.loadingScreen}>
+        <StatusBar barStyle="light-content" backgroundColor={NAVY} />
+        <Image
+          source={require('../assets/images/lilycrest-wordmark.png')}
+          style={styles.loadingLogo}
+          resizeMode="contain"
+          accessibilityLabel="LilyCrest logo"
+        />
+        <ActivityIndicator size="large" color={ORANGE} style={{ marginTop: 32 }} />
       </View>
     );
   }
 
-  const spin = logoRotate.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['-5deg', '5deg'],
-  });
-
   return (
     <ImageBackground
-      source={require('../assets/images/splash-image.png')}
-      style={styles.background}
+      source={require('../assets/images/RD-Lounge-Area.jpg')}
+      style={styles.bg}
       resizeMode="cover"
     >
-      <View style={styles.overlay}>
-        {/* Logo Section at Top */}
-        <Animated.View style={[
-          styles.logoSection,
-          { 
-            opacity: fadeAnim,
-            transform: [{ scale: scaleAnim }]
-          }
-        ]}>
-          <View style={styles.logoContainer}>
-            <View style={styles.logoIcon}>
-              <Ionicons name="home" size={32} color="#FFFFFF" />
-            </View>
-          </View>
-          <Text style={styles.brandName}>Lilycrest</Text>
-          <Text style={styles.brandTagline}>Dormitory</Text>
-        </Animated.View>
+      <StatusBar barStyle="light-content" translucent backgroundColor="transparent" />
 
-        {/* Content Section at Bottom */}
-        <View style={styles.content}>
-          {/* Text Section */}
-          <Animated.View style={[
-            styles.textContainer,
-            {
-              opacity: fadeAnim,
-              transform: [{ translateY: slideAnim }]
-            }
-          ]}>
-            <Text style={styles.title}>
-              Find Your Perfect{"\n"}Space in the City
-            </Text>
-            <Text style={styles.subtitle}>
-              Premium co-living spaces designed for students and young professionals. Your comfort is our priority.
-            </Text>
-          </Animated.View>
-          
-          {/* Button Section */}
-          <Animated.View style={[styles.buttonContainer, { opacity: buttonFade }]}>
-            <TouchableOpacity 
-              style={styles.getStartedButton}
-              onPress={() => router.push('/login')}
-              activeOpacity={0.9}
-            >
-              <Text style={styles.getStartedText}>Get Started</Text>
-              <View style={styles.buttonIcon}>
-                <Ionicons name="arrow-forward" size={20} color="#ffffff" />
+      {/* Dark overlay */}
+      <View style={styles.overlay} />
+
+      <SafeAreaView style={styles.safe} edges={['top', 'bottom']}>
+        <Animated.View style={[styles.inner, { opacity: fadeAnim, transform: [{ translateY: slideUpAnim }] }]}>
+
+          {/* ── Logo section ─────────────────────────────────────────── */}
+          <View style={styles.logoSection}>
+            <Image
+              source={require('../assets/images/lilycrest-wordmark.png')}
+              style={styles.onboardingLogo}
+              resizeMode="contain"
+              accessibilityLabel="LilyCrest logo"
+            />
+          </View>
+
+          {/* ── Slide carousel ───────────────────────────────────────── */}
+          <View style={styles.carouselSection}>
+            <FlatList
+              ref={flatListRef}
+              data={SLIDES}
+              renderItem={renderSlide}
+              keyExtractor={(item) => item.id}
+              initialNumToRender={1}
+              horizontal
+              pagingEnabled
+              showsHorizontalScrollIndicator={false}
+              onMomentumScrollEnd={handleScroll}
+              bounces={false}
+              removeClippedSubviews
+            />
+          </View>
+
+          {/* ── Feature icons row ─────────────────────────────────────── */}
+          <View style={styles.featuresRow}>
+            {SLIDES.map((s, i) => (
+              <View key={s.id} style={styles.featureItem}>
+                <View style={[styles.featureIconBox, activeIndex === i && styles.featureIconBoxActive]}>
+                  <Ionicons name={s.icon} size={22} color={activeIndex === i ? '#fff' : ORANGE} />
+                </View>
+                <Text style={[styles.featureLabel, activeIndex === i && styles.featureLabelActive]}>
+                  {s.label}
+                </Text>
+              </View>
+            ))}
+          </View>
+
+          {/* ── Divider ───────────────────────────────────────────────── */}
+          <View style={styles.divider} />
+
+          {/* ── Pagination dots + CTA ─────────────────────────────────── */}
+          <View style={styles.footer}>
+            <View style={styles.dots}>
+              {SLIDES.map((_, i) => (
+                <TouchableOpacity
+                  key={i}
+                  style={[styles.dot, activeIndex === i && styles.dotActive]}
+                  onPress={() => flatListRef.current?.scrollToIndex({ index: i, animated: true })}
+                />
+              ))}
+            </View>
+
+            <TouchableOpacity style={styles.ctaBtn} onPress={goNext} activeOpacity={0.85}>
+              <Text style={styles.ctaBtnText}>
+                {activeIndex === SLIDES.length - 1 ? 'Get Started' : 'Next'}
+              </Text>
+              <View style={styles.ctaArrow}>
+                <Ionicons name="arrow-forward" size={18} color="#fff" />
               </View>
             </TouchableOpacity>
+          </View>
 
-            {/* Features */}
-            <View style={styles.featuresRow}>
-              <View style={styles.featureItem}>
-                <Ionicons name="shield-checkmark" size={16} color="#D4682A" />
-                <Text style={styles.featureText}>Secure</Text>
-              </View>
-              <View style={styles.featureDot} />
-              <View style={styles.featureItem}>
-                <Ionicons name="wifi" size={16} color="#D4682A" />
-                <Text style={styles.featureText}>Connected</Text>
-              </View>
-              <View style={styles.featureDot} />
-              <View style={styles.featureItem}>
-                <Ionicons name="home" size={16} color="#D4682A" />
-                <Text style={styles.featureText}>Comfortable</Text>
-              </View>
-            </View>
-          </Animated.View>
-        </View>
-      </View>
+        </Animated.View>
+      </SafeAreaView>
     </ImageBackground>
   );
 }
 
 const styles = StyleSheet.create({
-  background: {
+  // ── Loading ──
+  loadingScreen: {
     flex: 1,
-    width: width,
-    height: height,
+    backgroundColor: NAVY,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingLogo: {
+    width: 212,
+    height: 168,
+  },
+
+  // ── Main layout ──
+  bg: {
+    flex: 1,
+    width,
+    height,
   },
   overlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: 'rgba(8, 18, 40, 0.82)',
+  },
+  safe: {
     flex: 1,
-    backgroundColor: 'rgba(30, 58, 95, 0.85)',
-    justifyContent: 'space-between',
-    paddingTop: 80,
   },
-  content: {
-    paddingHorizontal: 28,
-    paddingBottom: 60,
+  inner: {
+    flex: 1,
+    paddingHorizontal: 24,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) + 8 : 0,
   },
+
+  // ── Logo ──
   logoSection: {
     alignItems: 'center',
-    marginBottom: 20,
+    paddingTop: 10,
+    paddingBottom: 8,
   },
-  logoContainer: {
-    marginBottom: 12,
+  onboardingLogo: {
+    width: 144,
+    height: 112,
   },
-  logoIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 20,
-    backgroundColor: '#D4682A',
-    justifyContent: 'center',
+  brandWrap: {
     alignItems: 'center',
+    gap: 12,
+  },
+  brandWrapCompact: {
+    gap: 10,
+  },
+  brandBadge: {
+    width: 132,
+    height: 132,
+    borderRadius: 36,
+    backgroundColor: 'rgba(13, 27, 62, 0.96)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
     ...Platform.select({
-      web: {
-        boxShadow: '0 8px 16px rgba(212, 148, 42, 0.4)',
-      },
-      default: {
-        shadowColor: '#D4682A',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.4,
-        shadowRadius: 16,
-        elevation: 8,
-      },
+      ios: { shadowColor: '#000', shadowOpacity: 0.18, shadowOffset: { width: 0, height: 8 }, shadowRadius: 18 },
+      android: { elevation: 8 },
+      web: { boxShadow: '0 12px 24px rgba(0,0,0,0.24)' },
     }),
   },
-  brandName: {
-    fontSize: 36,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    letterSpacing: 1,
+  brandBadgeCompact: {
+    width: 110,
+    height: 110,
+    borderRadius: 30,
   },
-  brandTagline: {
-    fontSize: 16,
-    color: '#D4682A',
-    fontWeight: '500',
-    letterSpacing: 4,
-    textTransform: 'uppercase',
+  brandBadgeImage: {
+    width: 180,
+    height: 180,
+    transform: [{ translateY: -24 }],
   },
-  textContainer: {
-    marginBottom: 40,
+  brandBadgeImageCompact: {
+    width: 152,
+    height: 152,
+    transform: [{ translateY: -20 }],
   },
-  title: {
-    fontSize: 32,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginBottom: 16,
-    lineHeight: 40,
-  },
-  subtitle: {
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.8)',
-    lineHeight: 24,
-  },
-  buttonContainer: {
-    alignItems: 'center',
-  },
-  getStartedButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 18,
-    paddingHorizontal: 32,
-    borderRadius: 16,
-    width: '100%',
-    ...Platform.select({
-      web: {
-        boxShadow: '0 8px 16px rgba(0, 0, 0, 0.15)',
-      },
-      default: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: 8 },
-        shadowOpacity: 0.15,
-        shadowRadius: 16,
-        elevation: 8,
-      },
-    }),
-  },
-  getStartedText: {
-    color: '#1E3A5F',
-    fontSize: 17,
-    fontWeight: '700',
-    marginRight: 12,
-  },
-  buttonIcon: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    backgroundColor: '#D4682A',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  featuresRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 24,
-    gap: 8,
-  },
-  featureItem: {
-    flexDirection: 'row',
+  brandTextWrap: {
     alignItems: 'center',
     gap: 4,
   },
-  featureText: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.7)',
-    fontWeight: '500',
+  brandWordmark: {
+    fontSize: 30,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
-  featureDot: {
-    width: 4,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: 'rgba(255,255,255,0.4)',
+  brandWordmarkCompact: {
+    fontSize: 24,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: '#FFFFFF',
+  brandWordmarkLight: {
+    color: '#FFFFFF',
   },
-  loadingLogo: {
-    alignItems: 'center',
-    marginBottom: 32,
+  brandWordmarkAccent: {
+    color: ORANGE,
   },
-  logoIconLarge: {
-    width: 80,
-    height: 80,
-    borderRadius: 24,
-    backgroundColor: '#FDF6EC',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  loadingText: {
-    fontSize: 28,
+  brandTagline: {
+    fontSize: 11,
     fontWeight: '700',
-    color: '#1E3A5F',
+    color: 'rgba(255,255,255,0.74)',
+    letterSpacing: 2.6,
+    textTransform: 'uppercase',
+    textAlign: 'center',
   },
-  spinner: {
-    marginTop: 20,
+  brandTaglineCompact: {
+    fontSize: 10,
+    letterSpacing: 2.2,
+  },
+  logoImage: {
+    width: width * 0.62,
+    height: height * 0.22,
+  },
+
+  // ── Carousel ──
+  carouselSection: {
+    flex: 1,
+    marginBottom: 8,
+  },
+  slide: {
+    width: width - 48,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+    gap: 16,
+  },
+  slideIconWrap: {
+    width: 88,
+    height: 88,
+    borderRadius: 44,
+    backgroundColor: 'rgba(212,104,42,0.15)',
+    borderWidth: 2,
+    borderColor: 'rgba(212,104,42,0.4)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  slideTitle: {
+    fontSize: 28,
+    fontWeight: '800',
+    color: '#FFFFFF',
+    textAlign: 'center',
+    letterSpacing: 0.3,
+  },
+  slideDesc: {
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.72)',
+    textAlign: 'center',
+    lineHeight: 23,
+    paddingHorizontal: 8,
+  },
+
+  // ── Feature icons row ──
+  featuresRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 20,
+  },
+  featureItem: {
+    alignItems: 'center',
+    gap: 8,
+    flex: 1,
+  },
+  featureIconBox: {
+    width: 50,
+    height: 50,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderWidth: 1.5,
+    borderColor: 'rgba(212,104,42,0.35)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  featureIconBoxActive: {
+    backgroundColor: ORANGE,
+    borderColor: ORANGE_LIGHT,
+    ...Platform.select({
+      ios: { shadowColor: ORANGE, shadowOpacity: 0.5, shadowOffset: { width: 0, height: 4 }, shadowRadius: 10 },
+      android: { elevation: 6 },
+    }),
+  },
+  featureLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: 'rgba(255,255,255,0.55)',
+    textAlign: 'center',
+  },
+  featureLabelActive: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+
+  // ── Divider ──
+  divider: {
+    height: 1,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    marginBottom: 20,
+  },
+
+  // ── Footer ──
+  footer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingBottom: Platform.OS === 'ios' ? 8 : 16,
+  },
+  dots: {
+    flexDirection: 'row',
+    gap: 8,
+    alignItems: 'center',
+  },
+  dot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: 'rgba(255,255,255,0.3)',
+  },
+  dotActive: {
+    width: 24,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: ORANGE,
+  },
+  ctaBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: ORANGE,
+    paddingVertical: 14,
+    paddingLeft: 24,
+    paddingRight: 16,
+    borderRadius: 50,
+    gap: 10,
+    ...Platform.select({
+      ios: { shadowColor: ORANGE, shadowOpacity: 0.45, shadowOffset: { width: 0, height: 6 }, shadowRadius: 12 },
+      android: { elevation: 8 },
+    }),
+  },
+  ctaBtnText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  ctaArrow: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

@@ -263,9 +263,183 @@ async function sendLoginOtpEmail(toEmail, userName = 'Tenant', otpCode) {
   }
 }
 
+// ─── PAYMENT RECEIPT EMAIL ────────────────────────────────────────────────
+
+/**
+ * Send a payment receipt confirmation email.
+ *
+ * @param {string} toEmail   Recipient email
+ * @param {string} userName  Display name
+ * @param {object} receipt   Payment receipt details
+ * @returns {Promise<boolean>}
+ */
+async function sendPaymentReceiptEmail(toEmail, userName = 'Tenant', receipt = {}) {
+  const transporter = getTransporter();
+  if (!transporter) return false;
+
+  const maskedEmail = maskEmail(toEmail);
+  const billingId = receipt.billingId || 'N/A';
+  const description = receipt.description || `Bill ${billingId}`;
+  const amount = Number(receipt.amount || 0);
+  const paymentMethod = receipt.paymentMethod || 'PayMongo';
+  const referenceNumber = receipt.referenceNumber || receipt.paymentId || 'N/A';
+
+  const paymentDate = (() => {
+    const raw = receipt.paymentDate || new Date();
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) return new Date();
+    return parsed;
+  })();
+
+  const paymentDateText = paymentDate.toLocaleString('en-PH', {
+    timeZone: 'Asia/Manila',
+    dateStyle: 'long',
+    timeStyle: 'short',
+  });
+
+  const amountText = `PHP ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const bodyHtml = `
+    <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">
+      Hi <strong>${escapeHtml(userName)}</strong>,
+    </p>
+    <p style="margin:0 0 20px;color:#374151;font-size:15px;line-height:1.6;">
+      We confirmed your payment. Thank you for paying your LilyCrest billing on time.
+    </p>
+
+    <table cellpadding="0" cellspacing="0" width="100%" style="background:#F8FAFC;border:1px solid #E5E7EB;border-radius:12px;margin-bottom:20px;">
+      <tr>
+        <td style="padding:16px 20px;">
+          <table cellpadding="0" cellspacing="0" width="100%">
+            <tr>
+              <td style="padding:6px 0;color:#6B7280;font-size:13px;width:140px;">Billing ID</td>
+              <td style="padding:6px 0;color:#1F2937;font-size:14px;font-weight:600;">${escapeHtml(String(billingId))}</td>
+            </tr>
+            <tr>
+              <td style="padding:6px 0;color:#6B7280;font-size:13px;">Description</td>
+              <td style="padding:6px 0;color:#1F2937;font-size:14px;font-weight:600;">${escapeHtml(String(description))}</td>
+            </tr>
+            <tr>
+              <td style="padding:6px 0;color:#6B7280;font-size:13px;">Amount Paid</td>
+              <td style="padding:6px 0;color:#1F2937;font-size:14px;font-weight:700;">${escapeHtml(amountText)}</td>
+            </tr>
+            <tr>
+              <td style="padding:6px 0;color:#6B7280;font-size:13px;">Payment Method</td>
+              <td style="padding:6px 0;color:#1F2937;font-size:14px;font-weight:600;">${escapeHtml(String(paymentMethod))}</td>
+            </tr>
+            <tr>
+              <td style="padding:6px 0;color:#6B7280;font-size:13px;">Reference</td>
+              <td style="padding:6px 0;color:#1F2937;font-size:14px;font-weight:600;">${escapeHtml(String(referenceNumber))}</td>
+            </tr>
+            <tr>
+              <td style="padding:6px 0;color:#6B7280;font-size:13px;">Paid On</td>
+              <td style="padding:6px 0;color:#1F2937;font-size:14px;font-weight:600;">${escapeHtml(paymentDateText)}</td>
+            </tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+
+    <p style="margin:0;color:#6B7280;font-size:13px;line-height:1.5;">
+      Keep this email as your payment receipt for future reference.
+    </p>
+  `;
+
+  const html = brandedHtml({
+    title: 'Payment Receipt - LilyCrest',
+    heading: 'Payment Received',
+    bodyHtml,
+    footerNote: `Receipt issued for ${maskedEmail}.`,
+  });
+
+  try {
+    await transporter.sendMail({
+      from: senderAddress(),
+      to: toEmail,
+      subject: `Payment Receipt - ${billingId}`,
+      html,
+    });
+    console.log(`[Email] Payment receipt sent to ${maskedEmail} for bill ${billingId}`);
+    return true;
+  } catch (err) {
+    console.warn(`[Email] Failed to send payment receipt to ${maskedEmail}:`, err?.message);
+    return false;
+  }
+}
+
+// ─── PASSWORD RESET EMAIL ────────────────────────────────────────────────────
+
+/**
+ * Send a "reset your password" email with a deep-link button.
+ * The link goes to the backend, which serves a redirect page that opens the app.
+ *
+ * @param {string} toEmail    Recipient email
+ * @param {string} userName   Display name
+ * @param {string} resetLink  Full backend URL containing the reset token
+ * @returns {Promise<boolean>}
+ */
+async function sendPasswordResetEmail(toEmail, userName = 'Tenant', resetLink) {
+  const transporter = getTransporter();
+  if (!transporter) return false;
+
+  const maskedEmail = maskEmail(toEmail);
+
+  const bodyHtml = `
+    <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">
+      Hi <strong>${escapeHtml(userName)}</strong>,
+    </p>
+    <p style="margin:0 0 24px;color:#374151;font-size:15px;line-height:1.6;">
+      We received a request to reset the password for your LilyCrest account.
+      Tap the button below — it will open the LilyCrest app directly so you can set a new password.
+    </p>
+
+    <div style="text-align:center;margin:0 0 28px;">
+      <a href="${resetLink}"
+         style="display:inline-block;background:#D4682A;color:#ffffff;font-size:16px;
+                font-weight:700;padding:16px 40px;border-radius:14px;text-decoration:none;
+                letter-spacing:0.3px;">
+        Reset My Password
+      </a>
+    </div>
+
+    <div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:12px;padding:14px 20px;margin-bottom:16px;">
+      <p style="margin:0;color:#92400E;font-size:13px;line-height:1.5;">
+        ⏱ This link expires in <strong>15 minutes</strong> and can only be used once.
+      </p>
+    </div>
+
+    <p style="margin:0;color:#6B7280;font-size:13px;line-height:1.6;">
+      If you did not request a password reset, you can safely ignore this email — your account remains secure and your password has not been changed.
+    </p>
+  `;
+
+  const html = brandedHtml({
+    title: 'Reset Your Password — LilyCrest',
+    heading: '🔑 Reset Your Password',
+    bodyHtml,
+    footerNote: `You're receiving this because a password reset was requested for ${maskedEmail}.`,
+  });
+
+  try {
+    await transporter.sendMail({
+      from: senderAddress(),
+      to: toEmail,
+      subject: 'Reset your LilyCrest password',
+      html,
+    });
+    console.log(`[Email] Password reset link sent to ${maskedEmail}`);
+    return true;
+  } catch (err) {
+    console.warn(`[Email] Failed to send password reset email to ${maskedEmail}:`, err?.message);
+    return false;
+  }
+}
+
 // ─── EXPORTS ────────────────────────────────────────────────────────────────
 
 module.exports = {
   sendPasswordChangedEmail,
   sendLoginOtpEmail,
+  sendPaymentReceiptEmail,
+  sendPasswordResetEmail,
 };

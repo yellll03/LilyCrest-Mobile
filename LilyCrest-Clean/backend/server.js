@@ -19,6 +19,7 @@ const PORT = process.env.PORT || 8001;
 // NOTE: For production, add your actual frontend domain(s) here or to FRONTEND_URL env var.
 const defaultOrigins = [
   process.env.FRONTEND_URL,
+  process.env.BACKEND_URL,
   'http://localhost:8081',
   'http://localhost:8083',
   'http://localhost:3000',
@@ -32,6 +33,9 @@ function isAllowedOrigin(origin) {
   if (!origin) return true;
   if (defaultOrigins.includes(origin)) return true;
   if (!isProduction && privateNetworkOriginPattern.test(origin)) return true;
+  // Allow same-server origin (browser pages served by this server making fetch calls back)
+  const serverPort = process.env.PORT || 8001;
+  if (origin === `http://localhost:${serverPort}` || origin === `https://localhost:${serverPort}`) return true;
   return false;
 }
 

@@ -2,6 +2,15 @@ const { getDb } = require('../config/database');
 const { ObjectId } = require('mongodb');
 const { v4: uuidv4 } = require('uuid');
 
+function firstNonEmptyString(...values) {
+  for (const value of values) {
+    if (typeof value !== 'string') continue;
+    const trimmed = value.trim();
+    if (trimmed) return trimmed;
+  }
+  return '';
+}
+
 // Normalize a raw MongoDB user document to the shape the app expects.
 // Admin-panel documents use camelCase (fullName, emailAddress, contactNumber, etc.)
 // while app-created documents use snake_case (name, email, phone).
@@ -9,6 +18,33 @@ const { v4: uuidv4 } = require('uuid');
 function normalizeUser(doc) {
   if (!doc) return doc;
   const u = { ...doc };
+
+  const applicant = (u.applicantDetails && typeof u.applicantDetails === 'object')
+    ? u.applicantDetails
+    : ((u.applicant_details && typeof u.applicant_details === 'object') ? u.applicant_details : {});
+
+  const applicantFirstName = firstNonEmptyString(
+    applicant.firstName,
+    applicant.first_name,
+    u.firstName,
+    u.first_name,
+  );
+  const applicantLastName = firstNonEmptyString(
+    applicant.lastName,
+    applicant.last_name,
+    u.lastName,
+    u.last_name,
+  );
+
+  if (!u.firstName && applicantFirstName) u.firstName = applicantFirstName;
+  if (!u.lastName && applicantLastName) u.lastName = applicantLastName;
+
+  if (!u.name) {
+    const applicantFullName = [applicantFirstName, applicantLastName].filter(Boolean).join(' ').trim();
+    if (applicantFullName) {
+      u.name = applicantFullName;
+    }
+  }
 
   // Name: fullName → name
   if (!u.name && u.fullName) u.name = u.fullName;
@@ -19,6 +55,19 @@ function normalizeUser(doc) {
   // Phone: contactNumber / phoneNumber → phone
   if (!u.phone && (u.contactNumber || u.phoneNumber)) {
     u.phone = u.contactNumber || u.phoneNumber;
+  }
+
+  // Address from applicant details/home address fields → address
+  if (!u.address) {
+    u.address = firstNonEmptyString(
+      applicant.address,
+      applicant.homeAddress,
+      applicant.home_address,
+      applicant.currentAddress,
+      applicant.current_address,
+      u.homeAddress,
+      u.home_address,
+    );
   }
 
   // Username: fallback to email prefix if missing
@@ -476,19 +525,115 @@ async function deleteDocument(req, res) {
   }
 }
 
+function normalizePushTokenEntry(entry) {
+  if (typeof entry === 'string') {
+    const token = entry.trim();
+    return token
+      ? { token, provider: null, platform: null, enabled: true, updated_at: null }
+      : null;
+  }
+
+  if (!entry || typeof entry !== 'object') return null;
+
+  const token = typeof entry.token === 'string'
+    ? entry.token.trim()
+    : (typeof entry.push_token === 'string' ? entry.push_token.trim() : '');
+
+  if (!token) return null;
+
+  return {
+    token,
+    provider: typeof entry.provider === 'string' ? entry.provider.trim().toLowerCase() : null,
+    platform: typeof entry.platform === 'string'
+      ? entry.platform.trim().toLowerCase()
+      : (typeof entry.device_platform === 'string' ? entry.device_platform.trim().toLowerCase() : null),
+    enabled: entry.enabled !== false,
+    updated_at: entry.updated_at || null,
+  };
+}
+
 // Save push notification token
 async function savePushToken(req, res) {
   try {
-    const { push_token } = req.body;
-    if (!push_token || typeof push_token !== 'string') {
-      return res.status(400).json({ detail: 'push_token is required.' });
-    }
+    const rawPushToken = typeof req.body?.push_token === 'string' ? req.body.push_token.trim() : '';
+    const notificationsEnabled = req.body?.notifications_enabled !== false;
+    const provider = typeof req.body?.provider === 'string' ? req.body.provider.trim().toLowerCase() : null;
+    const devicePlatform = typeof req.body?.device_platform === 'string' ? req.body.device_platform.trim().toLowerCase() : null;
     const db = getDb();
+    const now = new Date();
+
+    if (!rawPushToken && notificationsEnabled) {
+      return res.status(400).json({ detail: 'push_token is required when notifications are enabled.' });
+    }
+
+    const user = await db.collection('users').findOne(
+      { user_id: req.user.user_id },
+      {
+        projection: {
+          push_token: 1,
+          push_provider: 1,
+          push_platform: 1,
+          push_token_updated: 1,
+          push_tokens: 1,
+        },
+      }
+    );
+
+    const existingEntries = [];
+    if (Array.isArray(user?.push_tokens)) {
+      existingEntries.push(...user.push_tokens.map(normalizePushTokenEntry));
+    }
+    if (user?.push_token) {
+      existingEntries.push(normalizePushTokenEntry({
+        token: user.push_token,
+        provider: user.push_provider,
+        platform: user.push_platform,
+        updated_at: user.push_token_updated,
+        enabled: true,
+      }));
+    }
+
+    const filteredEntries = existingEntries
+      .filter(Boolean)
+      .filter((entry) => entry.token !== rawPushToken);
+
+    if (rawPushToken) {
+      filteredEntries.unshift({
+        token: rawPushToken,
+        provider,
+        platform: devicePlatform,
+        enabled: notificationsEnabled,
+        updated_at: now,
+      });
+    }
+
+    const seen = new Set();
+    const nextPushTokens = filteredEntries.filter((entry) => {
+      if (!entry?.token || seen.has(entry.token)) return false;
+      seen.add(entry.token);
+      return true;
+    });
+
+    const latestEnabledEntry = nextPushTokens.find((entry) => entry.enabled !== false) || null;
+
     await db.collection('users').updateOne(
       { user_id: req.user.user_id },
-      { $set: { push_token, push_token_updated: new Date() } }
+      {
+        $set: {
+          push_tokens: nextPushTokens,
+          push_token: latestEnabledEntry?.token || null,
+          push_provider: latestEnabledEntry?.provider || null,
+          push_platform: latestEnabledEntry?.platform || null,
+          push_token_updated: now,
+        },
+      }
     );
-    res.json({ status: 'ok' });
+
+    res.json({
+      status: 'ok',
+      notifications_enabled: notificationsEnabled,
+      token_saved: Boolean(rawPushToken && notificationsEnabled),
+    });
   } catch (error) {
     console.error('Save push token error:', error);
     res.status(500).json({ detail: 'Failed to save push token' });

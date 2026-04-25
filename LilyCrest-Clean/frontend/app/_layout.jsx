@@ -7,6 +7,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AlertProvider } from '../src/context/AlertContext';
 import { AuthProvider } from '../src/context/AuthContext';
 import { ThemeProvider, useTheme } from '../src/context/ThemeContext';
+import { ToastProvider } from '../src/context/ToastContext';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -54,6 +55,7 @@ function LayoutContent() {
         <Stack.Screen name="index" />
         <Stack.Screen name="login" />
         <Stack.Screen name="forgot-password" />
+        <Stack.Screen name="reset-password" />
         <Stack.Screen name="change-password" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="auth-callback" />
@@ -113,13 +115,14 @@ export default function RootLayout() {
       <ErrorBoundary>
         <ThemeProvider>
           <AlertProvider>
-            <AuthProvider>
-              <LayoutContent />
-            </AuthProvider>
+            <ToastProvider>
+              <AuthProvider>
+                <LayoutContent />
+              </AuthProvider>
+            </ToastProvider>
           </AlertProvider>
         </ThemeProvider>
       </ErrorBoundary>
     </GestureHandlerRootView>
   );
 }
-
