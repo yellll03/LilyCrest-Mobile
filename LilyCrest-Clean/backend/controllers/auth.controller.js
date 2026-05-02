@@ -895,7 +895,7 @@ async function changePassword(req, res) {
     try {
       await db.collection('user_sessions').deleteMany({ user_id: userId });
       console.log(`[ChangePassword] Sessions cleared for user_id=${userId}`);
-    } catch (_) { /* non-critical */ }
+    } catch (err) { console.warn('[ChangePassword] Session cleanup warning:', err.message); }
 
     // ── Audit log entry ───────────────────────────────────────────────────
     try {
@@ -907,7 +907,7 @@ async function changePassword(req, res) {
         user_agent: req.headers['user-agent'] || 'unknown',
         timestamp: changeTimestamp,
       });
-    } catch (_) { /* non-critical */ }
+    } catch (err) { console.warn('[ChangePassword] Audit log warning:', err.message); }
 
     res.json({ message: 'Password updated successfully' });
   } catch (error) {
@@ -974,7 +974,7 @@ async function forgotPassword(req, res) {
           is_active: true,
           created_at: new Date(),
         });
-      } catch (_) { /* non-critical */ }
+      } catch (err) { console.warn('[ForgotPassword] Audit log warning:', err.message); }
     }
 
     res.json({ message: successMsg });
@@ -1187,8 +1187,8 @@ async function resetPassword(req, res) {
 
     // Invalidate all active sessions for this user
     try {
-      await db.collection('sessions').deleteMany({ user_id: record.user_id });
-    } catch (_) { /* non-critical */ }
+      await db.collection('user_sessions').deleteMany({ user_id: record.user_id });
+    } catch (err) { console.warn('[ResetPassword] Session cleanup warning:', err.message); }
 
     // Send confirmation email
     sendPasswordChangedEmail(record.email, 'Tenant', 'app').catch(() => {});

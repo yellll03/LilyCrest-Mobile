@@ -15,10 +15,18 @@ PERSONALITY:
 - Give direct, clear answers first — then practical next steps if relevant
 - Use conversational language — avoid bullet lists, numbered steps, or template-like formatting
 - Never repeat the same phrasing across conversations — vary how you say things
-- Keep responses concise (2-4 short paragraphs). Don't ramble
-- If the tenant is frustrated, acknowledge their feelings before solving the problem
+- Response length: 1-2 sentences for simple factual questions; 2-4 short paragraphs for process questions. Never write essays.
+- If the tenant is frustrated or upset, acknowledge their feelings in the first sentence before trying to solve the problem
 - Never output code, JSON, markdown tables, XML, or technical syntax
-- When the tenant asks about their personal data (bills, tickets, etc.), use the provided context naturally
+
+CONTEXT-AWARENESS (CRITICAL):
+- When TENANT CONTEXT is provided (bills, reservation, tickets), always reference those specific details — never be generic
+- Use their actual bill amount, their actual reservation step, their actual ticket subject — not hypothetical examples
+- Example: Instead of "You can check your balance in the app," say "Based on your account, your ₱5,400 rent is due on the 5th."
+- If TENANT CONTEXT shows no pending bills, confirm that explicitly: "Good news — your account looks clear on billing!"
+- When reservation status is provided, tell the tenant exactly where they are in the process and what to do next
+- ONLY reference data that is explicitly in TENANT CONTEXT. Never invent amounts, dates, ticket numbers, or booking references
+- If you genuinely don't have the specific information, say so honestly and offer to connect them to admin
 
 DORMITORY INFORMATION:
 - Name: LilyCrest Dormitory
@@ -41,10 +49,17 @@ BILLING & PAYMENTS:
   * Bank Transfer: BDO (1234-5678-9012) / BPI (9876-5432-1098), account name: LilyCrest Properties Inc.
   * E-Wallet: GCash or Maya — 0912 345 6789
   * Cash: Admin office Mon-Sat 8AM-5PM
-  * Online: PayMongo (GCash, Maya, debit/credit card) through the app
+  * Online: PayMongo (GCash, Maya, debit/credit card) through the LilyCrest app — tap Billing, then Pay Now
 - Always include room number and full name in payment references
 - After paying, upload proof of payment in the app. Verification takes 24-48 hours
 - Security deposit: 1 month rent, refundable after move-out inspection (damages/unpaid fees deducted)
+
+RESERVATION & APPLICATION PROCESS:
+- Pending: application submitted, awaiting admin review and confirmation
+- Confirmed: admin approved, tenant needs to complete payment and submit move-in requirements
+- Move-In Scheduled: admin has set a move-in date, tenant should prepare documents and deposits
+- Active: tenant is checked in and currently staying
+- When a tenant asks "what step am I on" or "what's next", use their reservation status from context to give a specific, actionable answer
 
 HOUSE RULES:
 - Quiet hours: 10:00 PM – 7:00 AM — keep noise to a minimum
@@ -85,29 +100,24 @@ MAINTENANCE:
 - For urgent issues (water leaks, electrical problems, safety hazards), contact admin immediately at +63 912 345 6789
 
 DOCUMENTS AVAILABLE:
-- Lease contract
-- House rules document
-- Curfew policy
-- Visitor policy
-- Payment terms
-- Emergency procedures
-- ID verification record
-- All can be downloaded as PDF from the app
+- Lease contract, house rules, curfew policy, visitor policy, payment terms, emergency procedures, ID verification record
+- All downloadable as PDF from the app under the Documents section
 
 EMERGENCY PROCEDURES:
 - Building admin (24/7): +63 912 345 6789
 - Security: available 24/7 on-site
 - Emergency hotline: +63 912 345 6790
-- Fire: sound alarm, avoid elevators, use emergency exits, assembly point is the parking lot, call 911
-- Earthquake: drop/cover/hold, stay away from windows, evacuate if structural damage visible
+- Fire: sound the alarm, avoid elevators, use emergency exits, assemble at the parking lot, call 911
+- Earthquake: drop/cover/hold, stay away from windows, evacuate if structural damage is visible
 - Medical: call building security immediately, do not move the injured person, admin coordinates ambulance
 - Nearby hospitals: Makati Medical Center (~2km), Ospital ng Makati (~1.5km)
-- Fire extinguishers located in hallways, kitchen, and lobby
+- Fire extinguishers are located in hallways, the kitchen, and the lobby
 
-ESCALATION:
-- If the issue is complex, sensitive, involves a complaint, safety concern, or requires human judgment, include "[NEEDS_ADMIN]" at the START of your response
-- If the tenant explicitly asks to talk to an admin or a real person, include "[NEEDS_ADMIN]"
-- For safety emergencies (fire, gas, injury), ALWAYS include "[NEEDS_ADMIN]"`;
+ESCALATION — when to include [NEEDS_ADMIN]:
+- ALWAYS include [NEEDS_ADMIN] at the START for: active fire/flooding/injury/gas smell, explicit requests to speak to admin or a real person, formal complaints or legal threats, theft or harassment reports
+- Include [NEEDS_ADMIN] for: disputed or incorrect charges (not standard late fees), lease termination requests, security deposit refund disputes, account access problems that the tenant cannot resolve in the app
+- Do NOT include [NEEDS_ADMIN] for: billing questions, late fee explanations, house rules, maintenance how-to, documents, room types, reservation status questions, amenity questions — handle these yourself
+- When in doubt: try to help first. Only escalate if you genuinely cannot resolve it with the information you have`;
 
 // ───────────────────────────────────────────────────
 // Knowledge base — structured topic data for AI context hints
@@ -228,18 +238,68 @@ const KNOWLEDGE_BASE = {
       { label: 'Payment methods', prompt: 'How can I pay my rent?' },
     ],
   },
+  reservation_status: {
+    intent: 'reservation_status',
+    triggers: ['reservation', 'application', 'my status', 'application status', 'where am i', 'what step', 'next step', 'pending application', 'confirmed reservation', 'move in date', 'when can i move', 'approved'],
+    category: 'onboarding',
+    knowledge: 'Reservation steps: Pending (admin reviewing), Confirmed (approved — complete payment and requirements), Move-In Scheduled (date set — prepare docs and deposits), Active (checked in). Tenant should check their application status in the app dashboard.',
+    followups: [
+      { label: 'Move-in requirements', prompt: 'What documents do I need to move in?' },
+      { label: 'Payment methods', prompt: 'How can I pay my reservation?' },
+      { label: 'Talk to admin', prompt: 'I need admin help with my application.' },
+    ],
+  },
+  online_payment_flow: {
+    intent: 'online_payment_flow',
+    triggers: ['pay online', 'paymongo', 'pay now', 'online payment', 'how to pay online', 'pay in app', 'app payment', 'pay via app', 'credit card', 'debit card'],
+    category: 'billing',
+    knowledge: 'To pay online: open the app → go to Billing → tap Pay Now → choose GCash, Maya, or card via PayMongo → complete payment → upload proof of payment. Verification takes 24-48 hours.',
+    followups: [
+      { label: 'Other payment methods', prompt: 'What other ways can I pay my rent?' },
+      { label: 'Late fee details', prompt: 'What happens if I pay late?' },
+    ],
+  },
 };
 
 // ───────────────────────────────────────────────────
 // Escalation keywords that trigger admin handoff
 // ───────────────────────────────────────────────────
 const ESCALATION_KEYWORDS = [
-  'complaint', 'dispute', 'unsafe', 'harass', 'legal', 'danger',
-  'smoke', 'fire', 'emergency', 'eviction', 'kick out', 'refund',
-  'threatening', 'assault', 'theft', 'stolen',
-  'connect me to admin', 'talk to admin', 'speak to admin',
-  'real person', 'human agent', 'talk to a person',
+  // Safety emergencies
+  'fire', 'smoke', 'flood', 'gas smell', 'gas leak', 'injured', 'bleeding',
+  'unconscious', 'emergency', 'danger', 'unsafe',
+  // Explicit admin/human requests
+  'connect me to admin', 'talk to admin', 'speak to admin', 'contact admin',
+  'real person', 'human agent', 'talk to a person', 'speak to a human',
+  // Formal complaints and legal
+  'complaint', 'dispute', 'legal action', 'report to management', 'file a complaint',
+  'formal complaint', 'threatening', 'harassment', 'harass',
+  // Security concerns
+  'assault', 'theft', 'stolen', 'break in', 'intruder',
+  // Eviction/lease issues requiring human
+  'eviction', 'kick out', 'terminate my contract', 'cancel my lease',
+  'move out immediately', 'end my lease',
+  // Payment disputes (not standard late fees)
+  'overcharged', 'wrong amount', 'incorrect charge', 'demand refund', 'refund my deposit',
+  // Account access problems
+  'cannot login', 'account locked', 'account suspended', 'locked out of account',
 ];
+
+// ───────────────────────────────────────────────────
+// Emotional tone detection — affects prompt empathy level, not escalation
+// ───────────────────────────────────────────────────
+const EMOTIONAL_TONE_PATTERNS = [
+  'frustrated', 'upset', 'angry', 'furious', 'mad at', 'disappointed',
+  'unacceptable', 'terrible', 'awful', 'horrible', 'fed up',
+  'so annoying', 'this is ridiculous', 'no one is helping', 'nobody answers',
+  'been waiting for days', 'waited so long', 'not fair', 'ripped off',
+  'disgusting', 'useless', 'worst service', 'i give up',
+];
+
+function detectEmotionalTone(message = '') {
+  const lower = message.toLowerCase();
+  return EMOTIONAL_TONE_PATTERNS.some((p) => lower.includes(p));
+}
 
 // ───────────────────────────────────────────────────
 // Greeting detection
@@ -267,17 +327,20 @@ function getTimeOfDayGreeting() {
 // Default follow-up suggestions
 // ───────────────────────────────────────────────────
 const DEFAULT_FOLLOWUPS = [
-  { label: 'Billing & Payments', prompt: 'Tell me about my billing.' },
-  { label: 'House Rules', prompt: 'What are the dormitory rules?' },
-  { label: 'Talk to Admin', prompt: 'Connect me to an admin.' },
+  { label: 'My billing status', prompt: 'How much do I owe this month?' },
+  { label: 'How to pay', prompt: 'How can I pay my rent online?' },
+  { label: 'House rules', prompt: 'What are the quiet hours and curfew policy?' },
+  { label: 'Talk to admin', prompt: 'Connect me to an admin.' },
 ];
 
 module.exports = {
   CHATBOT_SYSTEM_PROMPT,
   KNOWLEDGE_BASE,
   ESCALATION_KEYWORDS,
+  EMOTIONAL_TONE_PATTERNS,
   GREETING_PATTERNS,
   DEFAULT_FOLLOWUPS,
   isGreeting,
   getTimeOfDayGreeting,
+  detectEmotionalTone,
 };

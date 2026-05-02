@@ -1,4 +1,5 @@
 const axios = require('axios');
+const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
 const { ObjectId } = require('mongodb');
 const { getDb } = require('../config/database');
@@ -7,6 +8,30 @@ const { notifyPaymentConfirmed } = require('../services/pushService');
 const { sendPaymentReceiptEmail } = require('../services/emailService');
 
 const PAYMONGO_BASE = 'https://api.paymongo.com/v1';
+
+// Webhook signing secret — captured from registration response or set via env
+let _webhookSecret = process.env.PAYMONGO_WEBHOOK_SECRET || null;
+
+function verifyWebhookSignature(req) {
+  if (!_webhookSecret) {
+    console.warn('[PayMongo] PAYMONGO_WEBHOOK_SECRET not set — skipping signature verification');
+    return true;
+  }
+  const header = req.headers['x-paymongo-signature'];
+  if (!header) return false;
+  const tPart = header.split(',').find((p) => p.startsWith('t='));
+  const v1Part = header.split(',').find((p) => p.startsWith('v1='));
+  if (!tPart || !v1Part) return false;
+  const timestamp = tPart.slice(2);
+  const received = v1Part.slice(3);
+  const rawBody = req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(req.body);
+  const expected = crypto.createHmac('sha256', _webhookSecret).update(`${timestamp}.${rawBody}`).digest('hex');
+  try {
+    return crypto.timingSafeEqual(Buffer.from(received, 'hex'), Buffer.from(expected, 'hex'));
+  } catch (_) {
+    return false;
+  }
+}
 
 function normalizeBaseUrl(value) {
   return String(value || '').trim().replace(/\/+$/, '');
@@ -410,6 +435,10 @@ async function getCheckoutStatus(req, res) {
 
 // PayMongo webhook handler — receives events from PayMongo
 async function handleWebhook(req, res) {
+  if (!verifyWebhookSignature(req)) {
+    console.warn('[PayMongo] Webhook signature mismatch — request rejected');
+    return res.status(400).json({ detail: 'Invalid signature' });
+  }
   try {
     const event = req.body?.data;
     const eventType = event?.attributes?.type;
@@ -513,6 +542,11 @@ async function registerWebhook() {
     );
 
     const webhookId = resp.data?.data?.id;
+    const secretKey = resp.data?.data?.attributes?.secret_key;
+    if (secretKey && !_webhookSecret) {
+      _webhookSecret = secretKey;
+      console.log(`[PayMongo]   ⚠  Add to .env: PAYMONGO_WEBHOOK_SECRET=${secretKey}`);
+    }
     console.log(`[PayMongo] ✓ Webhook registered successfully!`);
     console.log(`[PayMongo]   URL: ${webhookUrl}`);
     console.log(`[PayMongo]   ID: ${webhookId}`);

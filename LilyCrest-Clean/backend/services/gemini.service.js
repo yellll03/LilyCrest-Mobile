@@ -80,9 +80,18 @@ async function sendGeminiMessage(sessionId, prompt) {
     const model = client.getGenerativeModel({ model: DEFAULT_MODEL });
     console.log(`[Gemini] Sending message to model "${DEFAULT_MODEL}" (session: ${sessionId}, history: ${session.history.length} msgs)`);
 
+    // Lower temperature for factual consistency; safety settings allow emergency/security topics
+    const safetySettings = [
+      { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+      { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
+      { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+      { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_ONLY_HIGH' },
+    ];
+
     const result = await model.generateContent({
       contents,
-      generationConfig: { maxOutputTokens: 800, temperature: 0.75, topP: 0.92 },
+      generationConfig: { maxOutputTokens: 700, temperature: 0.65, topP: 0.92 },
+      safetySettings,
     });
 
     const text = extractText(result);
@@ -98,9 +107,16 @@ async function sendGeminiMessage(sessionId, prompt) {
       try {
         const client = getGenAIClient();
         const fallbackModel = client.getGenerativeModel({ model: 'gemini-2.0-flash' });
+        const safetySettings = [
+          { category: 'HARM_CATEGORY_HARASSMENT', threshold: 'BLOCK_ONLY_HIGH' },
+          { category: 'HARM_CATEGORY_HATE_SPEECH', threshold: 'BLOCK_ONLY_HIGH' },
+          { category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT', threshold: 'BLOCK_MEDIUM_AND_ABOVE' },
+          { category: 'HARM_CATEGORY_DANGEROUS_CONTENT', threshold: 'BLOCK_ONLY_HIGH' },
+        ];
         const result = await fallbackModel.generateContent({
           contents,
-          generationConfig: { maxOutputTokens: 800, temperature: 0.75, topP: 0.92 },
+          generationConfig: { maxOutputTokens: 700, temperature: 0.65, topP: 0.92 },
+          safetySettings,
         });
         const text = extractText(result);
         console.log(`[Gemini] Fallback response: ${text ? text.length + ' chars' : 'EMPTY'}`);

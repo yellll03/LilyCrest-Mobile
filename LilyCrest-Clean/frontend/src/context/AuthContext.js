@@ -174,6 +174,28 @@ export function AuthProvider({ children }) {
           if (cachedUser) {
             setUser(cachedUser);
             setAuthStatus('authenticated');
+            // Re-validate after a delay — clears session if token was server-side revoked
+            setTimeout(async () => {
+              if (cancelled) return;
+              const reToken = await AsyncStorage.getItem(SESSION_TOKEN_KEY).catch(() => null);
+              if (!reToken || cancelled) return;
+              try {
+                const fresh = await api.get('/auth/me', {
+                  headers: { Authorization: `Bearer ${reToken}` },
+                  timeout: 8000,
+                });
+                if (!cancelled) {
+                  setUser(fresh.data);
+                  await AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(fresh.data)).catch(() => {});
+                }
+              } catch (retryErr) {
+                if (retryErr?.response?.status === 401 && !cancelled) {
+                  await clearPersistedSession();
+                  setUser(null);
+                  setAuthStatus('unauthenticated');
+                }
+              }
+            }, 4000);
           } else {
             setUser(null);
             setAuthStatus('unauthenticated');

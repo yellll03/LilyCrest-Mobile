@@ -54,7 +54,7 @@ app.use(cors({
   maxAge: 86400
 }));
 
-app.use(express.json({ limit: '10mb' }));
+app.use(express.json({ limit: '10mb', verify: (req, _res, buf) => { req.rawBody = buf; } }));
 app.use(cookieParser());
 
 // Rate limiting — general API (100 requests per minute per IP)

@@ -156,6 +156,7 @@ export default function LilyAssistantScreen() {
   const [replyText, setReplyText] = useState('');
   const [isSendingReply, setIsSendingReply] = useState(false);
   const [activeTicket, setActiveTicket] = useState(null); // { id, status } when admin chat is live
+  const [escalationPending, setEscalationPending] = useState(null); // holds message text awaiting user escalation confirmation
   const [networkError, setNetworkError] = useState(null);
   const [hasInteracted, setHasInteracted] = useState(false);
   const initialSession = useMemo(() => `${user?.user_id || 'guest'}-chat-${Date.now()}`, [user?.user_id]);
@@ -374,7 +375,7 @@ export default function LilyAssistantScreen() {
       return;
     }
 
-    // If backend flagged needs_admin, auto-escalate via ticket
+    // If backend flagged needs_admin, show AI response then ask user before escalating
     if (needsAdmin) {
       setMessages((prev) => [
         ...prev,
@@ -387,8 +388,8 @@ export default function LilyAssistantScreen() {
           meta: { intent: metadata?.intent || 'admin-escalation', confidence: metadata?.confidence ?? null },
         },
       ]);
-      // Trigger admin ticket creation automatically
-      await escalateToAdmin(text, []);
+      setEscalationPending(text);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 150);
       return;
     }
 
@@ -767,6 +768,34 @@ export default function LilyAssistantScreen() {
           </ScrollView>
 
           <View style={styles.bottomZone}>
+            {/* Escalation confirmation prompt — shown when AI signals needs_admin */}
+            {escalationPending && !activeTicket ? (
+              <View style={styles.escalationPrompt}>
+                <Text style={styles.escalationText}>
+                  I may need admin assistance for this. Would you like me to connect you to an admin?
+                </Text>
+                <View style={styles.escalationButtons}>
+                  <Pressable
+                    style={styles.escalationYes}
+                    onPress={async () => {
+                      const pending = escalationPending;
+                      setEscalationPending(null);
+                      await escalateToAdmin(pending, []);
+                    }}
+                    disabled={isSending}
+                  >
+                    <Text style={styles.escalationYesText}>Yes, connect me</Text>
+                  </Pressable>
+                  <Pressable
+                    style={styles.escalationNo}
+                    onPress={() => setEscalationPending(null)}
+                  >
+                    <Text style={styles.escalationNoText}>Not now</Text>
+                  </Pressable>
+                </View>
+              </View>
+            ) : null}
+
             {/* Admin connected banner */}
             {activeTicket ? (
               <View style={styles.adminConnectedBanner}>
@@ -1437,6 +1466,52 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontWeight: '700',
     fontSize: 14,
+  },
+  // ─── Escalation Confirmation ───
+  escalationPrompt: {
+    backgroundColor: '#FFF7ED',
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#FED7AA',
+    padding: 14,
+    gap: 10,
+    marginHorizontal: 4,
+  },
+  escalationText: {
+    color: '#92400E',
+    fontSize: 13,
+    fontWeight: '600',
+    lineHeight: 19,
+  },
+  escalationButtons: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  escalationYes: {
+    flex: 1,
+    backgroundColor: '#D4682A',
+    borderRadius: 20,
+    paddingVertical: 10,
+    alignItems: 'center',
+  },
+  escalationYesText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+    fontSize: 13,
+  },
+  escalationNo: {
+    flex: 1,
+    backgroundColor: '#F1F5F9',
+    borderRadius: 20,
+    paddingVertical: 10,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
+  escalationNoText: {
+    color: '#475569',
+    fontWeight: '700',
+    fontSize: 13,
   },
   // ─── Admin Connected Banner ───
   adminConnectedBanner: {

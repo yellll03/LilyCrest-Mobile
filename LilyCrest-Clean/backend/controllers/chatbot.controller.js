@@ -1,3 +1,4 @@
+const { ObjectId } = require('mongodb');
 const { getDb } = require('../config/database');
 const {
   CHATBOT_SYSTEM_PROMPT,
@@ -6,9 +7,9 @@ const {
   DEFAULT_FOLLOWUPS,
   isGreeting,
   getTimeOfDayGreeting,
+  detectEmotionalTone,
 } = require('../config/chatbot.presets');
 const {
-  classifyIntent,
   sendGeminiMessage,
   liveChatQueue,
   chatSessions,
@@ -71,14 +72,36 @@ function normalizeUserMessage(rawMessage) {
 
 function findRelevantKnowledge(message) {
   const lower = message.toLowerCase();
-  const matched = KNOWLEDGE_LIST.filter((entry) =>
+  return KNOWLEDGE_LIST.filter((entry) =>
     (entry.triggers || []).some((t) => lower.includes(t))
   );
-  return matched;
 }
 
 function findKnowledgeByIntent(intent) {
   return KNOWLEDGE_LIST.find((entry) => entry.intent === intent) || null;
+}
+
+// Fast in-process intent classifier — no extra Gemini API call required
+function classifyIntentLocal(message) {
+  const lower = message.toLowerCase();
+  let bestIntent = 'general';
+  let bestScore = 0;
+  for (const [, entry] of Object.entries(KNOWLEDGE_BASE)) {
+    const matchCount = (entry.triggers || []).filter((t) => lower.includes(t)).length;
+    if (matchCount > bestScore) {
+      bestScore = matchCount;
+      bestIntent = entry.intent;
+    }
+  }
+  const confidence = bestScore === 0 ? 0.3 : Math.min(0.5 + bestScore * 0.15, 0.95);
+  return { intent: bestIntent, confidence };
+}
+
+// Safe structured log — never logs tokens, credentials, or full message content
+function logChatEvent(type, data) {
+  try {
+    console.log(`[Chatbot:${type}] ${JSON.stringify(data)}`);
+  } catch (_) {}
 }
 
 function shouldEscalate(knowledgeEntries, message) {
@@ -108,7 +131,7 @@ function pickFollowups(knowledgeEntries, intent) {
  * Build a rich, context-aware prompt for Gemini.
  * This is the heart of the AI-first approach.
  */
-function buildAIPrompt(userMessage, contextLines, knowledgeHints, conversationHistory) {
+function buildAIPrompt(userMessage, contextLines, knowledgeHints, conversationHistory, isEmotional = false) {
   const timeContext = `Current time: ${new Date().toLocaleString('en-PH', { timeZone: 'Asia/Manila' })}`;
   const contextBlock = contextLines.length > 0
     ? `\nTENANT CONTEXT:\n${contextLines.join('\n')}`
@@ -119,8 +142,11 @@ function buildAIPrompt(userMessage, contextLines, knowledgeHints, conversationHi
   const historyBlock = conversationHistory.length > 0
     ? `\nRECENT CONVERSATION:\n${conversationHistory.slice(-6).map((h) => `${h.role === 'user' ? 'Tenant' : 'Lily'}: ${h.content}`).join('\n')}`
     : '';
+  const emotionalHint = isEmotional
+    ? '\n\nNOTE: The tenant appears frustrated or upset. Lead your response with genuine empathy in the first sentence before addressing their issue.'
+    : '';
 
-  return `${CHATBOT_SYSTEM_PROMPT}\n\n${timeContext}${contextBlock}${knowledgeBlock}${historyBlock}\n\nTenant: ${userMessage}`;
+  return `${CHATBOT_SYSTEM_PROMPT}\n\n${timeContext}${contextBlock}${knowledgeBlock}${historyBlock}${emotionalHint}\n\nTenant: ${userMessage}`;
 }
 
 async function ensureLiveChatRequest(db, sessionId, userId, userName, userEmail, reason) {
@@ -170,12 +196,24 @@ async function sendMessage(req, res) {
     const sessionId = normalizedSession.value;
     const userMessage = normalizedMessage.value;
 
+    logChatEvent('message', { sessionId, messageLength: userMessage.length, userId });
+
+    // Resolve MongoDB ObjectId from session user (used for reservation lookup)
+    const rawId = req.user?._id;
+    const mongoId = rawId && ObjectId.isValid(String(rawId)) ? new ObjectId(String(rawId)) : null;
+
     // Pull tenant context for grounded responses
     const db = getDb();
-    const [announcements, pendingBills, openTickets] = await Promise.all([
+    const [announcements, pendingBills, openTickets, activeReservation] = await Promise.all([
       db.collection('announcements').find({ is_active: true }).sort({ created_at: -1 }).limit(3).toArray(),
       db.collection('billing').find({ user_id: userId, status: { $ne: 'paid' } }).sort({ due_date: -1 }).limit(3).toArray(),
       db.collection('tickets').find({ user_id: userId, status: { $ne: 'closed' } }).sort({ created_at: -1 }).limit(3).toArray(),
+      mongoId
+        ? db.collection('reservations').findOne(
+            { userId: mongoId, isArchived: { $ne: true }, status: { $in: ['pending', 'confirmed', 'moveIn', 'active'] } },
+            { sort: { createdAt: -1 }, projection: { status: 1, moveInDate: 1, branch: 1 } },
+          )
+        : Promise.resolve(null),
     ]);
 
     // Check if this is an active live chat (admin is responding)
@@ -211,6 +249,23 @@ async function sendMessage(req, res) {
       contextLines.push(`Recent announcements:\n${annSummary}`);
     }
 
+    if (activeReservation) {
+      const STEP_LABELS = {
+        pending: 'pending — awaiting admin confirmation',
+        confirmed: 'confirmed — complete payment and submit move-in requirements',
+        moveIn: 'move-in scheduled — prepare documents and deposits',
+        active: 'active — currently checked in',
+      };
+      const stepLabel = STEP_LABELS[activeReservation.status] || activeReservation.status;
+      const moveInStr = activeReservation.moveInDate
+        ? `, move-in date: ${new Date(activeReservation.moveInDate).toLocaleDateString('en-PH')}`
+        : '';
+      const branchStr = activeReservation.branch ? `, branch: ${activeReservation.branch}` : '';
+      contextLines.push(`Reservation status: ${stepLabel}${moveInStr}${branchStr}`);
+    } else {
+      contextLines.push('Reservation status: no active reservation found');
+    }
+
     // Find relevant knowledge entries (context hints for the AI)
     const knowledgeHints = findRelevantKnowledge(userMessage);
     const meta = { intent: 'general', confidence: null };
@@ -218,22 +273,20 @@ async function sendMessage(req, res) {
     let aiResponse = '';
     let needsAdmin = false;
 
-    // Classify intent (for follow-up suggestions, not for response routing)
-    try {
-      const intentResult = await classifyIntent(userMessage);
-      meta.intent = intentResult.intent || 'general';
-      meta.confidence = intentResult.confidence ?? null;
-      // If intent classification found a relevant knowledge entry, include it
-      const intentKnowledge = findKnowledgeByIntent(intentResult.intent);
-      if (intentKnowledge && !knowledgeHints.includes(intentKnowledge)) {
-        knowledgeHints.push(intentKnowledge);
-      }
-    } catch (intentErr) {
-      console.warn('Intent classify failed:', intentErr?.message);
+    // Classify intent in-process — no extra API call
+    const intentResult = classifyIntentLocal(userMessage);
+    meta.intent = intentResult.intent;
+    meta.confidence = intentResult.confidence;
+    const intentKnowledge = findKnowledgeByIntent(intentResult.intent);
+    if (intentKnowledge && !knowledgeHints.includes(intentKnowledge)) {
+      knowledgeHints.push(intentKnowledge);
     }
 
     // Pick follow-ups
     followups = pickFollowups(knowledgeHints, meta.intent);
+
+    // Detect emotional tone — modifies prompt empathy level, does not trigger escalation
+    const isEmotional = detectEmotionalTone(userMessage);
 
     // Check for escalation
     const escalate = shouldEscalate(knowledgeHints, userMessage);
@@ -242,33 +295,34 @@ async function sendMessage(req, res) {
     const session = chatSessions.get(sessionId) || { history: [] };
     const conversationHistory = session.history || [];
 
+    logChatEvent('intent', { sessionId, intent: meta.intent, confidence: meta.confidence, escalate, isEmotional });
+
     // ── Generate response ──
     try {
       if (escalate) {
-        // Safety/admin escalation — AI still generates the response, but we flag it
+        // Safety/admin escalation — AI still generates the response, but flags it for human review
         needsAdmin = true;
         await ensureLiveChatRequest(
           db, sessionId, userId, userName, userEmail,
           `Escalated: ${userMessage.slice(0, 120)}`
         );
-        // Let AI craft a natural escalation message
         const escalationPrompt = buildAIPrompt(
-          userMessage, contextLines, knowledgeHints, conversationHistory
-        ) + '\n\nIMPORTANT: This message has been flagged for admin attention. Acknowledge the tenant\'s concern empathetically, let them know an admin will follow up shortly, and reassure them. Keep it short and warm.';
+          userMessage, contextLines, knowledgeHints, conversationHistory, isEmotional
+        ) + "\n\nIMPORTANT: This message has been flagged for admin attention. Acknowledge the tenant's concern empathetically, let them know an admin will follow up shortly, and reassure them. Keep it to 2-3 warm sentences.";
         const { text } = await sendGeminiMessage(sessionId, escalationPrompt);
-        aiResponse = text || "I understand your concern po. I've flagged this for our admin team and they'll get back to you shortly. If it's urgent, you can also call +63 912 345 6789.";
+        aiResponse = text || "I completely understand your concern po, and I want to make sure it gets properly handled. I've flagged this for our admin team and they'll reach out to you shortly. If it's urgent, you can also call us directly at +63 912 345 6789.";
       } else if (isGreeting(userMessage) && userMessage.trim().split(/\s+/).length <= 4) {
-        // Pure greeting (short message) — let AI generate a warm, personalized greeting
+        // Pure greeting — warm, personalized, mentions context if useful
         const greetingPrompt = buildAIPrompt(
-          userMessage, contextLines, [], conversationHistory
+          userMessage, contextLines, [], conversationHistory, false
         ) + '\n\nThis is a greeting. Respond warmly, introduce yourself briefly as Lily, and ask how you can help. Mention the time of day naturally. Keep it to 1-2 sentences.';
         const { text } = await sendGeminiMessage(sessionId, greetingPrompt);
-        aiResponse = text || `${getTimeOfDayGreeting()} I'm Lily, your dorm assistant. How can I help you today po?`;
+        aiResponse = text || `${getTimeOfDayGreeting()} I'm Lily, your LilyCrest dorm assistant. How can I help you today po?`;
         meta.intent = 'greeting';
         meta.confidence = 1;
       } else {
         // Normal message — AI-first, always
-        const prompt = buildAIPrompt(userMessage, contextLines, knowledgeHints, conversationHistory);
+        const prompt = buildAIPrompt(userMessage, contextLines, knowledgeHints, conversationHistory, isEmotional);
         const { text } = await sendGeminiMessage(sessionId, prompt);
 
         if (text && !looksLikeCode(text)) {
@@ -281,16 +335,15 @@ async function sendMessage(req, res) {
             );
           }
         } else {
-          // AI returned code or empty — retry with a simpler prompt
-          const retryPrompt = `${CHATBOT_SYSTEM_PROMPT}\n\nThe tenant asked: "${userMessage}"\n\nRespond naturally and helpfully. Do NOT include any code, formatting, or technical syntax.`;
+          // AI returned code or empty — retry with a plain prompt
+          const retryPrompt = `${CHATBOT_SYSTEM_PROMPT}\n\nThe tenant asked: "${userMessage}"\n\nRespond naturally and helpfully in plain conversational text. Do NOT include any code, formatting symbols, or technical syntax.`;
           const retry = await sendGeminiMessage(sessionId, retryPrompt);
-          aiResponse = retry.text || "I'm here to help po. Could you rephrase your question? You can ask me about billing, maintenance, house rules, or anything about your stay at LilyCrest.";
+          aiResponse = retry.text || "I'm here to help po! Could you rephrase your question? Feel free to ask me anything about billing, maintenance, house rules, or your stay at LilyCrest.";
         }
       }
     } catch (modelError) {
-      console.error('Chatbot AI error:', modelError);
-      // Minimal fallback — no canned policy dump
-      aiResponse = "I'm having a bit of trouble right now po. Please try again in a moment, or you can reach the admin office directly at +63 912 345 6789.";
+      logChatEvent('ai_error', { sessionId, error: modelError?.message });
+      aiResponse = "I'm having a bit of trouble connecting right now po. Please try again in a moment — or if it's urgent, you can reach the admin office directly at +63 912 345 6789.";
     }
 
     // Clean the response
@@ -311,6 +364,8 @@ async function sendMessage(req, res) {
       session.history = session.history.slice(-30);
     }
     chatSessions.set(sessionId, session);
+
+    logChatEvent('response', { sessionId, responseLength: cleanResponse.length, needsAdmin, intent: meta.intent });
 
     res.json({
       response: cleanResponse,
