@@ -61,7 +61,7 @@ console.log('Final Backend URL:', BACKEND_URL);
 // --- Connectivity check for debugging ---
 export async function checkBackendConnection() {
   try {
-    const response = await fetch(`${BACKEND_URL}/api/m/health`);
+    const response = await fetch(`${BACKEND_URL}/api/health`);
     if (response.ok) {
       console.log('Backend connectivity: SUCCESS');
     } else {
@@ -83,8 +83,12 @@ const AUTH_REFRESH_URL = `${BACKEND_URL}/api/auth/google`;
 // Export base URL for non-axios downloads (e.g., Linking openURL)
 export const BASE_BACKEND_URL = BACKEND_URL;
 
+// ── FIX: Changed /api/m → /api to match the live backend route structure.
+// The deployed backend at api.lilycrest.space only mounts routes under /api.
+// Using /api/m caused every request to 404, which axios surfaced as a network
+// error (no .response object) → "Unable to connect" in the UI.
 export const api = axios.create({
-  baseURL: `${BACKEND_URL}/api/m`,
+  baseURL: `${BACKEND_URL}/api`,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -94,6 +98,7 @@ export const api = axios.create({
 // Request interceptor — attach session token to every request
 api.interceptors.request.use(
   async (config) => {
+    console.log('[API] Request:', config.method?.toUpperCase(), config.baseURL + config.url);
     const token = await AsyncStorage.getItem('session_token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
@@ -179,7 +184,7 @@ export const apiService = {
   getPaymongoCheckoutStatus: (checkoutId) => api.get(`/paymongo/checkout/${checkoutId}/status`),
 
   // Documents
-  downloadDocumentUrl: (docId = 'contract') => `${BASE_BACKEND_URL}/api/m/documents/${docId}`,
+  downloadDocumentUrl: (docId = 'contract') => `${BASE_BACKEND_URL}/api/documents/${docId}`,
   
   // Maintenance
   getMyMaintenance: (status) => api.get('/maintenance/me', { params: { status } }),
