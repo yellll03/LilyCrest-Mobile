@@ -49,7 +49,6 @@ module.exports = {
     },
     plugins: [
       'expo-router',
-      'expo-dev-client',
       [
         'expo-notifications',
         {

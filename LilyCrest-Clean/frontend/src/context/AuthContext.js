@@ -63,6 +63,14 @@ export function AuthProvider({ children }) {
   routerRef.current = router;
   authStatusRef.current = authStatus;
 
+  // Safety net: if session hydration hangs for any reason, unblock the app after 10s
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setAuthStatus((prev) => (prev === 'initializing' ? 'unauthenticated' : prev));
+    }, 10000);
+    return () => clearTimeout(timeout);
+  }, []);
+
   const navigateFromNotification = useCallback(async (data) => {
     const destination = resolveNotificationRoute(data);
     if (!destination || !routerRef.current) return false;
