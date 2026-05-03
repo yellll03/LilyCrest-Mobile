@@ -30,6 +30,14 @@
           }
         },
         {
+          "client_id": "784085654130-uokurvbhvl4aso67khk4kr1it0n3uaet.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.lilycrest.lilycrestdorm",
+            "certificate_hash": "d29f0c32cadf74fe240a399732aaac38e5b7f756"
+          }
+        },
+        {
           "client_id": "784085654130-ue5677aho518t6btjffc26j6sut1akfj.apps.googleusercontent.com",
           "client_type": 3
         }
