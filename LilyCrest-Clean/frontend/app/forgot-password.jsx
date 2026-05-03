@@ -5,7 +5,8 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleShe
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../src/context/ThemeContext';
 import { useToast } from '../src/context/ToastContext';
-import { api } from '../src/services/api';
+import { sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '../src/config/firebase';
 
 const validateEmail = (value) => {
   const normalized = (value || '').trim().toLowerCase();
@@ -41,7 +42,7 @@ export default function ForgotPasswordScreen() {
 
     setIsLoading(true);
     try {
-      await api.post('/auth/forgot-password', { email: email.trim().toLowerCase() });
+      await sendPasswordResetEmail(auth, email.trim().toLowerCase());
       setSent(true);
       showToast({
         type: 'success',
@@ -49,11 +50,17 @@ export default function ForgotPasswordScreen() {
         message: 'If your email is registered, we just sent you a reset link.',
       });
     } catch (err) {
-      const detail = err.response?.data?.detail || err.response?.data?.message;
+      const code = err?.code;
+      let message = 'Please try again in a moment.';
+      if (code === 'auth/user-not-found' || code === 'auth/invalid-email') {
+        message = 'No account found with that email address.';
+      } else if (code === 'auth/too-many-requests') {
+        message = 'Too many attempts. Please wait before trying again.';
+      }
       showToast({
         type: 'error',
         title: 'Unable to Send Reset Link',
-        message: detail || 'Please try again in a moment.',
+        message,
       });
     } finally {
       setIsLoading(false);

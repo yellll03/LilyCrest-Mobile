@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { auth, getFreshIdToken, subscribeToAuthState } from '../config/firebase';
 import { api } from '../services/api';
 import {
@@ -250,53 +251,54 @@ export function AuthProvider({ children }) {
 
   const loginWithEmail = async (email, password, { biometricLogin = false } = {}) => {
     try {
-      const { data } = await api.post('/auth/login', {
-        email,
-        password,
-        biometric_login: biometricLogin,
+      // Step 1: authenticate with Firebase client SDK to get an ID token
+      const userCredential = await signInWithEmailAndPassword(auth, email, password);
+      const firebaseIdToken = await userCredential.user.getIdToken(true);
+
+      // Step 2: exchange the Firebase ID token for a backend session
+      const { data } = await api.post('/auth/login', { biometric_login: biometricLogin }, {
+        headers: { Authorization: `Bearer ${firebaseIdToken}` },
       });
 
-      if (data.otp_required) {
+      // Support both response formats: {user, session_token} and {data: {user, session_token}}
+      const payload = data?.data ?? data;
+
+      if (payload.otp_required) {
         return {
           success: false,
           otpRequired: true,
-          otpToken: data.otp_token,
-          maskedEmail: data.masked_email,
+          otpToken: payload.otp_token,
+          maskedEmail: payload.masked_email,
         };
       }
 
-      const { user: userData, session_token } = data;
+      const { user: userData, session_token } = payload;
       await persistSession(session_token, userData);
       setUser(userData);
       setAuthStatus('authenticated');
       return { success: true };
     } catch (error) {
-      const status = error.response?.status;
-      const detail = error.response?.data?.detail;
-      const attemptsRemaining = error.response?.data?.attempts_remaining;
+      // Firebase SDK errors (wrong credentials, disabled account, etc.)
+      const firebaseCode = error?.code;
+      if (firebaseCode === 'auth/invalid-credential' || firebaseCode === 'auth/wrong-password' || firebaseCode === 'auth/user-not-found') {
+        return { success: false, error: 'Invalid email or password. Please try again.' };
+      }
+      if (firebaseCode === 'auth/too-many-requests') {
+        return { success: false, error: 'Too many failed attempts. Please wait before trying again.' };
+      }
+      if (firebaseCode === 'auth/user-disabled') {
+        return { success: false, error: 'This account has been disabled. Please contact support.' };
+      }
+      if (firebaseCode) {
+        return { success: false, error: 'Authentication failed. Please try again.' };
+      }
 
-      if (status === 400) {
-        await clearPersistedSession();
-        return { success: false, status, error: detail || 'Please check your input and try again.' };
-      }
-      if (status === 401) {
-        let message = detail || 'Invalid email or password. Please try again.';
-        if (Number.isInteger(attemptsRemaining) && attemptsRemaining >= 0) {
-          const suffix = `${attemptsRemaining} password attempt${attemptsRemaining !== 1 ? 's' : ''} remaining before temporary lock.`;
-          message = `${message}${message.endsWith('.') ? '' : '.'} ${suffix}`;
-        }
-        await clearPersistedSession();
-        return { success: false, status, error: message, attemptsRemaining };
-      }
-      if (status === 403) {
-        return { success: false, status, error: detail || 'Access denied. Your account is not registered as a verified tenant. Please contact the admin office.' };
-      }
-      if (status === 429) {
-        return { success: false, status, error: detail || 'Too many failed attempts. Please wait a moment before trying again.' };
-      }
-      if (status === 500) {
-        return { success: false, status, error: 'A server error occurred. Please try again in a moment.' };
-      }
+      // Backend errors
+      const status = error.response?.status;
+      const detail = error.response?.data?.detail || error.response?.data?.error;
+      if (status === 403) return { success: false, status, error: detail || 'Access denied. Your account is not registered as a verified tenant.' };
+      if (status === 429) return { success: false, status, error: detail || 'Too many failed attempts. Please wait a moment before trying again.' };
+      if (status === 500) return { success: false, status, error: 'A server error occurred. Please try again in a moment.' };
       return { success: false, status: 0, error: 'Unable to connect. Please check your internet connection.' };
     }
   };
@@ -363,8 +365,13 @@ export function AuthProvider({ children }) {
         return { success: false, error: 'No authentication token available' };
       }
 
-      const response = await api.post('/auth/google', { idToken: tokenToUse });
-      const { user: userData, session_token } = response.data;
+      // Pass Firebase ID token in Authorization header — same endpoint as email login
+      const { data } = await api.post('/auth/login', {}, {
+        headers: { Authorization: `Bearer ${tokenToUse}` },
+      });
+
+      const payload = data?.data ?? data;
+      const { user: userData, session_token } = payload;
 
       await persistSession(session_token, userData);
       setUser(userData);
@@ -372,7 +379,7 @@ export function AuthProvider({ children }) {
       return { success: true };
     } catch (error) {
       const status = error.response?.status;
-      const detail = error.response?.data?.detail;
+      const detail = error.response?.data?.detail || error.response?.data?.error;
 
       if (status === 403) {
         return { success: false, error: detail || 'Access denied. Your account is not registered as an active tenant.' };
