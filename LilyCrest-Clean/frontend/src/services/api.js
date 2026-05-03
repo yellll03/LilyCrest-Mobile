@@ -61,7 +61,7 @@ console.log('Final Backend URL:', BACKEND_URL);
 // --- Connectivity check for debugging ---
 export async function checkBackendConnection() {
   try {
-    const response = await fetch(`${BACKEND_URL}/api/m/health`);
+    const response = await fetch(`${BACKEND_URL}/api/health`);
     if (response.ok) {
       console.log('Backend connectivity: SUCCESS');
     } else {
@@ -83,9 +83,8 @@ const AUTH_REFRESH_URL = `${BACKEND_URL}/api/auth/google`;
 // Export base URL for non-axios downloads (e.g., Linking openURL)
 export const BASE_BACKEND_URL = BACKEND_URL;
 
-// Mobile routes are mounted under /api/m on the production server.
 export const api = axios.create({
-  baseURL: `${BACKEND_URL}/api/m`,
+  baseURL: `${BACKEND_URL}/api`,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -181,7 +180,7 @@ export const apiService = {
   getPaymongoCheckoutStatus: (checkoutId) => api.get(`/paymongo/checkout/${checkoutId}/status`),
 
   // Documents
-  downloadDocumentUrl: (docId = 'contract') => `${BASE_BACKEND_URL}/api/m/documents/${docId}`,
+  downloadDocumentUrl: (docId = 'contract') => `${BASE_BACKEND_URL}/api/documents/${docId}`,
   
   // Maintenance
   getMyMaintenance: (status) => api.get('/maintenance/me', { params: { status } }),
