@@ -5,7 +5,7 @@ import { Platform } from 'react-native';
 import { getFreshIdToken } from '../config/firebase';
 
 const DEFAULT_PORT = process.env.EXPO_PUBLIC_BACKEND_PORT || '8001';
-const EXPLICIT_BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
+const EXPLICIT_BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || (__DEV__ ? '' : 'https://api.lilycrest.space');
 // Default the chatbot port to the main backend unless explicitly overridden.
 const CHATBOT_PORT = process.env.EXPO_PUBLIC_CHATBOT_PORT || DEFAULT_PORT;
 const DEV_FALLBACK_HOST = process.env.EXPO_PUBLIC_DEV_HOST || null;
@@ -61,7 +61,7 @@ console.log('Final Backend URL:', BACKEND_URL);
 // --- Connectivity check for debugging ---
 export async function checkBackendConnection() {
   try {
-    const response = await fetch(`${BACKEND_URL}/api/health`);
+    const response = await fetch(`${BACKEND_URL}/api/m/health`);
     if (response.ok) {
       console.log('Backend connectivity: SUCCESS');
     } else {
@@ -83,12 +83,9 @@ const AUTH_REFRESH_URL = `${BACKEND_URL}/api/auth/google`;
 // Export base URL for non-axios downloads (e.g., Linking openURL)
 export const BASE_BACKEND_URL = BACKEND_URL;
 
-// ── FIX: Changed /api/m → /api to match the live backend route structure.
-// The deployed backend at api.lilycrest.space only mounts routes under /api.
-// Using /api/m caused every request to 404, which axios surfaced as a network
-// error (no .response object) → "Unable to connect" in the UI.
+// Mobile routes are mounted under /api/m on the production server.
 export const api = axios.create({
-  baseURL: `${BACKEND_URL}/api`,
+  baseURL: `${BACKEND_URL}/api/m`,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -184,7 +181,7 @@ export const apiService = {
   getPaymongoCheckoutStatus: (checkoutId) => api.get(`/paymongo/checkout/${checkoutId}/status`),
 
   // Documents
-  downloadDocumentUrl: (docId = 'contract') => `${BASE_BACKEND_URL}/api/documents/${docId}`,
+  downloadDocumentUrl: (docId = 'contract') => `${BASE_BACKEND_URL}/api/m/documents/${docId}`,
   
   // Maintenance
   getMyMaintenance: (status) => api.get('/maintenance/me', { params: { status } }),
