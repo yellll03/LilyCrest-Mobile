@@ -29,6 +29,7 @@ local.properties
 *.iml
 *.hprof
 .cxx/
+/.vscode/
 
 # Android build outputs
 frontend/android/build/
@@ -39,6 +40,7 @@ frontend/android/app/build/
 .expo-shared/
 .expo/web/
 .metro-cache/
+frontend/.expo-export-check*/
 
 # React Native
 *.jsbundle

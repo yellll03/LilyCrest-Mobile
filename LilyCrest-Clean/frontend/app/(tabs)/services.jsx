@@ -399,12 +399,12 @@ export default function ServicesScreen() {
     setSaving(true);
     try {
       await apiService.cancelMaintenance(detailRequest.request_id);
-      showBannerMessage('success', 'Successfully deleted the request.');
+      showBannerMessage('success', 'Request cancelled successfully.');
       setShowCancelConfirm(false);
       setShowDetailModal(false);
       fetchRequests();
     } catch (e) {
-      showBannerMessage('error', e?.response?.data?.detail || 'Failed to delete request. Please try again.');
+      showBannerMessage('error', e?.response?.data?.detail || 'Failed to cancel request. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -653,7 +653,7 @@ export default function ServicesScreen() {
                 <Text style={styles.modalSectionTitle}>Add Photos (optional)</Text>
                 <View style={styles.uploadPanel}>
                   <View style={styles.uploadIcon}><Ionicons name="cloud-upload" size={28} color={colors.textMuted} /></View>
-                  <Text style={styles.uploadTitle}>Upload Receipt / Photos</Text>
+                  <Text style={styles.uploadTitle}>Upload Photos</Text>
                   <Text style={styles.uploadSubtitle}>Add supporting images for your request</Text>
                   <View style={styles.uploadButtons}>
                     <TouchableOpacity style={styles.uploadBtn} onPress={() => handleAttach(pickFromCamera)} disabled={submitting}>

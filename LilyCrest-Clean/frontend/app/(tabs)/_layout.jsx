@@ -1,11 +1,55 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { Tabs } from 'expo-router';
-import { useEffect, useMemo, useRef } from 'react';
+import { Tabs, usePathname } from 'expo-router';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Platform, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../src/context/ThemeContext';
+import { apiService } from '../../src/services/api';
+
+const LAST_SEEN_KEY = 'lilycrest_announcements_last_seen';
+
+function useUnreadAnnouncementCount() {
+  const [unreadCount, setUnreadCount] = useState(0);
+  const pathname = usePathname();
+
+  const refresh = async () => {
+    try {
+      const [resp, lastSeenStr] = await Promise.all([
+        apiService.getAnnouncements(),
+        AsyncStorage.getItem(LAST_SEEN_KEY),
+      ]);
+      const announcements = resp?.data || [];
+      const lastSeen = lastSeenStr ? new Date(lastSeenStr) : new Date(0);
+      const count = announcements.filter((a) => {
+        const created = a.created_at ? new Date(a.created_at) : new Date(0);
+        return created > lastSeen;
+      }).length;
+      setUnreadCount(count);
+    } catch (_) {
+      // silently ignore — badge is non-critical
+    }
+  };
+
+  // Clear badge when the user opens the announcements tab
+  useEffect(() => {
+    if (pathname === '/announcements') {
+      AsyncStorage.setItem(LAST_SEEN_KEY, new Date().toISOString()).catch(() => {});
+      setUnreadCount(0);
+    }
+  }, [pathname]);
+
+  // Poll for new announcements every 60 s
+  useEffect(() => {
+    refresh();
+    const interval = setInterval(refresh, 60000);
+    return () => clearInterval(interval);
+  }, []);
+
+  return unreadCount;
+}
 
 // Animated Tab Icon Component
-function AnimatedTabIcon({ focused, iconName, focusedIconName, label, colors, styles }) {
+function AnimatedTabIcon({ focused, iconName, focusedIconName, label, colors, styles, badgeCount = 0 }) {
   const scaleAnim = useRef(new Animated.Value(focused ? 1 : 0.9)).current;
   const bgAnim = useRef(new Animated.Value(focused ? 1 : 0)).current;
 
@@ -39,6 +83,11 @@ function AnimatedTabIcon({ focused, iconName, focusedIconName, label, colors, st
             color={focused ? colors.primary : colors.textMuted}
           />
         </Animated.View>
+        {badgeCount > 0 && (
+          <View style={styles.badgeDot}>
+            <Text style={styles.badgeText}>{badgeCount > 9 ? '9+' : badgeCount}</Text>
+          </View>
+        )}
       </Animated.View>
       <Text style={[styles.tabLabel, focused && styles.tabLabelActive]} numberOfLines={1}>
         {label}
@@ -90,6 +139,7 @@ function HomeTabIcon({ focused, colors, styles }) {
 export default function TabLayout() {
   const { colors, isDarkMode } = useTheme();
   const styles = useMemo(() => createStyles(colors, isDarkMode), [colors, isDarkMode]);
+  const unreadAnnouncements = useUnreadAnnouncementCount();
 
   return (
     <Tabs
@@ -130,6 +180,7 @@ export default function TabLayout() {
               label="News"
               colors={colors}
               styles={styles}
+              badgeCount={unreadAnnouncements}
             />
           ),
         }}
@@ -283,5 +334,25 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   homeLabelActive: {
     color: colors.primary,
     fontWeight: '600',
+  },
+  badgeDot: {
+    position: 'absolute',
+    top: 0,
+    right: 0,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    backgroundColor: '#EF4444',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 3,
+    borderWidth: 1.5,
+    borderColor: colors.surface,
+  },
+  badgeText: {
+    color: '#ffffff',
+    fontSize: 9,
+    fontWeight: '800',
+    lineHeight: 12,
   },
 });

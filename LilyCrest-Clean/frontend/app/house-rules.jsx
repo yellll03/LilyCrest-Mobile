@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -81,7 +81,7 @@ const HOUSE_RULES = [
   {
     title: '7. Payment',
     icon: 'card',
-    color: '#D4682A',
+    color: '#ff9000',
     rules: [
       'Monthly rent is due on the 5th of each month',
       'Grace period: 2 days (until the 7th)',
@@ -93,7 +93,7 @@ const HOUSE_RULES = [
   {
     title: '8. Safety & Security',
     icon: 'shield-checkmark',
-    color: '#1E3A5F',
+    color: '#6366F1',
     rules: [
       'Always lock your room when leaving',
       'Do not share your room key with others',
@@ -123,7 +123,7 @@ export default function HouseRulesScreen() {
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.introCard}>
-          <Ionicons name="document-text" size={32} color="#D4682A" />
+          <Ionicons name="document-text" size={32} color={colors.primary} />
           <View style={styles.introContent}>
             <Text style={styles.introTitle}>LilyCrest Dormitory Rules</Text>
             <Text style={styles.introText}>Please read and follow all rules to ensure a comfortable living environment for everyone.</Text>
@@ -195,7 +195,7 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   contactCard: { backgroundColor: colors.surface, borderRadius: 16, padding: 20, alignItems: 'center', borderWidth: isDarkMode ? 1 : 0, borderColor: colors.border },
   contactTitle: { fontSize: 18, fontWeight: '600', color: colors.text, marginBottom: 8 },
   contactText: { fontSize: 14, color: colors.textSecondary, textAlign: 'center', marginBottom: 16 },
-  chatButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#D4682A', paddingVertical: 12, paddingHorizontal: 24, borderRadius: 12, gap: 8 },
+  chatButton: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.primary, paddingVertical: 12, paddingHorizontal: 24, borderRadius: 12, gap: 8 },
   chatButtonText: { fontSize: 15, fontWeight: '600', color: '#FFFFFF' },
   bottomSpacer: { height: 32 },
 });

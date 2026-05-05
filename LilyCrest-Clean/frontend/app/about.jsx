@@ -1,13 +1,14 @@
-import React from 'react';
+﻿import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Image, Platform, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useTheme } from '../src/context/ThemeContext';
+import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
 
 export default function AboutScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -61,30 +62,30 @@ export default function AboutScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+const createStyles = (c) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.background },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
   backButton: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '600', color: '#1E3A5F' },
+  headerTitle: { fontSize: 18, fontWeight: '600', color: c.text },
   scrollView: { flex: 1 },
   scrollContent: { padding: 20 },
   logoSection: { alignItems: 'center', marginBottom: 24 },
-  logoIcon: { width: 80, height: 80, borderRadius: 24, backgroundColor: '#D4682A', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
-  appName: { fontSize: 28, fontWeight: '700', color: '#1E3A5F' },
-  tagline: { fontSize: 14, color: '#6B7280', marginTop: 4 },
-  version: { fontSize: 12, color: '#9CA3AF', marginTop: 8 },
-  card: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 20, marginBottom: 16, ...Platform.select({ web: { boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }, default: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 } }) },
-  cardTitle: { fontSize: 16, fontWeight: '600', color: '#1E3A5F', marginBottom: 12 },
-  cardText: { fontSize: 14, color: '#4B5563', lineHeight: 22 },
+  logoIcon: { width: 80, height: 80, borderRadius: 24, backgroundColor: '#204b7e', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
+  appName: { fontSize: 28, fontWeight: '700', color: c.text },
+  tagline: { fontSize: 14, color: c.textSecondary, marginTop: 4 },
+  version: { fontSize: 12, color: c.textMuted, marginTop: 8 },
+  card: { backgroundColor: c.surface, borderRadius: 16, padding: 20, marginBottom: 16, ...Platform.select({ web: { boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }, default: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 } }) },
+  cardTitle: { fontSize: 16, fontWeight: '600', color: c.text, marginBottom: 12 },
+  cardText: { fontSize: 14, color: c.textSecondary, lineHeight: 22 },
   featureList: { gap: 12 },
   featureItem: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  featureIcon: { width: 40, height: 40, borderRadius: 10, backgroundColor: '#F3F4F6', justifyContent: 'center', alignItems: 'center' },
-  featureText: { fontSize: 14, color: '#1F2937', fontWeight: '500' },
+  featureIcon: { width: 40, height: 40, borderRadius: 10, backgroundColor: c.surfaceSecondary, justifyContent: 'center', alignItems: 'center' },
+  featureText: { fontSize: 14, color: c.text, fontWeight: '500' },
   contactItem: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 8 },
-  contactText: { fontSize: 14, color: '#4B5563' },
+  contactText: { fontSize: 14, color: c.textSecondary },
   linksSection: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 8 },
   linkItem: {},
-  linkText: { fontSize: 14, color: '#D4682A', fontWeight: '500' },
-  linkDivider: { color: '#D1D5DB' },
-  copyright: { textAlign: 'center', fontSize: 12, color: '#9CA3AF', marginTop: 16, lineHeight: 18 },
+  linkText: { fontSize: 14, color: c.primary, fontWeight: '500' },
+  linkDivider: { color: c.border },
+  copyright: { textAlign: 'center', fontSize: 12, color: c.textMuted, marginTop: 16, lineHeight: 18 },
 });

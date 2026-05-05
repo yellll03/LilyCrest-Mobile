@@ -1,13 +1,14 @@
-import React from 'react';
+﻿import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useTheme } from '../src/context/ThemeContext';
+import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
 
 export default function PrivacyPolicyScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -48,15 +49,15 @@ export default function PrivacyPolicyScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
+const createStyles = (c) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.background },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
   backButton: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '600', color: '#1E3A5F' },
+  headerTitle: { fontSize: 18, fontWeight: '600', color: c.text },
   scrollView: { flex: 1 },
   scrollContent: { padding: 20 },
-  updateDate: { fontSize: 13, color: '#9CA3AF', marginBottom: 24 },
+  updateDate: { fontSize: 13, color: c.textMuted, marginBottom: 24 },
   section: { marginBottom: 24 },
-  sectionTitle: { fontSize: 16, fontWeight: '600', color: '#1E3A5F', marginBottom: 8 },
-  paragraph: { fontSize: 14, color: '#4B5563', lineHeight: 22 },
+  sectionTitle: { fontSize: 16, fontWeight: '600', color: c.text, marginBottom: 8 },
+  paragraph: { fontSize: 14, color: c.textSecondary, lineHeight: 22 },
 });

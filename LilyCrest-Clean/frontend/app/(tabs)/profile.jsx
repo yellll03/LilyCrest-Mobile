@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+﻿import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
@@ -148,7 +148,7 @@ export default function ProfileScreen() {
   const confirmLogout = async () => {
     setLogoutModalVisible(false);
     await logout();
-    router.replace('/');
+    router.replace('/login');
   };
 
 
@@ -253,7 +253,7 @@ export default function ProfileScreen() {
     }
   };
 
-  const iconColor = isDarkMode ? colors.primary : '#1E3A5F';
+  const iconColor = isDarkMode ? colors.primary : colors.accent;
   const menuItems = [
     { icon: 'person-outline', label: 'Edit Profile', onPress: () => setIsEditing(true), color: iconColor },
     { icon: 'receipt-outline', label: 'Billing History', onPress: () => router.push({ pathname: '/(tabs)/billing', params: { from: 'profile' } }), color: iconColor },
@@ -493,7 +493,7 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   avatarContainer: { position: 'relative', marginBottom: 16 },
   avatar: { width: 90, height: 90, borderRadius: 45, borderWidth: 3, borderColor: colors.border },
   avatarPlaceholder: { width: 90, height: 90, borderRadius: 45, backgroundColor: colors.inputBg, justifyContent: 'center', alignItems: 'center', borderWidth: 3, borderColor: colors.border },
-  editAvatarButton: { position: 'absolute', bottom: 2, right: 2, width: 28, height: 28, borderRadius: 14, backgroundColor: '#1E3A5F', justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: colors.surface },
+  editAvatarButton: { position: 'absolute', bottom: 2, right: 2, width: 28, height: 28, borderRadius: 14, backgroundColor: colors.accent, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: colors.surface },
   userName: { fontSize: 20, fontWeight: '600', color: colors.text, marginBottom: 2 },
   userHandle: { fontSize: 14, color: colors.primary, marginBottom: 4, fontWeight: '500' },
   userEmail: { fontSize: 14, color: colors.textSecondary, marginBottom: 12 },
@@ -526,7 +526,7 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   fieldErrorText: { fontSize: 12, color: '#EF4444' },
   fieldFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 },
   charCount: { fontSize: 11, color: colors.textMuted, fontWeight: '600' },
-  saveButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: '#1E3A5F', paddingVertical: 14, borderRadius: 12, marginTop: 8, gap: 8 },
+  saveButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary, paddingVertical: 14, borderRadius: 12, marginTop: 8, gap: 8 },
   saveButtonDisabled: { backgroundColor: colors.textMuted },
   saveButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
   bottomSpacer: { height: Platform.OS === 'ios' ? 100 : 80 },

@@ -1,4 +1,4 @@
-import React from 'react';
+﻿import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -11,7 +11,7 @@ const documents = [
   { title: 'House Rules', icon: 'home', color: '#F59E0B', description: 'General dormitory guidelines', category: 'Policy' },
   { title: 'Curfew Policy', icon: 'time', color: '#9333EA', description: 'Entry and exit times', category: 'Policy' },
   { title: 'Visitor Policy', icon: 'people', color: '#06B6D4', description: 'Guest registration rules', category: 'Policy' },
-  { title: 'Payment Terms', icon: 'cash', color: '#D4682A', description: 'Billing and payment policies', category: 'Billing' },
+  { title: 'Payment Terms', icon: 'cash', color: '#ff9000', description: 'Billing and payment policies', category: 'Billing' },
   { title: 'Emergency Procedures', icon: 'alert-circle', color: '#EF4444', description: 'Safety and emergency contacts', category: 'Safety' },
   { title: 'Contract Agreement', icon: 'document-text', color: '#3B82F6', description: 'Tenancy agreement terms', category: 'Contract', download: true },
 ];

@@ -1,7 +1,7 @@
-import { Image, Platform, StyleSheet, Text, View } from 'react-native';
+﻿import { Image, Platform, StyleSheet, Text, View } from 'react-native';
 
-const ORANGE = '#D4682A';
-const NAVY_TEXT = '#1E3A5F';
+const ACCENT = '#ff9000';
+const PRIMARY_TEXT = '#204b7e';
 
 export default function BrandHeader({
   compact = false,
@@ -119,10 +119,10 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   wordmarkLightOnLight: {
-    color: NAVY_TEXT,
+    color: PRIMARY_TEXT,
   },
   wordmarkAccent: {
-    color: ORANGE,
+    color: ACCENT,
   },
   tagline: {
     fontSize: 11,

@@ -25,19 +25,19 @@ const TOAST_COLORS = {
   },
   warning: {
     icon: 'warning',
-    background: '#FFFBEB',
-    border: '#FDE68A',
+    background: '#FFF8EC',
+    border: '#FFD88A',
     iconColor: '#B45309',
-    titleColor: '#92400E',
-    messageColor: '#92400E',
+    titleColor: '#7a3d00',
+    messageColor: '#7a3d00',
   },
   info: {
     icon: 'information-circle',
-    background: '#EFF6FF',
-    border: '#BFDBFE',
-    iconColor: '#1D4ED8',
-    titleColor: '#1E40AF',
-    messageColor: '#1E40AF',
+    background: '#E8F0FA',
+    border: '#B8D0EC',
+    iconColor: '#204b7e',
+    titleColor: '#163966',
+    messageColor: '#163966',
   },
 };
 

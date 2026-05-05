@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+﻿import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useRouter } from 'expo-router';
@@ -50,9 +50,10 @@ const SLIDES = [
   },
 ];
 
-const NAVY = '#0D1B3E';
-const ORANGE = '#D4682A';
-const ORANGE_LIGHT = '#E07840';
+const NAVY = '#0a1220';
+const PRIMARY = '#204b7e';
+const ACCENT = '#ff9000';
+const ACCENT_LIGHT = '#cc7200';
 
 export default function OnboardingScreen() {
   const router = useRouter();
@@ -131,7 +132,7 @@ export default function OnboardingScreen() {
   const renderSlide = useCallback(({ item }) => (
     <View style={styles.slide}>
       <View style={styles.slideIconWrap}>
-        <Ionicons name={item.icon} size={44} color={ORANGE} />
+        <Ionicons name={item.icon} size={44} color={ACCENT} />
       </View>
       <Text style={styles.slideTitle}>{item.title}</Text>
       <Text style={styles.slideDesc}>{item.description}</Text>
@@ -162,7 +163,7 @@ export default function OnboardingScreen() {
           resizeMode="contain"
           accessibilityLabel="LilyCrest logo"
         />
-        <ActivityIndicator size="large" color={ORANGE} style={{ marginTop: 32 }} />
+        <ActivityIndicator size="large" color={PRIMARY} style={{ marginTop: 32 }} />
       </View>
     );
   }
@@ -213,7 +214,7 @@ export default function OnboardingScreen() {
             {SLIDES.map((s, i) => (
               <View key={s.id} style={styles.featureItem}>
                 <View style={[styles.featureIconBox, activeIndex === i && styles.featureIconBoxActive]}>
-                  <Ionicons name={s.icon} size={22} color={activeIndex === i ? '#fff' : ORANGE} />
+                  <Ionicons name={s.icon} size={22} color={activeIndex === i ? '#fff' : ACCENT} />
                 </View>
                 <Text style={[styles.featureLabel, activeIndex === i && styles.featureLabelActive]}>
                   {s.label}
@@ -349,7 +350,7 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
   },
   brandWordmarkAccent: {
-    color: ORANGE,
+    color: ACCENT,
   },
   brandTagline: {
     fontSize: 11,
@@ -384,9 +385,9 @@ const styles = StyleSheet.create({
     width: 88,
     height: 88,
     borderRadius: 44,
-    backgroundColor: 'rgba(212,104,42,0.15)',
+    backgroundColor: 'rgba(255,144,0,0.15)',
     borderWidth: 2,
-    borderColor: 'rgba(212,104,42,0.4)',
+    borderColor: 'rgba(255,144,0,0.40)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -422,15 +423,15 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.08)',
     borderWidth: 1.5,
-    borderColor: 'rgba(212,104,42,0.35)',
+    borderColor: 'rgba(255,144,0,0.35)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   featureIconBoxActive: {
-    backgroundColor: ORANGE,
-    borderColor: ORANGE_LIGHT,
+    backgroundColor: ACCENT,
+    borderColor: ACCENT_LIGHT,
     ...Platform.select({
-      ios: { shadowColor: ORANGE, shadowOpacity: 0.5, shadowOffset: { width: 0, height: 4 }, shadowRadius: 10 },
+      ios: { shadowColor: ACCENT, shadowOpacity: 0.5, shadowOffset: { width: 0, height: 4 }, shadowRadius: 10 },
       android: { elevation: 6 },
     }),
   },
@@ -474,19 +475,19 @@ const styles = StyleSheet.create({
     width: 24,
     height: 8,
     borderRadius: 4,
-    backgroundColor: ORANGE,
+    backgroundColor: PRIMARY,
   },
   ctaBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: ORANGE,
+    backgroundColor: PRIMARY,
     paddingVertical: 14,
     paddingLeft: 24,
     paddingRight: 16,
     borderRadius: 50,
     gap: 10,
     ...Platform.select({
-      ios: { shadowColor: ORANGE, shadowOpacity: 0.45, shadowOffset: { width: 0, height: 6 }, shadowRadius: 12 },
+      ios: { shadowColor: PRIMARY, shadowOpacity: 0.45, shadowOffset: { width: 0, height: 6 }, shadowRadius: 12 },
       android: { elevation: 8 },
     }),
   },

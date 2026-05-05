@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+﻿import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
@@ -20,7 +20,7 @@ const UPLOAD_TYPES = [
   { key: 'drivers_license', label: "Driver's License", icon: 'car', color: '#8B5CF6' },
   { key: 'student_id', label: 'Student ID', icon: 'school', color: '#F59E0B' },
   { key: 'company_id', label: 'Company/Employee ID', icon: 'business', color: '#0EA5E9' },
-  { key: 'lease_extension', label: 'Lease Extension', icon: 'document-attach', color: '#D4682A' },
+  { key: 'lease_extension', label: 'Lease Extension', icon: 'document-attach', color: '#ff9000' },
   { key: 'proof_of_income', label: 'Proof of Income', icon: 'cash', color: '#10B981' },
   { key: 'authorization_letter', label: 'Authorization Letter', icon: 'mail', color: '#EC4899' },
   { key: 'other', label: 'Other Document', icon: 'document', color: '#6B7280' },
@@ -46,7 +46,7 @@ const POLICY_DOCUMENTS = [
   },
   {
     id: 'payment_terms', title: 'Payment Terms', description: 'Billing methods, due dates, and late fees', icon: 'cash',
-    color: '#D4682A', category: 'Billing', status: 'Active',
+    color: '#ff9000', category: 'Billing', status: 'Active',
   },
   {
     id: 'emergency_procedures', title: 'Emergency Procedures', description: 'Safety protocols and emergency contacts', icon: 'alert-circle',
@@ -57,7 +57,7 @@ const POLICY_DOCUMENTS = [
 const CATEGORIES = [
   { key: 'Personal', icon: 'person', color: '#3B82F6', label: 'My Documents' },
   { key: 'Policies', icon: 'shield-checkmark', color: '#9333EA', label: 'Dormitory Policies' },
-  { key: 'Billing', icon: 'wallet', color: '#D4682A', label: 'Billing & Payments' },
+  { key: 'Billing', icon: 'wallet', color: '#ff9000', label: 'Billing & Payments' },
   { key: 'Safety', icon: 'warning', color: '#EF4444', label: 'Safety & Emergency' },
 ];
 
@@ -734,7 +734,7 @@ export default function MyDocumentsScreen() {
         })}
 
         <View style={styles.helpCard}>
-          <Ionicons name="help-circle" size={22} color="#D4682A" />
+          <Ionicons name="help-circle" size={22} color="#ff9000" />
           <Text style={styles.helpText}>Need a document not listed here? Contact the admin office or chat with Lily for assistance.</Text>
         </View>
         <View style={{ height: 40 }} />
@@ -877,7 +877,7 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   chipBar: { backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border, paddingVertical: 10 },
   chipRow: { paddingHorizontal: 16, gap: 8 },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: isDarkMode ? 'rgba(255,255,255,0.06)' : '#F1F5F9', borderWidth: 1, borderColor: isDarkMode ? 'rgba(255,255,255,0.1)' : '#E2E8F0' },
-  chipActive: { backgroundColor: '#1E3A5F', borderColor: '#1E3A5F' },
+  chipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
   chipText: { fontSize: 12, fontWeight: '600', color: colors.textMuted },
   chipTextActive: { color: '#fff' },
   // List
@@ -890,7 +890,7 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   countBadge: { width: 22, height: 22, borderRadius: 11, backgroundColor: isDarkMode ? 'rgba(255,255,255,0.08)' : '#F1F5F9', justifyContent: 'center', alignItems: 'center' },
   countText: { fontSize: 11, fontWeight: '700', color: colors.textMuted },
   // Upload button
-  uploadButton: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, backgroundColor: '#1E3A5F' },
+  uploadButton: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, backgroundColor: colors.accent },
   uploadButtonText: { color: '#fff', fontSize: 12, fontWeight: '600' },
   // Uploaded documents
   subSection: { marginBottom: 14 },
@@ -919,7 +919,7 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   statusBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, marginLeft: 8 },
   statusText: { fontSize: 10, fontWeight: '700' },
   actionButtons: { marginLeft: 8 },
-  downloadButton: { width: 36, height: 36, borderRadius: 10, backgroundColor: '#1E3A5F', justifyContent: 'center', alignItems: 'center' },
+  downloadButton: { width: 36, height: 36, borderRadius: 10, backgroundColor: colors.accent, justifyContent: 'center', alignItems: 'center' },
   downloadButtonDisabled: { backgroundColor: colors.textMuted },
   helpCard: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: isDarkMode ? 'rgba(249,115,22,0.1)' : '#FFF7ED', borderRadius: 12, padding: 14, marginTop: 8, gap: 10 },
   helpText: { flex: 1, fontSize: 13, color: isDarkMode ? '#FDBA74' : '#9A3412', lineHeight: 20 },

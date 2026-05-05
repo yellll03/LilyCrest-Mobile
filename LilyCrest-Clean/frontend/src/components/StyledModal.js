@@ -1,7 +1,7 @@
-import { useEffect, useRef } from 'react';
+﻿import { useEffect, useRef } from 'react';
 import { Animated, Modal, Platform, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useThemedStyles } from '../context/ThemeContext';
+import { useTheme, useThemedStyles } from '../context/ThemeContext';
 
 /**
  * StyledModal — premium replacement for Alert.alert
@@ -28,6 +28,7 @@ export default function StyledModal({
 }) {
   const scaleAnim = useRef(new Animated.Value(0.85)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
+  const { colors } = useTheme();
 
   useEffect(() => {
     if (visible) {
@@ -66,7 +67,7 @@ export default function StyledModal({
       card: {
         width: '100%',
         maxWidth: 340,
-        backgroundColor: isDark ? '#1A2540' : '#FFFFFF',
+        backgroundColor: c.surface,
         borderRadius: 20,
         overflow: 'hidden',
         ...Platform.select({
@@ -76,7 +77,7 @@ export default function StyledModal({
       },
       accentBar: {
         height: 4,
-        backgroundColor: resolvedColor || c.accent || '#D4682A',
+        backgroundColor: resolvedColor || c.primary || '#204b7e',
       },
       body: {
         paddingHorizontal: 24,
@@ -88,7 +89,7 @@ export default function StyledModal({
         width: 56,
         height: 56,
         borderRadius: 28,
-        backgroundColor: `${resolvedColor || c.accent || '#D4682A'}18`,
+        backgroundColor: `${resolvedColor || c.primary || '#204b7e'}18`,
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 16,
@@ -96,14 +97,14 @@ export default function StyledModal({
       title: {
         fontSize: 18,
         fontWeight: '700',
-        color: isDark ? '#F0F4F8' : '#14365A',
+        color: c.text,
         textAlign: 'center',
         marginBottom: 8,
       },
       message: {
         fontSize: 14,
         lineHeight: 20,
-        color: isDark ? '#94A3B8' : '#64748B',
+        color: c.textSecondary,
         textAlign: 'center',
         marginBottom: 20,
       },
@@ -127,10 +128,10 @@ export default function StyledModal({
       btnText: {
         fontSize: 15,
         fontWeight: '600',
-        color: c.accent || '#D4682A',
+        color: c.primary || '#204b7e',
       },
       btnTextCancel: {
-        color: isDark ? '#94A3B8' : '#64748B',
+        color: c.textSecondary,
         fontWeight: '500',
       },
       btnTextDestructive: {
@@ -149,7 +150,7 @@ export default function StyledModal({
               <View style={styles.body}>
                 {resolvedIcon && (
                   <View style={styles.iconWrap}>
-                    <Ionicons name={resolvedIcon} size={28} color={resolvedColor || '#D4682A'} />
+                    <Ionicons name={resolvedIcon} size={28} color={resolvedColor || colors.primary || '#204b7e'} />
                   </View>
                 )}
                 {title ? <Text style={styles.title}>{title}</Text> : null}

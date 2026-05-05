@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+﻿import { Ionicons } from '@expo/vector-icons';
 import { format, formatDistanceToNow } from 'date-fns';
 import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -36,27 +36,22 @@ function getAnnouncementDateValue(announcement = {}) {
 function getAnnouncementTimestamp(announcement = {}) {
   const value = getAnnouncementDateValue(announcement);
   if (!value) return null;
-
   const parsed = value instanceof Date ? value : new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
 }
 
 function sortAnnouncements(list = [], direction = 'desc') {
   const multiplier = direction === 'asc' ? 1 : -1;
-
   return [...list].sort((left, right) => {
     const leftTimestamp = getAnnouncementTimestamp(left);
     const rightTimestamp = getAnnouncementTimestamp(right);
-
     if (leftTimestamp === null && rightTimestamp === null) return 0;
     if (leftTimestamp === null) return 1;
     if (rightTimestamp === null) return -1;
-
     return (leftTimestamp - rightTimestamp) * multiplier;
   });
 }
 
-// Check if announcement is less than 3 days old
 function isNew(dateStr) {
   try {
     const d = new Date(dateStr);
@@ -75,182 +70,181 @@ export default function AnnouncementsScreen() {
     // ── Header ──
     headerWrapper: {
       backgroundColor: c.surface,
-      borderBottomWidth: 1,
+      borderBottomWidth: StyleSheet.hairlineWidth,
       borderBottomColor: c.border,
     },
     headerRow: {
       flexDirection: 'row',
       justifyContent: 'space-between',
       alignItems: 'center',
-      paddingHorizontal: 20,
-      paddingTop: 20,
-      paddingBottom: 12,
+      paddingHorizontal: 16,
+      paddingTop: 14,
+      paddingBottom: 8,
     },
     headerLeft: { flex: 1 },
-    headerTitle: { fontSize: 22, fontWeight: '700', color: c.text, letterSpacing: -0.3 },
-    headerSubtitle: { fontSize: 13, color: c.textMuted, marginTop: 2 },
+    headerTitle: { fontSize: 18, fontWeight: '700', color: c.text, letterSpacing: -0.2 },
+    headerSubtitle: { fontSize: 11.5, color: c.textMuted, marginTop: 1 },
     refreshBtn: {
-      width: 36, height: 36, borderRadius: 10,
+      width: 32, height: 32, borderRadius: 8,
       backgroundColor: c.surfaceSecondary,
       justifyContent: 'center', alignItems: 'center',
     },
 
-    // ── Category Filter ──
-    sortRow: {
+    // ── Sort button (in header) ──
+    sortBtn: {
+      flexDirection: 'row', alignItems: 'center', gap: 3,
+      paddingVertical: 5, paddingHorizontal: 9,
+      borderRadius: 8, backgroundColor: c.surfaceSecondary,
+      marginRight: 6,
+    },
+    sortBtnText: { fontSize: 11.5, fontWeight: '600', color: c.textSecondary },
+
+    // ── Filter strip ──
+    filterScroll: { backgroundColor: c.surface },
+    filterScrollContent: {
+      paddingHorizontal: 14,
+      paddingTop: 4,
+      paddingBottom: 12,
       flexDirection: 'row',
       alignItems: 'center',
-      justifyContent: 'space-between',
-      paddingHorizontal: 16,
-      paddingBottom: 10,
-      gap: 12,
+      gap: 8,
     },
-    sortLabel: { fontSize: 12, fontWeight: '700', color: c.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
-    sortControl: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      backgroundColor: c.surfaceSecondary,
-      borderRadius: 999,
-      padding: 4,
-      gap: 4,
-    },
-    sortChip: {
-      paddingVertical: 7,
-      paddingHorizontal: 12,
-      borderRadius: 999,
-    },
-    sortChipActive: { backgroundColor: '#1E3A5F' },
-    sortChipText: { fontSize: 12, fontWeight: '600', color: c.textSecondary },
-    sortChipTextActive: { color: '#FFFFFF' },
-    categoryFilter: { backgroundColor: c.surface },
-    categoryFilterContent: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 12, gap: 6 },
-    categoryChip: {
+    chip: {
       flexDirection: 'row', alignItems: 'center',
       paddingVertical: 6, paddingHorizontal: 12,
-      borderRadius: 20, backgroundColor: c.surfaceSecondary,
-      marginRight: 4, gap: 5,
+      borderRadius: 999, backgroundColor: c.surfaceSecondary,
+      gap: 5,
     },
-    categoryChipActive: { backgroundColor: '#1E3A5F' },
-    urgentChipActive: { backgroundColor: '#EF4444' },
-    categoryChipText: { fontSize: 12, fontWeight: '600', color: c.textSecondary },
-    categoryChipTextActive: { color: '#FFFFFF' },
-    chipDivider: { width: 1, height: 20, backgroundColor: c.border, alignSelf: 'center', marginHorizontal: 2 },
-    chipCountWrap: {
-      backgroundColor: 'rgba(0,0,0,0.08)',
-      borderRadius: 8,
-      minWidth: 18, height: 18,
+    chipActive: { backgroundColor: c.accent },
+    urgentChipInactive: {
+      backgroundColor: 'transparent',
+      borderWidth: 1.5, borderColor: '#EF4444',
+    },
+    urgentChipActive: { backgroundColor: '#DC2626' },
+    chipText: { fontSize: 12.5, fontWeight: '600', color: c.textSecondary },
+    chipTextActive: { color: '#FFFFFF' },
+    chipTextUrgent: { color: '#EF4444' },
+    chipBadge: {
+      minWidth: 18, height: 18, borderRadius: 9,
+      backgroundColor: 'rgba(0,0,0,0.09)',
       justifyContent: 'center', alignItems: 'center',
-      paddingHorizontal: 5,
+      paddingHorizontal: 4,
     },
-    chipCountWrapActive: {
-      backgroundColor: 'rgba(255,255,255,0.2)',
-    },
-    chipCount: {
-      fontSize: 10, fontWeight: '700',
-      color: c.textMuted,
-      textAlign: 'center',
-    },
-    chipCountActive: {
-      color: '#FFFFFF',
-    },
+    chipBadgeActive: { backgroundColor: 'rgba(255,255,255,0.25)' },
+    chipBadgeUrgent: { backgroundColor: '#FEE2E2' },
+    chipBadgeText: { fontSize: 10.5, fontWeight: '700', color: c.textSecondary },
+    chipBadgeTextActive: { color: '#FFFFFF' },
+    chipBadgeTextUrgent: { color: '#DC2626' },
 
+    readMoreBtn: { marginTop: 4, alignSelf: 'flex-start' },
+    readMoreText: { fontSize: 13, fontWeight: '600', color: c.primary },
 
     // ── Cards ──
     scrollView: { flex: 1 },
-    scrollContent: { padding: 16, paddingTop: 16 },
+    scrollContent: { padding: 12, paddingTop: 12 },
     announcementCard: {
-      backgroundColor: c.surface, borderRadius: 14, marginBottom: 12,
-      borderWidth: 1, borderColor: c.border,
+      backgroundColor: c.surface, borderRadius: 12, marginBottom: 9,
+      borderWidth: StyleSheet.hairlineWidth, borderColor: c.border,
       overflow: 'hidden',
     },
     cardAccent: {
       position: 'absolute', left: 0, top: 0, bottom: 0,
-      width: 3.5, borderTopLeftRadius: 14, borderBottomLeftRadius: 14,
+      width: 3, borderTopLeftRadius: 12, borderBottomLeftRadius: 12,
     },
-    cardBody: { padding: 14, paddingLeft: 16 },
-    announcementHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 8 },
+    cardBody: { padding: 11, paddingLeft: 13 },
+    cardHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 6 },
     priorityIcon: {
-      width: 36, height: 36, borderRadius: 10,
-      justifyContent: 'center', alignItems: 'center', marginRight: 10,
+      width: 28, height: 28, borderRadius: 8,
+      justifyContent: 'center', alignItems: 'center', marginRight: 8,
     },
-    announcementTitleContainer: { flex: 1 },
-    titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
+    titleColumn: { flex: 1 },
+    titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 5 },
     announcementTitle: { fontSize: 14, fontWeight: '700', color: c.text, flex: 1, lineHeight: 20 },
     newDot: {
-      width: 7, height: 7, borderRadius: 4,
+      width: 6, height: 6, borderRadius: 3,
       backgroundColor: '#3B82F6', marginTop: 6,
     },
     announcementTime: { fontSize: 11.5, color: c.textMuted, marginTop: 2 },
-    badgeRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 8, gap: 6 },
+    badgeRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 6, gap: 4 },
     categoryBadge: {
       flexDirection: 'row', alignItems: 'center',
-      paddingVertical: 3, paddingHorizontal: 8,
-      borderRadius: 5, gap: 4,
+      paddingVertical: 2, paddingHorizontal: 6,
+      borderRadius: 4, gap: 3,
     },
-    categoryBadgeText: { fontSize: 10.5, fontWeight: '600' },
+    categoryBadgeText: { fontSize: 11, fontWeight: '600' },
     urgentBadge: {
       flexDirection: 'row', alignItems: 'center',
-      backgroundColor: '#FEE2E2', paddingVertical: 3, paddingHorizontal: 8,
-      borderRadius: 5, gap: 4,
+      backgroundColor: '#FEE2E2', paddingVertical: 2, paddingHorizontal: 6,
+      borderRadius: 4, gap: 3,
     },
-    urgentText: { fontSize: 10.5, fontWeight: '600', color: '#EF4444' },
+    urgentText: { fontSize: 11, fontWeight: '600', color: '#DC2626' },
     announcementContent: {
-      fontSize: 13, color: c.textSecondary, lineHeight: 20,
+      fontSize: 13.5, color: c.textSecondary, lineHeight: 20,
     },
     announcementFooter: {
       flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
       borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border,
-      paddingTop: 10, marginTop: 10,
+      paddingTop: 8, marginTop: 8,
     },
-    footerLeft: { flexDirection: 'row', alignItems: 'center', gap: 4 },
-    announcementDate: { fontSize: 10.5, color: c.textMuted, fontWeight: '500' },
+    footerLeft: { flexDirection: 'row', alignItems: 'center', gap: 3 },
+    announcementDate: { fontSize: 11, color: c.textMuted, fontWeight: '500' },
     footerAuthor: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-    authorText: { fontSize: 10.5, color: c.textMuted, fontWeight: '500' },
+    authorText: { fontSize: 11, color: c.textMuted, fontWeight: '500' },
 
-    // ── Error Banner ──
+    // ── Error banner ──
     errorBanner: {
       flexDirection: 'row', alignItems: 'center', gap: 8,
       backgroundColor: '#FEF3C7', borderWidth: 1, borderColor: '#FDE68A',
-      borderRadius: 10, padding: 12, marginBottom: 12,
+      borderRadius: 8, padding: 10, marginBottom: 10,
     },
-    errorBannerText: { flex: 1, fontSize: 13, color: '#92400E', fontWeight: '500' },
+    errorBannerText: { flex: 1, fontSize: 12.5, color: '#92400E', fontWeight: '500' },
 
-    // ── Empty ──
-    emptyState: { alignItems: 'center', paddingVertical: 60 },
+    // ── Empty state ──
+    emptyState: { alignItems: 'center', paddingVertical: 48 },
     emptyIcon: {
-      width: 72, height: 72, borderRadius: 20,
+      width: 56, height: 56, borderRadius: 16,
       backgroundColor: c.surfaceSecondary,
       justifyContent: 'center', alignItems: 'center',
-      marginBottom: 16,
+      marginBottom: 12,
     },
-    emptyTitle: { fontSize: 16, fontWeight: '600', color: c.text, marginBottom: 4 },
-    emptyText: { fontSize: 13, color: c.textMuted, textAlign: 'center', lineHeight: 20, paddingHorizontal: 40 },
+    emptyTitle: { fontSize: 14, fontWeight: '600', color: c.text, marginBottom: 4 },
+    emptyText: { fontSize: 12.5, color: c.textMuted, textAlign: 'center', lineHeight: 18, paddingHorizontal: 36 },
 
-    readMoreText: { fontSize: 12, color: c.primary, fontWeight: '600', marginTop: 4 },
-
-    // ── Detail Modal ──
+    // ── Detail sheet ──
     modalOverlay: {
-      flex: 1, backgroundColor: 'rgba(0,0,0,0.45)',
+      flex: 1, backgroundColor: 'rgba(0,0,0,0.42)',
       justifyContent: 'flex-end',
     },
     modalSheet: {
       backgroundColor: c.surface,
-      borderTopLeftRadius: 24, borderTopRightRadius: 24,
-      padding: 20, paddingBottom: Platform.OS === 'ios' ? 40 : 24,
-      maxHeight: '85%',
+      borderTopLeftRadius: 20, borderTopRightRadius: 20,
+      padding: 16, paddingBottom: Platform.OS === 'ios' ? 32 : 18,
+      maxHeight: '82%',
+    },
+    dragHandle: { alignItems: 'center', marginBottom: 12 },
+    dragHandlePill: {
+      width: 32, height: 3, borderRadius: 2,
+      backgroundColor: 'rgba(0,0,0,0.12)',
     },
     modalHeader: {
-      flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 12,
+      flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 10,
     },
-    modalTitle: { fontSize: 15, fontWeight: '700', color: c.text, lineHeight: 22, flex: 1 },
-    modalTime: { fontSize: 11.5, color: c.textMuted, marginTop: 2 },
-    modalBody: { marginVertical: 14 },
-    modalContent: { fontSize: 14, color: c.textSecondary, lineHeight: 22 },
+    modalTitleWrap: { flex: 1 },
+    modalTitle: { fontSize: 14, fontWeight: '700', color: c.text, lineHeight: 20, flex: 1 },
+    modalTime: { fontSize: 11, color: c.textMuted, marginTop: 2 },
+    modalBody: { marginVertical: 10 },
+    modalContent: { fontSize: 13.5, color: c.textSecondary, lineHeight: 20 },
     modalFooter: {
       flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-      borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border, paddingTop: 12,
+      borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border, paddingTop: 10,
+    },
+    modalCloseBtn: {
+      width: 26, height: 26, borderRadius: 7,
+      backgroundColor: 'rgba(0,0,0,0.06)',
+      justifyContent: 'center', alignItems: 'center',
     },
 
-    bottomSpacer: { height: Platform.OS === 'ios' ? 100 : 80 },
+    bottomSpacer: { height: Platform.OS === 'ios' ? 80 : 60 },
   }));
 
   const [announcements, setAnnouncements] = useState([]);
@@ -261,6 +255,7 @@ export default function AnnouncementsScreen() {
   const [urgentOnly, setUrgentOnly] = useState(false);
   const [selectedAnn, setSelectedAnn] = useState(null);
   const [sortOrder, setSortOrder] = useState('newest');
+  const [expandedIds, setExpandedIds] = useState(new Set());
 
   const fetchAnnouncements = useCallback(async (silent = false) => {
     if (!silent) setFetchError(null);
@@ -281,7 +276,6 @@ export default function AnnouncementsScreen() {
   useFocusEffect(
     useCallback(() => {
       clearNotificationUnread().catch(() => {});
-      // Only poll while this tab is focused
       const interval = setInterval(() => { fetchAnnouncements(true); }, 60000);
       return () => clearInterval(interval);
     }, [clearNotificationUnread, fetchAnnouncements])
@@ -308,20 +302,17 @@ export default function AnnouncementsScreen() {
   };
 
   const getCategoryColor = (category) => {
-    // Color palette — red is RESERVED for urgency, never used for categories
     switch (category?.toLowerCase()) {
-      case 'billing':     return { bg: '#DBEAFE', text: '#2563EB', icon: 'card' };            // Blue
-      case 'maintenance': return { bg: '#FEF3C7', text: '#D97706', icon: 'construct' };       // Amber
-      case 'rules':       return { bg: '#EEF2FF', text: '#4F46E5', icon: 'document-text' };   // Indigo
-      case 'promo':       return { bg: '#DCFCE7', text: '#16A34A', icon: 'pricetag' };        // Green
-      case 'event':       return { bg: '#F3E8FF', text: '#9333EA', icon: 'calendar' };        // Purple
-      default:            return { bg: '#F3F4F6', text: '#4B5563', icon: 'megaphone' };       // Gray
+      case 'billing':     return { bg: '#DBEAFE', text: '#2563EB', icon: 'card' };
+      case 'maintenance': return { bg: '#FEF3C7', text: '#D97706', icon: 'construct' };
+      case 'rules':       return { bg: '#EEF2FF', text: '#4F46E5', icon: 'document-text' };
+      case 'promo':       return { bg: '#DCFCE7', text: '#16A34A', icon: 'pricetag' };
+      case 'event':       return { bg: '#F3E8FF', text: '#9333EA', icon: 'calendar' };
+      default:            return { bg: '#F3F4F6', text: '#4B5563', icon: 'megaphone' };
     }
   };
 
-  const getCategoryIcon = (category) => {
-    return getCategoryColor(category).icon;
-  };
+  const getCategoryIcon = (category) => getCategoryColor(category).icon;
 
   const sortedAnnouncements = useMemo(
     () => sortAnnouncements(announcements, sortOrder === 'oldest' ? 'asc' : 'desc'),
@@ -353,81 +344,78 @@ export default function AnnouncementsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* ── Premium Header ── */}
+      {/* ── Header ── */}
       <View style={styles.headerWrapper}>
         <View style={styles.headerRow}>
           <View style={styles.headerLeft}>
             <Text style={styles.headerTitle}>Announcements</Text>
             <Text style={styles.headerSubtitle}>
-              {filteredAnnouncements.length} of {announcements.length} notice{announcements.length !== 1 ? 's' : ''} from management
+              {filteredAnnouncements.length} of {announcements.length}{announcements.length !== 1 ? ' notices' : ' notice'} from management
             </Text>
           </View>
+          <TouchableOpacity
+            style={styles.sortBtn}
+            onPress={() => setSortOrder((prev) => prev === 'newest' ? 'oldest' : 'newest')}
+            accessibilityLabel="Toggle sort order"
+          >
+            <Ionicons name={sortOrder === 'newest' ? 'arrow-down' : 'arrow-up'} size={13} color={colors.textSecondary} />
+            <Text style={styles.sortBtnText}>{sortOrder === 'newest' ? 'Newest' : 'Oldest'}</Text>
+          </TouchableOpacity>
           <TouchableOpacity
             style={styles.refreshBtn}
             onPress={() => { if (!refreshing) { setRefreshing(true); fetchAnnouncements(); } }}
             disabled={refreshing}
             accessibilityLabel="Refresh announcements"
           >
-            {refreshing ? (
-              <ActivityIndicator size={16} color={colors.primary} />
-            ) : (
-              <Ionicons name="refresh" size={18} color={colors.textMuted} />
-            )}
+            {refreshing
+              ? <ActivityIndicator size={14} color={colors.primary} />
+              : <Ionicons name="refresh" size={16} color={colors.textMuted} />
+            }
           </TouchableOpacity>
         </View>
 
-        {/* ── Filter Pills ── */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryFilter} contentContainerStyle={styles.categoryFilterContent}>
-          <View style={styles.sortRow}>
-            <Text style={styles.sortLabel}>Sort by</Text>
-            <View style={styles.sortControl}>
-              <TouchableOpacity
-                style={[styles.sortChip, sortOrder === 'newest' && styles.sortChipActive]}
-                onPress={() => setSortOrder('newest')}
-              >
-                <Text style={[styles.sortChipText, sortOrder === 'newest' && styles.sortChipTextActive]}>Newest</Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.sortChip, sortOrder === 'oldest' && styles.sortChipActive]}
-                onPress={() => setSortOrder('oldest')}
-              >
-                <Text style={[styles.sortChipText, sortOrder === 'oldest' && styles.sortChipTextActive]}>Oldest</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+        {/* ── Filter strip ── */}
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.filterScroll}
+          contentContainerStyle={styles.filterScrollContent}
+        >
           {categories.map((category) => {
             const isActive = selectedCategory === category || (!selectedCategory && category === 'All');
             const count = getCategoryCount(category);
             return (
               <TouchableOpacity
                 key={category}
-                style={[styles.categoryChip, isActive && styles.categoryChipActive]}
+                style={[styles.chip, isActive && styles.chipActive]}
                 onPress={() => { setSelectedCategory(category === 'All' ? null : category); setUrgentOnly(false); }}
               >
                 <Ionicons
                   name={category === 'All' ? 'apps' : getCategoryIcon(category)}
                   size={13}
-                  color={isActive ? '#FFFFFF' : colors.textMuted}
+                  color={isActive ? '#FFFFFF' : colors.textSecondary}
                 />
-                <Text style={[styles.categoryChipText, isActive && styles.categoryChipTextActive]}>{category}</Text>
-                <View style={[styles.chipCountWrap, isActive && styles.chipCountWrapActive]}>
-                  <Text style={[styles.chipCount, isActive && styles.chipCountActive]}>{count}</Text>
-                </View>
+                <Text style={[styles.chipText, isActive && styles.chipTextActive]}>{category}</Text>
+                {count > 0 && (
+                  <View style={[styles.chipBadge, isActive && styles.chipBadgeActive]}>
+                    <Text style={[styles.chipBadgeText, isActive && styles.chipBadgeTextActive]}>{count}</Text>
+                  </View>
+                )}
               </TouchableOpacity>
             );
           })}
 
-          {/* Divider + Urgent toggle */}
-          <View style={styles.chipDivider} />
           <TouchableOpacity
-            style={[styles.categoryChip, urgentOnly && styles.urgentChipActive]}
+            style={[styles.chip, urgentOnly ? styles.urgentChipActive : styles.urgentChipInactive]}
             onPress={() => setUrgentOnly((prev) => !prev)}
           >
             <Ionicons name="alert-circle" size={13} color={urgentOnly ? '#FFFFFF' : '#EF4444'} />
-            <Text style={[styles.categoryChipText, urgentOnly && styles.categoryChipTextActive]}>Urgent</Text>
-            <View style={[styles.chipCountWrap, urgentOnly && styles.chipCountWrapActive]}>
-              <Text style={[styles.chipCount, urgentOnly && styles.chipCountActive]}>{urgentCount}</Text>
-            </View>
+            <Text style={[styles.chipText, urgentOnly ? styles.chipTextActive : styles.chipTextUrgent]}>Urgent</Text>
+            {urgentCount > 0 && (
+              <View style={[styles.chipBadge, urgentOnly ? styles.chipBadgeActive : styles.chipBadgeUrgent]}>
+                <Text style={[styles.chipBadgeText, urgentOnly ? styles.chipBadgeTextActive : styles.chipBadgeTextUrgent]}>{urgentCount}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </ScrollView>
       </View>
@@ -439,29 +427,27 @@ export default function AnnouncementsScreen() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
         showsVerticalScrollIndicator={false}
       >
-        {/* ── Fetch Error Banner ── */}
         {fetchError ? (
           <View style={styles.errorBanner}>
-            <Ionicons name="cloud-offline-outline" size={16} color="#92400E" />
+            <Ionicons name="cloud-offline-outline" size={15} color="#92400E" />
             <Text style={styles.errorBannerText}>{fetchError}</Text>
           </View>
         ) : null}
 
-        {/* ── Announcement Cards ── */}
         {filteredAnnouncements.length === 0 ? (
           <View style={styles.emptyState}>
             <View style={styles.emptyIcon}>
-              <Ionicons name="megaphone-outline" size={32} color={colors.textMuted} />
+              <Ionicons name="megaphone-outline" size={26} color={colors.textMuted} />
             </View>
             <Text style={styles.emptyTitle}>{fetchError ? 'Could not load announcements' : 'No announcements'}</Text>
-            <Text style={styles.emptyText}>{fetchError ? 'Check your connection and pull down to refresh.' : 'There are no announcements in this category yet. Pull down to refresh.'}</Text>
+            <Text style={styles.emptyText}>{fetchError ? 'Check your connection and pull down to refresh.' : 'No announcements in this category yet. Pull down to refresh.'}</Text>
           </View>
         ) : filteredAnnouncements.map((announcement) => {
           const catColor = getCategoryColor(announcement.category || 'General');
           const prioColor = getPriorityColor(announcement.priority);
           const announcementDate = getAnnouncementDateValue(announcement);
           const isRecent = isNew(announcementDate);
-          const isTruncated = (announcement.content || '').length > 180;
+
           return (
             <TouchableOpacity
               key={announcement.announcement_id}
@@ -469,16 +455,16 @@ export default function AnnouncementsScreen() {
               onPress={() => setSelectedAnn(announcement)}
               activeOpacity={0.85}
             >
-              {/* Left accent bar */}
+              {/* Left priority accent */}
               <View style={[styles.cardAccent, { backgroundColor: prioColor }]} />
 
               <View style={styles.cardBody}>
-                {/* Header row: icon + title */}
-                <View style={styles.announcementHeader}>
+                {/* Icon + title row */}
+                <View style={styles.cardHeader}>
                   <View style={[styles.priorityIcon, { backgroundColor: `${prioColor}14` }]}>
-                    <Ionicons name={getPriorityIcon(announcement.priority)} size={22} color={prioColor} />
+                    <Ionicons name={getPriorityIcon(announcement.priority)} size={16} color={prioColor} />
                   </View>
-                  <View style={styles.announcementTitleContainer}>
+                  <View style={styles.titleColumn}>
                     <View style={styles.titleRow}>
                       <Text style={styles.announcementTitle} numberOfLines={2}>{announcement.title}</Text>
                       {isRecent && <View style={styles.newDot} />}
@@ -490,33 +476,53 @@ export default function AnnouncementsScreen() {
                 {/* Category + Urgent badges */}
                 <View style={styles.badgeRow}>
                   <View style={[styles.categoryBadge, { backgroundColor: catColor.bg }]}>
-                    <Ionicons name={catColor.icon} size={11} color={catColor.text} />
+                    <Ionicons name={catColor.icon} size={10} color={catColor.text} />
                     <Text style={[styles.categoryBadgeText, { color: catColor.text }]}>{announcement.category || 'General'}</Text>
                   </View>
                   {(announcement.priority || '').toLowerCase() === 'high' && (
                     <View style={styles.urgentBadge}>
-                      <Ionicons name="warning" size={11} color="#EF4444" />
+                      <Ionicons name="warning" size={10} color="#DC2626" />
                       <Text style={styles.urgentText}>Urgent</Text>
                     </View>
                   )}
                 </View>
 
                 {/* Content preview */}
-                <Text style={styles.announcementContent} numberOfLines={4}>{announcement.content}</Text>
-
-                {isTruncated && (
-                  <Text style={styles.readMoreText}>Read more...</Text>
-                )}
+                {(() => {
+                  const isExpanded = expandedIds.has(announcement.announcement_id);
+                  const isLong = (announcement.content || '').length > 120;
+                  return (
+                    <>
+                      <Text style={styles.announcementContent} numberOfLines={isExpanded ? undefined : 3}>
+                        {announcement.content}
+                      </Text>
+                      {isLong && (
+                        <TouchableOpacity
+                          style={styles.readMoreBtn}
+                          onPress={() => setExpandedIds((prev) => {
+                            const next = new Set(prev);
+                            if (next.has(announcement.announcement_id)) next.delete(announcement.announcement_id);
+                            else next.add(announcement.announcement_id);
+                            return next;
+                          })}
+                          hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                        >
+                          <Text style={styles.readMoreText}>{isExpanded ? 'Show less' : 'Read more'}</Text>
+                        </TouchableOpacity>
+                      )}
+                    </>
+                  );
+                })()}
 
                 {/* Footer */}
                 <View style={styles.announcementFooter}>
                   <View style={styles.footerLeft}>
-                    <Ionicons name="calendar-outline" size={13} color={colors.textMuted} />
-                    <Text style={styles.announcementDate}>{safeFormat(announcementDate, 'MMM dd, yyyy • h:mm a')}</Text>
+                    <Ionicons name="calendar-outline" size={11} color={colors.textMuted} />
+                    <Text style={styles.announcementDate}>{safeFormat(announcementDate, 'MMM dd, yyyy')}</Text>
                   </View>
                   <View style={styles.footerAuthor}>
-                    <Ionicons name="person-circle-outline" size={13} color={colors.textMuted} />
-                    <Text style={styles.authorText}>{announcement.author_name || 'Admin'}</Text>
+                    <Ionicons name="person-circle-outline" size={11} color={colors.textMuted} />
+                    <Text style={styles.authorText}>Management</Text>
                   </View>
                 </View>
               </View>
@@ -526,7 +532,7 @@ export default function AnnouncementsScreen() {
         <View style={styles.bottomSpacer} />
       </ScrollView>
 
-      {/* ── Announcement Detail Modal ── */}
+      {/* ── Detail sheet ── */}
       <Modal
         visible={!!selectedAnn}
         animationType="slide"
@@ -535,6 +541,11 @@ export default function AnnouncementsScreen() {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
+            {/* Drag handle */}
+            <View style={styles.dragHandle}>
+              <View style={styles.dragHandlePill} />
+            </View>
+
             {selectedAnn && (() => {
               const catColor = getCategoryColor(selectedAnn.category || 'General');
               const prioColor = getPriorityColor(selectedAnn.priority);
@@ -543,26 +554,30 @@ export default function AnnouncementsScreen() {
                   {/* Modal header */}
                   <View style={styles.modalHeader}>
                     <View style={[styles.priorityIcon, { backgroundColor: `${prioColor}14` }]}>
-                      <Ionicons name={getPriorityIcon(selectedAnn.priority)} size={22} color={prioColor} />
+                      <Ionicons name={getPriorityIcon(selectedAnn.priority)} size={16} color={prioColor} />
                     </View>
-                    <View style={{ flex: 1 }}>
+                    <View style={styles.modalTitleWrap}>
                       <Text style={styles.modalTitle}>{selectedAnn.title}</Text>
                       <Text style={styles.modalTime}>{safeDistanceToNow(getAnnouncementDateValue(selectedAnn))}</Text>
                     </View>
-                    <TouchableOpacity onPress={() => setSelectedAnn(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                      <Ionicons name="close" size={22} color={colors.textMuted} />
+                    <TouchableOpacity
+                      style={styles.modalCloseBtn}
+                      onPress={() => setSelectedAnn(null)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Ionicons name="close" size={15} color={colors.textMuted} />
                     </TouchableOpacity>
                   </View>
 
                   {/* Badges */}
                   <View style={styles.badgeRow}>
                     <View style={[styles.categoryBadge, { backgroundColor: catColor.bg }]}>
-                      <Ionicons name={catColor.icon} size={11} color={catColor.text} />
+                      <Ionicons name={catColor.icon} size={10} color={catColor.text} />
                       <Text style={[styles.categoryBadgeText, { color: catColor.text }]}>{selectedAnn.category || 'General'}</Text>
                     </View>
                     {selectedAnn.priority === 'high' && (
                       <View style={styles.urgentBadge}>
-                        <Ionicons name="warning" size={11} color="#EF4444" />
+                        <Ionicons name="warning" size={10} color="#DC2626" />
                         <Text style={styles.urgentText}>Urgent</Text>
                       </View>
                     )}
@@ -573,15 +588,15 @@ export default function AnnouncementsScreen() {
                     <Text style={styles.modalContent}>{selectedAnn.content}</Text>
                   </ScrollView>
 
-                  {/* Modal footer */}
+                  {/* Footer */}
                   <View style={styles.modalFooter}>
                     <View style={styles.footerLeft}>
-                      <Ionicons name="calendar-outline" size={13} color={colors.textMuted} />
-                      <Text style={styles.announcementDate}>{safeFormat(getAnnouncementDateValue(selectedAnn), 'MMM dd, yyyy • h:mm a')}</Text>
+                      <Ionicons name="calendar-outline" size={11} color={colors.textMuted} />
+                      <Text style={styles.announcementDate}>{safeFormat(getAnnouncementDateValue(selectedAnn), 'MMM dd, yyyy · h:mm a')}</Text>
                     </View>
                     <View style={styles.footerAuthor}>
-                      <Ionicons name="person-circle-outline" size={13} color={colors.textMuted} />
-                      <Text style={styles.authorText}>{selectedAnn.author_name || 'Admin'}</Text>
+                      <Ionicons name="person-circle-outline" size={11} color={colors.textMuted} />
+                      <Text style={styles.authorText}>Management</Text>
                     </View>
                   </View>
                 </>

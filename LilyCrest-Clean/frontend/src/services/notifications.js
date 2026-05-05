@@ -1,4 +1,5 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+﻿import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { api } from './api';
 
@@ -16,14 +17,17 @@ try {
 const PUSH_TOKEN_KEY = '@lilycrest_push_token';
 const PUSH_PERMISSION_REQUESTED_KEY = '@lilycrest_push_permission_requested';
 const PUSH_SETTING_KEY = 'notifications';
+const PUSH_SYNC_SIGNATURE_KEY = '@lilycrest_push_sync_signature';
 const DEFAULT_CHANNEL_ID = 'default';
 
-function ensureNotificationHandler() {
+export function initializeNotificationHandler() {
   if (!Notifications || handlerConfigured) return;
 
   try {
     Notifications.setNotificationHandler({
       handleNotification: async () => ({
+        // The app renders its own in-app banner while foregrounded.
+        shouldShowAlert: false,
         shouldShowBanner: false,
         shouldShowList: false,
         shouldPlaySound: false,
@@ -42,6 +46,22 @@ function normalizeDeviceProvider(platform = Platform.OS) {
   return platform;
 }
 
+function isExpoPushToken(token) {
+  return typeof token === 'string'
+    && /^(Expo|Exponent)PushToken\[[A-Za-z0-9-_=]+\]$/.test(token.trim());
+}
+
+function getExpoProjectId() {
+  return Constants?.expoConfig?.extra?.eas?.projectId
+    || Constants?.easConfig?.projectId
+    || null;
+}
+
+function normalizePushProvider(token, platform = Platform.OS) {
+  if (isExpoPushToken(token)) return 'expo';
+  return normalizeDeviceProvider(platform);
+}
+
 async function ensureAndroidNotificationChannel() {
   if (!Notifications || Platform.OS !== 'android') return;
 
@@ -50,7 +70,7 @@ async function ensureAndroidNotificationChannel() {
       name: 'LilyCrest Notifications',
       importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#D4682A',
+      lightColor: '#204b7e',
       sound: 'default',
     });
   } catch (error) {
@@ -73,7 +93,7 @@ export async function setPushNotificationsEnabled(enabled) {
 
 export async function registerForPushNotifications({ requestPermission = false } = {}) {
   if (!Notifications) return null;
-  ensureNotificationHandler();
+  initializeNotificationHandler();
 
   if (Platform.OS === 'web') {
     console.log('[Notifications] Push notifications are not supported on web');
@@ -105,9 +125,30 @@ export async function registerForPushNotifications({ requestPermission = false }
       return null;
     }
 
-    const tokenData = await Notifications.getDevicePushTokenAsync();
-    const token = typeof tokenData?.data === 'string' ? tokenData.data.trim() : '';
-    console.log('[Notifications] Native push token:', token);
+    let token = '';
+    const projectId = getExpoProjectId();
+
+    if (projectId && Notifications.getExpoPushTokenAsync) {
+      try {
+        const expoTokenData = await Notifications.getExpoPushTokenAsync({ projectId });
+        token = typeof expoTokenData?.data === 'string' ? expoTokenData.data.trim() : '';
+        if (token) {
+          console.log('[Notifications] Expo push token:', token);
+        }
+      } catch (error) {
+        console.warn('[Notifications] Expo push token fetch failed, falling back to native token:', error?.message);
+      }
+    }
+
+    if (!token) {
+      if (Platform.OS === 'ios') {
+        console.warn('[Notifications] Expo push token unavailable on iOS; skipping unsupported APNs token registration.');
+        return null;
+      }
+      const tokenData = await Notifications.getDevicePushTokenAsync();
+      token = typeof tokenData?.data === 'string' ? tokenData.data.trim() : '';
+      console.log('[Notifications] Native push token:', token);
+    }
 
     if (!token) return null;
 
@@ -136,18 +177,41 @@ export async function requestPushPermissionOnFirstLaunch() {
 export async function savePushTokenToServer(token, options = {}) {
   const trimmedToken = typeof token === 'string' ? token.trim() : '';
   const notificationsEnabled = options.notificationsEnabled ?? true;
+  const devicePlatform = options.platform || Platform.OS;
+  const authTokenOverride = typeof options.authTokenOverride === 'string' ? options.authTokenOverride.trim() : '';
+  const suppressUnauthorized = options.suppressUnauthorized === true;
+  const syncKey = typeof options.syncKey === 'string' && options.syncKey.trim()
+    ? options.syncKey.trim()
+    : 'default';
+  const nextSignature = JSON.stringify({
+    syncKey,
+    token: trimmedToken || null,
+    enabled: Boolean(notificationsEnabled),
+    platform: devicePlatform,
+  });
 
   if (!trimmedToken && notificationsEnabled) return;
 
   try {
+    const existingSignature = await AsyncStorage.getItem(PUSH_SYNC_SIGNATURE_KEY);
+    if (existingSignature === nextSignature) {
+      return;
+    }
+
     await api.post('/users/push-token', {
       push_token: trimmedToken || null,
       notifications_enabled: Boolean(notificationsEnabled),
-      provider: normalizeDeviceProvider(options.platform || Platform.OS),
-      device_platform: options.platform || Platform.OS,
+      provider: normalizePushProvider(trimmedToken, devicePlatform),
+      device_platform: devicePlatform,
+    }, {
+      headers: authTokenOverride ? { Authorization: `Bearer ${authTokenOverride}` } : undefined,
     });
+    await AsyncStorage.setItem(PUSH_SYNC_SIGNATURE_KEY, nextSignature);
     console.log('[Notifications] Token saved to server');
   } catch (error) {
+    if (suppressUnauthorized && error?.response?.status === 401) {
+      return;
+    }
     console.warn('[Notifications] Failed to save token to server:', error?.message);
     throw error;
   }
@@ -155,7 +219,7 @@ export async function savePushTokenToServer(token, options = {}) {
 
 export function setupNotificationListeners(onNotificationReceived, onNotificationTapped) {
   if (!Notifications) return () => {};
-  ensureNotificationHandler();
+  initializeNotificationHandler();
 
   try {
     const receivedSub = Notifications.addNotificationReceivedListener((notification) => {
@@ -181,7 +245,7 @@ export function setupNotificationListeners(onNotificationReceived, onNotificatio
 
 export function subscribeToPushTokenChanges(onTokenChanged) {
   if (!Notifications?.addPushTokenListener) return () => {};
-  ensureNotificationHandler();
+  initializeNotificationHandler();
 
   try {
     const subscription = Notifications.addPushTokenListener(async (tokenData) => {
@@ -230,31 +294,47 @@ export async function clearLastNotificationResponse() {
 }
 
 export function resolveNotificationRoute(data = {}) {
+  if (!data || typeof data !== 'object') return '/(tabs)/announcements';
+
   const directUrl = typeof data?.url === 'string' ? data.url.trim() : '';
-  if (directUrl) return directUrl;
+  if (directUrl.startsWith('/')) return directUrl;
 
   const billingId = data?.billing_id || data?.bill_id;
-  const screen = typeof data?.screen === 'string' ? data.screen.trim().toLowerCase() : '';
+  const explicitScreen = typeof data?.screen === 'string' ? data.screen.trim().toLowerCase() : '';
+  const type = typeof data?.type === 'string' ? data.type.trim().toLowerCase() : '';
+  const category = typeof data?.category === 'string' ? data.category.trim().toLowerCase() : '';
+  const screen = explicitScreen || type || category;
 
   switch (screen) {
     case 'billing':
+    case 'payment':
+    case 'payments':
       return billingId
         ? { pathname: '/bill-details', params: { billId: String(billingId) } }
-        : '/billing-history';
+        : '/(tabs)/billing';
     case 'announcements':
+    case 'announcement':
+    case 'news':
+    case 'notification':
+    case 'notifications':
       return '/(tabs)/announcements';
     case 'maintenance':
     case 'services':
       return '/(tabs)/services';
     case 'chat':
     case 'chatbot':
+    case 'admin chat':
+    case 'live chat':
       return '/(tabs)/chatbot';
     case 'reservation':
       return '/(tabs)/home';
     case 'settings':
       return '/settings';
+    case 'profile':
+    case 'system':
+      return '/(tabs)/profile';
     default:
-      return null;
+      return '/(tabs)/announcements';
   }
 }
 
