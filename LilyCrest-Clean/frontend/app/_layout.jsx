@@ -1,4 +1,4 @@
-import { Stack } from 'expo-router';
+﻿import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react';
@@ -59,6 +59,7 @@ function LayoutContent() {
         <Stack.Screen name="change-password" />
         <Stack.Screen name="(tabs)" />
         <Stack.Screen name="auth-callback" />
+        <Stack.Screen name="otp-verify" />
         <Stack.Screen name="documents" options={{ presentation: 'modal' }} />
         <Stack.Screen name="my-documents" />
         <Stack.Screen name="house-rules" />
@@ -91,13 +92,13 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff', padding: 24 }}>
-          <Text style={{ fontSize: 20, fontWeight: '700', color: '#1E3A5F', marginBottom: 8 }}>Something went wrong</Text>
-          <Text style={{ fontSize: 14, color: '#6B7280', textAlign: 'center', marginBottom: 20 }}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF', padding: 24 }}>
+          <Text style={{ fontSize: 20, fontWeight: '700', color: '#1a2744', marginBottom: 8 }}>Something went wrong</Text>
+          <Text style={{ fontSize: 14, color: '#4a5568', textAlign: 'center', marginBottom: 20 }}>
             {this.state.error?.message || 'An unexpected error occurred.'}
           </Text>
           <Text
-            style={{ fontSize: 15, fontWeight: '600', color: '#D4682A' }}
+            style={{ fontSize: 15, fontWeight: '600', color: '#204b7e' }}
             onPress={() => this.setState({ hasError: false, error: null })}
           >
             Tap to Retry

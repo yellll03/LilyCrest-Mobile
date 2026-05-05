@@ -1,29 +1,31 @@
-import { Ionicons } from '@expo/vector-icons';
+﻿import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Image,
-    KeyboardAvoidingView,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Image,
+  KeyboardAvoidingView,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 
 
 import { useGoogleSignIn } from '../src/config/googleSignIn';
-import { useAuth } from '../src/context/AuthContext';
-import { useTheme } from '../src/context/ThemeContext';
 import { useAlert } from '../src/context/AlertContext';
-import { saveCredentials, getCredentials, hasStoredCredentials, clearCredentials } from '../src/services/secureCredentials';
+import { useAuth } from '../src/context/AuthContext';
+import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
+import { clearCredentials, getCredentials, hasStoredCredentials, saveCredentials } from '../src/services/secureCredentials';
+import { blockPasswordWhitespaceInput, validateLoginPassword } from '../src/utils/passwordValidation';
 
+/* cspell:words creds prefs lilycrest wordmark */
 
 // Validation helpers
 const validateEmail = (email) => {
@@ -35,20 +37,12 @@ const validateEmail = (email) => {
   return { valid: true, error: '' };
 };
 
-const validatePassword = (password) => {
-  const rawPassword = password || '';
-  if (!rawPassword) return { valid: false, error: 'Password is required' };
-  if (rawPassword.length > 128) return { valid: false, error: 'Password is too long' };
-  if (rawPassword.length < 6) return { valid: false, error: 'Password must be at least 6 characters' };
-  return { valid: true, error: '' };
-};
-
-
 export default function LoginScreen() {
   const router = useRouter();
-  const { loginWithEmail, signInWithGoogle, checkAuth, isLoading, verifyLoginOtp } = useAuth();
+  const { loginWithEmail, signInWithGoogle, isLoading } = useAuth();
   const { signInWithGoogle: googleSignIn } = useGoogleSignIn();
   const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { showAlert } = useAlert();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -76,7 +70,7 @@ export default function LoginScreen() {
 
   useEffect(() => {
     if (touched.password) {
-      const passwordValidation = validatePassword(password);
+      const passwordValidation = validateLoginPassword(password);
       setErrors(prev => ({ ...prev, password: passwordValidation.error }));
     }
   }, [password, touched.password]);
@@ -84,6 +78,17 @@ export default function LoginScreen() {
   useEffect(() => {
     setLoginError(null);
   }, [email, password]);
+
+  const handlePasswordChange = (nextValue) => {
+    const { value, blocked } = blockPasswordWhitespaceInput(nextValue, password);
+    if (blocked) {
+      setTouched((prev) => ({ ...prev, password: true }));
+      setErrors((prev) => ({ ...prev, password: validateLoginPassword(nextValue).error }));
+      return;
+    }
+
+    setPassword(value);
+  };
 
   // Load remember-me preference and biometric eligibility
   useEffect(() => {
@@ -95,7 +100,7 @@ export default function LoginScreen() {
         const prefersRemember = savedRemember === 'true';
         const isBioEnabled = bioSetting === 'true';
         if (prefersRemember) setRememberMe(true);
-        if (savedEmail && !email) setEmail(savedEmail);
+        if (savedEmail && validateEmail(savedEmail).valid) setEmail(savedEmail);
 
         const hasHardware = await LocalAuthentication.hasHardwareAsync();
         const isEnrolled = await LocalAuthentication.isEnrolledAsync();
@@ -122,7 +127,7 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     const emailValidation = validateEmail(email);
-    const passwordValidation = validatePassword(password);
+    const passwordValidation = validateLoginPassword(password);
 
     setTouched({ email: true, password: true });
     setErrors({ email: emailValidation.error, password: passwordValidation.error });
@@ -242,12 +247,13 @@ export default function LoginScreen() {
 
     try {
       const result = await googleSignIn();
+      const { success, cancelled, error: resultError } = result;
 
-      if (result.success) {
+      if (success) {
         // Use the idToken returned directly by Google Sign-In.
         // Calling getFreshIdToken() after signInWithCredential fails in release
         // builds because Firebase auth state hasn't propagated yet.
-        let idToken = result.idToken;
+        let { idToken } = result;
 
         if (!idToken) {
           // Last-resort: wait briefly for Firebase to settle then grab the token
@@ -264,18 +270,19 @@ export default function LoginScreen() {
         }
 
         const backendResult = await signInWithGoogle(idToken);
+        const { success: backendSuccess, status, error: backendError } = backendResult;
 
-        if (backendResult.success) {
+        if (backendSuccess) {
           await AsyncStorage.setItem('remember_me', rememberMe ? 'true' : 'false');
           router.replace('/(tabs)/home');
         } else {
-          const type = backendResult.status === 403 ? 'access' : 'credentials';
-          setLoginError({ message: backendResult.error || 'Failed to create session.', type });
+          const type = status === 403 ? 'access' : 'credentials';
+          setLoginError({ message: backendError || 'Failed to create session.', type });
         }
-      } else if (result.cancelled) {
+      } else if (cancelled) {
         // User deliberately cancelled — not an error
       } else {
-        setLoginError({ message: result.error || 'Google sign-in failed. Please try again.', type: 'credentials' });
+        setLoginError({ message: resultError || 'Google sign-in failed. Please try again.', type: 'credentials' });
       }
     } catch (error) {
       console.error('Google login error:', error);
@@ -343,7 +350,7 @@ export default function LoginScreen() {
   };
 
   const isEmailValid = validateEmail(email).valid;
-  const isPasswordValid = validatePassword(password).valid;
+  const isPasswordValid = validateLoginPassword(password).valid;
 
   // Derive field-level error highlighting from loginError
   const showEmailFieldError = (touched.email && errors.email) || (loginError && ['credentials', 'access', 'ratelimit'].includes(loginError.type));
@@ -355,7 +362,7 @@ export default function LoginScreen() {
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           {/* Back Button */}
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={24} color="#0f172a" />
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
 
           {/* Logo */}
@@ -408,7 +415,7 @@ export default function LoginScreen() {
                 />
                 {!showEmailFieldError && touched.email && isEmailValid && <Ionicons name="checkmark-circle" size={20} color="#22C55E" />}
               </View>
-              {touched.email && errors.email ? (
+              {touched.email && errors.email && !loginError ? (
                 <View style={styles.errorContainer}>
                   <Ionicons name="alert-circle" size={14} color="#EF4444" />
                   <Text style={styles.errorText}>{errors.email}</Text>
@@ -426,7 +433,7 @@ export default function LoginScreen() {
                   placeholder="Enter your password" 
                   placeholderTextColor="#9CA3AF" 
                   value={password} 
-                  onChangeText={setPassword} 
+                  onChangeText={handlePasswordChange}
                   onBlur={() => setTouched(prev => ({ ...prev, password: true }))} 
                   secureTextEntry={!showPassword} 
                 />
@@ -434,7 +441,7 @@ export default function LoginScreen() {
                   <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#9CA3AF" />
                 </TouchableOpacity>
               </View>
-              {touched.password && errors.password ? (
+              {touched.password && errors.password && !loginError ? (
                 <View style={styles.errorContainer}>
                   <Ionicons name="alert-circle" size={14} color="#EF4444" />
                   <Text style={styles.errorText}>{errors.password}</Text>
@@ -481,7 +488,7 @@ export default function LoginScreen() {
                   <ActivityIndicator color={colors.primary} />
                 ) : (
                   <>
-                    <Ionicons name="finger-print" size={20} color="#1E3A5F" />
+                    <Ionicons name="finger-print" size={20} color={colors.accent} />
                     <Text style={styles.biometricText}>Sign in with {biometricType}</Text>
                   </>
                 )}
@@ -531,7 +538,7 @@ export default function LoginScreen() {
 
           {/* Tenant Notice */}
           <View style={styles.noticeContainer}>
-            <Ionicons name="information-circle" size={18} color="#D4682A" />
+            <Ionicons name="information-circle" size={18} color={colors.accent} />
             <Text style={styles.noticeText}>Only registered tenants can access this app. Contact the admin office if you need assistance.</Text>
           </View>
         </ScrollView>
@@ -540,86 +547,86 @@ export default function LoginScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
+const createStyles = (c, dark) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.surface },
   keyboardView: { flex: 1 },
   scrollContent: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 16, paddingBottom: 32 },
   backButton: {
     width: 44,
     height: 44,
     borderRadius: 12,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: c.surfaceSecondary,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#CBD5E1',
+    borderColor: c.border,
     ...Platform.select({
-      ios: { shadowColor: '#0f172a', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.18, shadowRadius: 4 },
-      android: { elevation: 3 },
-      web: { boxShadow: '0 4px 10px rgba(15, 23, 42, 0.15)' },
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
+      android: { elevation: 2 },
+      web: { boxShadow: '0 2px 6px rgba(0,0,0,0.08)' },
     }),
   },
   logoContainer: { alignItems: 'center', marginTop: 8, marginBottom: 2 },
   authLogo: { width: 132, height: 102 },
-  title: { fontSize: 28, fontWeight: '700', color: '#1E3A5F', textAlign: 'center', marginBottom: 8 },
-  subtitle: { fontSize: 15, color: '#6B7280', textAlign: 'center', marginBottom: 32 },
+  title: { fontSize: 28, fontWeight: '700', color: c.text, textAlign: 'center', marginBottom: 8 },
+  subtitle: { fontSize: 15, color: c.textSecondary, textAlign: 'center', marginBottom: 32 },
   form: { width: '100%' },
   inputContainer: { marginBottom: 20 },
-  label: { fontSize: 13, fontWeight: '600', color: '#1E3A5F', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
-  inputWrapper: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#E5E7EB', borderRadius: 12, backgroundColor: '#F8FAFC', paddingHorizontal: 16 },
-  inputWrapperError: { borderColor: '#EF4444', backgroundColor: '#FEF2F2' },
-  inputWrapperSuccess: { borderColor: '#22C55E', backgroundColor: '#F0FDF4' },
+  label: { fontSize: 13, fontWeight: '600', color: c.text, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
+  inputWrapper: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: c.border, borderRadius: 12, backgroundColor: c.inputBg, paddingHorizontal: 16 },
+  inputWrapperError: { borderColor: '#EF4444', backgroundColor: dark ? 'rgba(239,68,68,0.1)' : '#FEF2F2' },
+  inputWrapperSuccess: { borderColor: '#22C55E', backgroundColor: dark ? 'rgba(34,197,94,0.1)' : '#F0FDF4' },
   inputIcon: { marginRight: 12 },
-  input: { flex: 1, paddingVertical: 14, fontSize: 15, color: '#1F2937' },
+  input: { flex: 1, paddingVertical: 14, fontSize: 15, color: c.text },
   errorContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 4 },
   errorText: { fontSize: 12, color: '#EF4444' },
   optionsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 },
   rememberRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  checkbox: { width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: '#94A3B8', justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' },
-  checkboxChecked: { backgroundColor: '#1E3A5F', borderColor: '#1E3A5F' },
-  rememberText: { color: '#1E3A5F', fontWeight: '600' },
+  checkbox: { width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: c.border, justifyContent: 'center', alignItems: 'center', backgroundColor: c.inputBg },
+  checkboxChecked: { backgroundColor: c.accent, borderColor: c.accent },
+  rememberText: { color: c.text, fontWeight: '600' },
   forgotPassword: { alignSelf: 'flex-end' },
-  forgotPasswordText: { color: '#D4682A', fontSize: 14, fontWeight: '600' },
+  forgotPasswordText: { color: c.primary, fontSize: 14, fontWeight: '600' },
   loginErrorContainer: { flexDirection: 'row', alignItems: 'flex-start', borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 20, gap: 10 },
   loginErrorText: { flex: 1, fontSize: 13, fontWeight: '500', lineHeight: 18 },
-  signInButton: { 
-    backgroundColor: '#1E3A5F', 
-    paddingVertical: 16, 
-    borderRadius: 12, 
-    alignItems: 'center', 
-    ...Platform.select({ 
-      ios: { shadowColor: '#1E3A5F', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 }, 
-      android: { elevation: 4 }, 
-      web: { boxShadow: '0 4px 12px rgba(30, 58, 95, 0.3)' } 
-    }) 
+  signInButton: {
+    backgroundColor: c.accent,
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    ...Platform.select({
+      ios: { shadowColor: c.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
+      android: { elevation: 4 },
+      web: { boxShadow: '0 4px 12px rgba(0,0,0,0.2)' },
+    }),
   },
-  signInButtonDisabled: { 
-    backgroundColor: '#94A3B8', 
-    ...Platform.select({ 
-      ios: { shadowOpacity: 0 }, 
-      android: { elevation: 0 }, 
-      web: { boxShadow: 'none' } 
-    }) 
+  signInButtonDisabled: {
+    backgroundColor: c.textMuted,
+    ...Platform.select({
+      ios: { shadowOpacity: 0 },
+      android: { elevation: 0 },
+      web: { boxShadow: 'none' },
+    }),
   },
   signInButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
-  biometricButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1.5, borderColor: '#CBD5E1', borderRadius: 12, paddingVertical: 12, backgroundColor: '#F8FAFC', marginTop: 12 },
-  biometricText: { color: '#1E3A5F', fontSize: 14, fontWeight: '600' },
+  biometricButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1.5, borderColor: c.border, borderRadius: 12, paddingVertical: 12, backgroundColor: c.inputBg, marginTop: 12 },
+  biometricText: { color: c.text, fontSize: 14, fontWeight: '600' },
   biometricHintRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 12, paddingVertical: 8 },
-  biometricHintText: { fontSize: 12, color: '#9CA3AF', flex: 1 },
+  biometricHintText: { fontSize: 12, color: c.textMuted, flex: 1 },
   dividerContainer: { flexDirection: 'row', alignItems: 'center', marginVertical: 24 },
-  divider: { flex: 1, height: 1, backgroundColor: '#E5E7EB' },
-  dividerText: { paddingHorizontal: 16, color: '#9CA3AF', fontSize: 13 },
-  googleButton: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'center', 
-    borderWidth: 1.5, 
-    borderColor: '#E5E7EB', 
-    borderRadius: 12, 
-    paddingVertical: 14, 
+  divider: { flex: 1, height: 1, backgroundColor: c.border },
+  dividerText: { paddingHorizontal: 16, color: c.textMuted, fontSize: 13 },
+  googleButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: c.border,
+    borderRadius: 12,
+    paddingVertical: 14,
     paddingHorizontal: 16,
-    backgroundColor: '#FFFFFF', 
-    gap: 10 
+    backgroundColor: c.surface,
+    gap: 10,
   },
   googleIconSlot: {
     width: 24,
@@ -627,7 +634,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   googleLogoImage: { width: 18, height: 18 },
-  googleButtonText: { color: '#374151', fontSize: 15, fontWeight: '600' },
-  noticeContainer: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#FDF6EC', borderRadius: 12, padding: 16, marginTop: 24, gap: 10 },
-  noticeText: { flex: 1, fontSize: 13, color: '#8B6914', lineHeight: 18 },
+  googleButtonText: { color: c.text, fontSize: 15, fontWeight: '600' },
+  noticeContainer: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: c.primaryLight, borderRadius: 12, padding: 16, marginTop: 24, gap: 10 },
+  noticeText: { flex: 1, fontSize: 13, color: dark ? c.textSecondary : c.textSecondary, lineHeight: 18 },
 });

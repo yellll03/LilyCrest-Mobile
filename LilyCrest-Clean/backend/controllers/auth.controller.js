@@ -33,6 +33,9 @@ function generateSessionToken() {
 
 const PASSWORD_LOCK_THRESHOLD = 3;
 const PASSWORD_LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
+const PASSWORD_WHITESPACE_MESSAGE = 'Password must not contain spaces.';
+const EMAIL_MAX_LENGTH = 254;
+const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 function maskEmail(email = '') {
   const [user, domain] = email.split('@');
@@ -40,10 +43,18 @@ function maskEmail(email = '') {
   return user.length <= 2 ? `${user[0]}***@${domain}` : `${user.slice(0, 2)}***@${domain}`;
 }
 
-/** Case-insensitive regex for exact email match */
+/** Case-insensitive exact email match using native MongoDB regex syntax */
 function emailRegex(email) {
   const escaped = email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return new RegExp(`^${escaped}$`, 'i');
+  return { $regex: `^${escaped}$`, $options: 'i' };
+}
+
+function normalizeEmailInput(value) {
+  return typeof value === 'string' ? value.trim().toLowerCase() : '';
+}
+
+function isValidEmail(email = '') {
+  return Boolean(email) && email.length <= EMAIL_MAX_LENGTH && EMAIL_REGEX.test(email);
 }
 
 /** Create a new session and return { session_token, expires_at } */
@@ -175,6 +186,24 @@ function parseOtpAttempts(value) {
   return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
 }
 
+function passwordContainsWhitespace(password = '') {
+  return /\s/.test(password);
+}
+
+function validateAuthPassword(password, { requiredMessage = 'Password is required', minLength = 8, maxLength = 128 } = {}) {
+  if (!password || typeof password !== 'string') {
+    return [requiredMessage];
+  }
+  if (passwordContainsWhitespace(password)) {
+    return [PASSWORD_WHITESPACE_MESSAGE];
+  }
+  if (password.length < minLength || password.length > maxLength) {
+    return [`Password must be ${minLength} to ${maxLength} characters long`];
+  }
+
+  return [];
+}
+
 /** Normalize camelCase admin-panel fields to the snake_case the app expects */
 function normalizeUser(doc) {
   if (!doc) return doc;
@@ -238,18 +267,22 @@ async function getCleanUser(db, userId) {
 // ─── EMAIL / PASSWORD LOGIN ─────────────────────────────────────────────────
 
 async function login(req, res) {
-  const emailRaw = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
+  const emailRaw = normalizeEmailInput(req.body?.email);
   const password = typeof req.body?.password === 'string' ? req.body.password : '';
 
   // Input validation
   if (!emailRaw || !password) {
     return res.status(400).json({ detail: 'Email and password are required' });
   }
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailRaw) || emailRaw.length > 254) {
+  if (!isValidEmail(emailRaw)) {
     return res.status(400).json({ detail: 'Please provide a valid email address' });
   }
-  if (password.length < 6 || password.length > 128) {
-    return res.status(400).json({ detail: 'Password must be 6 to 128 characters long' });
+  const passwordValidationErrors = validateAuthPassword(password, {
+    requiredMessage: 'Email and password are required',
+    minLength: 6,
+  });
+  if (passwordValidationErrors.length > 0) {
+    return res.status(400).json({ detail: passwordValidationErrors[0] });
   }
 
   const apiKey = firebaseApiKey();
@@ -357,7 +390,28 @@ async function login(req, res) {
     }
   }
 
-  // Step 2: Find MongoDB tenant by exact email (NOT google_email — that's for Google sign-in only)
+  // Step 2a: Admin users get direct session — no OTP (admin panel is web-only, not mobile)
+  const adminUser = await db.collection('users').findOne({
+    email: emailRegex(emailRaw),
+    role: { $in: ['admin', 'superadmin'] },
+  });
+  if (adminUser) {
+    if (!adminUser.user_id) {
+      return res.status(500).json({ detail: 'Admin account configuration error.' });
+    }
+    await db.collection('users').updateOne(
+      { user_id: adminUser.user_id },
+      { $set: { firebase_uid: fbUid, last_login: new Date() } },
+    ).catch(() => {});
+    const session = await createSession(db, adminUser.user_id);
+    res.cookie('session_token', session.session_token, cookieOptions());
+    const userData = await getCleanUser(db, adminUser.user_id);
+    logAttempt(db, emailRaw, true, 'admin_login_success', req);
+    console.log(`[Login] ✓ Admin login for user_id=${adminUser.user_id}`);
+    return res.json({ user: userData, session_token: session.session_token });
+  }
+
+  // Step 2b: Find MongoDB tenant by exact email (NOT google_email — that's for Google sign-in only)
   const tenant = await db.collection('users').findOne({
     email: emailRegex(emailRaw),
     role: { $nin: ['admin', 'superadmin'] },
@@ -437,8 +491,15 @@ async function login(req, res) {
 
   const { sendLoginOtpEmail } = require('../services/emailService');
   const emailSent = await sendLoginOtpEmail(emailRaw, tenant.name || 'Tenant', otpCode);
-  if (!emailSent) {
+  const otpEmailDeliveryFailed = !emailSent;
+  if (otpEmailDeliveryFailed) {
+    await db.collection('otp_store').deleteOne({ otp_token: otpToken }).catch(() => {});
+    logAttempt(db, emailRaw, false, 'otp_email_failed', req);
     console.warn(`[Login] OTP email failed for user_id=${tenant.user_id} — proceeding anyway`);
+  }
+
+  if (otpEmailDeliveryFailed) {
+    return res.status(503).json({ detail: 'Unable to send verification code right now. Please try again.' });
   }
 
   logAttempt(db, emailRaw, true, 'otp_sent', req);
@@ -669,12 +730,17 @@ async function googleSignIn(req, res) {
 
 async function register(req, res) {
   try {
-    const { email, password, name, phone } = req.body;
+    const email = normalizeEmailInput(req.body?.email);
+    const { password, name, phone } = req.body;
     if (!email || !password) {
       return res.status(400).json({ detail: 'Email and password are required' });
     }
-    if (password.length < 8) {
-      return res.status(400).json({ detail: 'Password must be at least 8 characters' });
+    if (!isValidEmail(email)) {
+      return res.status(400).json({ detail: 'Please provide a valid email address' });
+    }
+    const passwordValidationErrors = validateNewPassword(password);
+    if (passwordValidationErrors.length > 0) {
+      return res.status(400).json({ detail: passwordValidationErrors[0] });
     }
 
     const apiKey = firebaseApiKey();
@@ -767,16 +833,9 @@ const COMMON_PASSWORDS = new Set([
 ]);
 
 function validateNewPassword(password) {
-  const errors = [];
-
-  if (!password || typeof password !== 'string') {
-    return ['New password is required'];
-  }
-  if (password.length < 8) {
-    errors.push('Password must be at least 8 characters');
-  }
-  if (password.length > 128) {
-    errors.push('Password must be 128 characters or fewer');
+  const errors = validateAuthPassword(password, { requiredMessage: 'New password is required' });
+  if (errors.length > 0) {
+    return errors;
   }
   if (!/[A-Z]/.test(password)) {
     errors.push('Password must contain at least one uppercase letter');
@@ -808,6 +867,9 @@ async function changePassword(req, res) {
     // ── Input validation ──────────────────────────────────────────────────
     if (!current_password || !new_password) {
       return res.status(400).json({ detail: 'Current password and new password are required' });
+    }
+    if (passwordContainsWhitespace(current_password)) {
+      return res.status(400).json({ detail: PASSWORD_WHITESPACE_MESSAGE });
     }
 
     // Server-side complexity checks (mirrors frontend rules)
@@ -922,12 +984,13 @@ async function forgotPassword(req, res) {
   // Always return same message to prevent email enumeration
   const successMsg = 'If your email is registered, you will receive a password reset link.';
   try {
-    const { email } = req.body;
-    if (!email) {
+    const normalizedEmail = normalizeEmailInput(req.body?.email);
+    if (!normalizedEmail) {
       return res.status(400).json({ detail: 'Email is required' });
     }
-
-    const normalizedEmail = email.trim().toLowerCase();
+    if (!isValidEmail(normalizedEmail)) {
+      return res.status(400).json({ detail: 'Please provide a valid email address' });
+    }
     const tenantData = await verifyTenantInFirebase(normalizedEmail);
 
     if (tenantData) {
@@ -936,7 +999,7 @@ async function forgotPassword(req, res) {
 
       const db = getDb();
       // Look up MongoDB user_id for session invalidation later
-      const dbUser = await db.collection('users').findOne({ email: normalizedEmail }).catch(() => null);
+      const dbUser = await findTenantByEmail(db, normalizedEmail).catch(() => null);
       const mongoUserId = dbUser?.user_id || null;
 
       // Invalidate any prior unused tokens for this email
@@ -956,7 +1019,7 @@ async function forgotPassword(req, res) {
 
       const backendUrl = (process.env.BACKEND_URL || 'http://localhost:8001').replace(/\/+$/, '');
       const resetLink = `${backendUrl}/api/auth/reset-password?token=${rawToken}`;
-      const userName = tenantData.name || 'Tenant';
+      const userName = tenantData.name || dbUser?.name || 'Tenant';
 
       sendPasswordResetEmail(normalizedEmail, userName, resetLink).catch(() => {});
 
@@ -969,7 +1032,7 @@ async function forgotPassword(req, res) {
           category: 'Account',
           priority: 'normal',
           author_id: 'system',
-          user_id: tenantData.user_id || null,
+          user_id: mongoUserId,
           is_private: true,
           is_active: true,
           created_at: new Date(),
@@ -1053,7 +1116,7 @@ h1{color:#1E3A5F;font-size:20px;margin-bottom:8px}p{color:#6B7280;font-size:14px
 <div class="card">
   <div class="icon">🔑</div>
   <h1>Reset Your Password</h1>
-  <p class="sub">This link expires in <strong>15 minutes</strong> and can only be used once.</p>
+  <p class="sub">This link expires in <strong>15 minutes</strong> and can only be used once. Use at least 8 characters with uppercase, lowercase, a number, and a special character.</p>
 
   <!-- ─── Mobile: open in app ─── -->
   <div class="mobile-section" id="mobileSection" style="display:none">
@@ -1079,6 +1142,7 @@ h1{color:#1E3A5F;font-size:20px;margin-bottom:8px}p{color:#6B7280;font-size:14px
       <input id="pw2" type="password" placeholder="Repeat your password" autocomplete="new-password">
       <button class="eye" type="button" onclick="toggleEye('pw2','eye2')" id="eye2">👁</button>
     </div>
+    <p class="note" style="margin-top:0;margin-bottom:14px">Choose a strong password: 8+ characters, uppercase, lowercase, number, and special character. Spaces are not allowed.</p>
     <button class="btn btn-submit" id="submitBtn" onclick="doReset()">Reset Password</button>
   </div>
 
@@ -1090,6 +1154,7 @@ h1{color:#1E3A5F;font-size:20px;margin-bottom:8px}p{color:#6B7280;font-size:14px
 
 <script>
   var TOKEN = ${JSON.stringify(token)};
+  var COMMON_PASSWORDS = ${JSON.stringify(Array.from(COMMON_PASSWORDS))};
 
   // Show mobile section only on actual mobile devices
   if (/Android|iPhone|iPad|iPod/i.test(navigator.userAgent)) {
@@ -1106,6 +1171,18 @@ h1{color:#1E3A5F;font-size:20px;margin-bottom:8px}p{color:#6B7280;font-size:14px
     else { inp.type = 'password'; btn.textContent = '👁'; }
   }
 
+  function validatePassword(pw) {
+    if (!pw) return 'Please enter a new password.';
+    if (/\\s/.test(pw)) return '${PASSWORD_WHITESPACE_MESSAGE}';
+    if (pw.length < 8) return 'Password must be at least 8 characters.';
+    if (!/[A-Z]/.test(pw)) return 'Password must contain at least one uppercase letter.';
+    if (!/[a-z]/.test(pw)) return 'Password must contain at least one lowercase letter.';
+    if (!/[0-9]/.test(pw)) return 'Password must contain at least one number.';
+    if (!/[^A-Za-z0-9\\s]/.test(pw)) return 'Password must contain at least one special character.';
+    if (COMMON_PASSWORDS.indexOf(pw.toLowerCase()) >= 0) return 'This password is too common. Please choose a stronger one.';
+    return '';
+  }
+
   async function doReset() {
     var pw  = document.getElementById('pw').value;
     var pw2 = document.getElementById('pw2').value;
@@ -1113,8 +1190,10 @@ h1{color:#1E3A5F;font-size:20px;margin-bottom:8px}p{color:#6B7280;font-size:14px
     msg.innerHTML = '';
 
     if (!pw || !pw2) { return showErr('Please fill in both fields.'); }
+    var passwordError = validatePassword(pw);
+    if (passwordError) { return showErr(passwordError); }
+    if (/\\s/.test(pw2)) { return showErr('${PASSWORD_WHITESPACE_MESSAGE}'); }
     if (pw !== pw2)  { return showErr('Passwords do not match.'); }
-    if (pw.length < 8) { return showErr('Password must be at least 8 characters.'); }
 
     var btn = document.getElementById('submitBtn');
     btn.disabled = true;
@@ -1166,29 +1245,32 @@ async function resetPassword(req, res) {
 
     const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
     const db = getDb();
-    const record = await db.collection('password_reset_tokens').findOne({
-      hashedToken,
-      used: false,
-      expiresAt: { $gt: new Date() },
-    });
+    const claimTime = new Date();
+    const claimedRecord = await db.collection('password_reset_tokens').findOneAndUpdate(
+      {
+        hashedToken,
+        used: false,
+        expiresAt: { $gt: claimTime },
+      },
+      { $set: { used: true, usedAt: claimTime } },
+      { returnDocument: 'before' }
+    );
+    const record = claimedRecord?.value ?? claimedRecord;
 
     if (!record) {
       return res.status(400).json({ detail: 'This reset link is invalid or has expired. Please request a new one.' });
     }
 
-    // Mark token used before touching Firebase (prevent replay on failure)
-    await db.collection('password_reset_tokens').updateOne(
-      { hashedToken },
-      { $set: { used: true, usedAt: new Date() } }
-    );
-
     // Update password in Firebase via Admin SDK
     await admin.auth().updateUser(record.uid, { password: newPassword });
 
-    // Invalidate all active sessions for this user
+    // Invalidate all active sessions for this user.
+    // Auth middleware validates against the user_sessions collection.
     try {
-      await db.collection('sessions').deleteMany({ user_id: record.user_id });
-    } catch (_) { /* non-critical */ }
+      await db.collection('user_sessions').deleteMany({ user_id: record.user_id });
+    } catch (sessionError) {
+      console.warn('[ResetPassword] Failed to invalidate active sessions:', sessionError?.message);
+    }
 
     // Send confirmation email
     sendPasswordChangedEmail(record.email, 'Tenant', 'app').catch(() => {});

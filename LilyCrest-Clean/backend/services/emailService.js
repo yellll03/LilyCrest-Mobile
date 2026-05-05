@@ -44,145 +44,6 @@ function senderAddress() {
   return process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@lilycrest.com';
 }
 
-// ─── HTML TEMPLATE ──────────────────────────────────────────────────────────
-
-function brandedHtml({ title, heading, bodyHtml, footerNote }) {
-  return `
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${title}</title>
-</head>
-<body style="margin:0;padding:0;background:#F3F4F6;font-family:'Segoe UI',Roboto,Arial,sans-serif;">
-  <table cellpadding="0" cellspacing="0" width="100%" style="background:#F3F4F6;padding:32px 16px;">
-    <tr>
-      <td align="center">
-        <table cellpadding="0" cellspacing="0" width="560" style="max-width:560px;background:#FFFFFF;border-radius:16px;overflow:hidden;box-shadow:0 4px 24px rgba(0,0,0,0.08);">
-          
-          <!-- Header -->
-          <tr>
-            <td style="background:linear-gradient(135deg,#1E3A5F 0%,#2D5A8E 100%);padding:32px 40px;text-align:center;">
-              <h1 style="margin:0;color:#FFFFFF;font-size:22px;font-weight:700;letter-spacing:0.5px;">🏠 LilyCrest Dormitory</h1>
-              <p style="margin:6px 0 0;color:rgba(255,255,255,0.7);font-size:13px;">Tenant Portal — Security Notification</p>
-            </td>
-          </tr>
-
-          <!-- Body -->
-          <tr>
-            <td style="padding:32px 40px;">
-              <h2 style="margin:0 0 16px;color:#1E3A5F;font-size:20px;font-weight:700;">${heading}</h2>
-              ${bodyHtml}
-            </td>
-          </tr>
-
-          <!-- Footer -->
-          <tr>
-            <td style="background:#F8FAFC;padding:24px 40px;border-top:1px solid #E5E7EB;">
-              ${footerNote ? `<p style="margin:0 0 12px;color:#6B7280;font-size:13px;line-height:1.5;">${footerNote}</p>` : ''}
-              <p style="margin:0;color:#9CA3AF;font-size:12px;">
-                This is an automated message from LilyCrest Dormitory Management System.<br/>
-                Please do not reply to this email.
-              </p>
-            </td>
-          </tr>
-
-        </table>
-
-        <p style="margin:24px 0 0;color:#9CA3AF;font-size:11px;">
-          © ${new Date().getFullYear()} LilyCrest Dormitory. All rights reserved.
-        </p>
-      </td>
-    </tr>
-  </table>
-</body>
-</html>`;
-}
-
-// ─── PASSWORD CHANGED EMAIL ─────────────────────────────────────────────────
-
-/**
- * Send a "your password was changed" confirmation email.
- *
- * @param {string} toEmail   Recipient email
- * @param {string} userName  Display name (for greeting)
- * @param {string} ip        IP address of the request
- * @returns {Promise<boolean>}
- */
-async function sendPasswordChangedEmail(toEmail, userName = 'Tenant', ip = 'Unknown') {
-  const transporter = getTransporter();
-  if (!transporter) return false;
-
-  const now = new Date();
-  const timestamp = now.toLocaleString('en-PH', {
-    timeZone: 'Asia/Manila',
-    dateStyle: 'long',
-    timeStyle: 'short',
-  });
-
-  const maskedEmail = maskEmail(toEmail);
-
-  const bodyHtml = `
-    <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">
-      Hi <strong>${escapeHtml(userName)}</strong>,
-    </p>
-    <p style="margin:0 0 20px;color:#374151;font-size:15px;line-height:1.6;">
-      Your LilyCrest account password was <strong>successfully changed</strong>.
-    </p>
-
-    <table cellpadding="0" cellspacing="0" width="100%" style="background:#F8FAFC;border:1px solid #E5E7EB;border-radius:12px;margin-bottom:24px;">
-      <tr>
-        <td style="padding:16px 20px;">
-          <table cellpadding="0" cellspacing="0" width="100%">
-            <tr>
-              <td style="padding:6px 0;color:#6B7280;font-size:13px;width:100px;">Account</td>
-              <td style="padding:6px 0;color:#1F2937;font-size:14px;font-weight:600;">${maskedEmail}</td>
-            </tr>
-            <tr>
-              <td style="padding:6px 0;color:#6B7280;font-size:13px;">Date & Time</td>
-              <td style="padding:6px 0;color:#1F2937;font-size:14px;font-weight:600;">${timestamp}</td>
-            </tr>
-            <tr>
-              <td style="padding:6px 0;color:#6B7280;font-size:13px;">IP Address</td>
-              <td style="padding:6px 0;color:#1F2937;font-size:14px;font-weight:600;">${escapeHtml(ip)}</td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
-
-    <div style="background:#FEF2F2;border:1px solid #FECACA;border-radius:12px;padding:16px 20px;margin-bottom:8px;">
-      <p style="margin:0;color:#991B1B;font-size:14px;font-weight:600;">⚠️ Didn't make this change?</p>
-      <p style="margin:6px 0 0;color:#B91C1C;font-size:13px;line-height:1.5;">
-        If you did not change your password, your account may be compromised. 
-        Please reset your password immediately through the app or contact the LilyCrest admin office right away.
-      </p>
-    </div>
-  `;
-
-  const html = brandedHtml({
-    title: 'Password Changed — LilyCrest',
-    heading: '🔒 Password Changed Successfully',
-    bodyHtml,
-    footerNote: 'You\'re receiving this email because a password change was made on your LilyCrest tenant account.',
-  });
-
-  try {
-    await transporter.sendMail({
-      from: senderAddress(),
-      to: toEmail,
-      subject: '🔒 LilyCrest Security Alert — Your Password Was Changed',
-      html,
-    });
-    console.log(`[Email] Password-changed confirmation sent to ${maskedEmail}`);
-    return true;
-  } catch (err) {
-    console.warn(`[Email] Failed to send password-changed email to ${maskedEmail}:`, err?.message);
-    return false;
-  }
-}
-
 // ─── HELPERS ────────────────────────────────────────────────────────────────
 
 function maskEmail(email = '') {
@@ -199,16 +60,177 @@ function escapeHtml(str = '') {
     .replace(/"/g, '&quot;');
 }
 
+// ─── HTML TEMPLATE ──────────────────────────────────────────────────────────
+
+function brandedHtml({ title, heading, bodyHtml, footerNote }) {
+  return `
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${title}</title>
+</head>
+<body style="margin:0;padding:0;background:#EEF2F8;font-family:'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+  <table cellpadding="0" cellspacing="0" width="100%" style="background:#EEF2F8;padding:40px 16px;">
+    <tr>
+      <td align="center">
+        <table cellpadding="0" cellspacing="0" width="580" style="max-width:580px;background:#FFFFFF;border-radius:6px;overflow:hidden;box-shadow:0 2px 16px rgba(32,75,126,0.12);">
+
+          <!-- Primary top stripe -->
+          <tr>
+            <td style="background:#204b7e;height:4px;font-size:0;line-height:0;">&nbsp;</td>
+          </tr>
+
+          <!-- Header -->
+          <tr>
+            <td style="background:#204b7e;padding:36px 48px 32px;text-align:center;">
+              <p style="margin:0 0 8px;color:#ff9000;font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;">Dormitory Management System</p>
+              <h1 style="margin:0;color:#FFFFFF;font-size:26px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">LilyCrest</h1>
+            </td>
+          </tr>
+
+          <!-- Heading bar -->
+          <tr>
+            <td style="background:#FAFBFD;padding:28px 48px 20px;border-bottom:1px solid #E4EAF2;">
+              <h2 style="margin:0 0 10px;color:#1a2744;font-size:19px;font-weight:700;letter-spacing:-0.2px;">${heading}</h2>
+              <div style="width:36px;height:3px;background:#ff9000;border-radius:2px;"></div>
+            </td>
+          </tr>
+
+          <!-- Body -->
+          <tr>
+            <td style="padding:28px 48px 32px;">
+              ${bodyHtml}
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="background:#FAFBFD;padding:20px 48px;border-top:1px solid #E4EAF2;">
+              ${footerNote ? `<p style="margin:0 0 10px;color:#6B7280;font-size:12.5px;line-height:1.6;">${footerNote}</p>` : ''}
+              <p style="margin:0;color:#9CA3AF;font-size:11.5px;line-height:1.6;">
+                This is an automated message from LilyCrest Dormitory Management System. Please do not reply to this email.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Bottom stripe -->
+          <tr>
+            <td style="background:#204b7e;padding:16px 48px;text-align:center;">
+              <p style="margin:0;color:rgba(255,255,255,0.50);font-size:11px;letter-spacing:0.3px;">
+                &copy; ${new Date().getFullYear()} LilyCrest Dormitory. All rights reserved.
+              </p>
+            </td>
+          </tr>
+
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
+// ─── SHARED PARTIALS ────────────────────────────────────────────────────────
+
+function infoTable(rows) {
+  const rowsHtml = rows.map(([label, value, highlight = false]) => `
+    <tr>
+      <td style="padding:9px 0;color:#8a97aa;font-size:12.5px;font-weight:500;width:140px;vertical-align:top;border-bottom:1px solid #EEF2F8;">${label}</td>
+      <td style="padding:9px 0;color:${highlight ? '#ff9000' : '#1a2744'};font-size:13.5px;font-weight:${highlight ? '700' : '600'};vertical-align:top;border-bottom:1px solid #EEF2F8;">${value}</td>
+    </tr>
+  `).join('');
+
+  return `
+    <table cellpadding="0" cellspacing="0" width="100%"
+      style="background:#FAFBFD;border:1px solid #E4EAF2;border-radius:6px;margin-bottom:24px;">
+      <tr><td style="padding:6px 20px 2px;">
+        <table cellpadding="0" cellspacing="0" width="100%">
+          ${rowsHtml}
+        </table>
+      </td></tr>
+    </table>
+  `;
+}
+
+function alertBox(title, body) {
+  return `
+    <div style="border-left:4px solid #ff9000;background:#FFF8EC;border-radius:0 6px 6px 0;padding:14px 18px;margin-bottom:8px;">
+      ${title ? `<p style="margin:0 0 5px;color:#1a2744;font-size:13.5px;font-weight:700;">${title}</p>` : ''}
+      <p style="margin:0;color:#4a5568;font-size:13px;line-height:1.6;">${body}</p>
+    </div>
+  `;
+}
+
+function noteBox(body) {
+  return `
+    <div style="border-left:4px solid #D8E2F0;background:#FAFBFD;border-radius:0 6px 6px 0;padding:14px 18px;margin-bottom:8px;">
+      <p style="margin:0;color:#6B7280;font-size:13px;line-height:1.6;">${body}</p>
+    </div>
+  `;
+}
+
+// ─── PASSWORD CHANGED EMAIL ─────────────────────────────────────────────────
+
+async function sendPasswordChangedEmail(toEmail, userName = 'Tenant', ip = 'Unknown') {
+  const transporter = getTransporter();
+  if (!transporter) return false;
+
+  const now = new Date();
+  const timestamp = now.toLocaleString('en-PH', {
+    timeZone: 'Asia/Manila',
+    dateStyle: 'long',
+    timeStyle: 'short',
+  });
+
+  const maskedEmail = maskEmail(toEmail);
+
+  const bodyHtml = `
+    <p style="margin:0 0 6px;color:#1a2744;font-size:15px;line-height:1.7;">
+      Dear <strong>${escapeHtml(userName)}</strong>,
+    </p>
+    <p style="margin:0 0 24px;color:#4a5568;font-size:14.5px;line-height:1.7;">
+      Your LilyCrest account password has been <strong style="color:#204b7e;">successfully changed</strong>.
+      Please review the details below.
+    </p>
+
+    ${infoTable([
+      ['Account', maskedEmail],
+      ['Date &amp; Time', timestamp],
+      ['IP Address', escapeHtml(ip)],
+    ])}
+
+    ${alertBox(
+      'Did not make this change?',
+      'If you did not change your password, your account may be compromised. Reset your password immediately through the LilyCrest app or contact the admin office without delay.',
+    )}
+  `;
+
+  const html = brandedHtml({
+    title: 'Password Changed — LilyCrest',
+    heading: 'Password Changed Successfully',
+    bodyHtml,
+    footerNote: 'You are receiving this email because a password change was made on your LilyCrest tenant account.',
+  });
+
+  try {
+    await transporter.sendMail({
+      from: senderAddress(),
+      to: toEmail,
+      subject: 'LilyCrest Security Alert — Your Password Was Changed',
+      html,
+    });
+    console.log(`[Email] Password-changed confirmation sent to ${maskedEmail}`);
+    return true;
+  } catch (err) {
+    console.warn(`[Email] Failed to send password-changed email to ${maskedEmail}:`, err?.message);
+    return false;
+  }
+}
+
 // ─── LOGIN OTP EMAIL ────────────────────────────────────────────────────────
 
-/**
- * Send a login OTP verification email.
- *
- * @param {string} toEmail   Recipient email
- * @param {string} userName  Display name
- * @param {string} otpCode   6-digit OTP code
- * @returns {Promise<boolean>}
- */
 async function sendLoginOtpEmail(toEmail, userName = 'Tenant', otpCode) {
   const transporter = getTransporter();
   if (!transporter) return false;
@@ -216,43 +238,39 @@ async function sendLoginOtpEmail(toEmail, userName = 'Tenant', otpCode) {
   const maskedEmail = maskEmail(toEmail);
 
   const bodyHtml = `
-    <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">
-      Hi <strong>${escapeHtml(userName)}</strong>,
+    <p style="margin:0 0 6px;color:#1a2744;font-size:15px;line-height:1.7;">
+      Dear <strong>${escapeHtml(userName)}</strong>,
     </p>
-    <p style="margin:0 0 24px;color:#374151;font-size:15px;line-height:1.6;">
-      Use the verification code below to complete your sign-in to LilyCrest Tenant Portal.
+    <p style="margin:0 0 28px;color:#4a5568;font-size:14.5px;line-height:1.7;">
+      Use the verification code below to complete your sign-in to the LilyCrest Tenant Portal.
     </p>
 
-    <div style="text-align:center;margin:0 0 24px;">
-      <div style="display:inline-block;background:#1E3A5F;border-radius:16px;padding:24px 40px;">
-        <p style="margin:0 0 6px;color:rgba(255,255,255,0.7);font-size:12px;letter-spacing:1px;text-transform:uppercase;">Verification Code</p>
-        <p style="margin:0;color:#FFFFFF;font-size:40px;font-weight:700;letter-spacing:10px;">${escapeHtml(otpCode)}</p>
+    <div style="text-align:center;margin:0 0 28px;">
+      <div style="display:inline-block;background:#204b7e;border-radius:8px;padding:32px 56px;">
+        <p style="margin:0 0 12px;color:rgba(255,255,255,0.65);font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;">Verification Code</p>
+        <p style="margin:0;color:#ff9000;font-size:48px;font-weight:700;letter-spacing:14px;font-family:'Courier New',Courier,monospace;">${escapeHtml(otpCode)}</p>
       </div>
     </div>
 
-    <div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:12px;padding:14px 20px;margin-bottom:8px;">
-      <p style="margin:0;color:#92400E;font-size:13px;line-height:1.5;">
-        ⏱ This code expires in <strong>10 minutes</strong>. Do not share it with anyone.
-      </p>
-    </div>
+    ${noteBox('This code expires in <strong style="color:#204b7e;">10 minutes</strong>. Do not share it with anyone, including LilyCrest staff.')}
 
-    <p style="margin:16px 0 0;color:#6B7280;font-size:13px;line-height:1.5;">
+    <p style="margin:16px 0 0;color:#9CA3AF;font-size:13px;line-height:1.6;">
       If you did not attempt to sign in, you can safely ignore this email. Your account remains secure.
     </p>
   `;
 
   const html = brandedHtml({
     title: 'Log-In Verification — LilyCrest',
-    heading: '🔐 Your Log-In Code',
+    heading: 'Your Verification Code',
     bodyHtml,
-    footerNote: `You're receiving this because a log-in was attempted on the LilyCrest Tenant Portal for ${maskedEmail}.`,
+    footerNote: `You are receiving this because a sign-in was attempted on the LilyCrest Tenant Portal for ${maskedEmail}.`,
   });
 
   try {
     await transporter.sendMail({
       from: senderAddress(),
       to: toEmail,
-      subject: `${otpCode} is your LilyCrest log-in code`,
+      subject: `${otpCode} is your LilyCrest verification code`,
       html,
     });
     console.log(`[Email] Login OTP sent to ${maskedEmail}`);
@@ -263,16 +281,8 @@ async function sendLoginOtpEmail(toEmail, userName = 'Tenant', otpCode) {
   }
 }
 
-// ─── PAYMENT RECEIPT EMAIL ────────────────────────────────────────────────
+// ─── PAYMENT RECEIPT EMAIL ───────────────────────────────────────────────────
 
-/**
- * Send a payment receipt confirmation email.
- *
- * @param {string} toEmail   Recipient email
- * @param {string} userName  Display name
- * @param {object} receipt   Payment receipt details
- * @returns {Promise<boolean>}
- */
 async function sendPaymentReceiptEmail(toEmail, userName = 'Tenant', receipt = {}) {
   const transporter = getTransporter();
   if (!transporter) return false;
@@ -300,63 +310,39 @@ async function sendPaymentReceiptEmail(toEmail, userName = 'Tenant', receipt = {
   const amountText = `PHP ${amount.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
   const bodyHtml = `
-    <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">
-      Hi <strong>${escapeHtml(userName)}</strong>,
+    <p style="margin:0 0 6px;color:#1a2744;font-size:15px;line-height:1.7;">
+      Dear <strong>${escapeHtml(userName)}</strong>,
     </p>
-    <p style="margin:0 0 20px;color:#374151;font-size:15px;line-height:1.6;">
-      We confirmed your payment. Thank you for paying your LilyCrest billing on time.
+    <p style="margin:0 0 24px;color:#4a5568;font-size:14.5px;line-height:1.7;">
+      Your payment has been confirmed. Thank you for settling your LilyCrest billing on time.
     </p>
 
-    <table cellpadding="0" cellspacing="0" width="100%" style="background:#F8FAFC;border:1px solid #E5E7EB;border-radius:12px;margin-bottom:20px;">
-      <tr>
-        <td style="padding:16px 20px;">
-          <table cellpadding="0" cellspacing="0" width="100%">
-            <tr>
-              <td style="padding:6px 0;color:#6B7280;font-size:13px;width:140px;">Billing ID</td>
-              <td style="padding:6px 0;color:#1F2937;font-size:14px;font-weight:600;">${escapeHtml(String(billingId))}</td>
-            </tr>
-            <tr>
-              <td style="padding:6px 0;color:#6B7280;font-size:13px;">Description</td>
-              <td style="padding:6px 0;color:#1F2937;font-size:14px;font-weight:600;">${escapeHtml(String(description))}</td>
-            </tr>
-            <tr>
-              <td style="padding:6px 0;color:#6B7280;font-size:13px;">Amount Paid</td>
-              <td style="padding:6px 0;color:#1F2937;font-size:14px;font-weight:700;">${escapeHtml(amountText)}</td>
-            </tr>
-            <tr>
-              <td style="padding:6px 0;color:#6B7280;font-size:13px;">Payment Method</td>
-              <td style="padding:6px 0;color:#1F2937;font-size:14px;font-weight:600;">${escapeHtml(String(paymentMethod))}</td>
-            </tr>
-            <tr>
-              <td style="padding:6px 0;color:#6B7280;font-size:13px;">Reference</td>
-              <td style="padding:6px 0;color:#1F2937;font-size:14px;font-weight:600;">${escapeHtml(String(referenceNumber))}</td>
-            </tr>
-            <tr>
-              <td style="padding:6px 0;color:#6B7280;font-size:13px;">Paid On</td>
-              <td style="padding:6px 0;color:#1F2937;font-size:14px;font-weight:600;">${escapeHtml(paymentDateText)}</td>
-            </tr>
-          </table>
-        </td>
-      </tr>
-    </table>
+    ${infoTable([
+      ['Billing ID', escapeHtml(String(billingId))],
+      ['Description', escapeHtml(String(description))],
+      ['Amount Paid', escapeHtml(amountText), true],
+      ['Payment Method', escapeHtml(String(paymentMethod))],
+      ['Reference No.', escapeHtml(String(referenceNumber))],
+      ['Paid On', escapeHtml(paymentDateText)],
+    ])}
 
-    <p style="margin:0;color:#6B7280;font-size:13px;line-height:1.5;">
-      Keep this email as your payment receipt for future reference.
+    <p style="margin:0;color:#6B7280;font-size:13px;line-height:1.6;">
+      Please keep this email as your official payment receipt for future reference.
     </p>
   `;
 
   const html = brandedHtml({
-    title: 'Payment Receipt - LilyCrest',
-    heading: 'Payment Received',
+    title: 'Payment Confirmed — LilyCrest',
+    heading: 'Payment Confirmed',
     bodyHtml,
-    footerNote: `Receipt issued for ${maskedEmail}.`,
+    footerNote: `Official receipt issued for ${maskedEmail}.`,
   });
 
   try {
     await transporter.sendMail({
       from: senderAddress(),
       to: toEmail,
-      subject: `Payment Receipt - ${billingId}`,
+      subject: `Payment Confirmed — Bill ${billingId}`,
       html,
     });
     console.log(`[Email] Payment receipt sent to ${maskedEmail} for bill ${billingId}`);
@@ -369,15 +355,6 @@ async function sendPaymentReceiptEmail(toEmail, userName = 'Tenant', receipt = {
 
 // ─── PASSWORD RESET EMAIL ────────────────────────────────────────────────────
 
-/**
- * Send a "reset your password" email with a deep-link button.
- * The link goes to the backend, which serves a redirect page that opens the app.
- *
- * @param {string} toEmail    Recipient email
- * @param {string} userName   Display name
- * @param {string} resetLink  Full backend URL containing the reset token
- * @returns {Promise<boolean>}
- */
 async function sendPasswordResetEmail(toEmail, userName = 'Tenant', resetLink) {
   const transporter = getTransporter();
   if (!transporter) return false;
@@ -385,46 +362,42 @@ async function sendPasswordResetEmail(toEmail, userName = 'Tenant', resetLink) {
   const maskedEmail = maskEmail(toEmail);
 
   const bodyHtml = `
-    <p style="margin:0 0 16px;color:#374151;font-size:15px;line-height:1.6;">
-      Hi <strong>${escapeHtml(userName)}</strong>,
+    <p style="margin:0 0 6px;color:#1a2744;font-size:15px;line-height:1.7;">
+      Dear <strong>${escapeHtml(userName)}</strong>,
     </p>
-    <p style="margin:0 0 24px;color:#374151;font-size:15px;line-height:1.6;">
+    <p style="margin:0 0 28px;color:#4a5568;font-size:14.5px;line-height:1.7;">
       We received a request to reset the password for your LilyCrest account.
       Tap the button below — it will open the LilyCrest app directly so you can set a new password.
     </p>
 
     <div style="text-align:center;margin:0 0 28px;">
       <a href="${resetLink}"
-         style="display:inline-block;background:#D4682A;color:#ffffff;font-size:16px;
-                font-weight:700;padding:16px 40px;border-radius:14px;text-decoration:none;
-                letter-spacing:0.3px;">
+         style="display:inline-block;background:#204b7e;color:#FFFFFF;font-size:14.5px;
+                font-weight:700;padding:16px 52px;border-radius:6px;text-decoration:none;
+                letter-spacing:0.5px;text-transform:uppercase;">
         Reset My Password
       </a>
     </div>
 
-    <div style="background:#FEF3C7;border:1px solid #FDE68A;border-radius:12px;padding:14px 20px;margin-bottom:16px;">
-      <p style="margin:0;color:#92400E;font-size:13px;line-height:1.5;">
-        ⏱ This link expires in <strong>15 minutes</strong> and can only be used once.
-      </p>
-    </div>
+    ${noteBox('This link expires in <strong style="color:#204b7e;">15 minutes</strong> and can only be used once.')}
 
-    <p style="margin:0;color:#6B7280;font-size:13px;line-height:1.6;">
-      If you did not request a password reset, you can safely ignore this email — your account remains secure and your password has not been changed.
+    <p style="margin:16px 0 0;color:#9CA3AF;font-size:13px;line-height:1.6;">
+      If you did not request a password reset, you can safely ignore this email. Your account remains secure and your password has not been changed.
     </p>
   `;
 
   const html = brandedHtml({
     title: 'Reset Your Password — LilyCrest',
-    heading: '🔑 Reset Your Password',
+    heading: 'Reset Your Password',
     bodyHtml,
-    footerNote: `You're receiving this because a password reset was requested for ${maskedEmail}.`,
+    footerNote: `You are receiving this because a password reset was requested for ${maskedEmail}.`,
   });
 
   try {
     await transporter.sendMail({
       from: senderAddress(),
       to: toEmail,
-      subject: 'Reset your LilyCrest password',
+      subject: 'Reset Your LilyCrest Password',
       html,
     });
     console.log(`[Email] Password reset link sent to ${maskedEmail}`);

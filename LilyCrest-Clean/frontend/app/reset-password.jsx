@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+﻿import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import {
@@ -13,27 +13,38 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useThemedStyles } from '../src/context/ThemeContext';
 import { useToast } from '../src/context/ToastContext';
 import { api } from '../src/services/api';
+import {
+  blockPasswordWhitespaceInput,
+  getStrongPasswordChecks,
+  validateStrongPassword,
+} from '../src/utils/passwordValidation';
 
-const getResetErrors = ({ newPassword, confirmPassword, token }) => ({
-  newPassword: !newPassword
-    ? 'New password is required.'
-    : newPassword.length < 8
-      ? 'Password must be at least 8 characters.'
-      : '',
-  confirmPassword: !confirmPassword
-    ? 'Please confirm your new password.'
-    : newPassword !== confirmPassword
-      ? 'Passwords do not match.'
-      : '',
-  token: token ? '' : 'Invalid reset link. Please request a new one.',
-});
+const getResetErrors = ({ newPassword, confirmPassword, token }) => {
+  const confirmValidation = validateStrongPassword(confirmPassword, { requiredMessage: 'Please confirm your new password.' });
+
+  return {
+    newPassword: validateStrongPassword(newPassword, { requiredMessage: 'New password is required.' }).error,
+    confirmPassword: !confirmPassword
+      ? 'Please confirm your new password.'
+      : !confirmValidation.valid
+        ? confirmValidation.error
+        : newPassword !== confirmPassword
+          ? 'Passwords do not match.'
+          : '',
+    token: token ? '' : 'Invalid reset link. Please request a new one.',
+  };
+};
 
 export default function ResetPasswordScreen() {
   const router = useRouter();
-  const { token } = useLocalSearchParams();
+  const { token: rawToken } = useLocalSearchParams();
+  const token = Array.isArray(rawToken) ? rawToken[0] : rawToken;
+  const normalizedToken = typeof token === 'string' ? token.trim() : '';
   const { showToast } = useToast();
+  const styles = useThemedStyles(createStyles);
 
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -44,8 +55,12 @@ export default function ResetPasswordScreen() {
   const [touched, setTouched] = useState({ newPassword: false, confirmPassword: false });
   const [requestError, setRequestError] = useState('');
   const [done, setDone] = useState(false);
+  const passwordChecks = useMemo(() => getStrongPasswordChecks(newPassword), [newPassword]);
 
-  const validationErrors = useMemo(() => getResetErrors({ newPassword, confirmPassword, token }), [confirmPassword, newPassword, token]);
+  const validationErrors = useMemo(
+    () => getResetErrors({ newPassword, confirmPassword, token: normalizedToken }),
+    [confirmPassword, newPassword, normalizedToken]
+  );
   const isFormValid = !validationErrors.newPassword && !validationErrors.confirmPassword && !validationErrors.token;
 
   useEffect(() => {
@@ -64,10 +79,29 @@ export default function ResetPasswordScreen() {
     setRequestError(validationErrors.token);
   }, [validationErrors.token]);
 
+  const handlePasswordFieldChange = (field, value) => {
+    const currentValue = field === 'newPassword' ? newPassword : confirmPassword;
+    const { value: nextValue, blocked } = blockPasswordWhitespaceInput(value, currentValue);
+
+    if (blocked) {
+      setTouched((prev) => ({ ...prev, [field]: true }));
+      setErrors((prev) => ({
+        ...prev,
+        [field]: field === 'newPassword'
+          ? validateStrongPassword(value, { requiredMessage: 'New password is required.' }).error
+          : 'Password must not contain spaces.',
+      }));
+      return;
+    }
+
+    if (field === 'newPassword') setNewPassword(nextValue);
+    if (field === 'confirmPassword') setConfirmPassword(nextValue);
+  };
+
   const handleReset = async () => {
     setRequestError('');
 
-    const nextErrors = getResetErrors({ newPassword, confirmPassword, token });
+    const nextErrors = getResetErrors({ newPassword, confirmPassword, token: normalizedToken });
     setTouched({ newPassword: true, confirmPassword: true });
     setErrors(nextErrors);
 
@@ -78,7 +112,7 @@ export default function ResetPasswordScreen() {
 
     setIsLoading(true);
     try {
-      await api.post('/auth/reset-password', { token, newPassword });
+      await api.post('/auth/reset-password', { token: normalizedToken, newPassword });
       setDone(true);
       showToast({
         type: 'success',
@@ -104,7 +138,7 @@ export default function ResetPasswordScreen() {
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false}>
 
           <View style={styles.iconBox}>
-            <Ionicons name={done ? 'checkmark-circle' : 'key'} size={48} color="#D4682A" />
+            <Ionicons name={done ? 'checkmark-circle' : 'key'} size={48} color="#204b7e" />
           </View>
 
           <Text style={styles.title}>{done ? 'Password Reset!' : 'Set New Password'}</Text>
@@ -125,7 +159,7 @@ export default function ResetPasswordScreen() {
                     placeholder="At least 8 characters"
                     placeholderTextColor="#9CA3AF"
                     value={newPassword}
-                    onChangeText={(value) => setNewPassword(value)}
+                    onChangeText={(value) => handlePasswordFieldChange('newPassword', value)}
                     onBlur={() => setTouched((prev) => ({ ...prev, newPassword: true }))}
                     secureTextEntry={!showNew}
                     autoCapitalize="none"
@@ -135,6 +169,14 @@ export default function ResetPasswordScreen() {
                   </TouchableOpacity>
                 </View>
                 {touched.newPassword && errors.newPassword ? <Text style={styles.errorText}>{errors.newPassword}</Text> : null}
+                <View style={styles.requirementsBox}>
+                  <Text style={[styles.requirementText, passwordChecks.noWhitespace && styles.requirementMet]}>No spaces</Text>
+                  <Text style={[styles.requirementText, passwordChecks.length && styles.requirementMet]}>At least 8 characters</Text>
+                  <Text style={[styles.requirementText, passwordChecks.uppercase && styles.requirementMet]}>One uppercase letter</Text>
+                  <Text style={[styles.requirementText, passwordChecks.lowercase && styles.requirementMet]}>One lowercase letter</Text>
+                  <Text style={[styles.requirementText, passwordChecks.number && styles.requirementMet]}>One number</Text>
+                  <Text style={[styles.requirementText, passwordChecks.special && styles.requirementMet]}>One special character</Text>
+                </View>
               </View>
 
               <View style={styles.field}>
@@ -146,7 +188,7 @@ export default function ResetPasswordScreen() {
                     placeholder="Repeat your password"
                     placeholderTextColor="#9CA3AF"
                     value={confirmPassword}
-                    onChangeText={(value) => setConfirmPassword(value)}
+                    onChangeText={(value) => handlePasswordFieldChange('confirmPassword', value)}
                     onBlur={() => setTouched((prev) => ({ ...prev, confirmPassword: true }))}
                     secureTextEntry={!showConfirm}
                     autoCapitalize="none"
@@ -178,7 +220,7 @@ export default function ResetPasswordScreen() {
 
           {!done && (
             <TouchableOpacity style={styles.linkRow} onPress={() => router.replace('/forgot-password')}>
-              <Ionicons name="refresh-outline" size={16} color="#D4682A" />
+              <Ionicons name="refresh-outline" size={16} color="#204b7e" />
               <Text style={styles.linkText}>Request a new link</Text>
             </TouchableOpacity>
           )}
@@ -189,37 +231,40 @@ export default function ResetPasswordScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
+const createStyles = (c, dark) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.background },
   flex: { flex: 1 },
   scroll: { flexGrow: 1, padding: 24 },
   iconBox: {
     width: 80, height: 80, borderRadius: 24,
-    backgroundColor: '#FDF6EC', justifyContent: 'center',
+    backgroundColor: c.primaryLight, justifyContent: 'center',
     alignItems: 'center', alignSelf: 'center', marginBottom: 24, marginTop: 16,
   },
-  title: { fontSize: 28, fontWeight: '700', color: '#1E3A5F', textAlign: 'center', marginBottom: 12 },
-  subtitle: { fontSize: 15, color: '#6B7280', textAlign: 'center', lineHeight: 22, marginBottom: 32, paddingHorizontal: 12 },
+  title: { fontSize: 28, fontWeight: '700', color: c.text, textAlign: 'center', marginBottom: 12 },
+  subtitle: { fontSize: 15, color: c.textSecondary, textAlign: 'center', lineHeight: 22, marginBottom: 32, paddingHorizontal: 12 },
   field: { marginBottom: 20 },
-  label: { fontSize: 12, fontWeight: '600', color: '#1E3A5F', marginBottom: 8, letterSpacing: 0.5 },
+  label: { fontSize: 12, fontWeight: '600', color: c.text, marginBottom: 8, letterSpacing: 0.5 },
   inputRow: {
     flexDirection: 'row', alignItems: 'center',
-    borderWidth: 1.5, borderColor: '#E5E7EB',
-    borderRadius: 12, backgroundColor: '#F8FAFC', paddingHorizontal: 14,
+    borderWidth: 1.5, borderColor: c.border,
+    borderRadius: 12, backgroundColor: c.inputBg, paddingHorizontal: 14,
   },
-  inputRowError: { borderColor: '#EF4444', backgroundColor: '#FEF2F2' },
-  inputRowSuccess: { borderColor: '#22C55E', backgroundColor: '#F0FDF4' },
+  inputRowError: { borderColor: '#EF4444', backgroundColor: dark ? 'rgba(239,68,68,0.1)' : '#FEF2F2' },
+  inputRowSuccess: { borderColor: '#22C55E', backgroundColor: dark ? 'rgba(34,197,94,0.1)' : '#F0FDF4' },
   inputIcon: { marginRight: 10 },
-  input: { flex: 1, paddingVertical: 14, fontSize: 15, color: '#1F2937' },
+  input: { flex: 1, paddingVertical: 14, fontSize: 15, color: c.text },
   eyeBtn: { padding: 4 },
-  errorText: { color: '#DC2626', fontSize: 12, marginTop: 6 },
-  requestErrorText: { color: '#DC2626', fontSize: 13, marginBottom: 12, textAlign: 'center' },
+  errorText: { color: '#EF4444', fontSize: 12, marginTop: 6 },
+  requirementsBox: { marginTop: 10, gap: 4 },
+  requirementText: { color: c.textSecondary, fontSize: 12 },
+  requirementMet: { color: '#22C55E', fontWeight: '600' },
+  requestErrorText: { color: '#EF4444', fontSize: 13, marginBottom: 12, textAlign: 'center' },
   primaryBtn: {
-    backgroundColor: '#1E3A5F', paddingVertical: 16,
+    backgroundColor: c.accent, paddingVertical: 16,
     borderRadius: 12, alignItems: 'center', marginBottom: 16,
   },
-  primaryBtnDisabled: { backgroundColor: '#94A3B8' },
+  primaryBtnDisabled: { backgroundColor: c.textMuted },
   primaryBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
   linkRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, paddingVertical: 12 },
-  linkText: { color: '#D4682A', fontSize: 14, fontWeight: '600' },
+  linkText: { color: c.primary, fontSize: 14, fontWeight: '600' },
 });

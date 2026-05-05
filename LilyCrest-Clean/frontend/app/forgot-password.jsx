@@ -1,9 +1,9 @@
-import { Ionicons } from '@expo/vector-icons';
+﻿import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme } from '../src/context/ThemeContext';
+import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
 import { useToast } from '../src/context/ToastContext';
 import { api } from '../src/services/api';
 
@@ -18,6 +18,7 @@ const validateEmail = (value) => {
 export default function ForgotPasswordScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { showToast } = useToast();
   const [email, setEmail] = useState('');
   const [isLoading, setIsLoading] = useState(false);
@@ -68,7 +69,7 @@ export default function ForgotPasswordScreen() {
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color={colors.text} /></TouchableOpacity>
           
-          <View style={styles.iconContainer}><Ionicons name={sent ? 'mail-open' : 'lock-closed'} size={48} color="#D4682A" /></View>
+          <View style={styles.iconContainer}><Ionicons name={sent ? 'mail-open' : 'lock-closed'} size={48} color={colors.primary} /></View>
           <Text style={styles.title}>{sent ? 'Check Your Email' : 'Forgot Password?'}</Text>
           <Text style={styles.subtitle}>{sent ? `We've sent a password reset link to ${email}` : 'Enter your email address and we\'ll send you a link to reset your password.'}</Text>
 
@@ -113,7 +114,7 @@ export default function ForgotPasswordScreen() {
           )}
 
           <TouchableOpacity style={styles.backToLogin} onPress={() => router.push('/login')}>
-            <Ionicons name="arrow-back" size={18} color="#D4682A" /><Text style={styles.backToLoginText}>Back to Login</Text>
+            <Ionicons name="arrow-back" size={18} color={colors.primary} /><Text style={styles.backToLoginText}>Back to Login</Text>
           </TouchableOpacity>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -121,26 +122,28 @@ export default function ForgotPasswordScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
-  keyboardView: { flex: 1 },
-  scrollContent: { flexGrow: 1, padding: 24 },
-  backButton: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#F8FAFC', justifyContent: 'center', alignItems: 'center', marginBottom: 32 },
-  iconContainer: { width: 80, height: 80, borderRadius: 24, backgroundColor: '#FDF6EC', justifyContent: 'center', alignItems: 'center', alignSelf: 'center', marginBottom: 24 },
-  title: { fontSize: 28, fontWeight: '700', color: '#1E3A5F', textAlign: 'center', marginBottom: 12 },
-  subtitle: { fontSize: 15, color: '#6B7280', textAlign: 'center', lineHeight: 22, marginBottom: 32, paddingHorizontal: 16 },
-  inputContainer: { marginBottom: 24 },
-  label: { fontSize: 13, fontWeight: '600', color: '#1E3A5F', marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
-  inputWrapper: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: '#E5E7EB', borderRadius: 12, backgroundColor: '#F8FAFC', paddingHorizontal: 16 },
-  inputWrapperError: { borderColor: '#EF4444', backgroundColor: '#FEF2F2' },
-  inputWrapperSuccess: { borderColor: '#22C55E', backgroundColor: '#F0FDF4' },
-  inputIcon: { marginRight: 12 },
-  input: { flex: 1, paddingVertical: 14, fontSize: 15, color: '#1F2937' },
-  errorContainer: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
-  errorText: { color: '#DC2626', fontSize: 12 },
-  resetButton: { backgroundColor: '#1E3A5F', paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginBottom: 16 },
-  resetButtonDisabled: { backgroundColor: '#94A3B8' },
-  resetButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
-  backToLogin: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12 },
-  backToLoginText: { color: '#D4682A', fontSize: 15, fontWeight: '600' },
-});
+function createStyles(c, dark) {
+  return StyleSheet.create({
+    container: { flex: 1, backgroundColor: c.background },
+    keyboardView: { flex: 1 },
+    scrollContent: { flexGrow: 1, padding: 24 },
+    backButton: { width: 44, height: 44, borderRadius: 12, backgroundColor: c.surfaceSecondary, justifyContent: 'center', alignItems: 'center', marginBottom: 32 },
+    iconContainer: { width: 80, height: 80, borderRadius: 24, backgroundColor: c.primaryLight, justifyContent: 'center', alignItems: 'center', alignSelf: 'center', marginBottom: 24 },
+    title: { fontSize: 28, fontWeight: '700', color: c.text, textAlign: 'center', marginBottom: 12 },
+    subtitle: { fontSize: 15, color: c.textSecondary, textAlign: 'center', lineHeight: 22, marginBottom: 32, paddingHorizontal: 16 },
+    inputContainer: { marginBottom: 24 },
+    label: { fontSize: 13, fontWeight: '600', color: c.text, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
+    inputWrapper: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: c.border, borderRadius: 12, backgroundColor: c.inputBg, paddingHorizontal: 16 },
+    inputWrapperError: { borderColor: '#EF4444', backgroundColor: dark ? 'rgba(239,68,68,0.1)' : '#FEF2F2' },
+    inputWrapperSuccess: { borderColor: '#22C55E', backgroundColor: dark ? 'rgba(34,197,94,0.1)' : '#F0FDF4' },
+    inputIcon: { marginRight: 12 },
+    input: { flex: 1, paddingVertical: 14, fontSize: 15, color: c.text },
+    errorContainer: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
+    errorText: { color: '#EF4444', fontSize: 12 },
+    resetButton: { backgroundColor: c.accent, paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginBottom: 16 },
+    resetButtonDisabled: { backgroundColor: c.textMuted },
+    resetButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
+    backToLogin: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12 },
+    backToLoginText: { color: c.primary, fontSize: 15, fontWeight: '600' },
+  });
+}

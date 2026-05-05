@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+﻿import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
@@ -8,6 +8,12 @@ import { useTheme } from '../src/context/ThemeContext';
 import { useAlert } from '../src/context/AlertContext';
 import { apiService } from '../src/services/api';
 import { clearCredentials } from '../src/services/secureCredentials';
+import {
+  blockPasswordWhitespaceInput,
+  getStrongPasswordChecks,
+  PASSWORD_WHITESPACE_MESSAGE,
+  validateStrongPassword,
+} from '../src/utils/passwordValidation';
 
 export default function ChangePasswordScreen() {
   const router = useRouter();
@@ -24,39 +30,35 @@ export default function ChangePasswordScreen() {
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({ current: false, new: false, confirm: false });
 
-  const validatePassword = (password) => {
-    const checks = {
-      length: password.length >= 8,
-      uppercase: /[A-Z]/.test(password),
-      lowercase: /[a-z]/.test(password),
-      number: /[0-9]/.test(password),
-      special: /[!@#$%^&*()\-_=+\[\]{};:'",.<>?/\\|`~]/.test(password),
-    };
-    return checks;
-  };
-
-  const passwordChecks = useMemo(() => validatePassword(newPassword), [newPassword]);
-  const isPasswordValid = Object.values(passwordChecks).every(Boolean);
+  const passwordChecks = useMemo(() => getStrongPasswordChecks(newPassword), [newPassword]);
+  const isPasswordValid = validateStrongPassword(newPassword, { requiredMessage: 'New password is required' }).valid;
   const isSameAsCurrent = Boolean(currentPassword) && currentPassword === newPassword;
   const doPasswordsMatch = Boolean(confirmPassword) && newPassword === confirmPassword;
   const canSubmit = Boolean(currentPassword) && Boolean(confirmPassword) && isPasswordValid && doPasswordsMatch && !isSameAsCurrent;
+
+  const validateCurrentPassword = (password) => {
+    if (!password) return 'Current password is required';
+    if (/\s/.test(password)) return PASSWORD_WHITESPACE_MESSAGE;
+    return '';
+  };
 
   useEffect(() => {
     const nextErrors = {};
 
     if (touched.current) {
-      nextErrors.current = currentPassword ? '' : 'Current password is required';
+      nextErrors.current = validateCurrentPassword(currentPassword);
     }
 
     if (touched.new) {
       if (!newPassword) nextErrors.new = 'New password is required';
-      else if (!isPasswordValid) nextErrors.new = 'Password does not meet requirements';
+      else if (!isPasswordValid) nextErrors.new = validateStrongPassword(newPassword, { requiredMessage: 'New password is required' }).error;
       else if (isSameAsCurrent) nextErrors.new = 'New password must be different from your current password';
       else nextErrors.new = '';
     }
 
     if (touched.confirm) {
       if (!confirmPassword) nextErrors.confirm = 'Please confirm your new password';
+      else if (/\s/.test(confirmPassword)) nextErrors.confirm = PASSWORD_WHITESPACE_MESSAGE;
       else if (!doPasswordsMatch) nextErrors.confirm = 'Passwords do not match';
       else nextErrors.confirm = '';
     }
@@ -66,16 +68,18 @@ export default function ChangePasswordScreen() {
 
   const handleChangePassword = async () => {
     const nextErrors = {
-      current: currentPassword ? '' : 'Current password is required',
+      current: validateCurrentPassword(currentPassword),
       new: !newPassword
         ? 'New password is required'
         : !isPasswordValid
-          ? 'Password does not meet requirements'
+          ? validateStrongPassword(newPassword, { requiredMessage: 'New password is required' }).error
           : isSameAsCurrent
             ? 'New password must be different from your current password'
             : '',
       confirm: !confirmPassword
         ? 'Please confirm your new password'
+        : /\s/.test(confirmPassword)
+          ? PASSWORD_WHITESPACE_MESSAGE
         : !doPasswordsMatch
           ? 'Passwords do not match'
           : '',
@@ -95,8 +99,13 @@ export default function ChangePasswordScreen() {
         notifyEmail: true,
       });
 
-      // Clear biometric credentials since password changed
-      await clearCredentials();
+      // Clear biometric credentials since password changed.
+      // Isolated: a Keychain/SecureStore failure must not surface as a "change password failed" error.
+      try {
+        await clearCredentials();
+      } catch (credError) {
+        console.warn('[ChangePassword] clearCredentials failed:', credError);
+      }
 
       // Show premium styled alert then force re-login
       showAlert({
@@ -106,7 +115,11 @@ export default function ChangePasswordScreen() {
         buttons: [{
           text: 'Sign In Again',
           onPress: async () => {
-            await logout();
+            try {
+              await logout();
+            } catch (logoutError) {
+              console.warn('[ChangePassword] logout failed (session may already be expired):', logoutError);
+            }
             router.replace('/login');
           },
         }],
@@ -134,6 +147,21 @@ export default function ChangePasswordScreen() {
     }
   };
 
+  const handlePasswordFieldChange = (field, value) => {
+    const currentValue = field === 'current' ? currentPassword : field === 'new' ? newPassword : confirmPassword;
+    const { value: nextValue, blocked } = blockPasswordWhitespaceInput(value, currentValue);
+
+    if (blocked) {
+      setTouched((prev) => ({ ...prev, [field]: true }));
+      setErrors((prev) => ({ ...prev, [field]: PASSWORD_WHITESPACE_MESSAGE }));
+      return;
+    }
+
+    if (field === 'current') setCurrentPassword(nextValue);
+    if (field === 'new') setNewPassword(nextValue);
+    if (field === 'confirm') setConfirmPassword(nextValue);
+  };
+
   const styles = createStyles(colors, isDarkMode);
 
   return (
@@ -149,7 +177,7 @@ export default function ChangePasswordScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardView}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.iconContainer}>
-            <Ionicons name="lock-closed" size={40} color="#D4682A" />
+            <Ionicons name="lock-closed" size={40} color="#204b7e" />
           </View>
           
           <Text style={styles.title}>Update Your Password</Text>
@@ -165,7 +193,7 @@ export default function ChangePasswordScreen() {
                 placeholder="Enter current password"
                 placeholderTextColor={colors.textMuted}
                 value={currentPassword}
-                onChangeText={setCurrentPassword}
+                onChangeText={(value) => handlePasswordFieldChange('current', value)}
                 onBlur={() => setTouched((prev) => ({ ...prev, current: true }))}
                 secureTextEntry={!showCurrentPassword}
               />
@@ -186,7 +214,7 @@ export default function ChangePasswordScreen() {
                 placeholder="Enter new password"
                 placeholderTextColor={colors.textMuted}
                 value={newPassword}
-                onChangeText={setNewPassword}
+                onChangeText={(value) => handlePasswordFieldChange('new', value)}
                 onBlur={() => setTouched((prev) => ({ ...prev, new: true }))}
                 secureTextEntry={!showNewPassword}
               />
@@ -198,6 +226,10 @@ export default function ChangePasswordScreen() {
             
             {/* Password Requirements */}
             <View style={styles.requirementsContainer}>
+              <View style={styles.requirementRow}>
+                <Ionicons name={passwordChecks.noWhitespace ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={passwordChecks.noWhitespace ? '#22C55E' : colors.textMuted} />
+                <Text style={[styles.requirementText, passwordChecks.noWhitespace && styles.requirementMet]}>No spaces</Text>
+              </View>
               <View style={styles.requirementRow}>
                 <Ionicons name={passwordChecks.length ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={passwordChecks.length ? '#22C55E' : colors.textMuted} />
                 <Text style={[styles.requirementText, passwordChecks.length && styles.requirementMet]}>At least 8 characters</Text>
@@ -231,7 +263,7 @@ export default function ChangePasswordScreen() {
                 placeholder="Confirm new password"
                 placeholderTextColor={colors.textMuted}
                 value={confirmPassword}
-                onChangeText={setConfirmPassword}
+                onChangeText={(value) => handlePasswordFieldChange('confirm', value)}
                 onBlur={() => setTouched((prev) => ({ ...prev, confirm: true }))}
                 secureTextEntry={!showConfirmPassword}
               />

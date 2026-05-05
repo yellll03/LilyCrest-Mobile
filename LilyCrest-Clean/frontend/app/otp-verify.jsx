@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+﻿import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../src/context/AlertContext';
 import { useAuth } from '../src/context/AuthContext';
+import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
 import { useToast } from '../src/context/ToastContext';
 import { apiService } from '../src/services/api';
 import { saveCredentials } from '../src/services/secureCredentials';
@@ -34,6 +35,8 @@ export default function OtpVerifyScreen() {
   const params = useLocalSearchParams();
   const { verifyLoginOtp } = useAuth();
   const { showAlert } = useAlert();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createStyles);
   const { showToast } = useToast();
 
   const otpToken = readParam(params.otp_token, '');
@@ -226,13 +229,13 @@ export default function OtpVerifyScreen() {
 
           {/* Back */}
           <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
-            <Ionicons name="arrow-back" size={24} color="#0f172a" />
+            <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
 
           {/* Icon */}
           <View style={styles.iconWrap}>
             <View style={styles.iconCircle}>
-              <Ionicons name="mail" size={36} color="#1E3A5F" />
+              <Ionicons name="mail" size={36} color={colors.accent} />
             </View>
           </View>
 
@@ -293,7 +296,7 @@ export default function OtpVerifyScreen() {
             ) : (
               <TouchableOpacity onPress={handleResend} disabled={isResending}>
                 {isResending
-                  ? <ActivityIndicator size={14} color="#1E3A5F" />
+                  ? <ActivityIndicator size={14} color={colors.accent} />
                   : <Text style={styles.resendLink}>Resend Code</Text>
                 }
               </TouchableOpacity>
@@ -314,73 +317,73 @@ export default function OtpVerifyScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
+const createStyles = (c, dark) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: c.surface },
   flex: { flex: 1 },
   scroll: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 16, paddingBottom: 40 },
 
   backBtn: {
     width: 44, height: 44, borderRadius: 12,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: c.surfaceSecondary,
     justifyContent: 'center', alignItems: 'center',
-    borderWidth: 1, borderColor: '#CBD5E1',
+    borderWidth: 1, borderColor: c.border,
     ...Platform.select({
-      ios: { shadowColor: '#0f172a', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.18, shadowRadius: 4 },
-      android: { elevation: 3 },
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
+      android: { elevation: 2 },
     }),
   },
 
   iconWrap: { alignItems: 'center', marginTop: 40, marginBottom: 24 },
   iconCircle: {
     width: 88, height: 88, borderRadius: 24,
-    backgroundColor: '#EFF6FF',
+    backgroundColor: c.primaryLight,
     justifyContent: 'center', alignItems: 'center',
-    borderWidth: 2, borderColor: '#DBEAFE',
+    borderWidth: 2, borderColor: dark ? 'rgba(255,101,0,0.3)' : '#FDDCB5',
   },
 
-  title: { fontSize: 26, fontWeight: '700', color: '#1E3A5F', textAlign: 'center', marginBottom: 10 },
-  subtitle: { fontSize: 14, color: '#6B7280', textAlign: 'center', lineHeight: 22, marginBottom: 36 },
-  emailHighlight: { color: '#1E3A5F', fontWeight: '700' },
+  title: { fontSize: 26, fontWeight: '700', color: c.text, textAlign: 'center', marginBottom: 10 },
+  subtitle: { fontSize: 14, color: c.textSecondary, textAlign: 'center', lineHeight: 22, marginBottom: 36 },
+  emailHighlight: { color: c.accent, fontWeight: '700' },
 
   otpRow: { flexDirection: 'row', justifyContent: 'center', gap: 10, marginBottom: 20 },
   otpBox: {
     width: 48, height: 58,
-    borderWidth: 2, borderColor: '#E5E7EB',
+    borderWidth: 2, borderColor: c.border,
     borderRadius: 12,
     textAlign: 'center',
-    fontSize: 22, fontWeight: '700', color: '#1E3A5F',
-    backgroundColor: '#F8FAFC',
+    fontSize: 22, fontWeight: '700', color: c.text,
+    backgroundColor: c.inputBg,
   },
-  otpBoxFilled: { borderColor: '#1E3A5F', backgroundColor: '#EFF6FF' },
-  otpBoxError: { borderColor: '#EF4444', backgroundColor: '#FEF2F2' },
+  otpBoxFilled: { borderColor: c.accent, backgroundColor: dark ? 'rgba(255,101,0,0.08)' : '#FFF0E6' },
+  otpBoxError: { borderColor: '#EF4444', backgroundColor: dark ? 'rgba(239,68,68,0.1)' : '#FEF2F2' },
 
   errorRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 16 },
   errorText: { fontSize: 13, color: '#EF4444', fontWeight: '500' },
 
   verifyBtn: {
-    backgroundColor: '#1E3A5F',
+    backgroundColor: c.accent,
     paddingVertical: 16, borderRadius: 12,
     alignItems: 'center', marginBottom: 20,
     ...Platform.select({
-      ios: { shadowColor: '#1E3A5F', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
+      ios: { shadowColor: c.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
       android: { elevation: 4 },
     }),
   },
   verifyBtnDisabled: {
-    backgroundColor: '#94A3B8',
+    backgroundColor: c.textMuted,
     ...Platform.select({ ios: { shadowOpacity: 0 }, android: { elevation: 0 } }),
   },
   verifyBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
 
   resendRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 28 },
-  resendLabel: { fontSize: 13, color: '#6B7280' },
-  resendLink: { fontSize: 13, fontWeight: '700', color: '#1E3A5F' },
-  resendCooldown: { fontSize: 13, color: '#9CA3AF' },
+  resendLabel: { fontSize: 13, color: c.textSecondary },
+  resendLink: { fontSize: 13, fontWeight: '700', color: c.primary },
+  resendCooldown: { fontSize: 13, color: c.textMuted },
 
   infoBox: {
     flexDirection: 'row', alignItems: 'flex-start', gap: 8,
-    backgroundColor: '#F8FAFC', borderRadius: 10, padding: 14,
-    borderWidth: 1, borderColor: '#E5E7EB',
+    backgroundColor: c.inputBg, borderRadius: 10, padding: 14,
+    borderWidth: 1, borderColor: c.border,
   },
-  infoText: { flex: 1, fontSize: 12, color: '#6B7280', lineHeight: 18 },
+  infoText: { flex: 1, fontSize: 12, color: c.textSecondary, lineHeight: 18 },
 });
