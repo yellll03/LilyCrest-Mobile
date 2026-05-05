@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { Link, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import LilyFlowerIcon from '../src/components/assistant/LilyFlowerIcon';
@@ -10,20 +10,20 @@ import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
 import { apiService } from '../src/services/api';
 import { downloadBillPdf } from '../src/utils/downloadBillPdf';
 
-// ── Helpers ──
+// Helpers
 function safeCurrency(amount) {
   const n = Number(amount);
-  if (!Number.isFinite(n) || n === 0) return '₱0.00';
-  return `₱${n.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+  if (!Number.isFinite(n) || n === 0) return '\u20b10.00';
+  return `\u20b1${n.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 }
 
 function safeDate(value) {
-  if (!value) return '—';
+  if (!value) return '\u2014';
   try {
     const d = new Date(value);
-    if (isNaN(d.getTime())) return '—';
+    if (isNaN(d.getTime())) return '\u2014';
     return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
-  } catch (_e) { return '—'; }
+  } catch (_e) { return '\u2014'; }
 }
 
 function relativeDate(value) {
@@ -64,22 +64,6 @@ const STATUS_FILTERS = [
 
 // Type filters removed — consolidated bills contain all charge types
 
-const getBillTypes = (bill) => {
-  const types = new Set();
-  if (bill?.rent) types.add('rent');
-  if (bill?.water) types.add('water');
-  if (bill?.electricity) types.add('electricity');
-  if (bill?.penalties) types.add('penalty');
-  if (bill?.items?.length) {
-    bill.items.forEach(item => {
-      const t = (item.type || 'other').toLowerCase();
-      types.add(t === 'penalties' ? 'penalty' : t);
-    });
-  }
-  if (bill?.billing_type) types.add(bill.billing_type.toLowerCase());
-  return Array.from(types);
-};
-
 const normalizeBreakdown = (bill) => {
   const parts = [];
   if (bill?.rent) parts.push({ label: 'Rent', amount: bill.rent, type: 'rent' });
@@ -97,12 +81,25 @@ const normalizeBreakdown = (bill) => {
 };
 
 const getBillId = (bill) => bill?.billing_id || bill?.id || bill?.billingId || bill?.billId || bill?.reference_id || bill?._id;
+const getBillStatus = (bill) => String(bill?.status || '').toLowerCase();
+const isBillOutstanding = (bill) => {
+  const status = getBillStatus(bill);
+  return status !== 'paid' && status !== 'settled';
+};
+const getBillOwedAmount = (bill) => {
+  const candidates = [bill?.remaining_amount, bill?.total, bill?.amount];
+  for (const value of candidates) {
+    const amount = Number(value);
+    if (Number.isFinite(amount)) return amount;
+  }
+  return 0;
+};
 
 
 export default function BillingScreen() {
   const router = useRouter();
-  const { isLoading: authLoading, checkAuth, user } = useAuth();
-  const { colors, isDarkMode } = useTheme();
+  const { isLoading: authLoading, checkAuth } = useAuth();
+  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
   const [history, setHistory] = useState([]);
@@ -112,46 +109,62 @@ export default function BillingScreen() {
   const [activeStatus, setActiveStatus] = useState('all');
   // Type filter removed — consolidated bills contain all charge types
   const [downloadingId, setDownloadingId] = useState(null);
+  const latestBillingRequestRef = useRef(0);
+  const [latestBillingDegraded, setLatestBillingDegraded] = useState(false);
 
-  useEffect(() => { if (!authLoading) loadData(); }, [authLoading]);
-  useFocusEffect(useCallback(() => { if (!authLoading) loadData(); return undefined; }, [authLoading]));
-
-  const loadData = async ({ silent = false } = {}) => {
+  const loadData = useCallback(async ({ silent = false } = {}) => {
+    const requestId = latestBillingRequestRef.current + 1;
+    latestBillingRequestRef.current = requestId;
     if (!silent) setLoading(true);
     setError(null);
+    setLatestBillingDegraded(false);
     try {
-      const [, historyResp] = await Promise.all([
-        apiService.getLatestBilling?.().catch(() => null),
+      const [latestBillingResult, historyResp] = await Promise.allSettled([
+        apiService.getLatestBilling?.(),
         apiService.getMyBilling?.(),
       ]);
-      const historyList = historyResp?.data || [];
+      if (latestBillingResult.status === 'rejected') {
+        const status = latestBillingResult.reason?.response?.status;
+        if (status === 401) { try { await checkAuth?.(); } catch (_) {} }
+        setLatestBillingDegraded(true);
+      }
+      if (historyResp.status !== 'fulfilled') {
+        throw historyResp.reason;
+      }
+      const historyList = historyResp.value?.data || [];
+      if (latestBillingRequestRef.current !== requestId) return;
       setHistory(historyList);
     } catch (err) {
       const status = err?.response?.status;
       if (status === 401) { try { await checkAuth?.(); } catch (_) {} }
+      if (latestBillingRequestRef.current !== requestId) return;
       setError('Unable to load billing data. Pull to retry.');
     } finally {
+      if (latestBillingRequestRef.current !== requestId) return;
       setLoading(false);
       setRefreshing(false);
     }
-  };
+  }, [checkAuth]);
 
-  const handleRefresh = () => {
+  useEffect(() => { if (!authLoading) loadData(); }, [authLoading, loadData]);
+  useFocusEffect(useCallback(() => { if (!authLoading) loadData(); return undefined; }, [authLoading, loadData]));
+
+  const handleRefresh = useCallback(() => {
     setRefreshing(true);
     loadData({ silent: true });
-  };
+  }, [loadData]);
 
 
 
   // ── Computed values ──
   const totalOutstanding = useMemo(() => {
     return history
-      .filter(b => { const s = (b.status || '').toLowerCase(); return s === 'pending' || s === 'overdue' || !s; })
-      .reduce((sum, b) => sum + (b.remaining_amount ?? b.total ?? b.amount ?? 0), 0);
+      .filter(isBillOutstanding)
+      .reduce((sum, b) => sum + getBillOwedAmount(b), 0);
   }, [history]);
 
   const unpaidCount = useMemo(() => {
-    return history.filter(b => { const s = (b.status || '').toLowerCase(); return s !== 'paid'; }).length;
+    return history.filter(isBillOutstanding).length;
   }, [history]);
 
   const statusCounts = useMemo(() => {
@@ -190,7 +203,7 @@ export default function BillingScreen() {
         <Pressable
           style={styles.heroPayBtn}
           onPress={() => {
-            const firstUnpaid = history.find(b => !isPaid(b));
+            const firstUnpaid = history.find(isBillOutstanding);
             const id = getBillId(firstUnpaid);
             router.push({ pathname: '/payment', params: { billId: id ? String(id) : undefined, mode: 'now' } });
           }}
@@ -318,6 +331,13 @@ export default function BillingScreen() {
         <View style={styles.errorBanner}>
           <Ionicons name="warning" size={14} color="#b91c1c" />
           <Text style={styles.errorText}>{error}</Text>
+          <Pressable onPress={loadData}><Text style={styles.retryText}>Retry</Text></Pressable>
+        </View>
+      )}
+      {latestBillingDegraded && !error && (
+        <View style={styles.errorBanner}>
+          <Ionicons name="information-circle" size={14} color="#92400e" />
+          <Text style={styles.errorText}>Latest billing summary is temporarily unavailable. Billing history is shown below.</Text>
           <Pressable onPress={loadData}><Text style={styles.retryText}>Retry</Text></Pressable>
         </View>
       )}

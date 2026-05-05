@@ -4,7 +4,6 @@ import * as WebBrowser from 'expo-web-browser';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAlert } from '../src/context/AlertContext';
-import { useAuth } from '../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
 import { apiService } from '../src/services/api';
 import { downloadBillPdf } from '../src/utils/downloadBillPdf';
@@ -16,21 +15,21 @@ const getBillId = (bill) => bill?.billing_id || bill?.id || bill?._id || bill?.b
 // ── Helpers ──
 function safeCurrency(amount) {
   const n = Number(amount);
-  if (!Number.isFinite(n) || n === 0) return '₱0.00';
-  return `₱${n.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+  if (!Number.isFinite(n) || n === 0) return '\u20b10.00';
+  return `\u20b1${n.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
 }
 
 function safeDate(value) {
-  if (!value) return '—';
+  if (!value) return '\u2014';
   const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '—';
+  if (Number.isNaN(d.getTime())) return '\u2014';
   return d.toLocaleDateString(undefined, { month: 'long', day: 'numeric', year: 'numeric' });
 }
 
 function shortDate(value) {
-  if (!value) return '—';
+  if (!value) return '\u2014';
   const d = new Date(value);
-  if (Number.isNaN(d.getTime())) return '—';
+  if (Number.isNaN(d.getTime())) return '\u2014';
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
@@ -41,11 +40,32 @@ const STATUS_CONFIG = {
   verification: { bg: '#eff6ff', text: '#1d4ed8', icon: 'hourglass', label: 'Verifying' },
 };
 
+function isBillOutstanding(bill) {
+  const status = String(bill?.status || '').toLowerCase();
+  return status !== 'paid' && status !== 'settled';
+}
+
+function hasUsableElectricityBreakdown(bill) {
+  if (!Array.isArray(bill?.electricity_breakdown) || bill.electricity_breakdown.length === 0) return false;
+
+  return bill.electricity_breakdown.every((seg) => {
+    const hasOccupants = Number.isFinite(Number(seg?.occupants))
+      || (Array.isArray(seg?.active_tenants) && seg.active_tenants.length > 0);
+    const hasDates = Boolean(seg?.reading_date_from || seg?.period_start)
+      && Boolean(seg?.reading_date_to || seg?.period_end);
+    const hasReadings = Number.isFinite(Number(seg?.reading_from))
+      && Number.isFinite(Number(seg?.reading_to));
+    const hasRate = Number.isFinite(Number(seg?.rate));
+    const hasShare = Number.isFinite(Number(seg?.share_per_tenant));
+
+    return hasOccupants && hasDates && hasReadings && hasRate && hasShare;
+  });
+}
+
 export default function BillDetailsScreen() {
   const router = useRouter();
   const { billId: billIdParam } = useLocalSearchParams();
   const billId = Array.isArray(billIdParam) ? billIdParam[0] : billIdParam;
-  const { user } = useAuth();
   const { colors, isDarkMode } = useTheme();
   const { showAlert } = useAlert();
   const styles = useThemedStyles((c) => createStyles(c, isDarkMode));
@@ -69,7 +89,7 @@ export default function BillDetailsScreen() {
         });
         if (match) { setBill(match); return; }
         setError('Bill not found');
-      } catch (err) {
+      } catch (_err) {
         setError('Unable to load bill details');
       } finally {
         setLoading(false);
@@ -132,42 +152,11 @@ export default function BillDetailsScreen() {
   const billIdentifier = getBillId(bill);
   const statusKey = (bill.status || 'pending').toLowerCase();
   const statusCfg = STATUS_CONFIG[statusKey] || STATUS_CONFIG.pending;
-  const isPaid = statusKey === 'paid';
+  const isOutstanding = isBillOutstanding(bill);
   const totalAmount = bill.total || bill.amount || 0;
-
-  // Auto-generate electricity breakdown for presentation if bill is electricity type but lacks breakdown data
-  if (
-    (!bill.electricity_breakdown || bill.electricity_breakdown.length === 0) &&
-    ((bill.billing_type || '').toLowerCase() === 'electricity' || (bill.electricity && !bill.rent && !bill.water))
-  ) {
-    const elecAmount = bill.electricity || totalAmount;
-    const rate = 16;
-    const occupants = 4;
-    const totalShare = elecAmount;
-    const segTotal = totalShare * occupants;
-    const consumption = segTotal / rate;
-    const baseReading = 1016.61;
-    // Default to 15th-to-15th reading period
-    const dueDate = bill.due_date ? new Date(bill.due_date) : new Date();
-    const readingEnd = new Date(dueDate);
-    readingEnd.setDate(15);
-    const readingStart = new Date(readingEnd);
-    readingStart.setMonth(readingStart.getMonth() - 1);
-    bill.electricity_breakdown = [
-      {
-        occupants,
-        reading_date_from: shortDate(bill.period_start || readingStart),
-        reading_date_to: shortDate(bill.period_end || readingEnd),
-        reading_from: baseReading,
-        reading_to: +(baseReading + consumption).toFixed(2),
-        consumption: +consumption.toFixed(2),
-        rate,
-        segment_total: +segTotal.toFixed(2),
-        share_per_tenant: +totalShare.toFixed(2),
-      },
-    ];
-    if (!bill.electricity) bill.electricity = elecAmount;
-  }
+  const expectsElectricityBreakdown =
+    ((bill.billing_type || '').toLowerCase() === 'electricity' || (bill.electricity && !bill.rent && !bill.water));
+  const usableElectricityBreakdown = hasUsableElectricityBreakdown(bill);
 
   // Auto-generate water breakdown for presentation if bill is water type but lacks breakdown data
   if (
@@ -198,11 +187,13 @@ export default function BillDetailsScreen() {
   // Include extra line items if present
   if (Array.isArray(bill.items)) {
     bill.items.forEach((item) => {
+      const label = item.label || item.description || 'Charge';
+      if (charges.find((charge) => charge.label === label)) return;
       const typeIcons = { rent: 'home', electricity: 'flash', water: 'water', penalty: 'warning' };
       const typeColors = { rent: '#1d4ed8', electricity: '#b45309', water: '#0284c7', penalty: '#b91c1c' };
       const t = (item.type || 'other').toLowerCase();
       charges.push({
-        label: item.label || item.description || 'Charge',
+        label,
         amount: item.amount || 0,
         icon: typeIcons[t] || 'receipt',
         color: typeColors[t] || '#6B7280',
@@ -246,11 +237,11 @@ export default function BillDetailsScreen() {
           <View style={styles.headerGrid}>
             <View style={styles.headerGridItem}>
               <Text style={styles.headerGridLabel}>Bill ID</Text>
-              <Text style={styles.headerGridValue} numberOfLines={1}>{billIdentifier || '—'}</Text>
+              <Text style={styles.headerGridValue} numberOfLines={1}>{billIdentifier || '\u2014'}</Text>
             </View>
             <View style={styles.headerGridItem}>
               <Text style={styles.headerGridLabel}>Period</Text>
-              <Text style={styles.headerGridValue}>{bill.billing_period || '—'}</Text>
+              <Text style={styles.headerGridValue}>{bill.billing_period || '\u2014'}</Text>
             </View>
             <View style={styles.headerGridItem}>
               <Text style={styles.headerGridLabel}>Released</Text>
@@ -297,7 +288,7 @@ export default function BillDetailsScreen() {
         </View>
 
         {/* ── Electricity Computation Breakdown ── */}
-        {bill.electricity_breakdown && bill.electricity_breakdown.length > 0 && (
+        {usableElectricityBreakdown && (
           <View style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
               <Ionicons name="flash" size={16} color="#b45309" />
@@ -389,7 +380,7 @@ export default function BillDetailsScreen() {
                   <View key={idx} style={styles.elecSummaryRow}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.elecSummaryLabel}>
-                        {dateFrom} – {dateTo} ({occ} occupants)
+                        {dateFrom} \u2013 {dateTo} ({occ} occupants)
                       </Text>
                     </View>
                     <Text style={styles.elecSummaryAmount}>
@@ -424,6 +415,15 @@ export default function BillDetailsScreen() {
                 </Text>
               </View>
             </View>
+          </View>
+        )}
+        {!usableElectricityBreakdown && expectsElectricityBreakdown && (
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="flash" size={16} color="#b45309" />
+              <Text style={styles.sectionTitle}>Electricity Breakdown</Text>
+            </View>
+            <Text style={styles.sharingPolicy}>Electricity breakdown unavailable</Text>
           </View>
         )}
 
@@ -470,7 +470,7 @@ export default function BillDetailsScreen() {
             <Text style={styles.sectionTitle}>Payment</Text>
           </View>
 
-          {isPaid ? (
+        {!isOutstanding ? (
             <View style={styles.paidInfo}>
               <View style={styles.paidBadge}>
                 <Ionicons name="checkmark-circle" size={20} color="#22C55E" />

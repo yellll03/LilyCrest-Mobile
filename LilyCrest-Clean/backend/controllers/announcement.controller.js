@@ -2,11 +2,38 @@ const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../config/database');
 const { notifyNewAnnouncement } = require('../services/pushService');
 
+function getAnnouncementDateValue(doc = {}) {
+  return doc.publishedAt || doc.sentAt || doc.created_at || doc.createdAt || doc.updated_at || doc.updatedAt || null;
+}
+
+function getAnnouncementTimestamp(doc = {}) {
+  const value = getAnnouncementDateValue(doc);
+  if (!value) return null;
+
+  const parsed = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
+}
+
+function sortAnnouncementsByDate(announcements = [], direction = 'desc') {
+  const multiplier = direction === 'asc' ? 1 : -1;
+
+  return [...announcements].sort((left, right) => {
+    const leftTimestamp = getAnnouncementTimestamp(left);
+    const rightTimestamp = getAnnouncementTimestamp(right);
+
+    if (leftTimestamp === null && rightTimestamp === null) return 0;
+    if (leftTimestamp === null) return 1;
+    if (rightTimestamp === null) return -1;
+
+    return (leftTimestamp - rightTimestamp) * multiplier;
+  });
+}
+
 // Normalize a raw announcement document to the shape the mobile app expects.
 // Admin-panel documents may use camelCase or different field names.
 function normalizeAnnouncement(doc) {
   const id = doc.announcement_id || doc._id?.toString();
-  const createdAt = doc.created_at || doc.createdAt || doc.publishedAt || null;
+  const createdAt = getAnnouncementDateValue(doc);
 
   // Priority: map admin values to app values
   const rawPriority = doc.priority || doc.importance || doc.type || 'normal';
@@ -29,6 +56,19 @@ function normalizeAnnouncement(doc) {
     is_pinned: doc.isPinned || doc.is_pinned || false,
     created_at: createdAt,
   };
+}
+
+function getAnnouncementDedupKey(doc = {}, normalized = {}) {
+  const mongoId = doc._id?.toString?.() || '';
+  const explicitAnnouncementId = [doc.announcement_id, normalized.announcement_id]
+    .map((value) => (typeof value === 'string' ? value.trim() : ''))
+    .find((value) => value && value !== mongoId);
+
+  if (explicitAnnouncementId) return `announcement_id:${explicitAnnouncementId}`;
+
+  const timestamp = getAnnouncementTimestamp(doc) ?? getAnnouncementTimestamp(normalized) ?? 'no-date';
+  const content = normalized.content || doc.content || doc.message || doc.body || doc.description || '';
+  return `fallback:${String(content).trim()}::${timestamp}`;
 }
 
 // Get all announcements
@@ -60,7 +100,19 @@ async function getAllAnnouncements(req, res) {
       .sort({ created_at: -1, createdAt: -1 })
       .toArray();
 
-    res.json(announcements.map(normalizeAnnouncement));
+    const normalizedAnnouncements = announcements.map(normalizeAnnouncement);
+    const dedupedAnnouncements = [];
+    const seen = new Set();
+
+    announcements.forEach((doc, index) => {
+      const normalized = normalizedAnnouncements[index];
+      const dedupKey = getAnnouncementDedupKey(doc, normalized);
+      if (seen.has(dedupKey)) return;
+      seen.add(dedupKey);
+      dedupedAnnouncements.push(normalized);
+    });
+
+    res.json(sortAnnouncementsByDate(dedupedAnnouncements));
   } catch (error) {
     console.error('getAllAnnouncements error:', error);
     res.status(500).json({ detail: 'Failed to fetch announcements' });
@@ -94,11 +146,15 @@ async function createAnnouncement(req, res) {
     await db.collection('announcements').insertOne(announcement);
 
     // Push notification to all tenants (non-blocking, skip for private targeted announcements)
+    let notification_sent = false;
     if (!announcement.is_private) {
       notifyNewAnnouncement(db, announcement).catch(() => {});
+      notification_sent = true;
+    } else {
+      console.log(`[createAnnouncement] Skipping push notification for private announcement "${announcement.title}" (user_id: ${announcement.user_id})`);
     }
 
-    res.status(201).json(normalizeAnnouncement(announcement));
+    res.status(201).json({ ...normalizeAnnouncement(announcement), notification_sent });
   } catch (error) {
     console.error('createAnnouncement error:', error);
     res.status(500).json({ detail: 'Failed to create announcement' });

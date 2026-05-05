@@ -72,6 +72,41 @@ const PRESENTATION_BILLS = {
   },
 };
 
+function normalizeBillingPeriod(value, fallback = 'N/A') {
+  if (value == null) return fallback;
+
+  const raw = String(value).trim();
+  if (!raw) return fallback;
+
+  const parsed = new Date(raw);
+  if (!Number.isNaN(parsed.getTime())) {
+    return parsed.toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
+  }
+
+  if (/^[A-Za-z]+\s+\d{4}$/.test(raw)) {
+    return raw;
+  }
+
+  return fallback;
+}
+
+function hasUsableElectricityBreakdown(bill) {
+  if (!Array.isArray(bill?.electricity_breakdown) || bill.electricity_breakdown.length === 0) return false;
+
+  return bill.electricity_breakdown.every((seg) => {
+    const hasOccupants = Number.isFinite(Number(seg?.occupants))
+      || (Array.isArray(seg?.active_tenants) && seg.active_tenants.length > 0);
+    const hasDates = Boolean(seg?.reading_date_from || seg?.period_start)
+      && Boolean(seg?.reading_date_to || seg?.period_end);
+    const hasReadings = Number.isFinite(Number(seg?.reading_from))
+      && Number.isFinite(Number(seg?.reading_to));
+    const hasRate = Number.isFinite(Number(seg?.rate));
+    const hasShare = Number.isFinite(Number(seg?.share_per_tenant));
+
+    return hasOccupants && hasDates && hasReadings && hasRate && hasShare;
+  });
+}
+
 // Map a document from the real 'bills' collection to the legacy billing shape
 function mapRealBill(b, userId) {
   const c = b.charges || {};
@@ -79,12 +114,7 @@ function mapRealBill(b, userId) {
   const payableAmount = b.remainingAmount ?? b.totalAmount ?? 0;
 
   // Format billing period from billingMonth ISO string → "April 2026"
-  let billingPeriod = b.billingMonth || b.description || '';
-  try {
-    if (billingPeriod && billingPeriod.includes('T')) {
-      billingPeriod = new Date(billingPeriod).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-    }
-  } catch (_) { /* keep raw value */ }
+  const billingPeriod = normalizeBillingPeriod(b.billingMonth ?? b.description, '');
 
   return {
     billing_id: b._id?.toString(),
@@ -238,7 +268,14 @@ async function createBilling(req, res) {
     await db.collection('billing').insertOne(newBill);
 
     // Push notification (non-blocking)
-    notifyBillCreated(req.user.user_id, newBill).catch(() => {});
+    const billOwnerUserId = typeof newBill.user_id === 'string' ? newBill.user_id.trim() : '';
+    if (billOwnerUserId) {
+      notifyBillCreated(billOwnerUserId, newBill).catch((pushError) => {
+        console.warn('[Billing] Bill-created push failed:', pushError?.message || pushError);
+      });
+    } else {
+      console.warn('[Billing] Skipped bill-created push because bill owner user_id was not resolved');
+    }
 
     res.status(201).json({ ...newBill, _id: undefined });
   } catch (error) {
@@ -408,36 +445,6 @@ async function downloadBillPdf(req, res) {
       tableRows.push({ label: 'Total Charges', value: formatMoney(bill.total || bill.amount || 0) });
     }
 
-    // Auto-generate electricity breakdown for presentation if missing
-    if (
-      (!bill.electricity_breakdown || !bill.electricity_breakdown.length) &&
-      ((bill.billing_type || '').toLowerCase() === 'electricity' || (bill.electricity && !bill.rent && !bill.water))
-    ) {
-      const elecAmount = bill.electricity || bill.total || bill.amount || 0;
-      const rate = 16;
-      const occupants = 4;
-      const segTotal = elecAmount * occupants;
-      const consumption = segTotal / rate;
-      const baseReading = 1016.61;
-      // Default to 15th-to-15th reading period
-      const dueDate = bill.due_date ? new Date(bill.due_date) : new Date();
-      const readingEnd = new Date(dueDate);
-      readingEnd.setDate(15);
-      const readingStart = new Date(readingEnd);
-      readingStart.setMonth(readingStart.getMonth() - 1);
-      bill.electricity_breakdown = [{
-        occupants,
-        reading_date_from: shortDate(bill.period_start || readingStart),
-        reading_date_to: shortDate(bill.period_end || readingEnd),
-        reading_from: baseReading,
-        reading_to: +(baseReading + consumption).toFixed(2),
-        consumption: +consumption.toFixed(2),
-        rate,
-        segment_total: +segTotal.toFixed(2),
-        share_per_tenant: +elecAmount.toFixed(2),
-      }];
-    }
-
     // Auto-generate water breakdown for presentation if missing
     if (
       !bill.water_breakdown &&
@@ -459,7 +466,10 @@ async function downloadBillPdf(req, res) {
 
     // Computation breakdown sections
     const breakdownSections = [];
-    if (bill.electricity_breakdown?.length) {
+    const expectsElectricityBreakdown =
+      ((bill.billing_type || '').toLowerCase() === 'electricity' || (bill.electricity && !bill.rent && !bill.water));
+    const usableElectricityBreakdown = hasUsableElectricityBreakdown(bill);
+    if (usableElectricityBreakdown) {
       breakdownSections.push({
         heading: 'Electricity Breakdown',
         type: 'electricity',
@@ -477,6 +487,14 @@ async function downloadBillPdf(req, res) {
             share_per_tenant: formatMoney(seg.share_per_tenant || 0),
           };
         }),
+      });
+    } else if (expectsElectricityBreakdown) {
+      breakdownSections.push({
+        heading: 'Electricity Breakdown',
+        type: 'generic',
+        segments: [{
+          rows: [{ label: 'Status', value: 'Electricity breakdown unavailable' }],
+        }],
       });
     }
     if (bill.water_breakdown) {

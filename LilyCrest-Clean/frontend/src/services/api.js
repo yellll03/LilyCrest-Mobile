@@ -79,6 +79,7 @@ function withPort(baseUrl, port) {
 
 const CHATBOT_BASE_URL = withPort(BACKEND_URL, CHATBOT_PORT);
 const AUTH_REFRESH_URL = `${BACKEND_URL}/api/auth/google`;
+let refreshSessionPromise = null;
 
 // Export base URL for non-axios downloads (e.g., Linking openURL)
 export const BASE_BACKEND_URL = BACKEND_URL;
@@ -90,6 +91,28 @@ export const api = axios.create({
   },
   timeout: 30000, // 30 second timeout
 });
+
+async function refreshGoogleSession() {
+  if (!refreshSessionPromise) {
+    refreshSessionPromise = (async () => {
+      const idToken = await getFreshIdToken(true);
+      if (!idToken) return null;
+
+      const response = await axios.post(AUTH_REFRESH_URL, { idToken });
+      const sessionToken = response?.data?.session_token || null;
+
+      if (sessionToken) {
+        await AsyncStorage.setItem('session_token', sessionToken);
+      }
+
+      return sessionToken;
+    })().finally(() => {
+      refreshSessionPromise = null;
+    });
+  }
+
+  return refreshSessionPromise;
+}
 
 // Request interceptor — attach session token to every request
 api.interceptors.request.use(
@@ -117,19 +140,11 @@ api.interceptors.response.use(
       originalRequest._retry = true;
 
       try {
-        // Only works for Google/Firebase auth users
-        const idToken = await getFreshIdToken(true);
-        
-        if (idToken) {
-          // Renew session via Google auth endpoint
-          const response = await axios.post(AUTH_REFRESH_URL, { idToken });
-          const { session_token } = response.data;
-          
-          if (session_token) {
-            await AsyncStorage.setItem('session_token', session_token);
-            originalRequest.headers.Authorization = `Bearer ${session_token}`;
-            return api(originalRequest);
-          }
+        const sessionToken = await refreshGoogleSession();
+
+        if (sessionToken) {
+          originalRequest.headers.Authorization = `Bearer ${sessionToken}`;
+          return api(originalRequest);
         }
       } catch (refreshError) {
         console.warn('Token refresh failed:', {
@@ -210,6 +225,15 @@ export const apiService = {
     api.post('/chatbot/message', { message, session_id: sessionId }),
   resetChatSession: (sessionId) =>
     api.post('/chatbot/reset', { session_id: sessionId }),
+  requestAdminChat: (sessionId, reason) =>
+    api.post('/chatbot/request-admin', { session_id: sessionId, reason }),
+  getLiveChatStatus: (sessionId) =>
+    api.get(`/chatbot/live-status/${sessionId}`),
+  // Tenant live chat uses the same endpoint; backend routes to admin when active.
+  sendLiveChatMessage: (message, sessionId) =>
+    api.post('/chatbot/message', { message, session_id: sessionId }),
+  closeLiveChat: (sessionId) =>
+    api.post('/chatbot/close-live-chat', { session_id: sessionId }),
   
   // Support Tickets
   getMyTickets: (status) => api.get('/tickets/me', { params: { status } }),
@@ -217,9 +241,34 @@ export const apiService = {
   createTicket: (data) => api.post('/tickets', data),
   respondToTicket: (ticketId, data) => api.post(`/tickets/${ticketId}/respond`, data),
   updateTicketStatus: (ticketId, status) => api.put(`/tickets/${ticketId}/status`, { status }),
+
+  // Admin Ticket Management
+  adminGetAllTickets: (status) => api.get('/tickets/admin/all', { params: { status } }),
+  adminReplyToTicket: (ticketId, message) => api.post(`/tickets/admin/${ticketId}/reply`, { message }),
+  adminUpdateTicketStatus: (ticketId, status) => api.put(`/tickets/admin/${ticketId}/status`, { status }),
+
+  // Human support chat — synced with the web admin panel in real-time.
+  // Uses /api/m/chat/... endpoints (mobile bridge in Capstone server) which
+  // write to chat_conversations + chat_messages collections the web admin reads.
+  startSupportChat: (data) => api.post('/chat/start', data),
+  getMySupportChats: () => api.get('/chat/me'),
+  getSupportChatMessages: (conversationId) => api.get(`/chat/${conversationId}/messages`),
+  sendSupportMessage: (conversationId, message) =>
+    api.post(`/chat/${conversationId}/messages`, { message }),
+  closeSupportChat: (conversationId, note) =>
+    api.patch(`/chat/${conversationId}/close`, { note }),
   
   // Seed data
   seedData: () => api.post('/seed'),
+
+  // Push notifications
+  savePushToken: (pushToken, provider = 'fcm', devicePlatform = null) =>
+    api.post('/users/push-token', {
+      push_token: pushToken,
+      provider,
+      device_platform: devicePlatform,
+      notifications_enabled: true,
+    }),
 
   // Auth
   changePassword: (currentPassword, newPassword, options = {}) =>

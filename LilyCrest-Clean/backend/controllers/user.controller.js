@@ -108,12 +108,19 @@ const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const EMAIL_MAX = 254;
 const PHONE_REGEX = /^\+63\d{10}$/;
 const ADDRESS_MAX = 200;
-const PICTURE_MAX_BYTES = 2 * 1024 * 1024; // 2 MB base64 payload
+const PICTURE_MAX_BYTES = 2 * 1024 * 1024; // 2 MB decoded image payload
 const DOC_MAX_BYTES = 5 * 1024 * 1024; // 5 MB for document uploads
 
 function sanitize(str) {
   if (typeof str !== 'string') return '';
   return str.replace(/[<>]/g, '').trim();
+}
+
+function getDecodedBase64Bytes(value = '') {
+  const raw = String(value || '').replace(/^data:image\/[^;]+;base64,/, '');
+  if (!raw) return 0;
+  const padding = raw.endsWith('==') ? 2 : raw.endsWith('=') ? 1 : 0;
+  return Math.floor((raw.length * 3) / 4) - padding;
 }
 
 function validateField(field, value) {
@@ -157,7 +164,7 @@ function validateField(field, value) {
       if (!value.startsWith('data:image/') && !value.startsWith('http')) {
         return { ok: false, error: 'Invalid image format.' };
       }
-      if (value.length > PICTURE_MAX_BYTES) {
+      if (getDecodedBase64Bytes(value) > PICTURE_MAX_BYTES) {
         return { ok: false, error: 'Image is too large (max 2 MB).' };
       }
       return { ok: true, value };
@@ -640,6 +647,20 @@ async function savePushToken(req, res) {
   }
 }
 
+// Admin: list all users (tenants + admins)
+async function adminGetAllUsers(req, res) {
+  try {
+    const db = getDb();
+    const users = await db.collection('users')
+      .find({})
+      .sort({ created_at: -1 })
+      .toArray();
+    res.json(users.map(u => ({ ...u, _id: undefined, password_hash: undefined })));
+  } catch (error) {
+    res.status(500).json({ detail: 'Failed to fetch users' });
+  }
+}
+
 module.exports = {
   getMe,
   updateMe,
@@ -648,4 +669,5 @@ module.exports = {
   getUserDocuments,
   getDocumentFile,
   deleteDocument,
+  adminGetAllUsers,
 };

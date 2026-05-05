@@ -60,6 +60,28 @@ function relativeTime(dateStr) {
   }
 }
 
+function isPlainObject(value) {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
+}
+
+function getBillStatus(bill) {
+  return String(bill?.status || '').toLowerCase();
+}
+
+function isBillOutstanding(bill) {
+  const status = getBillStatus(bill);
+  return status !== 'paid' && status !== 'settled';
+}
+
+function getBillOwedAmount(bill) {
+  const candidates = [bill?.remaining_amount, bill?.total, bill?.amount];
+  for (const value of candidates) {
+    const amount = Number(value);
+    if (Number.isFinite(amount)) return amount;
+  }
+  return 0;
+}
+
 
 const NOTIF_ICONS = {
   announcement: 'megaphone',
@@ -80,7 +102,7 @@ function SkeletonCard({ height = 120, colors }) {
 }
 
 export default function HomeScreen() {
-  const { user, checkAuth, authReady, isLoading: authLoading } = useAuth();
+  const { user, authReady, isLoading: authLoading } = useAuth();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const router = useRouter();
@@ -94,9 +116,8 @@ export default function HomeScreen() {
   const [loadError, setLoadError] = useState(null);
   const [modalData, setModalData] = useState({ visible: false, title: '', message: '', type: 'info' });
   const searchInputRef = useRef(null);
-  const pollingRef = useRef(null);
-  const retriedRef = useRef(false);
-  const isFetchingRef = useRef(false);
+  const latestDashboardRequestRef = useRef(0);
+  const userId = user?.user_id || null;
 
   // FAB pulse animation
   const fabScale = useRef(new Animated.Value(1)).current;
@@ -122,13 +143,10 @@ export default function HomeScreen() {
   const bills = useMemo(() => dashboardData?.billing?.items || dashboardData?.billing?.list || dashboardData?.billing || [], [dashboardData]);
   const outstandingBills = useMemo(() => {
     if (!Array.isArray(bills)) return [];
-    return bills.filter((b) => {
-      const status = (b.status || '').toLowerCase();
-      return status !== 'paid' && status !== 'settled';
-    });
+    return bills.filter(isBillOutstanding);
   }, [bills]);
   const latestBill = useMemo(() => {
-    if (billingSummary && (billingSummary.amount || billingSummary.due_date || billingSummary.dueDate)) {
+    if (billingSummary && isBillOutstanding(billingSummary) && (getBillOwedAmount(billingSummary) > 0 || billingSummary.due_date || billingSummary.dueDate)) {
       return billingSummary;
     }
     const source = outstandingBills.length ? outstandingBills : bills;
@@ -137,9 +155,8 @@ export default function HomeScreen() {
     return sorted[0];
   }, [bills, outstandingBills, billingSummary]);
   const outstandingBillCount = useMemo(() => {
-    if (typeof billingSummary?.outstanding_count === 'number') return billingSummary.outstanding_count;
     return outstandingBills.length;
-  }, [outstandingBills, billingSummary]);
+  }, [outstandingBills]);
 
   const maintenanceSummary = useMemo(() => dashboardData?.maintenance?.summary || {}, [dashboardData]);
   const maintenanceItems = useMemo(() => dashboardData?.maintenance?.items || dashboardData?.maintenance?.list || dashboardData?.maintenance || [], [dashboardData]);
@@ -250,9 +267,9 @@ export default function HomeScreen() {
   };
 
   // ── Data fetching ──
-  const fetchDashboard = async () => {
-    if (isFetchingRef.current) return; // Prevent overlapping fetches
-    isFetchingRef.current = true;
+  const fetchDashboard = useCallback(async () => {
+    const requestId = latestDashboardRequestRef.current + 1;
+    latestDashboardRequestRef.current = requestId;
     try {
       setLoadError(null);
       const [dashboardRes, announcementsRes] = await Promise.all([
@@ -260,8 +277,11 @@ export default function HomeScreen() {
         apiService.getAnnouncements().catch(() => ({ data: [] })),
       ]);
 
-      const dashboard = dashboardRes?.data || {};
-      const announcements = announcementsRes?.data || [];
+      const dashboard = dashboardRes?.data;
+      if (!isPlainObject(dashboard)) {
+        throw new Error('Invalid dashboard response shape');
+      }
+      const announcements = Array.isArray(announcementsRes?.data) ? announcementsRes.data : [];
 
       const billingItems = Array.isArray(dashboard?.billing?.items)
         ? dashboard.billing.items
@@ -288,28 +308,22 @@ export default function HomeScreen() {
             created_at: a.created_at,
           }));
 
+      if (latestDashboardRequestRef.current !== requestId) return;
       setDashboardData({ ...dashboard, billing: billingItems, maintenance: mItems, notifications: notifItems });
-      retriedRef.current = false;
     } catch (error) {
       console.error('Dashboard fetch error:', error);
-      const is401 = error.response?.status === 401;
-      if (is401 && !retriedRef.current) {
-        retriedRef.current = true;
-        try { await checkAuth?.(); } catch (_) { }
-        isFetchingRef.current = false;
-        return fetchDashboard();
-      }
+      if (latestDashboardRequestRef.current !== requestId) return;
       setLoadError('Unable to load dashboard. Pull to retry.');
     } finally {
-      isFetchingRef.current = false;
+      if (latestDashboardRequestRef.current !== requestId) return;
       setIsLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
 
   useEffect(() => {
     if (!authReady || authLoading) return;
-    if (!user) {
+    if (!userId) {
       setIsLoading(false);
       setLoadError('Please sign in to load your dashboard.');
       return;
@@ -318,24 +332,24 @@ export default function HomeScreen() {
     setLoadError(null);
     setIsLoading(true);
     fetchDashboard();
-  }, [authLoading, authReady, user?.user_id]);
+  }, [authLoading, authReady, fetchDashboard, userId]);
 
   useFocusEffect(
     useCallback(() => {
-      if (!authReady || !user?.user_id) return undefined;
+      if (!authReady || !userId) return undefined;
       // Fetch immediately when tab gains focus (e.g., after login redirect)
       fetchDashboard();
       // Also poll while this tab is focused
       const interval = setInterval(() => fetchDashboard(), 60000);
       return () => clearInterval(interval);
-    }, [authReady, user?.user_id])
+    }, [authReady, fetchDashboard, userId])
   );
 
   const onRefresh = useCallback(() => {
-    if (!authReady || !user?.user_id) { setRefreshing(false); return; }
+    if (!authReady || !userId) { setRefreshing(false); return; }
     setRefreshing(true);
     fetchDashboard();
-  }, [authReady, user?.user_id]);
+  }, [authReady, fetchDashboard, userId]);
 
   const openMap = () => {
     const address = '#7 Gil Puyat Ave. cor Marconi St. Brgy Palanan, Makati City';
@@ -667,7 +681,7 @@ export default function HomeScreen() {
               <View style={{ flex: 1 }}>
                 <Text style={styles.summaryLabel}>Billing</Text>
                 <Text style={styles.summaryValue}>
-                  {latestBill ? `${safeCurrency(latestBill.total || latestBill.amount)} • ${latestBill.status || 'Pending'}` : 'No bills found'}
+                  {latestBill ? `${safeCurrency(isBillOutstanding(latestBill) ? getBillOwedAmount(latestBill) : (latestBill.total ?? latestBill.amount ?? latestBill.remaining_amount ?? 0))} • ${latestBill.status || 'Pending'}` : 'No bills found'}
                 </Text>
                 <Text style={styles.summaryMeta}>
                   {[

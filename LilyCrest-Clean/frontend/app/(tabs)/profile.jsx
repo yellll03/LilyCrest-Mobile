@@ -52,6 +52,14 @@ const validateAddress = (address) => {
   return { valid: true, error: '' };
 };
 
+const isProfilePayload = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value) && typeof value.user_id === 'string' && value.user_id.trim().length > 0;
+const getDecodedBase64Bytes = (value = '') => {
+  const raw = String(value || '').replace(/^data:image\/[^;]+;base64,/, '');
+  if (!raw) return 0;
+  const padding = raw.endsWith('==') ? 2 : raw.endsWith('=') ? 1 : 0;
+  return Math.floor((raw.length * 3) / 4) - padding;
+};
+
 export default function ProfileScreen() {
   const { user, logout, updateUser, checkAuth, isLoading: authLoading } = useAuth();
   const router = useRouter();
@@ -71,6 +79,7 @@ export default function ProfileScreen() {
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
   const [profileError, setProfileError] = useState('');
   const [profileBanner, setProfileBanner] = useState(null);
+  const userId = user?.user_id || null;
 
   // keep form in sync when user data changes
   useEffect(() => {
@@ -84,12 +93,14 @@ export default function ProfileScreen() {
   }, [user?.name, user?.username, user?.email, user?.phone, user?.address]);
 
   // Fetch fresh profile data from server
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async () => {
     setProfileError('');
     try {
       const response = await apiService.getProfile();
-      if (response?.data) {
+      if (isProfilePayload(response?.data)) {
         updateUser(response.data);
+      } else {
+        throw new Error('Invalid profile response shape');
       }
     } catch (error) {
       const status = error?.response?.status;
@@ -98,15 +109,15 @@ export default function ProfileScreen() {
       }
       setProfileError('Unable to load profile. Pull to refresh and try again.');
     }
-  };
+  }, [checkAuth, updateUser]);
 
   // Refresh profile every time this tab gains focus
   useFocusEffect(
     useCallback(() => {
-      if (!authLoading && user) {
+      if (!authLoading && userId) {
         fetchProfile();
       }
-    }, [authLoading, user?.user_id])
+    }, [authLoading, fetchProfile, userId])
   );
 
   useEffect(() => {
@@ -177,6 +188,9 @@ export default function ProfileScreen() {
         address: formData.address.trim(),
       };
       const response = await apiService.updateProfile(payload);
+      if (!isProfilePayload(response?.data)) {
+        throw new Error('Invalid profile update response shape');
+      }
 
       // Update auth context with fresh data from server
       updateUser(response.data);
@@ -218,13 +232,17 @@ export default function ProfileScreen() {
     const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.5, base64: true });
     if (!result.canceled && result.assets[0].base64) {
       const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
-      if (base64Image.length > IMAGE_MAX_BYTES) {
+      const fileSizeBytes = getDecodedBase64Bytes(base64Image);
+      if (fileSizeBytes > IMAGE_MAX_BYTES) {
         setProfileBanner({ type: 'error', text: 'Image is too large (max 2 MB). Please choose a smaller photo.' });
         return;
       }
       setIsLoading(true);
       try {
         const response = await apiService.updateProfile({ picture: base64Image });
+        if (!isProfilePayload(response?.data)) {
+          throw new Error('Invalid profile picture response shape');
+        }
         updateUser(response.data);
         setProfileBanner({ type: 'success', text: 'Profile picture updated.' });
       } catch (error) {

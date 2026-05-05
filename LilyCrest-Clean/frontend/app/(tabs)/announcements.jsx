@@ -1,9 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { format, formatDistanceToNow } from 'date-fns';
-import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useAuth } from '../../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
 import { apiService } from '../../src/services/api';
 
@@ -22,6 +23,39 @@ function safeDistanceToNow(dateStr) {
   } catch (_e) { return ''; }
 }
 
+function getAnnouncementDateValue(announcement = {}) {
+  return announcement.publishedAt
+    || announcement.sentAt
+    || announcement.created_at
+    || announcement.createdAt
+    || announcement.updated_at
+    || announcement.updatedAt
+    || null;
+}
+
+function getAnnouncementTimestamp(announcement = {}) {
+  const value = getAnnouncementDateValue(announcement);
+  if (!value) return null;
+
+  const parsed = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
+}
+
+function sortAnnouncements(list = [], direction = 'desc') {
+  const multiplier = direction === 'asc' ? 1 : -1;
+
+  return [...list].sort((left, right) => {
+    const leftTimestamp = getAnnouncementTimestamp(left);
+    const rightTimestamp = getAnnouncementTimestamp(right);
+
+    if (leftTimestamp === null && rightTimestamp === null) return 0;
+    if (leftTimestamp === null) return 1;
+    if (rightTimestamp === null) return -1;
+
+    return (leftTimestamp - rightTimestamp) * multiplier;
+  });
+}
+
 // Check if announcement is less than 3 days old
 function isNew(dateStr) {
   try {
@@ -32,8 +66,8 @@ function isNew(dateStr) {
 }
 
 export default function AnnouncementsScreen() {
-  const router = useRouter();
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
+  const { clearNotificationUnread } = useAuth();
   const styles = useThemedStyles((c) => StyleSheet.create({
     container: { flex: 1, backgroundColor: c.background },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: c.background },
@@ -62,6 +96,31 @@ export default function AnnouncementsScreen() {
     },
 
     // ── Category Filter ──
+    sortRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      paddingHorizontal: 16,
+      paddingBottom: 10,
+      gap: 12,
+    },
+    sortLabel: { fontSize: 12, fontWeight: '700', color: c.textMuted, textTransform: 'uppercase', letterSpacing: 0.5 },
+    sortControl: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: c.surfaceSecondary,
+      borderRadius: 999,
+      padding: 4,
+      gap: 4,
+    },
+    sortChip: {
+      paddingVertical: 7,
+      paddingHorizontal: 12,
+      borderRadius: 999,
+    },
+    sortChipActive: { backgroundColor: '#1E3A5F' },
+    sortChipText: { fontSize: 12, fontWeight: '600', color: c.textSecondary },
+    sortChipTextActive: { color: '#FFFFFF' },
     categoryFilter: { backgroundColor: c.surface },
     categoryFilterContent: { paddingHorizontal: 16, paddingTop: 4, paddingBottom: 12, gap: 6 },
     categoryChip: {
@@ -201,12 +260,13 @@ export default function AnnouncementsScreen() {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [urgentOnly, setUrgentOnly] = useState(false);
   const [selectedAnn, setSelectedAnn] = useState(null);
+  const [sortOrder, setSortOrder] = useState('newest');
 
-  const fetchAnnouncements = async (silent = false) => {
+  const fetchAnnouncements = useCallback(async (silent = false) => {
     if (!silent) setFetchError(null);
     try {
       const response = await apiService.getAnnouncements();
-      setAnnouncements(response.data || []);
+      setAnnouncements(Array.isArray(response.data) ? response.data : []);
       setFetchError(null);
     } catch (error) {
       console.error('Fetch announcements error:', error);
@@ -215,18 +275,19 @@ export default function AnnouncementsScreen() {
       setIsLoading(false);
       setRefreshing(false);
     }
-  };
+  }, []);
 
-  useEffect(() => { fetchAnnouncements(); }, []);
+  useEffect(() => { fetchAnnouncements(); }, [fetchAnnouncements]);
   useFocusEffect(
     useCallback(() => {
+      clearNotificationUnread().catch(() => {});
       // Only poll while this tab is focused
       const interval = setInterval(() => { fetchAnnouncements(true); }, 60000);
       return () => clearInterval(interval);
-    }, [])
+    }, [clearNotificationUnread, fetchAnnouncements])
   );
 
-  const onRefresh = useCallback(() => { setRefreshing(true); fetchAnnouncements(); }, []);
+  const onRefresh = useCallback(() => { setRefreshing(true); fetchAnnouncements(); }, [fetchAnnouncements]);
 
   const getPriorityColor = (priority) => {
     switch (priority) {
@@ -262,25 +323,30 @@ export default function AnnouncementsScreen() {
     return getCategoryColor(category).icon;
   };
 
-  const categories = ['All', ...new Set(announcements.map((a) => a.category || 'General'))];
+  const sortedAnnouncements = useMemo(
+    () => sortAnnouncements(announcements, sortOrder === 'oldest' ? 'asc' : 'desc'),
+    [announcements, sortOrder]
+  );
 
-  const filteredAnnouncements = announcements.filter((a) => {
+  const categories = ['All', ...new Set(sortedAnnouncements.map((a) => a.category || 'General'))];
+
+  const filteredAnnouncements = sortedAnnouncements.filter((a) => {
     const catMatch = !selectedCategory || selectedCategory === 'All' || (a.category || 'General') === selectedCategory;
-    const urgentMatch = !urgentOnly || a.priority === 'high';
+    const urgentMatch = !urgentOnly || (a.priority || '').toLowerCase() === 'high';
     return catMatch && urgentMatch;
   });
 
   const getCategoryCount = (cat) => {
     return announcements.filter((a) => {
       const catMatch = cat === 'All' || (a.category || 'General') === cat;
-      const urgentMatch = !urgentOnly || a.priority === 'high';
+      const urgentMatch = !urgentOnly || (a.priority || '').toLowerCase() === 'high';
       return catMatch && urgentMatch;
     }).length;
   };
 
   const urgentCount = announcements.filter((a) => {
     const catMatch = !selectedCategory || selectedCategory === 'All' || (a.category || 'General') === selectedCategory;
-    return catMatch && a.priority === 'high';
+    return catMatch && (a.priority || '').toLowerCase() === 'high';
   }).length;
 
   if (isLoading) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color={colors.primary} /></View>;
@@ -312,6 +378,23 @@ export default function AnnouncementsScreen() {
 
         {/* ── Filter Pills ── */}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoryFilter} contentContainerStyle={styles.categoryFilterContent}>
+          <View style={styles.sortRow}>
+            <Text style={styles.sortLabel}>Sort by</Text>
+            <View style={styles.sortControl}>
+              <TouchableOpacity
+                style={[styles.sortChip, sortOrder === 'newest' && styles.sortChipActive]}
+                onPress={() => setSortOrder('newest')}
+              >
+                <Text style={[styles.sortChipText, sortOrder === 'newest' && styles.sortChipTextActive]}>Newest</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.sortChip, sortOrder === 'oldest' && styles.sortChipActive]}
+                onPress={() => setSortOrder('oldest')}
+              >
+                <Text style={[styles.sortChipText, sortOrder === 'oldest' && styles.sortChipTextActive]}>Oldest</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
           {categories.map((category) => {
             const isActive = selectedCategory === category || (!selectedCategory && category === 'All');
             const count = getCategoryCount(category);
@@ -376,7 +459,8 @@ export default function AnnouncementsScreen() {
         ) : filteredAnnouncements.map((announcement) => {
           const catColor = getCategoryColor(announcement.category || 'General');
           const prioColor = getPriorityColor(announcement.priority);
-          const isRecent = isNew(announcement.created_at);
+          const announcementDate = getAnnouncementDateValue(announcement);
+          const isRecent = isNew(announcementDate);
           const isTruncated = (announcement.content || '').length > 180;
           return (
             <TouchableOpacity
@@ -399,7 +483,7 @@ export default function AnnouncementsScreen() {
                       <Text style={styles.announcementTitle} numberOfLines={2}>{announcement.title}</Text>
                       {isRecent && <View style={styles.newDot} />}
                     </View>
-                    <Text style={styles.announcementTime}>{safeDistanceToNow(announcement.created_at)}</Text>
+                    <Text style={styles.announcementTime}>{safeDistanceToNow(announcementDate)}</Text>
                   </View>
                 </View>
 
@@ -409,7 +493,7 @@ export default function AnnouncementsScreen() {
                     <Ionicons name={catColor.icon} size={11} color={catColor.text} />
                     <Text style={[styles.categoryBadgeText, { color: catColor.text }]}>{announcement.category || 'General'}</Text>
                   </View>
-                  {announcement.priority === 'high' && (
+                  {(announcement.priority || '').toLowerCase() === 'high' && (
                     <View style={styles.urgentBadge}>
                       <Ionicons name="warning" size={11} color="#EF4444" />
                       <Text style={styles.urgentText}>Urgent</Text>
@@ -428,7 +512,7 @@ export default function AnnouncementsScreen() {
                 <View style={styles.announcementFooter}>
                   <View style={styles.footerLeft}>
                     <Ionicons name="calendar-outline" size={13} color={colors.textMuted} />
-                    <Text style={styles.announcementDate}>{safeFormat(announcement.created_at, 'MMM dd, yyyy • h:mm a')}</Text>
+                    <Text style={styles.announcementDate}>{safeFormat(announcementDate, 'MMM dd, yyyy • h:mm a')}</Text>
                   </View>
                   <View style={styles.footerAuthor}>
                     <Ionicons name="person-circle-outline" size={13} color={colors.textMuted} />
@@ -463,7 +547,7 @@ export default function AnnouncementsScreen() {
                     </View>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.modalTitle}>{selectedAnn.title}</Text>
-                      <Text style={styles.modalTime}>{safeDistanceToNow(selectedAnn.created_at)}</Text>
+                      <Text style={styles.modalTime}>{safeDistanceToNow(getAnnouncementDateValue(selectedAnn))}</Text>
                     </View>
                     <TouchableOpacity onPress={() => setSelectedAnn(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
                       <Ionicons name="close" size={22} color={colors.textMuted} />
@@ -493,7 +577,7 @@ export default function AnnouncementsScreen() {
                   <View style={styles.modalFooter}>
                     <View style={styles.footerLeft}>
                       <Ionicons name="calendar-outline" size={13} color={colors.textMuted} />
-                      <Text style={styles.announcementDate}>{safeFormat(selectedAnn.created_at, 'MMM dd, yyyy • h:mm a')}</Text>
+                      <Text style={styles.announcementDate}>{safeFormat(getAnnouncementDateValue(selectedAnn), 'MMM dd, yyyy • h:mm a')}</Text>
                     </View>
                     <View style={styles.footerAuthor}>
                       <Ionicons name="person-circle-outline" size={13} color={colors.textMuted} />

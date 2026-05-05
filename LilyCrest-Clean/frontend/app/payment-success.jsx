@@ -9,10 +9,15 @@ import { apiService } from '../src/services/api';
 export default function PaymentSuccessScreen() {
   const router = useRouter();
   const { billing_id, checkout_id } = useLocalSearchParams();
+  const checkoutId = String(checkout_id || '').trim();
   const { colors, isDarkMode } = useTheme();
   const styles = useMemo(() => createStyles(colors, isDarkMode), [colors, isDarkMode]);
-  const [isVerifying, setIsVerifying] = useState(Boolean(checkout_id));
-  const [verifyMessage, setVerifyMessage] = useState('Finalizing your payment...');
+  const [isVerifying, setIsVerifying] = useState(Boolean(checkoutId));
+  const [verifyMessage, setVerifyMessage] = useState(
+    checkoutId
+      ? 'Finalizing your payment...'
+      : 'Payment verification is unavailable for this redirect. Please check Billing in a few moments.'
+  );
 
   // Confirm the PayMongo checkout result so backend can mark the bill as paid.
   // If checkout_id is missing (older app flows), fall back to the old timed redirect.
@@ -21,7 +26,6 @@ export default function PaymentSuccessScreen() {
     let cancelled = false;
 
     const pollCheckoutStatus = async () => {
-      const checkoutId = String(checkout_id || '').trim();
       if (!checkoutId) {
         setIsVerifying(false);
         timer = setTimeout(() => {
@@ -80,7 +84,7 @@ export default function PaymentSuccessScreen() {
       cancelled = true;
       if (timer) clearTimeout(timer);
     };
-  }, [checkout_id, router]);
+  }, [checkoutId, router]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>

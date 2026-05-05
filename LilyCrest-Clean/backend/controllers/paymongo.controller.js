@@ -119,27 +119,85 @@ async function saveCheckoutRef(db, billingId, userId, mongoId, checkoutId, refer
   }
 }
 
+function isPaidStatus(status) {
+  return String(status || '').toLowerCase() === 'paid';
+}
+
+function unwrapMongoDocument(result) {
+  return result?.value ?? result ?? null;
+}
+
+async function markLegacyBillPaidAtomic(db, filter, { paymentId, eventType, checkoutId } = {}) {
+  const updated = unwrapMongoDocument(await db.collection('billing').findOneAndUpdate(
+    { ...filter, status: { $ne: 'paid' } },
+    {
+      $set: {
+        status: 'paid',
+        payment_method: 'paymongo',
+        payment_date: new Date(),
+        paymongo_payment_id: paymentId || null,
+        ...(checkoutId ? { paymongo_checkout_id: checkoutId } : {}),
+        ...(eventType ? { paymongo_event: eventType } : {}),
+        updated_at: new Date(),
+      },
+    },
+    { returnDocument: 'after' }
+  ));
+
+  if (updated) {
+    return { existing: updated, alreadyPaid: false, matched: true, resolvedUserId: updated.user_id || filter.user_id || null };
+  }
+
+  const existing = await db.collection('billing').findOne(filter);
+  if (!existing) {
+    return { existing: null, alreadyPaid: false, matched: false, resolvedUserId: null };
+  }
+
+  return { existing, alreadyPaid: isPaidStatus(existing.status), matched: true, resolvedUserId: existing.user_id || filter.user_id || null };
+}
+
+async function markRealBillPaidAtomic(db, filter, userId, { paymentId, eventType, checkoutId } = {}) {
+  const updated = unwrapMongoDocument(await db.collection('bills').findOneAndUpdate(
+    { ...filter, status: { $ne: 'paid' } },
+    {
+      $set: {
+        status: 'paid',
+        paymentMethod: 'paymongo',
+        paidAt: new Date(),
+        paymentDate: new Date(),
+        paymongoPaymentId: paymentId || null,
+        ...(checkoutId ? { paymongoSessionId: checkoutId } : {}),
+        ...(eventType ? { paymongoEvent: eventType } : {}),
+        updatedAt: new Date(),
+      },
+    },
+    { returnDocument: 'after' }
+  ));
+
+  if (updated) {
+    return { existing: mapRealBill(updated, userId), alreadyPaid: false, matched: true, resolvedUserId: userId };
+  }
+
+  const existing = await db.collection('bills').findOne(filter);
+  if (!existing) {
+    return { existing: null, alreadyPaid: false, matched: false, resolvedUserId: null };
+  }
+
+  return { existing: mapRealBill(existing, userId), alreadyPaid: isPaidStatus(existing.status), matched: true, resolvedUserId: userId };
+}
+
 // ── Mark a bill as paid in the correct collection ────────────────────────────
-// Returns the bill document (pre-update) for push notification context
-async function markBillPaid(db, billingId, userId, { paymentId, eventType } = {}) {
-  // 1. Try legacy 'billing' collection
-  const legacyBill = await db.collection('billing').findOne({ billing_id: billingId, user_id: userId });
-  if (legacyBill) {
-    const alreadyPaid = legacyBill.status === 'paid';
-    await db.collection('billing').updateOne(
-      { billing_id: billingId, user_id: userId },
-      {
-        $set: {
-          status: 'paid',
-          payment_method: 'paymongo',
-          payment_date: new Date(),
-          paymongo_payment_id: paymentId || null,
-          ...(eventType ? { paymongo_event: eventType } : {}),
-          updated_at: new Date(),
-        },
-      }
-    );
-    return { existing: legacyBill, alreadyPaid };
+// Returns the bill document (pre-update) for push notification context.
+// checkoutId is an optional fallback key used when billing_id/user_id matching
+// fails (e.g. metadata mismatch or presentation-mode bills that were upgraded).
+async function markBillPaid(db, billingId, userId, { paymentId, eventType, checkoutId } = {}) {
+  const legacyResult = await markLegacyBillPaidAtomic(
+    db,
+    { billing_id: billingId, user_id: userId },
+    { paymentId, eventType, checkoutId }
+  );
+  if (legacyResult.matched) {
+    return legacyResult;
   }
 
   // 2. Try real 'bills' collection (billingId is the ObjectId string)
@@ -147,43 +205,79 @@ async function markBillPaid(db, billingId, userId, { paymentId, eventType } = {}
   try {
     objId = new ObjectId(billingId);
   } catch (_) {
-    return { existing: null, alreadyPaid: false }; // not a valid ObjectId
+    objId = null;
   }
 
-  try {
-    const user = await db.collection('users').findOne({ user_id: userId });
-    const mongoId = user?._id;
-    if (!mongoId) {
-      console.warn(`[markBillPaid] User not found for user_id=${userId}`);
-      return { existing: null, alreadyPaid: false };
-    }
-
-    const realBill = await db.collection('bills').findOne({ _id: objId, userId: mongoId });
-    if (realBill) {
-      const alreadyPaid = realBill.status === 'paid';
-      await db.collection('bills').updateOne(
-        { _id: objId },
-        {
-          $set: {
-            status: 'paid',
-            paymentMethod: 'paymongo',
-            paidAt: new Date(),
-            paymentDate: new Date(),
-            paymongoPaymentId: paymentId || null,
-            ...(eventType ? { paymongoEvent: eventType } : {}),
-            updatedAt: new Date(),
-          },
+  if (objId) {
+    try {
+      const user = await db.collection('users').findOne({ user_id: userId });
+      const mongoId = user?._id;
+      if (mongoId) {
+        const realResult = await markRealBillPaidAtomic(
+          db,
+          { _id: objId, userId: mongoId },
+          userId,
+          { paymentId, eventType, checkoutId }
+        );
+        if (realResult.matched) {
+          console.log(`[markBillPaid] Bill ${billingId} resolved in bills collection`);
+          return realResult;
         }
-      );
-      console.log(`[markBillPaid] Bill ${billingId} marked paid in bills collection`);
-      return { existing: mapRealBill(realBill, userId), alreadyPaid };
+      } else {
+        console.warn(`[markBillPaid] User not found for user_id=${userId}`);
+      }
+    } catch (err) {
+      console.error(`[markBillPaid] DB error for bill ${billingId}:`, err.message);
     }
-    console.warn(`[markBillPaid] Bill ${billingId} not found for userId=${mongoId}`);
-  } catch (err) {
-    console.error(`[markBillPaid] DB error for bill ${billingId}:`, err.message);
   }
 
-  // 3. Presentation mode (no DB update needed)
+  // 3. Fallback: find by paymongo_checkout_id (handles metadata mismatch cases).
+  // This ensures payment is persisted even if the billing_id/user_id in the
+  // PayMongo metadata didn't exactly match the stored record.
+  if (checkoutId) {
+    try {
+      const legacyCheckoutResult = await markLegacyBillPaidAtomic(
+        db,
+        { paymongo_checkout_id: checkoutId },
+        { paymentId, eventType, checkoutId }
+      );
+      if (legacyCheckoutResult.matched) {
+        console.log(`[markBillPaid] Bill found by checkout_id ${checkoutId}`);
+        return legacyCheckoutResult;
+      }
+    } catch (err) {
+      console.error(`[markBillPaid] Checkout-ID fallback error:`, err.message);
+    }
+
+    // Also try 'bills' collection by paymongoSessionId
+    try {
+      const bySession = await db.collection('bills').findOne(
+        { paymongoSessionId: checkoutId },
+        { projection: { _id: 0, userId: 1 } }
+      );
+      if (bySession?.userId) {
+        const owner = await db.collection('users').findOne(
+          { _id: bySession.userId },
+          { projection: { _id: 0, user_id: 1 } }
+        );
+        const resolvedUserId = owner?.user_id || userId;
+        const realCheckoutResult = await markRealBillPaidAtomic(
+          db,
+          { paymongoSessionId: checkoutId, userId: bySession.userId },
+          resolvedUserId,
+          { paymentId, eventType, checkoutId }
+        );
+        if (realCheckoutResult.matched) {
+          console.log(`[markBillPaid] Bill found by paymongoSessionId ${checkoutId}`);
+          return realCheckoutResult;
+        }
+      }
+    } catch (err) {
+      console.error(`[markBillPaid] bills checkout-ID fallback error:`, err.message);
+    }
+  }
+
+  // 4. Presentation mode (no DB record — no update needed)
   return { existing: null, alreadyPaid: false };
 }
 
@@ -239,6 +333,29 @@ async function sendPaymentReceiptForBill(db, {
     console.warn(`[PayMongo] Failed to send receipt email for bill ${billingId}:`, error?.message);
     return false;
   }
+}
+
+async function resolveCheckoutIdForBill(db, billingId) {
+  if (!billingId) return '';
+
+  const legacy = await db.collection('billing').findOne(
+    { billing_id: billingId },
+    { projection: { _id: 0, paymongo_checkout_id: 1 } },
+  );
+  if (legacy?.paymongo_checkout_id) return String(legacy.paymongo_checkout_id);
+
+  try {
+    const objId = new ObjectId(billingId);
+    const realBill = await db.collection('bills').findOne(
+      { _id: objId },
+      { projection: { _id: 0, paymongoSessionId: 1 } },
+    );
+    if (realBill?.paymongoSessionId) return String(realBill.paymongoSessionId);
+  } catch (_) {
+    // billingId is not an ObjectId
+  }
+
+  return '';
 }
 
 // Create a PayMongo Checkout Session for a specific bill
@@ -378,14 +495,16 @@ async function getCheckoutStatus(req, res) {
         const referenceNumber = session?.attributes?.reference_number;
         const userEmailHint = session?.attributes?.metadata?.user_email || '';
         const db = getDb();
-        const { existing, alreadyPaid } = await markBillPaid(db, billingId, userId, {
+        const { existing, alreadyPaid, resolvedUserId } = await markBillPaid(db, billingId, userId, {
           paymentId,
+          checkoutId: checkoutId,
         });
+        const paymentUserId = resolvedUserId || userId;
         // Push only once
-        if (!alreadyPaid && existing) {
-          notifyPaymentConfirmed(userId, { ...existing, status: 'paid' }).catch(() => {});
+        if (!alreadyPaid && existing && paymentUserId) {
+          notifyPaymentConfirmed(paymentUserId, { ...existing, status: 'paid' }).catch(() => {});
           sendPaymentReceiptForBill(db, {
-            userId,
+            userId: paymentUserId,
             billingId,
             bill: { ...existing, status: 'paid' },
             paymentId,
@@ -425,15 +544,18 @@ async function handleWebhook(req, res) {
 
       if (billingId && userId) {
         const db = getDb();
-        const { existing, alreadyPaid } = await markBillPaid(db, billingId, userId, {
+        const webhookCheckoutId = checkoutData?.id || '';
+        const { existing, alreadyPaid, resolvedUserId } = await markBillPaid(db, billingId, userId, {
           paymentId,
           eventType,
+          checkoutId: webhookCheckoutId,
         });
+        const paymentUserId = resolvedUserId || userId;
         console.log(`[PayMongo Webhook] Bill ${billingId} marked as paid`);
-        if (!alreadyPaid && existing) {
-          notifyPaymentConfirmed(userId, { ...existing, status: 'paid' }).catch(() => {});
+        if (!alreadyPaid && existing && paymentUserId) {
+          notifyPaymentConfirmed(paymentUserId, { ...existing, status: 'paid' }).catch(() => {});
           sendPaymentReceiptForBill(db, {
-            userId,
+            userId: paymentUserId,
             billingId,
             bill: { ...existing, status: 'paid' },
             paymentId,
@@ -526,10 +648,17 @@ async function registerWebhook() {
 // PayMongo redirects the browser here after payment. We serve an HTML page
 // that auto-redirects to the app's deep link (frontend:// scheme).
 
-function redirectSuccess(req, res) {
+async function redirectSuccess(req, res) {
   const billingId = req.query.billing_id || '';
-  const prodLink = `frontend://payment-success?billing_id=${encodeURIComponent(billingId)}&status=success`;
-  const devLink = `exp+frontend://payment-success?billing_id=${encodeURIComponent(billingId)}&status=success`;
+  let checkoutId = '';
+  try {
+    const db = getDb();
+    checkoutId = await resolveCheckoutIdForBill(db, billingId);
+  } catch (_) {}
+
+  const checkoutParam = checkoutId ? `&checkout_id=${encodeURIComponent(checkoutId)}` : '';
+  const prodLink = `frontend://payment-success?billing_id=${encodeURIComponent(billingId)}&status=success${checkoutParam}`;
+  const devLink = `exp+frontend://payment-success?billing_id=${encodeURIComponent(billingId)}&status=success${checkoutParam}`;
   console.log(`[PayMongo] Payment success redirect for bill ${billingId}`);
 
   // Immediately redirect to the app scheme. Chrome Custom Tabs (openAuthSessionAsync)
@@ -537,7 +666,7 @@ function redirectSuccess(req, res) {
   // The fallback HTML is shown only if the browser doesn't support the scheme.
   res.send(`<!DOCTYPE html>
 <html><head>
-<meta charset="utf-8">
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Payment Successful</title>
 <style>
@@ -551,7 +680,7 @@ function redirectSuccess(req, res) {
   .retry { margin-top: 12px; font-size: 14px; color: #6B7280; }
 </style>
 </head><body>
-<h1>✅ Payment Successful!</h1>
+<h1>&#10003; Payment Successful!</h1>
 <p>Redirecting you back to LilyCrest...</p>
 <a href="${prodLink}">Return to App</a>
 <p class="retry">If the app doesn't open, <a href="${devLink}" style="background:none;padding:0;color:#D4682A;font-size:14px;">tap here (dev build)</a></p>
@@ -562,15 +691,22 @@ function redirectSuccess(req, res) {
 </body></html>`);
 }
 
-function redirectCancel(req, res) {
+async function redirectCancel(req, res) {
   const billingId = req.query.billing_id || '';
-  const prodLink = `frontend://payment-cancel?billing_id=${encodeURIComponent(billingId)}&status=cancelled`;
-  const devLink = `exp+frontend://payment-cancel?billing_id=${encodeURIComponent(billingId)}&status=cancelled`;
+  let checkoutId = '';
+  try {
+    const db = getDb();
+    checkoutId = await resolveCheckoutIdForBill(db, billingId);
+  } catch (_) {}
+
+  const checkoutParam = checkoutId ? `&checkout_id=${encodeURIComponent(checkoutId)}` : '';
+  const prodLink = `frontend://payment-cancel?billing_id=${encodeURIComponent(billingId)}&status=cancelled${checkoutParam}`;
+  const devLink = `exp+frontend://payment-cancel?billing_id=${encodeURIComponent(billingId)}&status=cancelled${checkoutParam}`;
   console.log(`[PayMongo] Payment cancelled redirect for bill ${billingId}`);
 
   res.send(`<!DOCTYPE html>
 <html><head>
-<meta charset="utf-8">
+<meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Payment Cancelled</title>
 <style>
