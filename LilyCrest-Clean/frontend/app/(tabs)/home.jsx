@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+﻿import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { Link, useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -23,6 +23,8 @@ import LilyFlowerIcon from '../../src/components/assistant/LilyFlowerIcon';
 import { useAuth } from '../../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
 import { apiService } from '../../src/services/api';
+import { subscribeBillingRefresh } from '../../src/services/billingState';
+import { getBillingInsightPanel } from '../../src/utils/billingInsights';
 
 // ── Helpers ──────────────────────────────────────────────────
 function safeFormatDate(dateStr, fmt = 'MMM dd, yyyy') {
@@ -42,35 +44,21 @@ function safeCurrency(amount) {
   return `₱${n.toLocaleString()}`;
 }
 
-function relativeTime(dateStr) {
-  if (!dateStr) return '';
-  try {
-    const diff = Date.now() - new Date(dateStr).getTime();
-    if (diff < 0 || isNaN(diff)) return '';
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'just now';
-    if (mins < 60) return `${mins}m ago`;
-    const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `${hrs}h ago`;
-    const days = Math.floor(hrs / 24);
-    if (days < 7) return `${days}d ago`;
-    return safeFormatDate(dateStr, 'MMM dd');
-  } catch (_e) {
-    return '';
-  }
-}
-
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
+
+const HOME_NON_PAYABLE = new Set([
+  'paid', 'settled', 'cancelled', 'rejected', 'void',
+  'refunded', 'duplicate', 'archived', 'verification',
+]);
 
 function getBillStatus(bill) {
   return String(bill?.status || '').toLowerCase();
 }
 
 function isBillOutstanding(bill) {
-  const status = getBillStatus(bill);
-  return status !== 'paid' && status !== 'settled';
+  return !HOME_NON_PAYABLE.has(getBillStatus(bill));
 }
 
 function getBillOwedAmount(bill) {
@@ -81,16 +69,6 @@ function getBillOwedAmount(bill) {
   }
   return 0;
 }
-
-
-const NOTIF_ICONS = {
-  announcement: 'megaphone',
-  billing: 'card',
-  payment: 'card',
-  maintenance: 'construct',
-  alert: 'alert-circle',
-  general: 'notifications',
-};
 
 // ── Skeleton placeholder ──
 function SkeletonCard({ height = 120, colors }) {
@@ -108,6 +86,7 @@ export default function HomeScreen() {
   const router = useRouter();
 
   const [dashboardData, setDashboardData] = useState(null);
+  const [billingHistory, setBillingHistory] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -117,6 +96,7 @@ export default function HomeScreen() {
   const [modalData, setModalData] = useState({ visible: false, title: '', message: '', type: 'info' });
   const searchInputRef = useRef(null);
   const latestDashboardRequestRef = useRef(0);
+  const isFetchingRef = useRef(false);
   const userId = user?.user_id || null;
 
   // FAB pulse animation
@@ -155,8 +135,19 @@ export default function HomeScreen() {
     return sorted[0];
   }, [bills, outstandingBills, billingSummary]);
   const outstandingBillCount = useMemo(() => {
-    return outstandingBills.length;
+    return outstandingBills.filter(b => getBillOwedAmount(b) > 0).length;
   }, [outstandingBills]);
+  const outstandingBalance = useMemo(() => {
+    return outstandingBills.reduce((sum, bill) => sum + getBillOwedAmount(bill), 0);
+  }, [outstandingBills]);
+  const billingInsightPanel = useMemo(() => {
+    try {
+      return getBillingInsightPanel(billingHistory);
+    } catch (error) {
+      console.error('Billing insight render guard:', error);
+      return null;
+    }
+  }, [billingHistory]);
 
   const maintenanceSummary = useMemo(() => dashboardData?.maintenance?.summary || {}, [dashboardData]);
   const maintenanceItems = useMemo(() => dashboardData?.maintenance?.items || dashboardData?.maintenance?.list || dashboardData?.maintenance || [], [dashboardData]);
@@ -172,6 +163,170 @@ export default function HomeScreen() {
 
   const notifications = useMemo(() => dashboardData?.notifications?.items || dashboardData?.notifications || [], [dashboardData]);
   const policyItems = useMemo(() => dashboardData?.policies || dashboardData?.house_rules || [], [dashboardData]);
+  const billingHeadlineTone = billingInsightPanel?.headline?.tone || 'neutral';
+  const billingIsCleared = outstandingBillCount === 0 && Boolean(latestBill);
+  const billingCardMode = useMemo(() => {
+    if (outstandingBillCount > 0 && billingHeadlineTone === 'critical') return 'overdue';
+    if (outstandingBillCount > 0) return 'open';
+    if (billingIsCleared) return 'cleared';
+    return 'empty';
+  }, [billingHeadlineTone, billingIsCleared, outstandingBillCount]);
+  const summaryMaintenanceValue = useMemo(() => (
+    activeMaintenanceCount > 0 ? `${activeMaintenanceCount} active` : 'All clear'
+  ), [activeMaintenanceCount]);
+  const summaryMaintenanceMeta = useMemo(() => (
+    activeMaintenanceCount > 0 ? 'Pending or in progress' : 'No open service requests'
+  ), [activeMaintenanceCount]);
+  const billingCardSubtitle = useMemo(() => {
+    if (billingCardMode === 'overdue') return 'Action is needed on your current balance';
+    if (billingCardMode === 'open') return 'Keep track of active bills and due dates';
+    if (billingCardMode === 'cleared') return 'Everything currently looks settled';
+    return 'Your billing activity will appear here once records are posted';
+  }, [billingCardMode]);
+  const billingHeroLabel = useMemo(() => {
+    if (billingCardMode === 'overdue') return 'Payment required';
+    if (billingCardMode === 'open') return 'Outstanding balance';
+    if (billingCardMode === 'cleared') return 'Account status';
+    return 'Billing overview';
+  }, [billingCardMode]);
+  const billingHeroValue = useMemo(() => {
+    if (billingCardMode === 'overdue' || billingCardMode === 'open') return safeCurrency(outstandingBalance);
+    if (billingCardMode === 'cleared') return 'No outstanding balance';
+    return 'No billing yet';
+  }, [billingCardMode, outstandingBalance]);
+  const billingNextDueStat = useMemo(() => {
+    const stats = Array.isArray(billingInsightPanel?.stats) ? billingInsightPanel.stats : [];
+    return stats.find((stat) => stat?.id === 'next-due') || null;
+  }, [billingInsightPanel]);
+  const billingHeroMeta = useMemo(() => {
+    if (billingCardMode === 'overdue') {
+      return billingInsightPanel?.headline?.message
+        || `You still have ${outstandingBillCount} unpaid bill${outstandingBillCount === 1 ? '' : 's'} that need attention.`;
+    }
+    if (billingCardMode === 'open') {
+      return billingInsightPanel?.headline?.message
+        || `You have ${outstandingBillCount} active bill${outstandingBillCount === 1 ? '' : 's'} to keep an eye on.`;
+    }
+    if (billingCardMode === 'cleared') {
+      return billingInsightPanel?.headline?.message || 'Your recent billing records are marked settled.';
+    }
+    return 'No billing record has been posted yet. Once one is available, you can review it here.';
+  }, [billingCardMode, billingInsightPanel, outstandingBillCount]);
+  const billingStatusChip = useMemo(() => {
+    if (billingHeadlineTone === 'critical') return 'Overdue';
+    if (outstandingBillCount > 0) return billingHeadlineTone === 'warning' ? 'Due soon' : 'Open';
+    return latestBill ? 'Clear' : 'No bills';
+  }, [billingHeadlineTone, latestBill, outstandingBillCount]);
+  const billingHeroActionLabel = useMemo(() => {
+    if (billingCardMode === 'overdue') return 'Review overdue bills';
+    if (billingCardMode === 'open') return 'Open billing';
+    if (billingCardMode === 'cleared') return 'View billing history';
+    return 'Go to billing';
+  }, [billingCardMode]);
+  const billingHeroIconName = useMemo(() => {
+    if (billingCardMode === 'overdue') return 'alert-circle';
+    if (billingCardMode === 'open') return 'time';
+    if (billingCardMode === 'cleared') return 'checkmark-circle';
+    return 'document-text';
+  }, [billingCardMode]);
+  const billingLastPaidStat = useMemo(() => {
+    const stats = Array.isArray(billingInsightPanel?.stats) ? billingInsightPanel.stats : [];
+    return stats.find((stat) => stat?.id === 'last-paid') || null;
+  }, [billingInsightPanel]);
+  const billingLatestAmount = useMemo(() => {
+    const amount = Number(billingInsightPanel?.meta?.latestAmount);
+    return Number.isFinite(amount) ? safeCurrency(amount) : null;
+  }, [billingInsightPanel]);
+  const billingRecordCount = useMemo(() => {
+    if (typeof billingInsightPanel?.meta?.recordCount === 'number') return billingInsightPanel.meta.recordCount;
+    return Array.isArray(billingHistory) ? billingHistory.length : 0;
+  }, [billingHistory, billingInsightPanel]);
+  const billingLatestLabel = useMemo(() => {
+    if (billingInsightPanel?.meta?.latestLabel) return billingInsightPanel.meta.latestLabel;
+    const raw = latestBill?.billing_period || latestBill?.period || latestBill?.label || latestBill?.due_date || latestBill?.dueDate || null;
+    return raw ? safeFormatDate(raw, 'MMM yyyy') || String(raw) : null;
+  }, [billingInsightPanel, latestBill]);
+  const billingNextDueLabel = useMemo(() => {
+    if (billingNextDueStat?.value) return billingNextDueStat.value;
+    if (billingInsightPanel?.meta?.nextDueLabel) return billingInsightPanel.meta.nextDueLabel;
+    if (latestBill?.due_date || latestBill?.dueDate) return safeFormatDate(latestBill.due_date || latestBill.dueDate, 'MMM dd');
+    return null;
+  }, [billingInsightPanel, billingNextDueStat, latestBill]);
+  const billingMetaChips = useMemo(() => {
+    const chips = [];
+    if (billingRecordCount > 0) {
+      chips.push({ id: 'records', icon: 'albums-outline', label: `${billingRecordCount} on record` });
+    }
+
+    if (billingCardMode === 'overdue' || billingCardMode === 'open') {
+      chips.push({ id: 'open-count', icon: 'card-outline', label: `${outstandingBillCount} unpaid` });
+      if (billingNextDueLabel) {
+        chips.push({ id: 'next-due', icon: 'alarm-outline', label: `Next due ${billingNextDueLabel}` });
+      }
+    } else if (billingLatestLabel) {
+      chips.push({ id: 'latest', icon: 'calendar-outline', label: `Latest ${billingLatestLabel}` });
+    } else if (billingCardMode === 'empty') {
+      chips.push({ id: 'waiting', icon: 'time-outline', label: 'Waiting for first billing record' });
+    }
+
+    return chips.slice(0, 3);
+  }, [billingCardMode, billingLatestLabel, billingNextDueLabel, billingRecordCount, outstandingBillCount]);
+  const billingHeroHighlights = useMemo(() => {
+    if (billingCardMode === 'overdue' || billingCardMode === 'open') {
+      return [
+        {
+          id: 'open-bills',
+          label: 'Unpaid bills',
+          value: String(outstandingBillCount),
+          helper: billingCardMode === 'overdue' ? 'Includes overdue balance' : 'Still awaiting payment',
+        },
+        billingNextDueLabel ? {
+          id: 'next-due',
+          label: 'Next due',
+          value: billingNextDueLabel,
+          helper: billingNextDueStat?.helper || 'Date on record',
+        } : null,
+      ].filter(Boolean);
+    }
+
+    if (billingCardMode === 'cleared') {
+      return [
+        billingLatestAmount ? {
+          id: 'latest-amount',
+          label: 'Latest bill',
+          value: billingLatestAmount,
+          helper: billingLatestLabel || 'Most recent record',
+        } : null,
+        billingLastPaidStat?.value ? {
+          id: 'last-paid',
+          label: billingLastPaidStat.label,
+          value: billingLastPaidStat.value,
+          helper: billingLastPaidStat.helper || 'Recorded in your history',
+        } : null,
+      ].filter(Boolean);
+    }
+
+    return [];
+  }, [billingCardMode, billingLastPaidStat, billingLatestAmount, billingLatestLabel, billingNextDueLabel, billingNextDueStat, outstandingBillCount]);
+  const billingDetailStats = useMemo(() => {
+    const heroStatId = outstandingBillCount > 0 ? 'outstanding' : latestBill ? 'latest-bill' : '';
+    const hiddenStatIds = new Set(heroStatId ? [heroStatId] : []);
+    if (billingIsCleared) hiddenStatIds.add('last-paid');
+    return (Array.isArray(billingInsightPanel?.stats) ? billingInsightPanel.stats : [])
+      .filter((stat) => stat && !hiddenStatIds.has(stat.id))
+      .slice(0, 3);
+  }, [billingInsightPanel, billingIsCleared, latestBill, outstandingBillCount]);
+  const billingSignalItems = useMemo(() => {
+    return (Array.isArray(billingInsightPanel?.signals) ? billingInsightPanel.signals : [])
+      .filter(Boolean)
+      .slice(0, 2);
+  }, [billingInsightPanel]);
+  const billingDetailSectionLabel = useMemo(() => (
+    billingCardMode === 'cleared' ? 'Recent billing details' : 'Key details'
+  ), [billingCardMode]);
+  const billingSignalSectionLabel = useMemo(() => (
+    billingCardMode === 'cleared' ? 'Recent signals' : 'What stands out'
+  ), [billingCardMode]);
 
   const tenancyRoom = useMemo(() => {
     return dashboardData?.room || null;
@@ -258,7 +413,7 @@ export default function HomeScreen() {
   };
 
   const categoryMeta = {
-    'Quick Actions': { icon: 'flash', color: '#E0793A' },
+    'Quick Actions': { icon: 'flash', color: '#ff9000' },
     'Room': { icon: 'bed', color: '#6366F1' },
     'Bills': { icon: 'card', color: '#3B82F6' },
     'Maintenance': { icon: 'construct', color: '#0EA5E9' },
@@ -267,14 +422,17 @@ export default function HomeScreen() {
   };
 
   // ── Data fetching ──
-  const fetchDashboard = useCallback(async () => {
+  const fetchDashboard = useCallback(async (force = false) => {
+    if (!force && isFetchingRef.current) return;
+    isFetchingRef.current = true;
     const requestId = latestDashboardRequestRef.current + 1;
     latestDashboardRequestRef.current = requestId;
     try {
       setLoadError(null);
-      const [dashboardRes, announcementsRes] = await Promise.all([
+      const [dashboardRes, announcementsRes, billingHistoryRes] = await Promise.all([
         apiService.getDashboard(),
         apiService.getAnnouncements().catch(() => ({ data: [] })),
+        apiService.getBillingHistory ? apiService.getBillingHistory().catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
       ]);
 
       const dashboard = dashboardRes?.data;
@@ -282,6 +440,7 @@ export default function HomeScreen() {
         throw new Error('Invalid dashboard response shape');
       }
       const announcements = Array.isArray(announcementsRes?.data) ? announcementsRes.data : [];
+      const billingHistoryItems = Array.isArray(billingHistoryRes?.data) ? billingHistoryRes.data : [];
 
       const billingItems = Array.isArray(dashboard?.billing?.items)
         ? dashboard.billing.items
@@ -301,20 +460,23 @@ export default function HomeScreen() {
         ? dashboard.notifications.items
         : Array.isArray(dashboard?.notifications)
           ? dashboard.notifications
-          : announcements.map((a) => ({
-            title: a.title,
-            body: a.content || a.description,
-            type: a.category || 'announcement',
-            created_at: a.created_at,
+          : announcements.map((item) => ({
+            title: item.title,
+            body: item.content || item.description,
+            type: item.category || 'announcement',
+            category: item.category || 'announcement',
+            created_at: item.created_at,
           }));
 
       if (latestDashboardRequestRef.current !== requestId) return;
       setDashboardData({ ...dashboard, billing: billingItems, maintenance: mItems, notifications: notifItems });
+      setBillingHistory(billingHistoryItems);
     } catch (error) {
       console.error('Dashboard fetch error:', error);
       if (latestDashboardRequestRef.current !== requestId) return;
       setLoadError('Unable to load dashboard. Pull to retry.');
     } finally {
+      isFetchingRef.current = false;
       if (latestDashboardRequestRef.current !== requestId) return;
       setIsLoading(false);
       setRefreshing(false);
@@ -324,6 +486,8 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!authReady || authLoading) return;
     if (!userId) {
+      setDashboardData(null);
+      setBillingHistory([]);
       setIsLoading(false);
       setLoadError('Please sign in to load your dashboard.');
       return;
@@ -333,6 +497,13 @@ export default function HomeScreen() {
     setIsLoading(true);
     fetchDashboard();
   }, [authLoading, authReady, fetchDashboard, userId]);
+
+  useEffect(() => {
+    if (!authReady || !userId) return undefined;
+    return subscribeBillingRefresh(() => {
+      fetchDashboard();
+    });
+  }, [authReady, fetchDashboard, userId]);
 
   useFocusEffect(
     useCallback(() => {
@@ -348,7 +519,7 @@ export default function HomeScreen() {
   const onRefresh = useCallback(() => {
     if (!authReady || !userId) { setRefreshing(false); return; }
     setRefreshing(true);
-    fetchDashboard();
+    fetchDashboard(true);
   }, [authReady, fetchDashboard, userId]);
 
   const openMap = () => {
@@ -365,7 +536,7 @@ export default function HomeScreen() {
   if (!authReady || isLoading) {
     return (
       <View style={styles.container}>
-        <AppHeader />
+        <AppHeader recentNotifications={notifications} />
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
           <SkeletonCard height={56} colors={colors} />
           <SkeletonCard height={88} colors={colors} />
@@ -379,7 +550,7 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <AppHeader />
+      <AppHeader recentNotifications={notifications} />
       {loadError ? (
         <View style={styles.errorBanner}>
           <Ionicons name="warning" size={16} color="#b91c1c" />
@@ -391,7 +562,7 @@ export default function HomeScreen() {
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={['#1E3A5F']} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -661,7 +832,7 @@ export default function HomeScreen() {
                     let text = `${daysLeft}d left`;
                     if (daysLeft < 0) { color = '#b91c1c'; text = `Expired ${Math.abs(daysLeft)}d ago`; }
                     else if (daysLeft <= 30) { color = '#EF4444'; text = `${daysLeft}d left`; }
-                    else if (daysLeft <= 90) { color = '#E0793A'; text = `${daysLeft}d left`; }
+                    else if (daysLeft <= 90) { color = '#ff9000'; text = `${daysLeft}d left`; }
                     return <Text style={[styles.dateMeta, { color }]}>{text}</Text>;
                   } catch (_e) { return null; }
                 })()}
@@ -670,91 +841,210 @@ export default function HomeScreen() {
           </View>
         </View>
 
-        {/* ── Summary Card ── */}
-        <View style={styles.card}>
-          <Text style={styles.sectionTitle}>Summary</Text>
-          <TouchableOpacity style={styles.summaryRow} onPress={() => router.push('/(tabs)/billing')} activeOpacity={0.7}>
-            <View style={styles.summaryItem}>
-              <View style={[styles.summaryIcon, { backgroundColor: '#FDF6EC' }]}>
-                <Ionicons name="card" size={20} color="#D4682A" />
-              </View>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.summaryLabel}>Billing</Text>
-                <Text style={styles.summaryValue}>
-                  {latestBill ? `${safeCurrency(isBillOutstanding(latestBill) ? getBillOwedAmount(latestBill) : (latestBill.total ?? latestBill.amount ?? latestBill.remaining_amount ?? 0))} • ${latestBill.status || 'Pending'}` : 'No bills found'}
-                </Text>
-                <Text style={styles.summaryMeta}>
-                  {[
-                    outstandingBillCount > 0 ? `${outstandingBillCount} outstanding` : latestBill ? 'Up to date' : '',
-                    latestBill?.due_date || latestBill?.dueDate ? `Due ${safeFormatDate(latestBill.due_date || latestBill.dueDate)}` : '',
-                  ].filter(Boolean).join(' • ')}
-                </Text>
-              </View>
+        <View style={styles.billingInsightCard}>
+          <View style={styles.billingInsightHeader}>
+            <View style={styles.billingInsightBadge}>
+              <Ionicons name="analytics-outline" size={16} color={colors.accent} />
             </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-          </TouchableOpacity>
+            <View style={styles.billingInsightHeaderText}>
+              <Text style={styles.billingInsightTitle}>Billing Summary</Text>
+              <Text style={styles.billingInsightSubtitle}>{billingCardSubtitle}</Text>
+            </View>
+          </View>
 
-          <View style={styles.summaryDivider} />
+          {billingMetaChips.length > 0 ? (
+            <View style={styles.billingInsightTrustRow}>
+              {billingMetaChips.map((chip) => (
+                <View key={chip.id} style={styles.billingInsightTrustChip}>
+                  <Ionicons name={chip.icon} size={13} color={colors.primary} />
+                  <Text style={styles.billingInsightTrustText}>{chip.label}</Text>
+                </View>
+              ))}
+            </View>
+          ) : null}
 
-          <TouchableOpacity style={styles.summaryRow} onPress={() => router.push('/(tabs)/services')} activeOpacity={0.7}>
+            <View
+              style={[
+                styles.billingHeroCard,
+                billingCardMode === 'overdue' && styles.billingHeroCardCritical,
+                billingCardMode === 'open' && styles.billingHeroCardWarning,
+                billingCardMode === 'cleared' && styles.billingHeroCardPositive,
+                billingCardMode === 'empty' && styles.billingHeroCardNeutral,
+              ]}
+            >
+              <View style={styles.billingHeroIntroRow}>
+                <View
+                  style={[
+                    styles.billingHeroIconWrap,
+                    billingCardMode === 'overdue' && styles.billingHeroIconWrapCritical,
+                    billingCardMode === 'open' && styles.billingHeroIconWrapWarning,
+                    billingCardMode === 'cleared' && styles.billingHeroIconWrapPositive,
+                    billingCardMode === 'empty' && styles.billingHeroIconWrapNeutral,
+                  ]}
+                >
+                  <Ionicons
+                    name={billingHeroIconName}
+                    size={22}
+                    color={
+                      billingCardMode === 'overdue'
+                        ? '#B91C1C'
+                        : billingCardMode === 'open'
+                          ? '#C2410C'
+                          : billingCardMode === 'cleared'
+                            ? '#15803D'
+                            : colors.primary
+                    }
+                  />
+                </View>
+                <View style={styles.billingHeroCopy}>
+                  <Text style={styles.billingHeroLabel}>{billingHeroLabel}</Text>
+                  <Text
+                    style={[
+                      styles.billingHeroValue,
+                      billingCardMode === 'cleared' && styles.billingHeroValueCompact,
+                      billingCardMode === 'empty' && styles.billingHeroValueCompact,
+                    ]}
+                  >
+                    {billingHeroValue}
+                  </Text>
+                  <Text style={styles.billingHeroMeta}>{billingHeroMeta}</Text>
+                </View>
+                <View
+                  style={[
+                    styles.billingStatusChip,
+                    billingCardMode === 'overdue' && styles.billingStatusChipCritical,
+                    billingCardMode === 'open' && styles.billingStatusChipWarning,
+                    billingCardMode === 'cleared' && styles.billingStatusChipPositive,
+                    billingCardMode === 'empty' && styles.billingStatusChipNeutral,
+                  ]}
+                >
+                  <Text style={styles.billingStatusChipText}>{billingStatusChip}</Text>
+                </View>
+              </View>
+
+              {billingHeroHighlights.length > 0 ? (
+                <View style={styles.billingHeroHighlightsRow}>
+                  {billingHeroHighlights.map((item) => (
+                    <View key={item.id} style={styles.billingHeroHighlightCard}>
+                      <Text style={styles.billingHeroHighlightLabel}>{item.label}</Text>
+                      <Text style={styles.billingHeroHighlightValue}>{item.value}</Text>
+                      <Text style={styles.billingHeroHighlightHelper}>{item.helper}</Text>
+                    </View>
+                  ))}
+                </View>
+              ) : null}
+
+              <TouchableOpacity
+                style={[
+                  styles.billingHeroActionButton,
+                  billingCardMode === 'overdue' && styles.billingHeroActionButtonCritical,
+                  billingCardMode === 'open' && styles.billingHeroActionButtonWarning,
+                  billingCardMode === 'cleared' && styles.billingHeroActionButtonPositive,
+                  billingCardMode === 'empty' && styles.billingHeroActionButtonNeutral,
+                ]}
+                onPress={() => router.push('/(tabs)/billing')}
+                activeOpacity={0.85}
+              >
+                <Text style={styles.billingHeroActionText}>{billingHeroActionLabel}</Text>
+                <Ionicons name="arrow-forward" size={16} color="#ffffff" />
+              </TouchableOpacity>
+            </View>
+
+            {billingDetailStats.length > 0 ? (
+              <View style={styles.billingInsightSection}>
+                <View style={styles.billingInsightSectionHeader}>
+                  <Text style={styles.billingInsightSectionLabel}>{billingDetailSectionLabel}</Text>
+                  <Text style={styles.billingInsightSectionCaption}>From your recorded billing history</Text>
+                </View>
+                <View style={styles.billingInsightDetailList}>
+                  {billingDetailStats.map((stat, index) => (
+                    <View
+                      key={stat.id}
+                      style={[
+                        styles.billingInsightDetailItem,
+                        index === billingDetailStats.length - 1 && styles.billingInsightDetailItemLast,
+                      ]}
+                    >
+                      <View style={styles.billingInsightDetailCopy}>
+                        <Text style={styles.billingInsightDetailLabel}>{stat.label}</Text>
+                        <Text style={styles.billingInsightDetailHelper}>{stat.helper}</Text>
+                      </View>
+                      <View
+                        style={[
+                          styles.billingInsightDetailValuePill,
+                          stat.tone === 'critical' && styles.billingInsightDetailValueCritical,
+                          stat.tone === 'warning' && styles.billingInsightDetailValueWarning,
+                          stat.tone === 'positive' && styles.billingInsightDetailValuePositive,
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.billingInsightDetailValue,
+                            stat.tone === 'critical' && styles.billingInsightDetailValueTextCritical,
+                            stat.tone === 'warning' && styles.billingInsightDetailValueTextWarning,
+                            stat.tone === 'positive' && styles.billingInsightDetailValueTextPositive,
+                          ]}
+                        >
+                          {stat.value}
+                        </Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+
+            {billingSignalItems.length > 0 ? (
+              <View style={styles.billingInsightSection}>
+                <Text style={styles.billingInsightSectionLabel}>{billingSignalSectionLabel}</Text>
+                <View style={styles.billingInsightList}>
+                  {billingSignalItems.map((insight, index) => (
+                    <View
+                      key={insight.id || insight.utility || index}
+                      style={[styles.billingInsightRow, index === billingSignalItems.length - 1 && styles.billingInsightRowLast]}
+                    >
+                      <View
+                        style={[
+                          styles.billingInsightToneIcon,
+                          insight.tone === 'critical' && styles.billingInsightToneCritical,
+                          insight.tone === 'warning' && styles.billingInsightToneWarning,
+                          insight.tone === 'positive' && styles.billingInsightTonePositive,
+                          insight.tone === 'increase' && styles.billingInsightToneIncrease,
+                          insight.tone === 'decrease' && styles.billingInsightToneDecrease,
+                          insight.tone === 'neutral' && styles.billingInsightToneNeutral,
+                        ]}
+                      >
+                        <Ionicons name={insight.icon} size={15} color="#ffffff" />
+                      </View>
+                      <View style={styles.billingInsightItemBody}>
+                        <Text style={styles.billingInsightItemTitle}>{insight.title}</Text>
+                        <Text style={styles.billingInsightItemMessage}>{insight.message}</Text>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+              </View>
+            ) : null}
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.cardHeader}>
+            <Text style={styles.sectionTitle}>Quick Status</Text>
+            <Text style={styles.summaryCaption}>Helpful shortcuts</Text>
+          </View>
+          <TouchableOpacity style={styles.summaryRow} onPress={() => router.push('/(tabs)/services')} activeOpacity={0.75}>
             <View style={styles.summaryItem}>
               <View style={[styles.summaryIcon, { backgroundColor: '#E0F2FE' }]}>
                 <Ionicons name="construct" size={20} color="#0EA5E9" />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.summaryLabel}>Maintenance</Text>
-                <Text style={styles.summaryValue}>
-                  {activeMaintenanceCount > 0 ? `${activeMaintenanceCount} active` : 'No pending requests'}
-                </Text>
-                <Text style={styles.summaryMeta}>
-                  {activeMaintenanceCount > 0 ? 'Pending or in progress' : 'Track your service tickets'}
-                </Text>
+                <Text style={styles.summaryValue}>{summaryMaintenanceValue}</Text>
+                <Text style={styles.summaryMeta}>{summaryMaintenanceMeta}</Text>
               </View>
             </View>
             <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
           </TouchableOpacity>
-        </View>
-
-        {/* ── Notifications ── */}
-        <View style={styles.card}>
-          <View style={styles.cardHeader}>
-            <Text style={styles.sectionTitle}>Notifications</Text>
-            <TouchableOpacity onPress={() => router.push('/(tabs)/announcements')}>
-              <Text style={styles.viewAllText}>View All</Text>
-            </TouchableOpacity>
-          </View>
-          {notifications.length > 0 ? (
-            notifications.slice(0, 4).map((note, idx) => {
-              const notifType = (note.type || 'general').toLowerCase();
-              const iconName = NOTIF_ICONS[notifType] || NOTIF_ICONS.general;
-              return (
-                <TouchableOpacity
-                  key={idx}
-                  style={[styles.notifRow, idx === Math.min(notifications.length - 1, 3) && { borderBottomWidth: 0 }]}
-                  onPress={() => router.push('/(tabs)/announcements')}
-                  activeOpacity={0.6}
-                >
-                  <View style={styles.notifIconWrap}>
-                    <Ionicons name={iconName} size={18} color={colors.primary} />
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.notifTitle}>{note.title || 'Alert'}</Text>
-                    {note.body ? <Text style={styles.notifBody} numberOfLines={2}>{note.body}</Text> : null}
-                  </View>
-                  <View style={styles.notifRight}>
-                    <Text style={styles.notifTime}>{relativeTime(note.created_at)}</Text>
-                    <Ionicons name="chevron-forward" size={14} color="#9CA3AF" />
-                  </View>
-                </TouchableOpacity>
-              );
-            })
-          ) : (
-            <View style={styles.emptyState}>
-              <Ionicons name="checkmark-circle-outline" size={36} color="#22C55E" />
-              <Text style={styles.emptyTitle}>You&apos;re all caught up!</Text>
-              <Text style={styles.emptyHint}>No new notifications</Text>
-            </View>
-          )}
         </View>
 
         <View style={styles.bottomSpacer} />
@@ -884,6 +1174,334 @@ function createStyles(c) {
     summaryValue: { fontSize: 14, fontWeight: '700', color: c.text },
     summaryMeta: { fontSize: 12, color: c.textMuted, marginTop: 2 },
     summaryDivider: { height: 1, backgroundColor: c.border, marginVertical: 14 },
+    summaryCaption: { fontSize: 12, color: c.textMuted },
+    summaryGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 12,
+    },
+    summaryTile: {
+      flex: 1,
+      minWidth: 145,
+      borderRadius: 16,
+      padding: 14,
+      backgroundColor: c.surfaceSecondary,
+      borderWidth: 1,
+      borderColor: c.border,
+      gap: 8,
+    },
+    summaryTileBillingAlert: {
+      backgroundColor: '#FFF7ED',
+      borderColor: '#FED7AA',
+    },
+    summaryTileHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+    },
+    summaryTileIcon: {
+      width: 36,
+      height: 36,
+      borderRadius: 12,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    summaryTileLabel: {
+      fontSize: 12,
+      color: c.textSecondary,
+      fontWeight: '700',
+    },
+    summaryTileValue: {
+      fontSize: 18,
+      lineHeight: 23,
+      fontWeight: '800',
+      color: c.text,
+    },
+    summaryTileMeta: {
+      fontSize: 12,
+      lineHeight: 17,
+      color: c.textMuted,
+    },
+
+    billingInsightCard: {
+      backgroundColor: c.surface,
+      borderRadius: 16,
+      padding: 18,
+      marginBottom: 16,
+      gap: 14,
+      ...Platform.select({
+        web: { boxShadow: '0 2px 8px rgba(0,0,0,0.06)' },
+        default: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
+      }),
+    },
+    billingInsightHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    billingInsightHeaderText: { flex: 1, gap: 2 },
+    billingInsightBadge: {
+      width: 32,
+      height: 32,
+      borderRadius: 10,
+      backgroundColor: '#FDF6EC',
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
+    billingInsightTitle: { fontSize: 16, fontWeight: '700', color: c.text },
+    billingInsightSubtitle: { fontSize: 12, color: c.textMuted, lineHeight: 17 },
+    billingInsightHeaderCta: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 2,
+      paddingVertical: 6,
+      paddingHorizontal: 10,
+      borderRadius: 999,
+      backgroundColor: c.surfaceSecondary,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    billingInsightHeaderCtaText: { fontSize: 12, fontWeight: '700', color: c.primary },
+    billingInsightTrustRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 8,
+    },
+    billingInsightTrustChip: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      paddingVertical: 7,
+      paddingHorizontal: 10,
+      borderRadius: 999,
+      backgroundColor: c.surfaceSecondary,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    billingInsightTrustText: {
+      fontSize: 12,
+      color: c.textSecondary,
+      fontWeight: '600',
+    },
+    billingHeroCard: {
+      borderRadius: 14,
+      padding: 16,
+      gap: 14,
+      borderWidth: 1,
+    },
+    billingHeroCardCritical: { backgroundColor: '#FEF2F2', borderColor: '#FECACA' },
+    billingHeroCardWarning: { backgroundColor: '#FFF7ED', borderColor: '#FED7AA' },
+    billingHeroCardPositive: { backgroundColor: '#F0FDF4', borderColor: '#BBF7D0' },
+    billingHeroCardNeutral: { backgroundColor: c.surfaceSecondary, borderColor: c.border },
+    billingHeroIntroRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 12,
+    },
+    billingHeroIconWrap: {
+      width: 42,
+      height: 42,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 2,
+    },
+    billingHeroIconWrapCritical: { backgroundColor: '#FEE2E2' },
+    billingHeroIconWrapWarning: { backgroundColor: '#FFEDD5' },
+    billingHeroIconWrapPositive: { backgroundColor: '#DCFCE7' },
+    billingHeroIconWrapNeutral: { backgroundColor: '#E8EEF5' },
+    billingHeroCopy: {
+      flex: 1,
+      gap: 4,
+    },
+    billingHeroLabel: { fontSize: 12, fontWeight: '700', color: c.textSecondary, textTransform: 'uppercase', letterSpacing: 0.4 },
+    billingHeroValue: { fontSize: 28, lineHeight: 34, fontWeight: '800', color: c.text },
+    billingHeroValueCompact: { fontSize: 22, lineHeight: 28 },
+    billingHeroMeta: { fontSize: 13, lineHeight: 18, color: c.textSecondary },
+    billingHeroHighlightsRow: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      gap: 10,
+    },
+    billingHeroHighlightCard: {
+      flex: 1,
+      minWidth: 128,
+      paddingVertical: 12,
+      paddingHorizontal: 12,
+      borderRadius: 12,
+      backgroundColor: 'rgba(255,255,255,0.65)',
+      borderWidth: 1,
+      borderColor: 'rgba(255,255,255,0.55)',
+      gap: 3,
+    },
+    billingHeroHighlightLabel: {
+      fontSize: 11,
+      lineHeight: 15,
+      color: c.textSecondary,
+      fontWeight: '700',
+      textTransform: 'uppercase',
+      letterSpacing: 0.4,
+    },
+    billingHeroHighlightValue: {
+      fontSize: 16,
+      lineHeight: 21,
+      fontWeight: '800',
+      color: c.text,
+    },
+    billingHeroHighlightHelper: {
+      fontSize: 11,
+      lineHeight: 16,
+      color: c.textMuted,
+    },
+    billingHeroActionButton: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 8,
+      borderRadius: 12,
+      paddingVertical: 12,
+      paddingHorizontal: 14,
+    },
+    billingHeroActionButtonCritical: { backgroundColor: '#B91C1C' },
+    billingHeroActionButtonWarning: { backgroundColor: '#C2410C' },
+    billingHeroActionButtonPositive: { backgroundColor: '#15803D' },
+    billingHeroActionButtonNeutral: { backgroundColor: c.primary },
+    billingHeroActionText: {
+      fontSize: 13,
+      lineHeight: 18,
+      fontWeight: '800',
+      color: '#ffffff',
+    },
+    billingStatusChip: {
+      paddingVertical: 5,
+      paddingHorizontal: 10,
+      borderRadius: 999,
+    },
+    billingStatusChipCritical: { backgroundColor: '#FEE2E2' },
+    billingStatusChipWarning: { backgroundColor: '#FED7AA' },
+    billingStatusChipPositive: { backgroundColor: '#DCFCE7' },
+    billingStatusChipNeutral: { backgroundColor: '#E5E7EB' },
+    billingStatusChipText: { fontSize: 11, fontWeight: '700', color: c.text },
+    billingInsightCallout: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 8,
+      paddingHorizontal: 2,
+    },
+    billingInsightCalloutText: {
+      flex: 1,
+      fontSize: 13,
+      lineHeight: 19,
+      color: c.textSecondary,
+      fontWeight: '500',
+    },
+    billingInsightSection: { gap: 10 },
+    billingInsightSectionHeader: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 10,
+    },
+    billingInsightSectionLabel: {
+      fontSize: 11,
+      fontWeight: '700',
+      letterSpacing: 0.4,
+      textTransform: 'uppercase',
+      color: c.textMuted,
+    },
+    billingInsightSectionCaption: {
+      fontSize: 11,
+      lineHeight: 16,
+      color: c.textMuted,
+    },
+    billingInsightDetailList: {
+      gap: 2,
+    },
+    billingInsightDetailItem: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      gap: 14,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+    },
+    billingInsightDetailItemLast: {
+      borderBottomWidth: 0,
+    },
+    billingInsightDetailCopy: {
+      flex: 1,
+      gap: 2,
+    },
+    billingInsightDetailLabel: {
+      fontSize: 12,
+      fontWeight: '700',
+      color: c.text,
+    },
+    billingInsightDetailHelper: {
+      fontSize: 11,
+      lineHeight: 16,
+      color: c.textMuted,
+    },
+    billingInsightDetailValue: {
+      fontSize: 14,
+      lineHeight: 19,
+      fontWeight: '800',
+      color: c.text,
+      textAlign: 'center',
+    },
+    billingInsightDetailValuePill: {
+      minWidth: 84,
+      paddingVertical: 8,
+      paddingHorizontal: 12,
+      borderRadius: 999,
+      backgroundColor: c.surfaceSecondary,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    billingInsightDetailValueCritical: { backgroundColor: '#FEE2E2' },
+    billingInsightDetailValueWarning: { backgroundColor: '#FFEDD5' },
+    billingInsightDetailValuePositive: { backgroundColor: '#DCFCE7' },
+    billingInsightDetailValueTextCritical: { color: '#B91C1C' },
+    billingInsightDetailValueTextWarning: { color: '#C2410C' },
+    billingInsightDetailValueTextPositive: { color: '#15803D' },
+    billingInsightList: { gap: 12 },
+    billingInsightRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 10,
+      padding: 12,
+      borderRadius: 14,
+      backgroundColor: c.surfaceSecondary,
+      borderWidth: 1,
+      borderColor: c.border,
+    },
+    billingInsightRowLast: {
+      marginBottom: 0,
+    },
+    billingInsightToneIcon: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      justifyContent: 'center',
+      alignItems: 'center',
+      marginTop: 1,
+    },
+    billingInsightToneCritical: { backgroundColor: '#B91C1C' },
+    billingInsightToneWarning: { backgroundColor: '#EA580C' },
+    billingInsightTonePositive: { backgroundColor: '#15803D' },
+    billingInsightToneIncrease: { backgroundColor: '#B45309' },
+    billingInsightToneDecrease: { backgroundColor: '#15803D' },
+    billingInsightToneNeutral: { backgroundColor: '#64748B' },
+    billingInsightItemBody: { flex: 1, gap: 4, paddingTop: 1 },
+    billingInsightItemTitle: {
+      fontSize: 13,
+      lineHeight: 18,
+      color: c.text,
+      fontWeight: '700',
+    },
+    billingInsightItemMessage: {
+      fontSize: 13,
+      lineHeight: 19,
+      color: c.textSecondary,
+      fontWeight: '500',
+    },
 
     // Notifications
     viewAllText: { color: c.primary, fontSize: 13, fontWeight: '600' },

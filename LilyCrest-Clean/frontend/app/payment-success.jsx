@@ -1,10 +1,11 @@
-import { Ionicons } from '@expo/vector-icons';
+﻿import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../src/context/ThemeContext';
 import { apiService } from '../src/services/api';
+import { emitBillingRefresh } from '../src/services/billingState';
 
 export default function PaymentSuccessScreen() {
   const router = useRouter();
@@ -29,6 +30,7 @@ export default function PaymentSuccessScreen() {
       if (!checkoutId) {
         setIsVerifying(false);
         timer = setTimeout(() => {
+          emitBillingRefresh('payment_success');
           router.replace('/(tabs)/billing');
         }, 5000);
         return;
@@ -48,6 +50,7 @@ export default function PaymentSuccessScreen() {
           if (paid) {
             setVerifyMessage('Payment confirmed. Redirecting to billing...');
             setIsVerifying(false);
+            emitBillingRefresh('payment_success');
             timer = setTimeout(() => {
               if (!cancelled) {
                 router.replace('/(tabs)/billing');
@@ -104,12 +107,12 @@ export default function PaymentSuccessScreen() {
           <Text style={styles.ref}>Bill ID: {billing_id}</Text>
         )}
 
-        <Pressable style={styles.primaryBtn} onPress={() => router.replace('/(tabs)/billing')}>
+        <Pressable style={styles.primaryBtn} onPress={() => { emitBillingRefresh('payment_success'); router.replace('/(tabs)/billing'); }}>
           <Ionicons name="receipt-outline" size={18} color="#fff" />
           <Text style={styles.primaryBtnText}>View Billing</Text>
         </Pressable>
 
-        <Pressable style={styles.secondaryBtn} onPress={() => router.replace('/(tabs)/home')}>
+        <Pressable style={styles.secondaryBtn} onPress={() => { emitBillingRefresh('payment_success'); router.replace('/(tabs)/home'); }}>
           <Text style={styles.secondaryBtnText}>Go to Home</Text>
         </Pressable>
       </View>
@@ -146,7 +149,7 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
   ref: { fontSize: 12, color: c.textMuted, fontWeight: '600' },
   primaryBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: '#D4682A', paddingVertical: 15, paddingHorizontal: 32,
+    backgroundColor: c.primary, paddingVertical: 15, paddingHorizontal: 32,
     borderRadius: 14, marginTop: 16, width: '100%', maxWidth: 300,
   },
   primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },

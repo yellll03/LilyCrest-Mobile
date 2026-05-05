@@ -1,11 +1,18 @@
-import { Ionicons } from '@expo/vector-icons';
+﻿import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAlert } from '../src/context/AlertContext';
 import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
 import { apiService } from '../src/services/api';
+import {
+  BILL_UNAVAILABLE_MESSAGE,
+  emitBillingRefresh,
+  getBillingApiMessage,
+  isBillingUnavailableMessage,
+} from '../src/services/billingState';
 import { downloadBillPdf } from '../src/utils/downloadBillPdf';
 
 const getBillId = (bill) => bill?.billing_id || bill?.id || bill?._id || bill?.billingId || bill?.billId || bill?.reference_id;
@@ -76,32 +83,54 @@ export default function BillDetailsScreen() {
   const [downloading, setDownloading] = useState(false);
   const [creatingCheckout, setCreatingCheckout] = useState(false);
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const resp = await apiService.getMyBilling();
-        const all = resp?.data || [];
-        const match = all.find((b) => {
-          const ids = [b.billing_id, b.id, b._id, b.billingId, b.billId, b.reference_id].filter(Boolean).map((id) => String(id));
-          return ids.includes(String(billId));
-        });
-        if (match) { setBill(match); return; }
-        setError('Bill not found');
-      } catch (_err) {
-        setError('Unable to load bill details');
-      } finally {
-        setLoading(false);
+  const loadBill = useCallback(async ({ showLoader = true } = {}) => {
+    if (showLoader) setLoading(true);
+    setError(null);
+
+    const targetId = String(billId || '').trim();
+    if (!targetId) {
+      setBill(null);
+      setError(BILL_UNAVAILABLE_MESSAGE);
+      if (showLoader) setLoading(false);
+      return null;
+    }
+
+    try {
+      const response = await apiService.getBillingById(targetId);
+      const nextBill = response?.data || null;
+      setBill(nextBill);
+      return nextBill;
+    } catch (err) {
+      const message = getBillingApiMessage(err, 'Unable to load bill details');
+      setBill(null);
+      setError(message);
+      if (isBillingUnavailableMessage(message)) {
+        emitBillingRefresh('bill_unavailable');
       }
-    };
-    load();
+      return null;
+    } finally {
+      if (showLoader) setLoading(false);
+    }
   }, [billId]);
+
+  useEffect(() => {
+    loadBill();
+  }, [loadBill]);
+
+  useFocusEffect(useCallback(() => {
+    loadBill({ showLoader: false });
+    return undefined;
+  }, [loadBill]));
 
   // ── PayMongo Payment ──
   const handlePayOnline = async () => {
-    const id = getBillId(bill);
-    if (!id) return;
+    const latestBill = await loadBill({ showLoader: false });
+    if (!latestBill) return;
+    const id = getBillId(latestBill);
+    if (!id) {
+      setError(BILL_UNAVAILABLE_MESSAGE);
+      return;
+    }
     setCreatingCheckout(true);
     try {
       const resp = await apiService.createPaymongoCheckout(id);
@@ -126,7 +155,13 @@ export default function BillDetailsScreen() {
       }
       // result.type === 'cancel' means the user closed the browser — stay on page
     } catch (err) {
-      showAlert({ title: 'Payment Error', message: err?.response?.data?.detail || 'Failed to create payment session.', type: 'error' });
+      const message = getBillingApiMessage(err, 'Failed to create payment session.');
+      if (isBillingUnavailableMessage(message)) {
+        setBill(null);
+        setError(message);
+        emitBillingRefresh('bill_unavailable');
+      }
+      showAlert({ title: 'Payment Error', message, type: 'error' });
     } finally {
       setCreatingCheckout(false);
     }
@@ -143,7 +178,7 @@ export default function BillDetailsScreen() {
   if (error || !bill) {
     return (
       <View style={styles.center}>
-        <Text style={styles.errorText}>{error || 'Bill not found'}</Text>
+        <Text style={styles.errorText}>{error || BILL_UNAVAILABLE_MESSAGE}</Text>
         <Pressable onPress={() => router.back()} style={styles.backBtn}><Text style={styles.backBtnText}>Go Back</Text></Pressable>
       </View>
     );
@@ -155,28 +190,11 @@ export default function BillDetailsScreen() {
   const isOutstanding = isBillOutstanding(bill);
   const totalAmount = bill.total || bill.amount || 0;
   const expectsElectricityBreakdown =
-    ((bill.billing_type || '').toLowerCase() === 'electricity' || (bill.electricity && !bill.rent && !bill.water));
+    Number(bill.electricity || 0) > 0 || (bill.billing_type || '').toLowerCase() === 'electricity';
   const usableElectricityBreakdown = hasUsableElectricityBreakdown(bill);
 
-  // Auto-generate water breakdown for presentation if bill is water type but lacks breakdown data
-  if (
-    !bill.water_breakdown &&
-    ((bill.billing_type || '').toLowerCase() === 'water' || (bill.water && !bill.rent && !bill.electricity))
-  ) {
-    const waterAmount = bill.water || totalAmount;
-    const rate = 50;
-    const consumption = waterAmount / rate;
-    const baseReading = 15;
-    bill.water_breakdown = {
-      reading_from: baseReading,
-      reading_to: +(baseReading + consumption).toFixed(1),
-      consumption: +consumption.toFixed(1),
-      rate,
-      total: waterAmount,
-      sharing_policy: 'Equal division among active tenants',
-    };
-    if (!bill.water) bill.water = waterAmount;
-  }
+  const expectsWaterBreakdown =
+    Number(bill.water || 0) > 0 || (bill.billing_type || '').toLowerCase() === 'water';
 
   // Charge items
   const charges = [];
@@ -423,11 +441,20 @@ export default function BillDetailsScreen() {
               <Ionicons name="flash" size={16} color="#b45309" />
               <Text style={styles.sectionTitle}>Electricity Breakdown</Text>
             </View>
-            <Text style={styles.sharingPolicy}>Electricity breakdown unavailable</Text>
+            <Text style={styles.sharingPolicy}>Breakdown unavailable.</Text>
           </View>
         )}
 
         {/* ── Water Breakdown ── */}
+        {expectsWaterBreakdown && !bill.water_breakdown && (
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="water" size={16} color="#0284c7" />
+              <Text style={styles.sectionTitle}>Water Breakdown</Text>
+            </View>
+            <Text style={styles.sharingPolicy}>Breakdown unavailable.</Text>
+          </View>
+        )}
         {bill.water_breakdown && (
           <View style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
@@ -561,8 +588,8 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
 
   // Header Card
   headerCard: {
-    backgroundColor: isDarkMode ? '#1A1A2E' : '#14365A', borderRadius: 18, padding: 18,
-    ...Platform.select({ ios: { shadowColor: '#14365A', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10 }, android: { elevation: 4 } }),
+    backgroundColor: c.headerBg, borderRadius: 18, padding: 18,
+    ...Platform.select({ ios: { shadowColor: c.headerBg, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10 }, android: { elevation: 4 } }),
   },
   brandText: { fontSize: 10, letterSpacing: 2, color: 'rgba(255,255,255,0.4)', fontWeight: '700', marginBottom: 6 },
   billTitle: { fontSize: 18, fontWeight: '800', color: '#ffffff', marginBottom: 8 },
@@ -595,7 +622,7 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
   totalDivider: { height: 1.5, backgroundColor: c.border, marginVertical: 6 },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
   totalLabel: { fontSize: 14, fontWeight: '800', color: c.text },
-  totalValue: { fontSize: 20, fontWeight: '800', color: '#D4682A' },
+  totalValue: { fontSize: 20, fontWeight: '800', color: c.accent },
 
   // Computation Segments (old styles kept for water breakdown)
   segmentCard: {
@@ -618,7 +645,7 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
   },
   elecTableHeaderRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    backgroundColor: isDarkMode ? '#1A1A2E' : '#14365A',
+    backgroundColor: c.headerBg,
     paddingHorizontal: 12, paddingVertical: 8,
   },
   elecHeaderLabel: { fontSize: 12, fontWeight: '700', color: '#ffffff' },
@@ -643,8 +670,8 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 9,
     backgroundColor: isDarkMode ? 'rgba(212,104,42,0.15)' : '#FFF7ED',
   },
-  elecAmountLabel: { fontSize: 11, fontWeight: '600', color: '#D4682A', flex: 1 },
-  elecAmountValue: { fontSize: 14, fontWeight: '800', color: '#D4682A' },
+  elecAmountLabel: { fontSize: 11, fontWeight: '600', color: c.accent, flex: 1 },
+  elecAmountValue: { fontSize: 14, fontWeight: '800', color: c.accent },
   // Electricity summary table (total due + due date)
   elecSummaryTable: {
     borderRadius: 10, overflow: 'hidden', borderWidth: 1, borderColor: c.border,
@@ -665,14 +692,14 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
   elecSummaryAdditionText: { fontSize: 11, fontWeight: '600', color: c.textMuted, fontStyle: 'italic' },
   elecTotalDueRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    backgroundColor: isDarkMode ? '#1A1A2E' : '#14365A',
+    backgroundColor: c.headerBg,
     paddingHorizontal: 12, paddingVertical: 10,
   },
   elecTotalDueLabel: { fontSize: 13, fontWeight: '700', color: '#ffffff' },
-  elecTotalDueValue: { fontSize: 16, fontWeight: '800', color: '#D4682A' },
+  elecTotalDueValue: { fontSize: 16, fontWeight: '800', color: '#ff9000' },
   elecDueDateRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    backgroundColor: isDarkMode ? '#222240' : '#1A3D6A',
+    backgroundColor: isDarkMode ? '#1A1A1A' : '#0A2040',
     paddingHorizontal: 12, paddingVertical: 8,
     borderBottomLeftRadius: 10, borderBottomRightRadius: 10,
   },
@@ -689,7 +716,7 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
   paySection: { gap: 10 },
   paymongoBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: '#D4682A', paddingVertical: 16, borderRadius: 14,
+    backgroundColor: c.primary, paddingVertical: 16, borderRadius: 14,
   },
   paymongoBtnText: { color: '#ffffff', fontWeight: '700', fontSize: 16 },
   secureNote: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
@@ -698,7 +725,7 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
   // Download
   downloadBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: '#152774', paddingVertical: 14, borderRadius: 14,
+    backgroundColor: c.headerBg, paddingVertical: 14, borderRadius: 14,
   },
   downloadText: { color: '#ffffff', fontWeight: '700', fontSize: 15 },
 

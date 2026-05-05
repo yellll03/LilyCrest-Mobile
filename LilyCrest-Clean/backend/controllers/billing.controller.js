@@ -72,6 +72,411 @@ const PRESENTATION_BILLS = {
   },
 };
 
+const BILL_UNAVAILABLE_MESSAGE = 'This billing record is no longer available.';
+const NON_VISIBLE_BILL_STATUSES = new Set([
+  'archived',
+  'cancelled',
+  'canceled',
+  'deleted',
+  'hidden',
+  'invalid',
+  'void',
+  'voided',
+]);
+const PAID_BILL_STATUSES = new Set(['paid', 'settled']);
+const NON_PAYABLE_BILL_STATUSES = new Set([
+  ...NON_VISIBLE_BILL_STATUSES,
+  ...PAID_BILL_STATUSES,
+  'duplicate',
+  'refunded',
+  'rejected',
+  'verification',
+]);
+
+function normalizeBillId(bill = {}) {
+  const candidates = [
+    bill.billing_id,
+    bill.id,
+    bill.billingId,
+    bill.billId,
+    bill.reference_id,
+    bill._id,
+  ];
+
+  for (const candidate of candidates) {
+    if (candidate === null || candidate === undefined) continue;
+    const normalized = String(candidate).trim();
+    if (normalized) return normalized;
+  }
+
+  return '';
+}
+
+function normalizeBillStatus(status) {
+  return String(status || '').trim().toLowerCase();
+}
+
+function getBillPaymentDate(bill = {}) {
+  return bill.payment_date
+    || bill.paymentDate
+    || bill.paidAt
+    || bill.paid_at
+    || null;
+}
+
+function hasTrueFlag(value) {
+  if (value === true || value === 1) return true;
+  if (typeof value === 'string') {
+    const normalized = value.trim().toLowerCase();
+    return normalized === 'true' || normalized === '1' || normalized === 'yes';
+  }
+  return false;
+}
+
+function hasMeaningfulValue(value) {
+  if (value === null || value === undefined) return false;
+  if (typeof value === 'string') return value.trim().length > 0;
+  return true;
+}
+
+function hasConfirmedPaymentEvidence(bill = {}) {
+  if (
+    hasMeaningfulValue(bill.paymongo_payment_id)
+    || hasMeaningfulValue(bill.paymongoPaymentId)
+    || hasMeaningfulValue(bill.transaction_id)
+    || hasMeaningfulValue(bill.transactionId)
+    || hasMeaningfulValue(bill.txn_id)
+  ) {
+    return true;
+  }
+
+  const paymentDate = getBillPaymentDate(bill);
+  const hasReference = hasMeaningfulValue(bill.paymongo_reference)
+    || hasMeaningfulValue(bill.paymongoReference)
+    || hasMeaningfulValue(bill.reference_no)
+    || hasMeaningfulValue(bill.reference);
+  const paymentMethod = String(bill.payment_method || bill.paymentMethod || '').trim().toLowerCase();
+
+  return Boolean(paymentDate) && (hasReference || Boolean(paymentMethod));
+}
+
+function getEffectiveBillStatus(bill = {}) {
+  const status = normalizeBillStatus(bill.status);
+  if (PAID_BILL_STATUSES.has(status)) return status;
+  if (hasConfirmedPaymentEvidence(bill)) return 'paid';
+  return status;
+}
+
+function toComparableDate(value) {
+  if (!value) return '';
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return String(value).trim();
+  return parsed.toISOString();
+}
+
+function getBillTimestamp(bill = {}) {
+  const candidates = [
+    bill.due_date,
+    bill.dueDate,
+    bill.release_date,
+    bill.releaseDate,
+    bill.created_at,
+    bill.createdAt,
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const parsed = new Date(candidate).getTime();
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  return 0;
+}
+
+function getComparableBillAmount(bill = {}) {
+  if (isPaidBill(bill)) return 0;
+  const amount = Number(bill.remaining_amount ?? bill.total ?? bill.amount ?? 0);
+  return Number.isFinite(amount) ? amount : 0;
+}
+
+function getStableBillAmount(bill = {}) {
+  const directCandidates = [
+    bill.original_total,
+    bill.gross_amount,
+    bill.grossAmount,
+  ];
+
+  for (const candidate of directCandidates) {
+    const parsed = Number(candidate);
+    if (Number.isFinite(parsed) && parsed > 0) return parsed;
+  }
+
+  const baseCharges = ['rent', 'electricity', 'water', 'penalties']
+    .reduce((sum, key) => {
+      const parsed = Number(bill[key] ?? 0);
+      return Number.isFinite(parsed) ? sum + parsed : sum;
+    }, 0);
+  if (baseCharges > 0) return baseCharges;
+
+  if (Array.isArray(bill.items) && bill.items.length > 0) {
+    const itemizedTotal = bill.items.reduce((sum, item) => {
+      const parsed = Number(item?.amount ?? 0);
+      return Number.isFinite(parsed) ? sum + parsed : sum;
+    }, 0);
+    if (itemizedTotal > 0) return itemizedTotal;
+  }
+
+  const fallbackCandidates = [bill.total, bill.amount, bill.remaining_amount];
+  for (const candidate of fallbackCandidates) {
+    const parsed = Number(candidate);
+    if (Number.isFinite(parsed) && parsed >= 0) return parsed;
+  }
+
+  return 0;
+}
+
+function buildBillChargeFingerprint(bill = {}) {
+  const baseParts = ['rent', 'electricity', 'water', 'penalties']
+    .map((key) => {
+      const parsed = Number(bill[key] ?? 0);
+      return `${key}:${Number.isFinite(parsed) ? parsed : 0}`;
+    });
+
+  const itemParts = Array.isArray(bill.items)
+    ? [...bill.items]
+      .map((item) => ({
+        label: String(item?.label || item?.description || '').trim().toLowerCase(),
+        type: String(item?.type || '').trim().toLowerCase(),
+        amount: Number(item?.amount ?? 0),
+      }))
+      .sort((left, right) => {
+        const labelDiff = left.label.localeCompare(right.label);
+        if (labelDiff !== 0) return labelDiff;
+        return left.type.localeCompare(right.type);
+      })
+      .map((item) => `${item.label}:${item.type}:${Number.isFinite(item.amount) ? item.amount : 0}`)
+    : [];
+
+  return [...baseParts, ...itemParts].join('|');
+}
+
+function getBillFreshnessTimestamp(bill = {}) {
+  const candidates = [
+    bill.updated_at,
+    bill.updatedAt,
+    getBillPaymentDate(bill),
+    bill.created_at,
+    bill.createdAt,
+    bill.due_date,
+    bill.dueDate,
+  ];
+
+  for (const candidate of candidates) {
+    if (!candidate) continue;
+    const parsed = new Date(candidate).getTime();
+    if (Number.isFinite(parsed)) return parsed;
+  }
+
+  return 0;
+}
+
+function getBillPreferenceScore(bill = {}) {
+  let score = 0;
+
+  if (isPaidBill(bill)) score += 1000;
+  if (hasMeaningfulValue(getBillPaymentDate(bill))) score += 300;
+  if (
+    hasConfirmedPaymentEvidence(bill)
+  ) {
+    score += 250;
+  }
+  if ((bill.__source || '') === 'real') score += 150;
+  if (isPayableBill(bill)) score += 25;
+
+  return score;
+}
+
+function mergeBillRecords(preferred = {}, fallback = {}) {
+  const merged = { ...fallback };
+
+  Object.entries(preferred).forEach(([key, value]) => {
+    if (Array.isArray(value)) {
+      if (value.length > 0) merged[key] = value;
+      return;
+    }
+
+    if (value instanceof Date) {
+      merged[key] = value;
+      return;
+    }
+
+    if (value && typeof value === 'object') {
+      if (Object.keys(value).length > 0) merged[key] = value;
+      return;
+    }
+
+    if (hasMeaningfulValue(value)) {
+      merged[key] = value;
+    }
+  });
+
+  merged.__source = preferred.__source || fallback.__source;
+  return merged;
+}
+
+function choosePreferredBillRecord(existing, candidate) {
+  if (!existing) return candidate;
+  if (!candidate) return existing;
+
+  const existingScore = getBillPreferenceScore(existing);
+  const candidateScore = getBillPreferenceScore(candidate);
+  if (candidateScore !== existingScore) {
+    return candidateScore > existingScore
+      ? mergeBillRecords(candidate, existing)
+      : mergeBillRecords(existing, candidate);
+  }
+
+  const existingFreshness = getBillFreshnessTimestamp(existing);
+  const candidateFreshness = getBillFreshnessTimestamp(candidate);
+  if (candidateFreshness !== existingFreshness) {
+    return candidateFreshness > existingFreshness
+      ? mergeBillRecords(candidate, existing)
+      : mergeBillRecords(existing, candidate);
+  }
+
+  if ((existing.__source || '') !== (candidate.__source || '')) {
+    return (candidate.__source || '') === 'real'
+      ? mergeBillRecords(candidate, existing)
+      : mergeBillRecords(existing, candidate);
+  }
+
+  return getBillTimestamp(candidate) >= getBillTimestamp(existing)
+    ? mergeBillRecords(candidate, existing)
+    : mergeBillRecords(existing, candidate);
+}
+
+function isBillHiddenOrDeleted(bill = {}) {
+  return hasTrueFlag(bill.isArchived)
+    || hasTrueFlag(bill.archived)
+    || hasTrueFlag(bill.hidden)
+    || hasTrueFlag(bill.isHidden)
+    || hasTrueFlag(bill.deleted)
+    || hasTrueFlag(bill.isDeleted)
+    || hasTrueFlag(bill.invalid)
+    || hasTrueFlag(bill.isInvalid)
+    || hasMeaningfulValue(bill.archivedAt)
+    || hasMeaningfulValue(bill.archived_at)
+    || hasMeaningfulValue(bill.deletedAt)
+    || hasMeaningfulValue(bill.deleted_at)
+    || hasMeaningfulValue(bill.hiddenAt)
+    || hasMeaningfulValue(bill.hidden_at)
+    || hasMeaningfulValue(bill.cancelledAt)
+    || hasMeaningfulValue(bill.cancelled_at)
+    || hasMeaningfulValue(bill.canceledAt)
+    || hasMeaningfulValue(bill.canceled_at)
+    || hasMeaningfulValue(bill.invalidatedAt)
+    || hasMeaningfulValue(bill.invalidated_at)
+    || hasMeaningfulValue(bill.voidedAt)
+    || hasMeaningfulValue(bill.voided_at);
+}
+
+function isTenantVisibleBill(bill = {}) {
+  const status = normalizeBillStatus(bill.status);
+  if (!normalizeBillId(bill)) return false;
+  if (isBillHiddenOrDeleted(bill)) return false;
+  return !NON_VISIBLE_BILL_STATUSES.has(status);
+}
+
+function isPaidBill(bill = {}) {
+  return PAID_BILL_STATUSES.has(getEffectiveBillStatus(bill));
+}
+
+function isPayableBill(bill = {}) {
+  const status = getEffectiveBillStatus(bill);
+  if (!isTenantVisibleBill(bill)) return false;
+  if (NON_PAYABLE_BILL_STATUSES.has(status)) return false;
+  return getComparableBillAmount(bill) > 0;
+}
+
+function normalizeLegacyBill(bill = {}) {
+  const normalized = { ...bill, _id: undefined };
+  const effectiveStatus = getEffectiveBillStatus(normalized);
+
+  normalized.status = effectiveStatus || normalized.status;
+  if (effectiveStatus === 'paid') {
+    if (normalized.remaining_amount !== undefined) {
+      normalized.remaining_amount = 0;
+    }
+    const paymentDate = getBillPaymentDate(normalized);
+    if (paymentDate && !normalized.payment_date) {
+      normalized.payment_date = paymentDate;
+    }
+  }
+
+  return normalized;
+}
+
+function buildBillVisibilitySignature(bill = {}) {
+  return [
+    String(bill.billing_period || '').trim().toLowerCase(),
+    String(bill.description || '').trim().toLowerCase(),
+    toComparableDate(bill.due_date || bill.dueDate),
+    toComparableDate(bill.release_date || bill.releaseDate),
+    getStableBillAmount(bill),
+    String(bill.billing_type || '').trim().toLowerCase(),
+    buildBillChargeFingerprint(bill),
+  ].join('|');
+}
+
+function sortBillsNewestFirst(bills = []) {
+  return [...bills].sort((left, right) => {
+    const timeDiff = getBillTimestamp(right) - getBillTimestamp(left);
+    if (timeDiff !== 0) return timeDiff;
+    return normalizeBillId(right).localeCompare(normalizeBillId(left));
+  });
+}
+
+function dedupeTenantBills(bills = []) {
+  const uniqueById = new Map();
+
+  bills.forEach((bill) => {
+    const id = normalizeBillId(bill);
+    if (!id || !isTenantVisibleBill(bill)) return;
+    uniqueById.set(id, choosePreferredBillRecord(uniqueById.get(id), bill));
+  });
+
+  const uniqueBySignature = new Map();
+  Array.from(uniqueById.values()).forEach((bill) => {
+    const signature = buildBillVisibilitySignature(bill);
+    uniqueBySignature.set(signature, choosePreferredBillRecord(uniqueBySignature.get(signature), bill));
+  });
+
+  return sortBillsNewestFirst(Array.from(uniqueBySignature.values())).map(({ __source, ...bill }) => bill);
+}
+
+function applyBillFilters(bills, { billingId = null, paidOnly = false, unpaidOnly = false, limit = 100 } = {}) {
+  const targetId = String(billingId || '').trim().toLowerCase();
+  let results = Array.isArray(bills) ? [...bills] : [];
+
+  if (targetId) {
+    results = results.filter((bill) => normalizeBillId(bill).trim().toLowerCase() === targetId);
+  }
+
+  if (paidOnly) {
+    results = results.filter(isPaidBill);
+  } else if (unpaidOnly) {
+    results = results.filter(isPayableBill);
+  }
+
+  results = sortBillsNewestFirst(results);
+
+  if (Number.isFinite(limit) && limit > 0) {
+    return results.slice(0, limit);
+  }
+
+  return results;
+}
+
 function normalizeBillingPeriod(value, fallback = 'N/A') {
   if (value == null) return fallback;
 
@@ -110,8 +515,19 @@ function hasUsableElectricityBreakdown(bill) {
 // Map a document from the real 'bills' collection to the legacy billing shape
 function mapRealBill(b, userId) {
   const c = b.charges || {};
+  const effectiveStatus = getEffectiveBillStatus(b);
+  const isSettled = PAID_BILL_STATUSES.has(effectiveStatus);
+  const originalTotal = b.totalAmount ?? b.grossAmount ?? b.remainingAmount ?? 0;
   // Use remainingAmount as the payable total (accounts for credits/discounts)
-  const payableAmount = b.remainingAmount ?? b.totalAmount ?? 0;
+  const payableAmount = isSettled ? 0 : (b.remainingAmount ?? b.totalAmount ?? 0);
+  const visibleAmount = isSettled ? originalTotal : payableAmount;
+  const paymentDate = getBillPaymentDate(b);
+  const electricityBreakdown = Array.isArray(b.electricity_breakdown)
+    ? b.electricity_breakdown
+    : (Array.isArray(b.electricityBreakdown) ? b.electricityBreakdown : undefined);
+  const waterBreakdown = b.water_breakdown && typeof b.water_breakdown === 'object'
+    ? b.water_breakdown
+    : (b.waterBreakdown && typeof b.waterBreakdown === 'object' ? b.waterBreakdown : undefined);
 
   // Format billing period from billingMonth ISO string → "April 2026"
   const billingPeriod = normalizeBillingPeriod(b.billingMonth ?? b.description, '');
@@ -124,21 +540,38 @@ function mapRealBill(b, userId) {
     billing_type: 'consolidated',
     due_date: b.dueDate,
     release_date: b.billingCycleStart,
-    status: b.status,
+    status: effectiveStatus || b.status,
     // Individual charge fields so breakdown chips render correctly
-    rent: c.rent || 0,
-    electricity: c.electricity || 0,
-    water: c.water || 0,
-    penalties: (c.penalty || 0) + (c.applianceFees || 0) + (c.corkageFees || 0),
+    rent: c.rent ?? b.rent ?? 0,
+    electricity: c.electricity ?? b.electricity ?? 0,
+    water: c.water ?? b.water ?? 0,
+    penalties: (c.penalty ?? 0) + (c.applianceFees ?? 0) + (c.corkageFees ?? 0) + (b.penalties ?? 0),
     // Totals
-    amount: payableAmount,
-    total: payableAmount,
-    gross_amount: b.grossAmount,
-    remaining_amount: b.remainingAmount,
+    amount: visibleAmount,
+    total: visibleAmount,
+    gross_amount: b.grossAmount ?? originalTotal,
+    original_total: originalTotal,
+    remaining_amount: isSettled ? 0 : b.remainingAmount,
     payment_method: b.paymentMethod,
-    payment_date: b.paidAt,
+    payment_date: paymentDate,
+    paymongo_reference: b.paymongoReference,
+    paymongo_checkout_id: b.paymongoSessionId,
+    paymongo_payment_id: b.paymongoPaymentId,
     additional_charges: b.additionalCharges,
+    electricity_breakdown: electricityBreakdown,
+    water_breakdown: waterBreakdown,
     created_at: b.createdAt,
+    updated_at: b.updatedAt,
+    isArchived: b.isArchived ?? false,
+    isHidden: b.isHidden ?? b.hidden ?? false,
+    isDeleted: b.isDeleted ?? false,
+    invalid: b.invalid ?? b.isInvalid ?? false,
+    archivedAt: b.archivedAt,
+    deletedAt: b.deletedAt,
+    hiddenAt: b.hiddenAt,
+    cancelledAt: b.cancelledAt ?? b.canceledAt,
+    invalidatedAt: b.invalidatedAt,
+    voidedAt: b.voidedAt,
   };
 }
 
@@ -154,32 +587,30 @@ function normalizeLine(line) {
 
 // Fetch bills for a user — tries the legacy 'billing' collection first,
 // then falls back to the real 'bills' collection (keyed by MongoDB ObjectId).
-async function fetchUserBills(db, user, { paidOnly = false, limit = 100 } = {}) {
+async function fetchUserBills(db, user, {
+  billingId = null,
+  paidOnly = false,
+  unpaidOnly = false,
+  limit = 100,
+} = {}) {
   const userId = user.user_id;
   const mongoId = user._id;
 
-  // 1. Legacy 'billing' collection (string user_id)
-  const legacyQuery = { user_id: userId };
-  if (paidOnly) legacyQuery.status = 'paid';
-  const legacy = await db.collection('billing')
-    .find(legacyQuery)
-    .sort({ due_date: -1, created_at: -1 })
-    .limit(limit)
-    .toArray();
+  const [legacyBills, realBills] = await Promise.all([
+    db.collection('billing')
+      .find({ user_id: userId })
+      .toArray()
+      .then((docs) => docs.map((bill) => ({ ...normalizeLegacyBill(bill), __source: 'legacy' }))),
+    mongoId
+      ? db.collection('bills')
+        .find({ userId: mongoId })
+        .toArray()
+        .then((docs) => docs.map((bill) => ({ ...mapRealBill(bill, userId), __source: 'real' })))
+      : Promise.resolve([]),
+  ]);
 
-  if (legacy.length) return legacy.map((b) => ({ ...b, _id: undefined }));
-
-  // 2. Real 'bills' collection (ObjectId userId)
-  if (!mongoId) return [];
-  const realQuery = { userId: mongoId };
-  if (paidOnly) realQuery.status = 'paid';
-  const real = await db.collection('bills')
-    .find(realQuery)
-    .sort({ dueDate: -1 })
-    .limit(limit)
-    .toArray();
-
-  return real.map((b) => mapRealBill(b, userId));
+  const visibleBills = dedupeTenantBills([...legacyBills, ...realBills]);
+  return applyBillFilters(visibleBills, { billingId, paidOnly, unpaidOnly, limit });
 }
 
 // Get the most recent bill for the user (by due date, fallback to created_at)
@@ -209,6 +640,17 @@ async function getMyBilling(req, res) {
   }
 }
 
+// Get tenant-visible billing history
+async function getBillingHistory(req, res) {
+  try {
+    const db = getDb();
+    const bills = await fetchUserBills(db, req.user);
+    res.json(bills);
+  } catch (error) {
+    res.status(500).json({ detail: 'Failed to fetch billing history' });
+  }
+}
+
 // Get paid history
 async function getPaymentHistory(req, res) {
   try {
@@ -217,6 +659,23 @@ async function getPaymentHistory(req, res) {
     res.json(bills);
   } catch (error) {
     res.status(500).json({ detail: 'Failed to fetch payment history' });
+  }
+}
+
+async function getBillingById(req, res) {
+  try {
+    const { billingId } = req.params;
+    const db = getDb();
+    const bill = (await fetchUserBills(db, req.user, { billingId, limit: 1 }))[0];
+
+    if (!bill) {
+      return res.status(404).json({ detail: BILL_UNAVAILABLE_MESSAGE });
+    }
+
+    return res.json(bill);
+  } catch (error) {
+    console.error('Get billing by id error:', error);
+    return res.status(500).json({ detail: 'Failed to fetch billing record' });
   }
 }
 
@@ -300,6 +759,9 @@ async function updateBilling(req, res) {
       amount, total,
     } = req.body || {};
 
+    const isAdmin = ['admin', 'superadmin'].includes(req.user?.role);
+    const db = getDb();
+
     const updates = {};
     if (status) updates.status = status;
     if (payment_method) updates.payment_method = payment_method;
@@ -320,8 +782,10 @@ async function updateBilling(req, res) {
 
     // Recompute total if itemized fields were updated
     if (rent != null || electricity != null || water != null || penalties != null) {
-      const db = getDb();
-      const existing = await db.collection('billing').findOne({ billing_id: billingId, user_id: req.user.user_id });
+      const legacyFilter = isAdmin
+        ? { billing_id: billingId }
+        : { billing_id: billingId, user_id: req.user.user_id };
+      const existing = await db.collection('billing').findOne(legacyFilter);
       if (!existing) return res.status(404).json({ detail: 'Bill not found' });
       const r = updates.rent ?? existing.rent ?? 0;
       const e = updates.electricity ?? existing.electricity ?? 0;
@@ -339,20 +803,79 @@ async function updateBilling(req, res) {
 
     updates.updated_at = new Date();
 
-    const db = getDb();
-    const result = await db.collection('billing').findOneAndUpdate(
-      { billing_id: billingId, user_id: req.user.user_id },
+    // 1. Try legacy 'billing' collection.
+    // Admins can update any tenant's bill; tenants only their own.
+    const legacyFilter = isAdmin
+      ? { billing_id: billingId }
+      : { billing_id: billingId, user_id: req.user.user_id };
+    const existingLegacy = await db.collection('billing').findOne(legacyFilter);
+    if (existingLegacy && updates.status) {
+      const existingLegacyBill = normalizeLegacyBill(existingLegacy);
+      const requestedStatus = normalizeBillStatus(updates.status);
+      if (!PAID_BILL_STATUSES.has(requestedStatus) && isPaidBill(existingLegacyBill)) {
+        delete updates.status;
+      }
+    }
+
+    const legacyResult = await db.collection('billing').findOneAndUpdate(
+      legacyFilter,
       { $set: updates },
       { returnDocument: 'after' }
     );
+    const legacyUpdated = legacyResult?.value ?? legacyResult;
+    if (legacyUpdated?.billing_id) {
+      return res.json({ ...legacyUpdated, _id: undefined });
+    }
 
-    // MongoDB driver v6+ returns document directly; older versions use .value
-    const updated = result?.value ?? result;
-    if (!updated || !updated.billing_id) {
+    // 2. Fallback: 'bills' collection (admin-created bills, keyed by ObjectId).
+    // Only admins can update bills from this collection.
+    if (!isAdmin) {
       return res.status(404).json({ detail: 'Bill not found' });
     }
 
-    res.json({ ...updated, _id: undefined });
+    let objId;
+    try { objId = new ObjectId(billingId); } catch (_) { objId = null; }
+    if (!objId) {
+      return res.status(404).json({ detail: 'Bill not found' });
+    }
+
+    const existingReal = await db.collection('bills').findOne({ _id: objId });
+    if (!existingReal) {
+      return res.status(404).json({ detail: 'Bill not found' });
+    }
+
+    const existingRealBill = mapRealBill(existingReal, existingReal.userId?.toString() || '');
+    if (updates.status) {
+      const requestedStatus = normalizeBillStatus(updates.status);
+      if (!PAID_BILL_STATUSES.has(requestedStatus) && isPaidBill(existingRealBill)) {
+        delete updates.status;
+      }
+    }
+
+    // Map snake_case fields to the camelCase schema used by the 'bills' collection.
+    const billsUpdates = { updatedAt: new Date() };
+    if (updates.status) {
+      billsUpdates.status = updates.status;
+      if (updates.status === 'paid') {
+        billsUpdates.remainingAmount = 0;
+        billsUpdates.paidAt = updates.payment_date || new Date();
+      }
+    }
+    if (updates.payment_method) billsUpdates.paymentMethod = updates.payment_method;
+    if (updates.payment_date) billsUpdates.paymentDate = new Date(updates.payment_date);
+    if (updates.notes) billsUpdates.notes = updates.notes;
+
+    const billsResult = await db.collection('bills').findOneAndUpdate(
+      { _id: objId },
+      { $set: billsUpdates },
+      { returnDocument: 'after' }
+    );
+    const billsUpdated = billsResult?.value ?? billsResult;
+    if (!billsUpdated) {
+      return res.status(404).json({ detail: 'Bill not found' });
+    }
+
+    return res.json(mapRealBill(billsUpdated, billsUpdated.userId?.toString() || ''));
   } catch (error) {
     console.error('Update billing error:', error);
     res.status(500).json({ detail: 'Failed to update bill' });
@@ -364,28 +887,10 @@ async function downloadBillPdf(req, res) {
   try {
     const { billingId } = req.params;
     const db = getDb();
-    const userId = req.user.user_id;
-    const mongoId = req.user._id;
-
-    // 1. Try legacy 'billing' collection (string billing_id + user_id)
-    let bill = await db.collection('billing').findOne({ billing_id: billingId, user_id: userId });
-
-    // 2. Try real 'bills' collection (ObjectId _id + userId)
-    if (!bill && mongoId) {
-      let realBill = null;
-      try {
-        realBill = await db.collection('bills').findOne({ _id: new ObjectId(billingId), userId: mongoId });
-      } catch (_) { /* billingId is not a valid ObjectId — skip */ }
-      if (realBill) bill = mapRealBill(realBill, userId);
-    }
-
-    // 3. Presentation-mode fallback — serve mock bill for demo purposes
-    if (!bill && PRESENTATION_BILLS[billingId]) {
-      bill = { ...PRESENTATION_BILLS[billingId] };
-    }
+    const bill = (await fetchUserBills(db, req.user, { billingId, limit: 1 }))[0];
 
     if (!bill) {
-      return res.status(404).json({ detail: 'Bill not found' });
+      return res.status(404).json({ detail: BILL_UNAVAILABLE_MESSAGE });
     }
 
     const formatMoney = (value) => `PHP ${(Number(value || 0)).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
@@ -445,29 +950,10 @@ async function downloadBillPdf(req, res) {
       tableRows.push({ label: 'Total Charges', value: formatMoney(bill.total || bill.amount || 0) });
     }
 
-    // Auto-generate water breakdown for presentation if missing
-    if (
-      !bill.water_breakdown &&
-      ((bill.billing_type || '').toLowerCase() === 'water' || (bill.water && !bill.rent && !bill.electricity))
-    ) {
-      const waterAmount = bill.water || bill.total || bill.amount || 0;
-      const rate = 50;
-      const consumption = waterAmount / rate;
-      const baseReading = 15;
-      bill.water_breakdown = {
-        reading_from: baseReading,
-        reading_to: +(baseReading + consumption).toFixed(1),
-        consumption: +consumption.toFixed(1),
-        rate,
-        total: waterAmount,
-        sharing_policy: 'Equal division among active tenants',
-      };
-    }
-
     // Computation breakdown sections
     const breakdownSections = [];
     const expectsElectricityBreakdown =
-      ((bill.billing_type || '').toLowerCase() === 'electricity' || (bill.electricity && !bill.rent && !bill.water));
+      Number(bill.electricity || 0) > 0 || (bill.billing_type || '').toLowerCase() === 'electricity';
     const usableElectricityBreakdown = hasUsableElectricityBreakdown(bill);
     if (usableElectricityBreakdown) {
       breakdownSections.push({
@@ -493,10 +979,12 @@ async function downloadBillPdf(req, res) {
         heading: 'Electricity Breakdown',
         type: 'generic',
         segments: [{
-          rows: [{ label: 'Status', value: 'Electricity breakdown unavailable' }],
+          rows: [{ label: 'Status', value: 'Breakdown unavailable.' }],
         }],
       });
     }
+    const expectsWaterBreakdown =
+      Number(bill.water || 0) > 0 || (bill.billing_type || '').toLowerCase() === 'water';
     if (bill.water_breakdown) {
       const wb = bill.water_breakdown;
       const waterRows = [
@@ -512,6 +1000,14 @@ async function downloadBillPdf(req, res) {
         heading: 'Water Computation Breakdown',
         type: 'water',
         segments: [{ rows: waterRows }],
+      });
+    } else if (expectsWaterBreakdown) {
+      breakdownSections.push({
+        heading: 'Water Breakdown',
+        type: 'generic',
+        segments: [{
+          rows: [{ label: 'Status', value: 'Breakdown unavailable.' }],
+        }],
       });
     }
 
@@ -545,13 +1041,28 @@ async function downloadBillPdf(req, res) {
 
 
 module.exports = {
+  fetchUserBills,
   getLatestBilling,
   getMyBilling,
+  getBillingHistory,
+  getBillingById,
   getPaymentHistory,
   createBilling,
   updateBilling,
   downloadBillPdf,
   // Shared utilities used by paymongo controller
+  BILL_UNAVAILABLE_MESSAGE,
+  getBillPaymentDate,
+  hasConfirmedPaymentEvidence,
+  getEffectiveBillStatus,
+  isPayableBill,
+  isPaidBill,
+  isTenantVisibleBill,
+  normalizeBillId,
+  getBillTimestamp,
+  getBillFreshnessTimestamp,
+  getBillPreferenceScore,
+  buildBillVisibilitySignature,
   PRESENTATION_BILLS,
   mapRealBill,
 };

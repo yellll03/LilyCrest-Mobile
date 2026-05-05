@@ -185,8 +185,9 @@ export const apiService = {
   // Billing
   getMyBilling: () => api.get('/billing/me'),
   getBillingHistory: () => api.get('/billing/history'),
-  getPaymentHistory: () => api.get('/billing/history'),
+  getPaymentHistory: () => api.get('/billing/history/paid'),
   getLatestBilling: () => api.get('/billing/me/latest'),
+  getBillingById: (billingId) => api.get(`/billing/${billingId}`),
   updateBilling: (billingId, data) => api.put(`/billing/${billingId}`, data),
 
   // PayMongo

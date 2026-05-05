@@ -1,5 +1,6 @@
 const { getDb } = require('../config/database');
 const { ObjectId } = require('mongodb');
+const { fetchUserBills } = require('./billing.controller');
 
 // Convert slug like 'quadruple-sharing' → 'Quadruple Sharing'
 function formatRoomType(type) {
@@ -177,47 +178,7 @@ async function getDashboard(req, res) {
     }
 
     // ── Billing ──────────────────────────────────────────────────────────────
-    // Primary: 'bills' collection (keyed by MongoDB ObjectId userId)
-    let billing = [];
-
-    if (mongoId) {
-      const bills = await db.collection('bills')
-        .find({ userId: mongoId })
-        .sort({ dueDate: -1 })
-        .limit(10)
-        .toArray();
-
-      billing = bills.map((b) => ({
-        billing_id: b._id?.toString(),
-        user_id: userId,
-        description: b.billingMonth || b.description || 'Bill',
-        billing_type: 'consolidated',
-        due_date: b.dueDate,
-        release_date: b.billingCycleStart,
-        billing_period: b.billingMonth,
-        status: b.status,
-        amount: b.totalAmount,
-        total: b.totalAmount,
-        gross_amount: b.grossAmount,
-        remaining_amount: b.remainingAmount,
-        payment_method: b.paymentMethod,
-        payment_date: b.paidAt,
-        charges: b.charges,
-        additional_charges: b.additionalCharges,
-        reservation_id: b.reservationId?.toString(),
-        created_at: b.createdAt,
-      }));
-    }
-
-    // Fallback: old 'billing' collection (keyed by string user_id)
-    if (!billing.length) {
-      const oldBilling = await db.collection('billing')
-        .find({ user_id: userId })
-        .sort({ due_date: -1, created_at: -1 })
-        .limit(10)
-        .toArray();
-      billing = oldBilling.map((b) => ({ ...b, _id: undefined }));
-    }
+    const billing = await fetchUserBills(db, req.user, { limit: 10 });
 
     const latestBill = billing[0] || null;
 

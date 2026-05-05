@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+﻿import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -56,7 +56,7 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
   subtitle: { fontSize: 15, color: c.textSecondary, textAlign: 'center', lineHeight: 22, maxWidth: 300 },
   primaryBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: '#1E3A5F', paddingVertical: 15, paddingHorizontal: 32,
+    backgroundColor: c.accent, paddingVertical: 15, paddingHorizontal: 32,
     borderRadius: 14, marginTop: 16, width: '100%', maxWidth: 300,
   },
   primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },

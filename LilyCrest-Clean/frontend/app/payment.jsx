@@ -1,12 +1,19 @@
-import { Ionicons } from '@expo/vector-icons';
+﻿import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../src/context/AlertContext';
 import { useTheme } from '../src/context/ThemeContext';
 import { apiService } from '../src/services/api';
+import {
+  BILL_UNAVAILABLE_MESSAGE,
+  emitBillingRefresh,
+  getBillingApiMessage,
+  isBillingUnavailableMessage,
+} from '../src/services/billingState';
 
 function safeCurrency(amount) {
   const n = Number(amount);
@@ -30,6 +37,10 @@ function isBillOutstanding(bill) {
   return status !== 'paid' && status !== 'settled';
 }
 
+function getBillId(bill) {
+  return bill?.billing_id || bill?.id || bill?._id || bill?.billingId || bill?.billId || bill?.reference_id;
+}
+
 export default function PaymentScreen() {
   const router = useRouter();
   const { billId: billIdParam } = useLocalSearchParams();
@@ -43,36 +54,54 @@ export default function PaymentScreen() {
   const [creatingCheckout, setCreatingCheckout] = useState(false);
   const [error, setError] = useState(null);
 
-  // Load bill data.
-  useEffect(() => {
-    (async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const resp = await apiService.getMyBilling();
-        const all = resp?.data || [];
-        const target = billId ? String(billId).trim().toLowerCase() : null;
+  const loadBill = useCallback(async ({ showLoader = true } = {}) => {
+    if (showLoader) setLoading(true);
+    setError(null);
+    const targetId = String(billId || '').trim();
 
-        let match = all.find((b) => {
-          const ids = [b.billing_id, b.billingId, b.billId, b.id, b._id, b.reference_id]
-            .filter(Boolean)
-            .map((id) => String(id).trim().toLowerCase());
-          return target && ids.includes(target);
-        });
+    if (!targetId) {
+      setBill(null);
+      setError(BILL_UNAVAILABLE_MESSAGE);
+      if (showLoader) setLoading(false);
+      return null;
+    }
 
-        if (!match) match = all.find(isBillOutstanding) || all[0] || null;
-        setBill(match);
-      } catch (_e) {
-        setError('Unable to load billing data.');
-      } finally {
-        setLoading(false);
+    try {
+      const response = await apiService.getBillingById(targetId);
+      const nextBill = response?.data || null;
+      setBill(nextBill);
+      return nextBill;
+    } catch (err) {
+      const message = getBillingApiMessage(err, 'Unable to load bill. Please try again.');
+      setBill(null);
+      setError(message);
+      if (isBillingUnavailableMessage(message)) {
+        emitBillingRefresh('bill_unavailable');
       }
-    })();
+      return null;
+    } finally {
+      if (showLoader) setLoading(false);
+    }
   }, [billId]);
 
+  // Load bill data.
+  useEffect(() => {
+    loadBill();
+  }, [loadBill]);
+
+  useFocusEffect(useCallback(() => {
+    loadBill({ showLoader: false });
+    return undefined;
+  }, [loadBill]));
+
   const handlePayOnline = async () => {
-    const id = bill?.billing_id || bill?.id;
-    if (!id) return;
+    const latestBill = await loadBill({ showLoader: false });
+    if (!latestBill) return;
+    const id = getBillId(latestBill);
+    if (!id) {
+      setError(BILL_UNAVAILABLE_MESSAGE);
+      return;
+    }
 
     setCreatingCheckout(true);
     try {
@@ -96,8 +125,13 @@ export default function PaymentScreen() {
       }
       // result.type === 'cancel' means the user closed the browser — stay on page.
     } catch (err) {
-      const detail = err?.response?.data?.detail || 'Failed to create payment session.';
-      showAlert({ title: 'Payment Error', message: detail, type: 'error' });
+      const message = getBillingApiMessage(err, 'Failed to create payment session.');
+      if (isBillingUnavailableMessage(message)) {
+        setBill(null);
+        setError(message);
+        emitBillingRefresh('bill_unavailable');
+      }
+      showAlert({ title: 'Payment Error', message, type: 'error' });
     } finally {
       setCreatingCheckout(false);
     }
@@ -116,10 +150,15 @@ export default function PaymentScreen() {
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.center}>
           <Ionicons name="alert-circle-outline" size={48} color={colors.textMuted} />
-          <Text style={styles.errorLabel}>{error || 'Bill not found'}</Text>
-          <Pressable style={styles.backBtnSmall} onPress={() => router.back()}>
-            <Text style={styles.backBtnSmallText}>Go Back</Text>
-          </Pressable>
+          <Text style={styles.errorLabel}>{error || BILL_UNAVAILABLE_MESSAGE}</Text>
+          <View style={styles.errorActions}>
+            <Pressable style={styles.retryBtnSmall} onPress={loadBill}>
+              <Text style={styles.retryBtnSmallText}>Try Again</Text>
+            </Pressable>
+            <Pressable style={styles.backBtnSmall} onPress={() => router.back()}>
+              <Text style={styles.backBtnSmallText}>Go Back</Text>
+            </Pressable>
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -244,6 +283,11 @@ export default function PaymentScreen() {
               <Ionicons name="lock-closed" size={12} color={colors.textMuted} />
               <Text style={styles.secureNoteText}>Payments are processed securely by PayMongo</Text>
             </View>
+
+            <View style={styles.singleBillNote}>
+              <Ionicons name="information-circle-outline" size={14} color={colors.textMuted} />
+              <Text style={styles.singleBillNoteText}>This payment is for the selected bill only.</Text>
+            </View>
           </View>
         )}
 
@@ -261,8 +305,11 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12, padding: 16 },
   errorLabel: { fontSize: 16, fontWeight: '700', color: c.text },
-  backBtnSmall: { paddingHorizontal: 20, paddingVertical: 10, backgroundColor: c.primary, borderRadius: 10 },
-  backBtnSmallText: { color: '#ffffff', fontWeight: '700' },
+  errorActions: { flexDirection: 'row', alignItems: 'center', gap: 10, marginTop: 4 },
+  retryBtnSmall: { paddingHorizontal: 20, paddingVertical: 10, backgroundColor: c.primary, borderRadius: 10 },
+  retryBtnSmallText: { color: '#ffffff', fontWeight: '700' },
+  backBtnSmall: { paddingHorizontal: 20, paddingVertical: 10, backgroundColor: c.surface, borderRadius: 10, borderWidth: 1.5, borderColor: c.border },
+  backBtnSmallText: { color: c.text, fontWeight: '700' },
 
   header: { flexDirection: 'row', alignItems: 'center', height: 50, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: c.border },
   headerBack: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
@@ -271,8 +318,8 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
   scrollContent: { padding: 16, gap: 16 },
 
   summaryCard: {
-    backgroundColor: isDarkMode ? '#1A1A2E' : '#14365A', borderRadius: 18, padding: 18,
-    ...Platform.select({ ios: { shadowColor: '#14365A', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10 }, android: { elevation: 4 } }),
+    backgroundColor: c.headerBg, borderRadius: 18, padding: 18,
+    ...Platform.select({ ios: { shadowColor: c.headerBg, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10 }, android: { elevation: 4 } }),
   },
   summaryRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   summaryTitle: { fontSize: 15, fontWeight: '700', color: '#ffffff', flex: 1 },
@@ -280,7 +327,7 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
   summaryDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)', marginVertical: 12 },
   summaryDetail: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   summaryLabel: { fontSize: 13, color: 'rgba(255,255,255,0.6)', fontWeight: '600' },
-  summaryAmount: { fontSize: 24, fontWeight: '800', color: '#E0793A' },
+  summaryAmount: { fontSize: 24, fontWeight: '800', color: '#ff9000' },
   summaryValue: { fontSize: 14, fontWeight: '700', color: '#ffffff' },
 
   chargesList: { marginBottom: 8 },
@@ -301,12 +348,14 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
 
   payBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: '#D4682A', paddingVertical: 16, borderRadius: 14,
+    backgroundColor: c.primary, paddingVertical: 16, borderRadius: 14,
   },
   payBtnText: { color: '#ffffff', fontWeight: '700', fontSize: 16 },
 
   secureNote: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
   secureNoteText: { fontSize: 11, color: c.textMuted },
+  singleBillNote: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
+  singleBillNoteText: { fontSize: 11, color: c.textMuted },
 
   paidCard: {
     backgroundColor: c.surface, borderRadius: 16, padding: 18, gap: 10,

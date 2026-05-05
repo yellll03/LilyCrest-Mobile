@@ -1,8 +1,12 @@
 const axios = require('axios');
-const { v4: uuidv4 } = require('uuid');
 const { ObjectId } = require('mongodb');
 const { getDb } = require('../config/database');
-const { PRESENTATION_BILLS, mapRealBill } = require('./billing.controller');
+const {
+  BILL_UNAVAILABLE_MESSAGE,
+  fetchUserBills,
+  isPayableBill,
+  mapRealBill,
+} = require('./billing.controller');
 const { notifyPaymentConfirmed } = require('../services/pushService');
 const { sendPaymentReceiptEmail } = require('../services/emailService');
 
@@ -54,35 +58,121 @@ function paymongoHeaders() {
   };
 }
 
-// ── Resolve a bill from any of the three sources ─────────────────────────────
-// Returns { bill, source } so callers know which collection to update.
-// source: 'legacy' | 'real' | 'presentation'
-async function resolveBillWithSource(db, billingId, user) {
-  const userId = user.user_id;
-  const mongoId = user._id;
-
-  // 1. Legacy 'billing' collection (string billing_id)
-  const legacyBill = await db.collection('billing').findOne({ billing_id: billingId, user_id: userId });
-  if (legacyBill) return { bill: legacyBill, source: 'legacy' };
-
-  // 2. Real 'bills' collection (ObjectId _id)
-  if (mongoId) {
-    try {
-      const realBill = await db.collection('bills').findOne({ _id: new ObjectId(billingId), userId: mongoId });
-      if (realBill) return { bill: mapRealBill(realBill, userId), source: 'real', rawBill: realBill };
-    } catch (_) { /* not a valid ObjectId */ }
-  }
-
-  // 3. Presentation-mode mock bill
-  if (PRESENTATION_BILLS[billingId]) return { bill: { ...PRESENTATION_BILLS[billingId] }, source: 'presentation' };
-
-  return { bill: null, source: null };
+function getCheckoutSessionPayments(session = {}) {
+  const payments = session?.attributes?.payments;
+  return Array.isArray(payments) ? payments : [];
 }
 
-// Backward-compatible wrapper
-async function resolveBill(db, billingId, user) {
-  const { bill } = await resolveBillWithSource(db, billingId, user);
-  return bill;
+function normalizePaymongoStatus(value, fallback = '') {
+  const normalized = String(value || fallback || '').trim().toLowerCase();
+  return normalized || String(fallback || '').trim().toLowerCase();
+}
+
+function getCheckoutSessionPaymentState(session = {}) {
+  const payments = getCheckoutSessionPayments(session);
+  const intentStatus = normalizePaymongoStatus(session?.attributes?.payment_intent?.attributes?.status);
+  const sessionStatus = normalizePaymongoStatus(session?.attributes?.status, 'pending');
+  const paymentStatus = intentStatus || sessionStatus;
+  const hasConfirmedPayments = payments.length > 0 && payments.every((payment) => {
+    const status = normalizePaymongoStatus(payment?.attributes?.status || payment?.status);
+    return status === 'paid' || status === 'succeeded';
+  });
+  const sessionClosedWithPayment = sessionStatus === 'inactive' && payments.length > 0;
+  const paymentConfirmed = paymentStatus === 'succeeded'
+    || paymentStatus === 'paid'
+    || hasConfirmedPayments
+    || sessionClosedWithPayment;
+
+  return {
+    payments,
+    intentStatus,
+    sessionStatus,
+    paymentStatus: paymentStatus || 'pending',
+    paymentConfirmed,
+  };
+}
+
+function parsePaymongoTimestamp(value) {
+  if (!value && value !== 0) return null;
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return value;
+  }
+
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    const millis = value > 1e12 ? value : value * 1000;
+    const parsed = new Date(millis);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    if (/^\d+$/.test(trimmed)) {
+      const numericValue = Number(trimmed);
+      if (Number.isFinite(numericValue)) {
+        const millis = trimmed.length >= 13 ? numericValue : numericValue * 1000;
+        const parsed = new Date(millis);
+        if (!Number.isNaN(parsed.getTime())) return parsed;
+      }
+    }
+
+    const parsed = new Date(trimmed);
+    if (!Number.isNaN(parsed.getTime())) return parsed;
+  }
+
+  return null;
+}
+
+function getCheckoutSessionPaymentDate(session = {}) {
+  const payments = getCheckoutSessionPayments(session);
+  const primaryPayment = payments[0] || null;
+  const candidates = [
+    primaryPayment?.attributes?.paid_at,
+    primaryPayment?.attributes?.updated_at,
+    primaryPayment?.attributes?.created_at,
+    session?.attributes?.paid_at,
+    session?.attributes?.updated_at,
+    session?.attributes?.created_at,
+  ];
+
+  for (const candidate of candidates) {
+    const parsed = parsePaymongoTimestamp(candidate);
+    if (parsed) return parsed;
+  }
+
+  return null;
+}
+
+async function fetchCheckoutSessionRecord(checkoutId) {
+  if (!checkoutId) return null;
+
+  const response = await axios.get(`${PAYMONGO_BASE}/checkout_sessions/${checkoutId}`, {
+    headers: paymongoHeaders(),
+  });
+
+  return response.data?.data || null;
+}
+
+// ── Resolve a bill from any of the three sources ─────────────────────────────
+// Returns { bill, source } so callers know which collection to update.
+// source: 'legacy' | 'real'
+async function resolveBillWithSource(db, billingId, user) {
+  const bill = (await fetchUserBills(db, user, { billingId, limit: 1 }))[0] || null;
+
+  if (!bill) {
+    return { bill: null, source: null };
+  }
+
+  let source = 'legacy';
+  try {
+    source = ObjectId.isValid(billingId) ? 'real' : 'legacy';
+  } catch (_) {
+    source = 'legacy';
+  }
+
+  return { bill, source };
 }
 
 // ── Save checkout reference to the correct collection ────────────────────────
@@ -127,16 +217,25 @@ function unwrapMongoDocument(result) {
   return result?.value ?? result ?? null;
 }
 
-async function markLegacyBillPaidAtomic(db, filter, { paymentId, eventType, checkoutId } = {}) {
+async function markLegacyBillPaidAtomic(db, filter, {
+  paymentId,
+  eventType,
+  checkoutId,
+  paymentDate,
+  referenceNumber,
+} = {}) {
+  const resolvedPaymentDate = paymentDate instanceof Date ? paymentDate : new Date();
   const updated = unwrapMongoDocument(await db.collection('billing').findOneAndUpdate(
     { ...filter, status: { $ne: 'paid' } },
     {
       $set: {
         status: 'paid',
+        remaining_amount: 0,
         payment_method: 'paymongo',
-        payment_date: new Date(),
+        payment_date: resolvedPaymentDate,
         paymongo_payment_id: paymentId || null,
         ...(checkoutId ? { paymongo_checkout_id: checkoutId } : {}),
+        ...(referenceNumber ? { paymongo_reference: referenceNumber } : {}),
         ...(eventType ? { paymongo_event: eventType } : {}),
         updated_at: new Date(),
       },
@@ -156,17 +255,26 @@ async function markLegacyBillPaidAtomic(db, filter, { paymentId, eventType, chec
   return { existing, alreadyPaid: isPaidStatus(existing.status), matched: true, resolvedUserId: existing.user_id || filter.user_id || null };
 }
 
-async function markRealBillPaidAtomic(db, filter, userId, { paymentId, eventType, checkoutId } = {}) {
+async function markRealBillPaidAtomic(db, filter, userId, {
+  paymentId,
+  eventType,
+  checkoutId,
+  paymentDate,
+  referenceNumber,
+} = {}) {
+  const resolvedPaymentDate = paymentDate instanceof Date ? paymentDate : new Date();
   const updated = unwrapMongoDocument(await db.collection('bills').findOneAndUpdate(
     { ...filter, status: { $ne: 'paid' } },
     {
       $set: {
         status: 'paid',
+        remainingAmount: 0,
         paymentMethod: 'paymongo',
-        paidAt: new Date(),
-        paymentDate: new Date(),
+        paidAt: resolvedPaymentDate,
+        paymentDate: resolvedPaymentDate,
         paymongoPaymentId: paymentId || null,
         ...(checkoutId ? { paymongoSessionId: checkoutId } : {}),
+        ...(referenceNumber ? { paymongoReference: referenceNumber } : {}),
         ...(eventType ? { paymongoEvent: eventType } : {}),
         updatedAt: new Date(),
       },
@@ -190,11 +298,12 @@ async function markRealBillPaidAtomic(db, filter, userId, { paymentId, eventType
 // Returns the bill document (pre-update) for push notification context.
 // checkoutId is an optional fallback key used when billing_id/user_id matching
 // fails (e.g. metadata mismatch or presentation-mode bills that were upgraded).
-async function markBillPaid(db, billingId, userId, { paymentId, eventType, checkoutId } = {}) {
+async function markBillPaid(db, billingId, userId, options = {}) {
+  const { paymentId, eventType, checkoutId } = options;
   const legacyResult = await markLegacyBillPaidAtomic(
     db,
     { billing_id: billingId, user_id: userId },
-    { paymentId, eventType, checkoutId }
+    options
   );
   if (legacyResult.matched) {
     return legacyResult;
@@ -217,7 +326,7 @@ async function markBillPaid(db, billingId, userId, { paymentId, eventType, check
           db,
           { _id: objId, userId: mongoId },
           userId,
-          { paymentId, eventType, checkoutId }
+          options
         );
         if (realResult.matched) {
           console.log(`[markBillPaid] Bill ${billingId} resolved in bills collection`);
@@ -239,7 +348,7 @@ async function markBillPaid(db, billingId, userId, { paymentId, eventType, check
       const legacyCheckoutResult = await markLegacyBillPaidAtomic(
         db,
         { paymongo_checkout_id: checkoutId },
-        { paymentId, eventType, checkoutId }
+        options
       );
       if (legacyCheckoutResult.matched) {
         console.log(`[markBillPaid] Bill found by checkout_id ${checkoutId}`);
@@ -265,7 +374,7 @@ async function markBillPaid(db, billingId, userId, { paymentId, eventType, check
           db,
           { paymongoSessionId: checkoutId, userId: bySession.userId },
           resolvedUserId,
-          { paymentId, eventType, checkoutId }
+          options
         );
         if (realCheckoutResult.matched) {
           console.log(`[markBillPaid] Bill found by paymongoSessionId ${checkoutId}`);
@@ -317,7 +426,14 @@ async function sendPaymentReceiptForBill(db, {
 
     const fallbackName = [userDoc?.firstName, userDoc?.lastName].filter(Boolean).join(' ').trim();
     const userName = userDoc?.name || userDoc?.fullName || fallbackName || 'Tenant';
-    const amountPaid = Number(bill?.remaining_amount ?? bill?.total ?? bill?.amount ?? 0);
+    const amountPaid = Number(
+      bill?.original_total
+      ?? bill?.gross_amount
+      ?? bill?.total
+      ?? bill?.amount
+      ?? bill?.remaining_amount
+      ?? 0
+    );
     const description = bill?.description || `Bill ${billingId}`;
 
     return sendPaymentReceiptEmail(userEmail, userName, {
@@ -358,6 +474,67 @@ async function resolveCheckoutIdForBill(db, billingId) {
   return '';
 }
 
+async function reconcileCheckoutSessionPayment(db, checkoutId, {
+  session = null,
+  eventType = '',
+  sendSideEffects = true,
+} = {}) {
+  const resolvedSession = session || await fetchCheckoutSessionRecord(checkoutId);
+  const state = getCheckoutSessionPaymentState(resolvedSession || {});
+
+  if (!resolvedSession || !state.paymentConfirmed) {
+    return {
+      session: resolvedSession,
+      ...state,
+      existing: null,
+      alreadyPaid: false,
+      resolvedUserId: '',
+      referenceNumber: '',
+      paymentId: '',
+      reconciled: false,
+    };
+  }
+
+  const metadata = resolvedSession?.attributes?.metadata || {};
+  const billingId = String(metadata.billing_id || '').trim();
+  const userId = String(metadata.user_id || '').trim();
+  const paymentId = String(state.payments[0]?.id || '').trim();
+  const referenceNumber = String(resolvedSession?.attributes?.reference_number || '').trim();
+  const userEmailHint = String(metadata.user_email || '').trim();
+  const paymentDate = getCheckoutSessionPaymentDate(resolvedSession) || new Date();
+  const { existing, alreadyPaid, resolvedUserId } = await markBillPaid(db, billingId, userId, {
+    paymentId,
+    eventType,
+    checkoutId,
+    paymentDate,
+    referenceNumber,
+  });
+  const paymentUserId = resolvedUserId || userId;
+
+  if (sendSideEffects && !alreadyPaid && existing && paymentUserId) {
+    notifyPaymentConfirmed(paymentUserId, { ...existing, status: 'paid' }).catch(() => {});
+    sendPaymentReceiptForBill(db, {
+      userId: paymentUserId,
+      billingId,
+      bill: { ...existing, status: 'paid' },
+      paymentId,
+      referenceNumber,
+      userEmailHint,
+    }).catch(() => {});
+  }
+
+  return {
+    session: resolvedSession,
+    ...state,
+    existing,
+    alreadyPaid,
+    resolvedUserId: paymentUserId,
+    referenceNumber,
+    paymentId,
+    reconciled: Boolean(existing),
+  };
+}
+
 // Create a PayMongo Checkout Session for a specific bill
 async function createCheckoutSession(req, res) {
   try {
@@ -370,12 +547,16 @@ async function createCheckoutSession(req, res) {
     const { bill } = await resolveBillWithSource(db, billingId, req.user);
 
     if (!bill) {
-      return res.status(404).json({ detail: 'Bill not found' });
+      return res.status(404).json({ detail: BILL_UNAVAILABLE_MESSAGE });
     }
 
-    const status = (bill.status || '').toLowerCase();
-    if (status === 'paid') {
+    const status = String(bill.status || '').toLowerCase();
+    if (status === 'paid' || status === 'settled') {
       return res.status(400).json({ detail: 'This bill has already been paid' });
+    }
+
+    if (!isPayableBill(bill)) {
+      return res.status(404).json({ detail: BILL_UNAVAILABLE_MESSAGE });
     }
 
     const amount = Math.round((bill.remaining_amount ?? bill.total ?? bill.amount ?? 0) * 100); // centavos
@@ -462,58 +643,15 @@ async function getCheckoutStatus(req, res) {
       return res.status(400).json({ detail: 'checkoutId is required' });
     }
 
-    const response = await axios.get(`${PAYMONGO_BASE}/checkout_sessions/${checkoutId}`, {
-      headers: paymongoHeaders(),
-    });
+    const db = getDb();
+    const reconciliation = await reconcileCheckoutSessionPayment(db, checkoutId);
 
-    const session = response.data?.data;
+    const session = reconciliation.session;
     // payment_intent is null for e-wallet (GCash/Maya/GrabPay) payments — fall back to session status
-    const intentStatus = session?.attributes?.payment_intent?.attributes?.status;
-    const sessionStatus = session?.attributes?.status || 'pending';
-    const paymentStatus = intentStatus || sessionStatus;
-    const payments = session?.attributes?.payments || [];
+    const paymentStatus = reconciliation.paymentStatus;
+    const payments = reconciliation.payments;
 
-    const hasConfirmedPayments = payments.length > 0 && payments.every((p) => {
-      const s = p?.attributes?.status || p?.status || '';
-      return s === 'paid' || s === 'succeeded';
-    });
-
-    // 'inactive' = session closed; if it has any payments it was closed by a payment, not expiry
-    const sessionClosedWithPayment = sessionStatus === 'inactive' && payments.length > 0;
-
-    const paymentConfirmed =
-      paymentStatus === 'succeeded' ||
-      paymentStatus === 'paid' ||
-      hasConfirmedPayments ||
-      sessionClosedWithPayment;
-
-    if (paymentConfirmed) {
-      const billingId = session?.attributes?.metadata?.billing_id;
-      const userId = session?.attributes?.metadata?.user_id;
-      if (billingId && userId) {
-        const paymentId = payments[0]?.id;
-        const referenceNumber = session?.attributes?.reference_number;
-        const userEmailHint = session?.attributes?.metadata?.user_email || '';
-        const db = getDb();
-        const { existing, alreadyPaid, resolvedUserId } = await markBillPaid(db, billingId, userId, {
-          paymentId,
-          checkoutId: checkoutId,
-        });
-        const paymentUserId = resolvedUserId || userId;
-        // Push only once
-        if (!alreadyPaid && existing && paymentUserId) {
-          notifyPaymentConfirmed(paymentUserId, { ...existing, status: 'paid' }).catch(() => {});
-          sendPaymentReceiptForBill(db, {
-            userId: paymentUserId,
-            billingId,
-            bill: { ...existing, status: 'paid' },
-            paymentId,
-            referenceNumber,
-            userEmailHint,
-          }).catch(() => {});
-        }
-      }
-    }
+    const paymentConfirmed = reconciliation.paymentConfirmed;
 
     res.json({
       status: paymentStatus,
@@ -537,32 +675,15 @@ async function handleWebhook(req, res) {
       const checkoutData = event?.attributes?.data;
       const billingId = checkoutData?.attributes?.metadata?.billing_id;
       const userId = checkoutData?.attributes?.metadata?.user_id;
-      const userEmailHint = checkoutData?.attributes?.metadata?.user_email || '';
-      const referenceNumber = checkoutData?.attributes?.reference_number;
-      const payments = checkoutData?.attributes?.payments || [];
-      const paymentId = payments[0]?.id;
 
       if (billingId && userId) {
         const db = getDb();
         const webhookCheckoutId = checkoutData?.id || '';
-        const { existing, alreadyPaid, resolvedUserId } = await markBillPaid(db, billingId, userId, {
-          paymentId,
+        await reconcileCheckoutSessionPayment(db, webhookCheckoutId, {
+          session: checkoutData,
           eventType,
-          checkoutId: webhookCheckoutId,
         });
-        const paymentUserId = resolvedUserId || userId;
         console.log(`[PayMongo Webhook] Bill ${billingId} marked as paid`);
-        if (!alreadyPaid && existing && paymentUserId) {
-          notifyPaymentConfirmed(paymentUserId, { ...existing, status: 'paid' }).catch(() => {});
-          sendPaymentReceiptForBill(db, {
-            userId: paymentUserId,
-            billingId,
-            bill: { ...existing, status: 'paid' },
-            paymentId,
-            referenceNumber,
-            userEmailHint,
-          }).catch(() => {});
-        }
       }
     }
 
@@ -654,6 +775,9 @@ async function redirectSuccess(req, res) {
   try {
     const db = getDb();
     checkoutId = await resolveCheckoutIdForBill(db, billingId);
+    if (checkoutId) {
+      await reconcileCheckoutSessionPayment(db, checkoutId, { eventType: 'redirect_success' });
+    }
   } catch (_) {}
 
   const checkoutParam = checkoutId ? `&checkout_id=${encodeURIComponent(checkoutId)}` : '';
@@ -732,9 +856,13 @@ async function redirectCancel(req, res) {
 
 module.exports = {
   createCheckoutSession,
+  fetchCheckoutSessionRecord,
+  getCheckoutSessionPaymentDate,
+  getCheckoutSessionPaymentState,
   getCheckoutStatus,
   handleWebhook,
   registerWebhook,
+  reconcileCheckoutSessionPayment,
   redirectSuccess,
   redirectCancel,
 };

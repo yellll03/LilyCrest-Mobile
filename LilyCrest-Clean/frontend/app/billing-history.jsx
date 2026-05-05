@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+﻿import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { Link, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -8,6 +8,7 @@ import LilyFlowerIcon from '../src/components/assistant/LilyFlowerIcon';
 import { useAuth } from '../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
 import { apiService } from '../src/services/api';
+import { subscribeBillingRefresh } from '../src/services/billingState';
 import { downloadBillPdf } from '../src/utils/downloadBillPdf';
 
 // Helpers
@@ -82,10 +83,11 @@ const normalizeBreakdown = (bill) => {
 
 const getBillId = (bill) => bill?.billing_id || bill?.id || bill?.billingId || bill?.billId || bill?.reference_id || bill?._id;
 const getBillStatus = (bill) => String(bill?.status || '').toLowerCase();
-const isBillOutstanding = (bill) => {
-  const status = getBillStatus(bill);
-  return status !== 'paid' && status !== 'settled';
-};
+const NON_PAYABLE_STATUSES = new Set([
+  'paid', 'settled', 'cancelled', 'rejected', 'void',
+  'refunded', 'duplicate', 'archived', 'verification',
+]);
+const isBillOutstanding = (bill) => !NON_PAYABLE_STATUSES.has(getBillStatus(bill));
 const getBillOwedAmount = (bill) => {
   const candidates = [bill?.remaining_amount, bill?.total, bill?.amount];
   for (const value of candidates) {
@@ -95,6 +97,60 @@ const getBillOwedAmount = (bill) => {
   return 0;
 };
 
+const getBillDateValue = (bill) => (
+  bill?.billing_period ||
+  bill?.due_date ||
+  bill?.dueDate ||
+  bill?.release_date ||
+  bill?.releaseDate ||
+  bill?.created_at ||
+  bill?.createdAt ||
+  null
+);
+
+const getBillTimestamp = (bill) => {
+  const value = getBillDateValue(bill);
+  if (!value) return 0;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const sortBillsNewestFirst = (bills) => [...bills].sort((a, b) => getBillTimestamp(b) - getBillTimestamp(a));
+
+const getFiniteAmountValue = (value) => {
+  if (value === null || value === undefined || value === '') return null;
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+};
+
+
+
+const getPreferredInsightAmount = (bill) => {
+  // Use total/amount for trend comparison — remaining_amount reflects partial payments
+  // and would produce misleading comparisons (e.g. paid ₱0 vs new bill's full amount).
+  const candidates = [bill?.total, bill?.amount];
+  for (const value of candidates) {
+    const parsed = getFiniteAmountValue(value);
+    if (parsed !== null) return parsed;
+  }
+  return null;
+};
+
+const getUtilityAmount = (bill, utility) => {
+  const directAmount = getFiniteAmountValue(bill?.[utility]);
+  if (directAmount !== null) return directAmount;
+
+  const breakdownItem = normalizeBreakdown(bill).find((item) => item.type === utility);
+  const breakdownAmount = getFiniteAmountValue(breakdownItem?.amount);
+  if (breakdownAmount !== null) return breakdownAmount;
+
+  const billType = String(bill?.billing_type || bill?.type || '').toLowerCase();
+  if (billType === utility) {
+    return getPreferredInsightAmount(bill);
+  }
+
+  return null;
+};
 
 export default function BillingScreen() {
   const router = useRouter();
@@ -121,7 +177,7 @@ export default function BillingScreen() {
     try {
       const [latestBillingResult, historyResp] = await Promise.allSettled([
         apiService.getLatestBilling?.(),
-        apiService.getMyBilling?.(),
+        apiService.getBillingHistory?.(),
       ]);
       if (latestBillingResult.status === 'rejected') {
         const status = latestBillingResult.reason?.response?.status;
@@ -148,6 +204,12 @@ export default function BillingScreen() {
 
   useEffect(() => { if (!authLoading) loadData(); }, [authLoading, loadData]);
   useFocusEffect(useCallback(() => { if (!authLoading) loadData(); return undefined; }, [authLoading, loadData]));
+  useEffect(() => {
+    if (authLoading) return undefined;
+    return subscribeBillingRefresh(() => {
+      loadData({ silent: true });
+    });
+  }, [authLoading, loadData]);
 
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
@@ -160,11 +222,14 @@ export default function BillingScreen() {
   const totalOutstanding = useMemo(() => {
     return history
       .filter(isBillOutstanding)
-      .reduce((sum, b) => sum + getBillOwedAmount(b), 0);
+      .reduce((sum, b) => {
+        const amount = getBillOwedAmount(b);
+        return sum + (amount > 0 ? amount : 0);
+      }, 0);
   }, [history]);
 
   const unpaidCount = useMemo(() => {
-    return history.filter(isBillOutstanding).length;
+    return history.filter(b => isBillOutstanding(b) && getBillOwedAmount(b) > 0).length;
   }, [history]);
 
   const statusCounts = useMemo(() => {
@@ -195,7 +260,7 @@ export default function BillingScreen() {
           <Text style={styles.heroAmount}>{safeCurrency(totalOutstanding)}</Text>
         </View>
         <View style={styles.heroBadge}>
-          <Ionicons name="receipt-outline" size={14} color="#D4682A" />
+          <Ionicons name="receipt-outline" size={14} color={colors.accent} />
           <Text style={styles.heroBadgeText}>{unpaidCount} unpaid</Text>
         </View>
       </View>
@@ -241,6 +306,7 @@ export default function BillingScreen() {
       })}
     </ScrollView>
   );
+
 
   // ── Bill Card ──
   const renderBillCard = ({ item: bill }) => {
@@ -391,8 +457,8 @@ export default function BillingScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            colors={['#D4682A']}
-            tintColor="#D4682A"
+            colors={['#204b7e']}
+            tintColor="#204b7e"
           />
         }
         ListEmptyComponent={
@@ -432,10 +498,10 @@ function createStyles(c, isDarkMode) {
 
     // Hero
     heroCard: {
-      backgroundColor: isDarkMode ? '#1A1A2E' : '#14365A',
+      backgroundColor: c.headerBg,
       borderRadius: 20, padding: 20,
       ...Platform.select({
-        ios: { shadowColor: '#14365A', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12 },
+        ios: { shadowColor: c.headerBg, shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.3, shadowRadius: 12 },
         android: { elevation: 6 },
       }),
     },
@@ -443,9 +509,70 @@ function createStyles(c, isDarkMode) {
     heroLabel: { fontSize: 13, color: 'rgba(255,255,255,0.6)', fontWeight: '600', marginBottom: 4 },
     heroAmount: { fontSize: 30, fontWeight: '800', color: '#ffffff' },
     heroBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(212,148,42,0.15)', paddingVertical: 5, paddingHorizontal: 10, borderRadius: 20 },
-    heroBadgeText: { fontSize: 12, fontWeight: '700', color: '#E0793A' },
-    heroPayBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#D4682A', paddingVertical: 13, borderRadius: 14, marginTop: 16 },
+    heroBadgeText: { fontSize: 12, fontWeight: '700', color: c.accent },
+    heroPayBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: c.primary, paddingVertical: 13, borderRadius: 14, marginTop: 16 },
     heroPayText: { color: '#ffffff', fontWeight: '700', fontSize: 15 },
+
+    insightCard: {
+      backgroundColor: c.surface,
+      borderRadius: 16,
+      padding: 16,
+      gap: 12,
+      borderWidth: isDarkMode ? 1 : 0,
+      borderColor: c.border,
+      ...Platform.select({
+        ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 },
+        android: { elevation: 2 },
+      }),
+    },
+    insightHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    insightTitleWrap: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+    insightIconBadge: {
+      width: 32,
+      height: 32,
+      borderRadius: 16,
+      backgroundColor: c.primaryLight,
+      alignItems: 'center',
+      justifyContent: 'center',
+    },
+    insightTitle: { fontSize: 16, fontWeight: '700', color: c.text },
+    insightList: { gap: 10 },
+    insightRow: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 10,
+      paddingBottom: 10,
+      borderBottomWidth: 1,
+      borderBottomColor: c.border,
+    },
+    insightRowLast: {
+      paddingBottom: 0,
+      borderBottomWidth: 0,
+    },
+    insightToneIcon: {
+      width: 28,
+      height: 28,
+      borderRadius: 14,
+      alignItems: 'center',
+      justifyContent: 'center',
+      marginTop: 1,
+    },
+    insightToneIncrease: { backgroundColor: '#B45309' },
+    insightToneDecrease: { backgroundColor: '#15803D' },
+    insightToneNeutral: { backgroundColor: '#64748B' },
+    insightMessage: {
+      flex: 1,
+      fontSize: 13,
+      lineHeight: 19,
+      color: c.textSecondary,
+      fontWeight: '600',
+    },
+    insightFallback: {
+      fontSize: 13,
+      lineHeight: 19,
+      color: c.textMuted,
+      fontWeight: '600',
+    },
 
     // ── Clean Filter Pills ──
     filterRow: {
@@ -462,7 +589,7 @@ function createStyles(c, isDarkMode) {
       borderWidth: 1, borderColor: c.border,
     },
     filterPillActive: {
-      backgroundColor: '#1E3A5F', borderColor: '#1E3A5F',
+      backgroundColor: c.accent, borderColor: c.accent,
     },
     filterPillText: {
       fontSize: 13, fontWeight: '600', color: c.textSecondary,
@@ -514,7 +641,7 @@ function createStyles(c, isDarkMode) {
     breakdownAmount: { fontSize: 11, fontWeight: '700', color: c.text },
 
     billActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    payBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#D4682A', paddingVertical: 9, paddingHorizontal: 16, borderRadius: 10 },
+    payBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: c.primary, paddingVertical: 9, paddingHorizontal: 16, borderRadius: 10 },
     payBtnText: { color: '#ffffff', fontWeight: '700', fontSize: 13 },
     outlineBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 9, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1.5, borderColor: c.border },
     outlineBtnText: { color: c.text, fontWeight: '600', fontSize: 13 },
@@ -535,10 +662,10 @@ function createStyles(c, isDarkMode) {
     // Lily AI FAB
     chatbotFab: {
       position: 'absolute', bottom: Platform.OS === 'ios' ? 110 : 90, right: 20,
-      width: 60, height: 60, borderRadius: 30, backgroundColor: isDarkMode ? '#1A1A2E' : '#14365A',
+      width: 60, height: 60, borderRadius: 30, backgroundColor: c.headerBg,
       justifyContent: 'center', alignItems: 'center',
       ...Platform.select({
-        ios: { shadowColor: '#14365A', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8 },
+        ios: { shadowColor: c.headerBg, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8 },
         android: { elevation: 8 },
       }),
     },
