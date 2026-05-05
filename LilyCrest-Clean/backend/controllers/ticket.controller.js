@@ -106,6 +106,76 @@ async function respondToTicket(req, res) {
   }
 }
 
+// Admin: get all tickets
+async function getAllTickets(req, res) {
+  try {
+    const db = getDb();
+    const filter = {};
+    if (req.query.status) filter.status = req.query.status;
+    const tickets = await db.collection('tickets')
+      .find(filter)
+      .sort({ updated_at: -1 })
+      .toArray();
+    res.json(tickets.map(t => ({ ...t, _id: undefined })));
+  } catch (error) {
+    res.status(500).json({ detail: 'Failed to fetch tickets' });
+  }
+}
+
+// Admin: reply to a ticket
+async function adminReplyToTicket(req, res) {
+  try {
+    const { ticketId } = req.params;
+    const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
+    if (!message) return res.status(400).json({ detail: 'Message is required' });
+    if (message.length > 2000) return res.status(400).json({ detail: 'Message must be 2000 characters or fewer' });
+
+    const db = getDb();
+    const ticket = await db.collection('tickets').findOne({ ticket_id: ticketId });
+    if (!ticket) return res.status(404).json({ detail: 'Ticket not found' });
+
+    const response = {
+      response_id: `resp_${uuidv4().replace(/-/g, '').substring(0, 10)}`,
+      author: req.user.name || 'Admin',
+      author_role: 'admin',
+      message,
+      created_at: new Date(),
+    };
+
+    await db.collection('tickets').updateOne(
+      { ticket_id: ticketId },
+      { $push: { responses: response }, $set: { updated_at: new Date() } }
+    );
+
+    res.json({ message: 'Admin reply added', response });
+  } catch (error) {
+    res.status(500).json({ detail: 'Failed to add admin reply' });
+  }
+}
+
+// Admin: update any ticket status
+async function adminUpdateTicketStatus(req, res) {
+  try {
+    const { ticketId } = req.params;
+    const status = typeof req.body?.status === 'string' ? req.body.status.toLowerCase() : '';
+    const allowed = ['open', 'in_progress', 'solved', 'closed'];
+    if (!allowed.includes(status)) {
+      return res.status(400).json({ detail: `Status must be one of: ${allowed.join(', ')}` });
+    }
+
+    const db = getDb();
+    const result = await db.collection('tickets').updateOne(
+      { ticket_id: ticketId },
+      { $set: { status, updated_at: new Date() } }
+    );
+    if (result.matchedCount === 0) return res.status(404).json({ detail: 'Ticket not found' });
+
+    res.json({ message: 'Ticket status updated', status });
+  } catch (error) {
+    res.status(500).json({ detail: 'Failed to update ticket status' });
+  }
+}
+
 // Update ticket status (tenant can only close their own ticket)
 async function updateTicketStatus(req, res) {
   try {
@@ -135,4 +205,7 @@ module.exports = {
   getTicket,
   respondToTicket,
   updateTicketStatus,
+  getAllTickets,
+  adminReplyToTicket,
+  adminUpdateTicketStatus,
 };

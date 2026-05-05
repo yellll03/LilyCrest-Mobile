@@ -117,7 +117,7 @@ function sanitize(str) {
 }
 
 function getDecodedBase64Bytes(value = '') {
-  const raw = String(value || '').replace(/^data:image\/[^;]+;base64,/, '');
+  const raw = String(value || '').replace(/^data:[^;]+;base64,/, '');
   if (!raw) return 0;
   const padding = raw.endsWith('==') ? 2 : raw.endsWith('=') ? 1 : 0;
   return Math.floor((raw.length * 3) / 4) - padding;
@@ -284,7 +284,7 @@ async function uploadDocument(req, res) {
     if (!file_data.startsWith('data:image/') && !file_data.startsWith('data:application/pdf')) {
       return res.status(400).json({ detail: 'File must be an image or PDF.' });
     }
-    if (file_data.length > DOC_MAX_BYTES) {
+    if (getDecodedBase64Bytes(file_data) > DOC_MAX_BYTES) {
       return res.status(400).json({ detail: 'File is too large (max 5 MB).' });
     }
 

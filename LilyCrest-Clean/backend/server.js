@@ -4,6 +4,8 @@ const cors = require('cors');
 const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
 
+const path = require('path');
+
 // Import configurations
 const { connectToMongo } = require('./config/database');
 const { initializeFirebase } = require('./config/firebase');
@@ -15,6 +17,12 @@ const apiRoutes = require('./routes');
 // Initialize Express app
 const app = express();
 const PORT = process.env.PORT || 8001;
+
+// Only trust proxy headers when deployment explicitly opts in.
+const trustProxyHops = Number.parseInt(String(process.env.TRUST_PROXY_HOPS || '').trim(), 10);
+if (Number.isInteger(trustProxyHops) && trustProxyHops > 0) {
+  app.set('trust proxy', trustProxyHops);
+}
 
 // NOTE: For production, add your actual frontend domain(s) here or to FRONTEND_URL env var.
 const defaultOrigins = [
@@ -37,6 +45,14 @@ function isAllowedOrigin(origin) {
   const serverPort = process.env.PORT || 8001;
   if (origin === `http://localhost:${serverPort}` || origin === `https://localhost:${serverPort}`) return true;
   return false;
+}
+
+function oncePerRequest(middleware, flag) {
+  return (req, res, next) => {
+    if (req[flag]) return next();
+    req[flag] = true;
+    return middleware(req, res, next);
+  };
 }
 
 // Middleware - CORS Configuration
@@ -65,8 +81,9 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
   message: { detail: 'Too many requests. Please try again shortly.' },
 });
-app.use('/api', apiLimiter);
-app.use('/api/m', apiLimiter);
+const apiLimiterOnce = oncePerRequest(apiLimiter, '__apiLimiterApplied');
+app.use('/api', apiLimiterOnce);
+app.use('/api/m', apiLimiterOnce);
 
 // Stricter rate limit for chatbot (30 requests per minute per IP)
 const chatbotLimiter = rateLimit({
@@ -76,7 +93,9 @@ const chatbotLimiter = rateLimit({
   legacyHeaders: false,
   message: { detail: 'Chatbot rate limit reached. Please wait a moment.' },
 });
-app.use('/api/chatbot', chatbotLimiter);
+const chatbotLimiterOnce = oncePerRequest(chatbotLimiter, '__chatbotLimiterApplied');
+app.use('/api/chatbot', chatbotLimiterOnce);
+app.use('/api/m/chatbot', chatbotLimiterOnce);
 
 // ETag cache for frequently read endpoints (60s TTL)
 app.use('/api/announcements', cacheMiddleware(120));
@@ -92,6 +111,9 @@ app.use('/api/m/rooms', cacheMiddleware(120));
 app.use('/api', apiRoutes);
 app.use('/api/m', apiRoutes);
 
+// Serve admin panel static files
+app.use('/admin', express.static(path.join(__dirname, 'public', 'admin')));
+
 // Start server
 async function startServer() {
   // Initialize Firebase
@@ -105,79 +127,84 @@ async function startServer() {
     const { getDb } = require('./config/database');
     const db = getDb();
     const users = db.collection('users');
-    const indexes = await users.indexes();
+    const migrationsCol = db.collection('migrations');
 
-    for (const idx of indexes) {
-      // Drop unique indexes on email/username — enforce uniqueness in app code instead
-      if ((idx.key?.email || idx.key?.username) && idx.unique) {
-        console.log(`[Migration] Dropping unique index: ${idx.name}`);
-        try { await users.dropIndex(idx.name); } catch (_) {}
-      }
-
-      // Drop any legacy non-sparse unique indexes on firebaseUid or firebase_uid
-      const isFirebaseIdx = idx.key?.firebaseUid || idx.key?.firebase_uid;
-      if (isFirebaseIdx && idx.unique && !idx.sparse) {
-        console.log(`[Migration] Dropping non-sparse index: ${idx.name}`);
-        try { await users.dropIndex(idx.name); } catch (_) {}
-      }
-    }
-
-    // Clear duplicate firebase_uid values before creating the sparse unique index
-    // Find all firebase_uid values that appear on more than one doc
-    const dupes = await users.aggregate([
-      { $match: { firebase_uid: { $exists: true, $ne: null } } },
-      { $group: { _id: '$firebase_uid', count: { $sum: 1 }, ids: { $push: '$user_id' } } },
-      { $match: { count: { $gt: 1 } } },
-    ]).toArray();
-
-    for (const dupe of dupes) {
-      // Keep the firebase_uid on the MOST RECENTLY logged-in user, clear from others
-      const relatedUsers = await users
-        .find({ firebase_uid: dupe._id })
-        .sort({ last_login: -1 })
-        .toArray();
-      
-      // Skip the first one (most recent), clear the rest
-      for (let i = 1; i < relatedUsers.length; i++) {
-        console.log(`[Migration] Clearing stale firebase_uid from ${relatedUsers[i].user_id}`);
-        await users.updateOne(
-          { user_id: relatedUsers[i].user_id },
-          { $unset: { firebase_uid: '' } },
-        );
-      }
-    }
-
-    // Ensure sparse unique index on firebase_uid
+    // Always ensure the sparse unique index — createIndex is idempotent and fast.
     await users.createIndex(
       { firebase_uid: 1 },
       { unique: true, sparse: true, name: 'firebase_uid_1_sparse' },
     );
 
-    // Auto-generate user_id for any documents that don't have one
-    // (Web admin may create tenants without user_id — mobile app requires it)
-    const { v4: uuidv4 } = require('uuid');
-    const missingUserIds = await users.find({
-      $or: [
-        { user_id: { $exists: false } },
-        { user_id: null },
-        { user_id: '' },
-      ],
-    }).toArray();
+    const migrationDone = await migrationsCol.findOne({ name: 'v1_index_migration', completed: true });
+    if (migrationDone) {
+      console.log('[Migration] Already completed — skipping heavy migration.');
+    } else {
+      console.log('[Migration] Running first-time migration...');
 
-    for (const doc of missingUserIds) {
-      const newUserId = `user_${uuidv4().replace(/-/g, '').substring(0, 12)}`;
-      await users.updateOne(
-        { _id: doc._id },
-        { $set: { user_id: newUserId } },
-      );
-      console.log(`[Migration] Generated user_id=${newUserId} for ${doc.email || doc.name || doc._id}`);
+      const indexes = await users.indexes();
+      for (const idx of indexes) {
+        // Drop unique indexes on email/username — enforce uniqueness in app code instead
+        if ((idx.key?.email || idx.key?.username) && idx.unique) {
+          console.log(`[Migration] Dropping unique index: ${idx.name}`);
+          try { await users.dropIndex(idx.name); } catch (_) {}
+        }
+
+        // Drop any legacy non-sparse unique indexes on firebaseUid or firebase_uid
+        const isFirebaseIdx = idx.key?.firebaseUid || idx.key?.firebase_uid;
+        if (isFirebaseIdx && idx.unique && !idx.sparse) {
+          console.log(`[Migration] Dropping non-sparse index: ${idx.name}`);
+          try { await users.dropIndex(idx.name); } catch (_) {}
+        }
+      }
+
+      // Clear duplicate firebase_uid values before relying on the sparse unique index
+      const dupes = await users.aggregate([
+        { $match: { firebase_uid: { $exists: true, $ne: null } } },
+        { $group: { _id: '$firebase_uid', count: { $sum: 1 }, ids: { $push: '$user_id' } } },
+        { $match: { count: { $gt: 1 } } },
+      ]).toArray();
+
+      for (const dupe of dupes) {
+        const relatedUsers = await users
+          .find({ firebase_uid: dupe._id })
+          .sort({ last_login: -1 })
+          .toArray();
+        for (let i = 1; i < relatedUsers.length; i++) {
+          console.log(`[Migration] Clearing stale firebase_uid from ${relatedUsers[i].user_id}`);
+          await users.updateOne(
+            { user_id: relatedUsers[i].user_id },
+            { $unset: { firebase_uid: '' } },
+          );
+        }
+      }
+
+      // Auto-generate user_id for any documents that don't have one
+      // (Web admin may create tenants without user_id — mobile app requires it)
+      const { v4: uuidv4 } = require('uuid');
+      const missingUserIds = await users.find({
+        $or: [
+          { user_id: { $exists: false } },
+          { user_id: null },
+          { user_id: '' },
+        ],
+      }).toArray();
+
+      for (const doc of missingUserIds) {
+        const newUserId = `user_${uuidv4().replace(/-/g, '').substring(0, 12)}`;
+        await users.updateOne(
+          { _id: doc._id },
+          { $set: { user_id: newUserId } },
+        );
+        console.log(`[Migration] Generated user_id=${newUserId} for ${doc.email || doc.name || doc._id}`);
+      }
+
+      if (missingUserIds.length > 0) {
+        console.log(`[Migration] Fixed ${missingUserIds.length} documents with missing user_id`);
+      }
+
+      await migrationsCol.insertOne({ name: 'v1_index_migration', completed: true, completedAt: new Date() });
+      console.log('[Migration] Complete — flag saved to DB.');
     }
-
-    if (missingUserIds.length > 0) {
-      console.log(`[Migration] Fixed ${missingUserIds.length} documents with missing user_id`);
-    }
-
-    console.log('[Migration] Index migration complete');
   } catch (idxErr) {
     console.warn('[Migration] Index migration warning:', idxErr?.message);
   }

@@ -45,7 +45,7 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     fontWeight: '700',
-    color: '#0f172a',
+    color: '#1a2744',
   },
   chip: {
     paddingHorizontal: 10,

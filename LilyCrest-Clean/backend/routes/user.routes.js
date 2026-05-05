@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const userController = require('../controllers/user.controller');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, adminMiddleware } = require('../middleware/auth');
 
 router.get('/me', authMiddleware, userController.getMe);
 router.put('/me', authMiddleware, userController.updateMe);
@@ -12,5 +12,8 @@ router.post('/documents', authMiddleware, userController.uploadDocument);
 router.get('/documents', authMiddleware, userController.getUserDocuments);
 router.get('/documents/:docId', authMiddleware, userController.getDocumentFile);
 router.delete('/documents/:docId', authMiddleware, userController.deleteDocument);
+
+// Admin
+router.get('/admin/all', authMiddleware, adminMiddleware, userController.adminGetAllUsers);
 
 module.exports = router;

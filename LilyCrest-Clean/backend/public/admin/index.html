@@ -1,0 +1,1497 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>LilyCrest Admin</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg: #0f172a;
+    --surface: #1e293b;
+    --surface2: #263348;
+    --border: rgba(255,255,255,0.08);
+    --accent: #D4682A;
+    --accent2: #E07840;
+    --text: #f1f5f9;
+    --muted: #94a3b8;
+    --success: #22c55e;
+    --warning: #f59e0b;
+    --danger: #ef4444;
+    --info: #38bdf8;
+    --radius: 12px;
+    --sidebar-w: 220px;
+  }
+  body { font-family: system-ui, -apple-system, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+  a { color: inherit; text-decoration: none; }
+  button { cursor: pointer; font-family: inherit; }
+
+  /* ── Auth ── */
+  #auth-screen {
+    display: flex; align-items: center; justify-content: center;
+    min-height: 100vh; background: var(--bg);
+  }
+  .auth-card {
+    background: var(--surface); border-radius: 20px; padding: 40px 36px;
+    width: 100%; max-width: 400px; border: 1px solid var(--border);
+    box-shadow: 0 20px 60px rgba(0,0,0,0.5);
+  }
+  .auth-logo { text-align: center; margin-bottom: 32px; }
+  .auth-logo h1 { font-size: 26px; font-weight: 800; color: var(--accent); letter-spacing: -0.5px; }
+  .auth-logo p { color: var(--muted); font-size: 13px; margin-top: 4px; }
+  .form-group { margin-bottom: 16px; }
+  .form-group label { display: block; font-size: 12px; font-weight: 700; color: var(--muted); margin-bottom: 6px; text-transform: uppercase; letter-spacing: 0.4px; }
+  .form-group input, .form-group select, .form-group textarea {
+    width: 100%; background: var(--bg); border: 1.5px solid var(--border);
+    border-radius: 10px; padding: 11px 14px; color: var(--text); font-size: 14px;
+    outline: none; transition: border-color .2s;
+  }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--accent); }
+  .form-group textarea { resize: vertical; min-height: 90px; }
+  .form-group select option { background: var(--surface); }
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    padding: 10px 18px; border-radius: 10px; font-size: 13px; font-weight: 700;
+    border: none; transition: opacity .15s, transform .1s;
+  }
+  .btn:hover { opacity: .88; }
+  .btn:active { transform: scale(.97); }
+  .btn-primary { background: var(--accent); color: #fff; }
+  .btn-success { background: var(--success); color: #fff; }
+  .btn-danger { background: var(--danger); color: #fff; }
+  .btn-ghost { background: rgba(255,255,255,0.07); color: var(--text); }
+  .btn-sm { padding: 6px 12px; font-size: 12px; border-radius: 8px; }
+  .btn-full { width: 100%; justify-content: center; padding: 13px; font-size: 15px; }
+  .err-msg { color: var(--danger); font-size: 13px; margin-top: 10px; text-align: center; }
+
+  /* ── Layout ── */
+  #app { display: flex; min-height: 100vh; }
+
+  /* ── Sidebar ── */
+  .sidebar {
+    width: var(--sidebar-w); background: var(--surface); border-right: 1px solid var(--border);
+    display: flex; flex-direction: column; position: fixed; top: 0; left: 0; bottom: 0; z-index: 100;
+  }
+  .sidebar-brand {
+    padding: 20px 18px 16px; border-bottom: 1px solid var(--border);
+  }
+  .sidebar-brand h2 { font-size: 17px; font-weight: 800; color: var(--accent); }
+  .sidebar-brand span { font-size: 11px; color: var(--muted); display: block; margin-top: 2px; }
+  .nav { flex: 1; padding: 12px 10px; display: flex; flex-direction: column; gap: 2px; }
+  .nav-item {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+    border-radius: 10px; font-size: 13px; font-weight: 600; color: var(--muted);
+    cursor: pointer; transition: all .15s; border: none; background: none; width: 100%; text-align: left;
+  }
+  .nav-item svg { width: 16px; height: 16px; flex-shrink: 0; }
+  .nav-item:hover { background: var(--surface2); color: var(--text); }
+  .nav-item.active { background: rgba(212,104,42,0.15); color: var(--accent); }
+  .nav-item .badge {
+    margin-left: auto; background: var(--danger); color: #fff;
+    font-size: 10px; font-weight: 700; border-radius: 10px; padding: 1px 6px; min-width: 18px; text-align: center;
+  }
+  .sidebar-footer { padding: 12px 10px; border-top: 1px solid var(--border); }
+  .admin-info { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 10px; }
+  .admin-avatar { width: 34px; height: 34px; border-radius: 17px; background: var(--accent); display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 14px; flex-shrink: 0; }
+  .admin-name { font-size: 12px; font-weight: 700; }
+  .admin-role { font-size: 11px; color: var(--muted); }
+  .btn-logout { margin-top: 8px; width: 100%; justify-content: center; background: rgba(239,68,68,0.12); color: var(--danger); padding: 9px; }
+
+  /* ── Main ── */
+  .main { margin-left: var(--sidebar-w); flex: 1; display: flex; flex-direction: column; min-height: 100vh; }
+  .topbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 28px; height: 60px; display: flex; align-items: center; justify-content: space-between; position: sticky; top: 0; z-index: 50; }
+  .topbar h1 { font-size: 17px; font-weight: 800; }
+  .topbar-right { display: flex; align-items: center; gap: 10px; }
+  .page-content { padding: 28px; flex: 1; }
+
+  /* ── Cards & Tables ── */
+  .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; margin-bottom: 28px; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 20px; }
+  .stat-label { font-size: 12px; color: var(--muted); font-weight: 700; text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 8px; }
+  .stat-value { font-size: 30px; font-weight: 800; }
+  .stat-card.accent .stat-value { color: var(--accent); }
+  .stat-card.success .stat-value { color: var(--success); }
+  .stat-card.warning .stat-value { color: var(--warning); }
+  .stat-card.info .stat-value { color: var(--info); }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); }
+  .card-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+  .card-header h2 { font-size: 14px; font-weight: 700; }
+  .card-body { padding: 0; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  thead th { text-align: left; padding: 12px 16px; font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; border-bottom: 1px solid var(--border); }
+  tbody tr { border-bottom: 1px solid var(--border); transition: background .1s; }
+  tbody tr:last-child { border-bottom: none; }
+  tbody tr:hover { background: rgba(255,255,255,0.03); }
+  tbody td { padding: 13px 16px; vertical-align: middle; }
+
+  .badge-status { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 11px; font-weight: 700; }
+  .badge-open { background: rgba(34,197,94,0.15); color: var(--success); }
+  .badge-in_progress { background: rgba(245,158,11,0.15); color: var(--warning); }
+  .badge-solved, .badge-closed { background: rgba(148,163,184,0.15); color: var(--muted); }
+  .badge-pending { background: rgba(56,189,248,0.15); color: var(--info); }
+  .badge-high { background: rgba(239,68,68,0.15); color: var(--danger); }
+  .badge-normal { background: rgba(148,163,184,0.15); color: var(--muted); }
+  .badge-resolved, .badge-completed { background: rgba(34,197,94,0.15); color: var(--success); }
+  .badge-rejected, .badge-cancelled { background: rgba(239,68,68,0.15); color: var(--danger); }
+
+  /* ── Ticket Detail Panel ── */
+  .panel-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 200; display: flex; align-items: stretch; justify-content: flex-end; }
+  .panel { width: 480px; max-width: 100vw; background: var(--surface); display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+  .panel-head { padding: 18px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+  .panel-head h3 { font-size: 15px; font-weight: 700; flex: 1; }
+  .panel-close { background: none; border: none; color: var(--muted); font-size: 20px; line-height: 1; padding: 4px 8px; border-radius: 6px; }
+  .panel-close:hover { background: var(--surface2); color: var(--text); }
+  .panel-meta { padding: 14px 20px; border-bottom: 1px solid var(--border); display: flex; flex-wrap: wrap; gap: 10px; font-size: 12px; color: var(--muted); }
+  .panel-meta strong { color: var(--text); }
+  .panel-thread { flex: 1; overflow-y: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 10px; background: #0d1929; }
+  .msg-row { display: flex; gap: 8px; align-items: flex-end; }
+  .msg-row.user { flex-direction: row-reverse; }
+  .msg-avatar { width: 28px; height: 28px; border-radius: 14px; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 800; flex-shrink: 0; }
+  .msg-avatar.tenant { background: #334155; color: var(--muted); }
+  .msg-avatar.admin { background: var(--accent); color: #fff; }
+  .msg-bubble { max-width: 75%; border-radius: 16px; padding: 10px 14px; font-size: 13px; line-height: 1.5; }
+  .msg-bubble.tenant { background: #1e293b; color: var(--text); border-bottom-left-radius: 4px; }
+  .msg-bubble.admin { background: var(--accent); color: #fff; border-bottom-right-radius: 4px; }
+  .msg-time { font-size: 10px; opacity: 0.55; margin-top: 4px; display: block; }
+  .msg-label { font-size: 10px; font-weight: 700; opacity: 0.7; margin-bottom: 3px; }
+  .panel-initial { background: var(--surface2); border-radius: 12px; padding: 12px 14px; font-size: 13px; color: var(--text); line-height: 1.5; margin-bottom: 4px; }
+  .panel-initial-label { font-size: 10px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 4px; }
+  .sys-msg { text-align: center; font-size: 11px; color: var(--muted); padding: 4px 0; }
+  .panel-reply { padding: 14px 16px; border-top: 1px solid var(--border); background: var(--surface); display: flex; flex-direction: column; gap: 10px; }
+  .panel-reply textarea { width: 100%; background: var(--bg); border: 1.5px solid var(--border); border-radius: 10px; padding: 11px 14px; color: var(--text); font-size: 13px; resize: none; height: 76px; outline: none; font-family: inherit; }
+  .panel-reply textarea:focus { border-color: var(--accent); }
+  .panel-reply-actions { display: flex; align-items: center; gap: 8px; }
+  .panel-status-select { flex: 1; background: var(--bg); border: 1.5px solid var(--border); border-radius: 8px; padding: 8px 10px; color: var(--text); font-size: 12px; font-weight: 700; }
+
+  /* ── Modal ── */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 300; display: flex; align-items: center; justify-content: center; }
+  .modal { background: var(--surface); border-radius: 16px; padding: 28px; width: 100%; max-width: 460px; border: 1px solid var(--border); }
+  .modal h3 { font-size: 16px; font-weight: 800; margin-bottom: 20px; }
+  .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+
+  /* ── Utility ── */
+  .hidden { display: none !important; }
+  .flex { display: flex; }
+  .gap-2 { gap: 8px; }
+  .mt-1 { margin-top: 4px; }
+  .mt-2 { margin-top: 8px; }
+  .mt-4 { margin-top: 16px; }
+  .mb-4 { margin-bottom: 16px; }
+  .text-muted { color: var(--muted); }
+  .text-sm { font-size: 12px; }
+  .fw-700 { font-weight: 700; }
+  .truncate { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 220px; }
+  .loading { text-align: center; padding: 48px 0; color: var(--muted); font-size: 14px; }
+  .empty-state { text-align: center; padding: 60px 20px; color: var(--muted); }
+  .empty-state p { margin-top: 8px; font-size: 13px; }
+  .filter-bar { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; flex-wrap: wrap; }
+  .filter-bar select { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 12px; font-weight: 700; }
+  .filter-bar input[type=search] { background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 8px 12px; color: var(--text); font-size: 12px; outline: none; }
+  .filter-bar input[type=search]:focus { border-color: var(--accent); }
+  .empty-emoji { font-size: 36px; }
+  .ann-actions { display: flex; justify-content: flex-end; margin-bottom: 16px; }
+  .panel-head-actions { display: flex; align-items: center; gap: 8px; }
+  .toast { position: fixed; bottom: 24px; right: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px; font-size: 13px; font-weight: 600; z-index: 999; box-shadow: 0 8px 32px rgba(0,0,0,0.4); display: flex; align-items: center; gap: 10px; min-width: 220px; }
+  .toast.success { border-color: var(--success); }
+  .toast.error { border-color: var(--danger); }
+  .dot { width: 8px; height: 8px; border-radius: 4px; flex-shrink: 0; }
+  .dot.success { background: var(--success); }
+  .dot.error { background: var(--danger); }
+  .spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.2); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .avatar-circle { width: 32px; height: 32px; border-radius: 16px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; flex-shrink: 0; }
+</style>
+</head>
+<body>
+
+<!-- ── Login ── -->
+<div id="auth-screen">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <h1>🌸 LilyCrest</h1>
+      <p>Admin Dashboard</p>
+    </div>
+    <div class="form-group">
+      <label>Email</label>
+      <input type="email" id="login-email" placeholder="admin@lilycrest.com" autocomplete="email" />
+    </div>
+    <div class="form-group">
+      <label>Password</label>
+      <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password" />
+    </div>
+    <button class="btn btn-primary btn-full" id="login-btn" onclick="doLogin()">Sign In</button>
+    <p class="err-msg hidden" id="login-err"></p>
+  </div>
+</div>
+
+<!-- ── App Shell ── -->
+<div id="app" class="hidden">
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-brand">
+      <h2>🌸 LilyCrest</h2>
+      <span>Admin Panel</span>
+    </div>
+    <nav class="nav">
+      <button class="nav-item" data-page="dashboard" onclick="navigate('dashboard')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+        Dashboard
+      </button>
+      <button class="nav-item" data-page="tickets" onclick="navigate('tickets')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+        Tenant Inquiries
+        <span class="badge hidden" id="ticket-badge">0</span>
+      </button>
+      <button class="nav-item" data-page="livechat" onclick="navigate('livechat')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg>
+        Admin Support
+        <span class="badge hidden" id="livechat-badge">0</span>
+      </button>
+      <button class="nav-item" data-page="announcements" onclick="navigate('announcements')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
+        Announcements
+      </button>
+      <button class="nav-item" data-page="maintenance" onclick="navigate('maintenance')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
+        Maintenance
+      </button>
+      <button class="nav-item" data-page="users" onclick="navigate('users')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Tenants
+      </button>
+    </nav>
+    <div class="sidebar-footer">
+      <div class="admin-info">
+        <div class="admin-avatar" id="admin-avatar-text">A</div>
+        <div>
+          <div class="admin-name" id="admin-name-text">Admin</div>
+          <div class="admin-role" id="admin-role-text">Admin</div>
+        </div>
+      </div>
+      <button class="btn btn-sm btn-logout mt-2" onclick="doLogout()">Sign Out</button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <div class="main">
+    <header class="topbar">
+      <h1 id="page-title">Dashboard</h1>
+      <div class="topbar-right">
+        <button class="btn btn-sm btn-ghost" onclick="refreshPage()">↻ Refresh</button>
+      </div>
+    </header>
+
+    <div class="page-content">
+      <!-- Dashboard -->
+      <div id="page-dashboard" class="hidden">
+        <div class="stats-grid" id="stats-grid">
+          <div class="stat-card accent"><div class="stat-label">Open Inquiries</div><div class="stat-value" id="stat-open">–</div></div>
+          <div class="stat-card warning"><div class="stat-label">Pending Maintenance</div><div class="stat-value" id="stat-maint">–</div></div>
+          <div class="stat-card info"><div class="stat-label">Total Tenants</div><div class="stat-value" id="stat-tenants">–</div></div>
+          <div class="stat-card success"><div class="stat-label">Resolved Today</div><div class="stat-value" id="stat-resolved">–</div></div>
+        </div>
+        <div class="card">
+          <div class="card-header"><h2>Recent Inquiries</h2><button class="btn btn-sm btn-ghost" onclick="navigate('tickets')">View All →</button></div>
+          <div class="card-body">
+            <table>
+              <thead><tr><th>Tenant</th><th>Subject</th><th>Status</th><th>Date</th></tr></thead>
+              <tbody id="dash-tickets"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tickets -->
+      <div id="page-tickets" class="hidden">
+        <div class="filter-bar">
+          <select id="ticket-filter-status" onchange="loadTickets()">
+            <option value="">All Status</option>
+            <option value="open">Open</option>
+            <option value="in_progress">In Progress</option>
+            <option value="solved">Solved</option>
+
+      <!-- Live Chat -->
+      <div id="page-livechat" class="hidden">
+        <div class="filter-bar">
+          <select id="livechat-filter-status" onchange="loadLiveChats()">
+            <option value="">All Status</option>
+            <option value="open">Open</option>
+            <option value="in_review">In Review</option>
+            <option value="waiting_tenant">Waiting for Tenant</option>
+            <option value="resolved">Resolved</option>
+            <option value="closed">Closed</option>
+          </select>
+          <button class="btn btn-sm btn-ghost" onclick="loadLiveChats()">Refresh</button>
+        </div>
+        <div class="card">
+          <div class="card-header"><h2>Admin Support Conversations</h2></div>
+          <div class="card-body">
+            <div id="livechat-loading" class="loading">Loading live chats…</div>
+            <table id="livechat-table" class="hidden">
+              <thead><tr><th>Tenant</th><th>Concern</th><th>Status</th><th>Unread</th><th>Date</th><th>Action</th></tr></thead>
+              <tbody id="livechat-tbody"></tbody>
+            </table>
+            <div id="livechat-empty" class="empty-state hidden">
+              <div class="empty-emoji">No support</div>
+              <p>No admin support conversations right now</p>
+            </div>
+          </div>
+        </div>
+      </div>
+            <option value="closed">Closed</option>
+          </select>
+          <input type="search" id="ticket-search" placeholder="Search by tenant or subject…" oninput="filterTicketTable()" />
+        </div>
+        <div class="card">
+          <div class="card-header"><h2>Tenant Inquiries</h2></div>
+          <div class="card-body">
+            <div id="tickets-loading" class="loading">Loading inquiries…</div>
+            <table id="tickets-table" class="hidden">
+              <thead><tr><th>Tenant</th><th>Subject</th><th>Category</th><th>Status</th><th>Date</th><th>Action</th></tr></thead>
+              <tbody id="tickets-tbody"></tbody>
+            </table>
+            <div id="tickets-empty" class="empty-state hidden">
+              <div class="empty-emoji">💬</div>
+              <p>No inquiries found</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Announcements -->
+      <div id="page-announcements" class="hidden">
+        <div class="ann-actions">
+          <button class="btn btn-primary" onclick="showAnnouncementModal()">+ New Announcement</button>
+        </div>
+        <div class="card">
+          <div class="card-header"><h2>Announcements</h2></div>
+          <div class="card-body">
+            <div id="ann-loading" class="loading">Loading…</div>
+            <table id="ann-table" class="hidden">
+              <thead><tr><th>Title</th><th>Category</th><th>Priority</th><th>Date</th></tr></thead>
+              <tbody id="ann-tbody"></tbody>
+            </table>
+            <div id="ann-empty" class="empty-state hidden">
+              <div class="empty-emoji">📢</div>
+              <p>No announcements yet</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Maintenance -->
+      <div id="page-maintenance" class="hidden">
+        <div class="filter-bar">
+          <select id="maint-filter-status" onchange="loadMaintenance()">
+            <option value="">All Status</option>
+            <option value="pending">Pending</option>
+            <option value="in_progress">In Progress</option>
+            <option value="resolved">Resolved</option>
+            <option value="completed">Completed</option>
+            <option value="rejected">Rejected</option>
+          </select>
+          <input type="search" id="maint-search" placeholder="Search…" oninput="filterMaintenanceTable()" />
+        </div>
+        <div class="card">
+          <div class="card-header"><h2>Maintenance Requests</h2></div>
+          <div class="card-body">
+            <div id="maint-loading" class="loading">Loading…</div>
+            <table id="maint-table" class="hidden">
+              <thead><tr><th>Tenant</th><th>Type</th><th>Description</th><th>Urgency</th><th>Status</th><th>Date</th><th>Action</th></tr></thead>
+              <tbody id="maint-tbody"></tbody>
+            </table>
+            <div id="maint-empty" class="empty-state hidden">
+              <div class="empty-emoji">🔧</div>
+              <p>No maintenance requests</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Users -->
+      <div id="page-users" class="hidden">
+        <div class="filter-bar">
+          <select id="user-filter-role" onchange="filterUserTable()">
+            <option value="">All Roles</option>
+            <option value="tenant">Tenants</option>
+            <option value="admin">Admins</option>
+          </select>
+          <input type="search" id="user-search" placeholder="Search by name or email…" oninput="filterUserTable()" />
+        </div>
+        <div class="card">
+          <div class="card-header"><h2>Tenants &amp; Admins</h2></div>
+          <div class="card-body">
+            <div id="users-loading" class="loading">Loading…</div>
+            <table id="users-table" class="hidden">
+              <thead><tr><th>Name</th><th>Email</th><th>Role</th><th>Room</th><th>Status</th><th>Joined</th></tr></thead>
+              <tbody id="users-tbody"></tbody>
+            </table>
+            <div id="users-empty" class="empty-state hidden">
+              <div class="empty-emoji">👥</div>
+              <p>No users found</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Ticket Detail Panel ── -->
+<div class="panel-overlay hidden" id="ticket-panel" onclick="closePanelOnBackdrop(event)">
+  <div class="panel" onclick="event.stopPropagation()">
+      <div class="panel-head">
+      <h3 id="panel-subject">Inquiry</h3>
+      <div class="panel-head-actions">
+        <span id="panel-status-badge" class="badge-status"></span>
+        <button class="panel-close" onclick="closePanel()">✕</button>
+      </div>
+    </div>
+    <div class="panel-meta" id="panel-meta"></div>
+    <div class="panel-thread" id="panel-thread"></div>
+    <div class="panel-reply" id="panel-reply-section">
+      <textarea id="reply-input" placeholder="Type your reply to the tenant…"></textarea>
+      <div class="panel-reply-actions">
+        <select class="panel-status-select" id="reply-status">
+          <option value="open">Keep Open</option>
+          <option value="in_progress">Mark In Progress</option>
+          <option value="solved">Mark Solved</option>
+        </select>
+        <button class="btn btn-primary" id="send-reply-btn" onclick="sendReply()">Send Reply</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Live Chat Panel ── -->
+<div class="panel-overlay hidden" id="livechat-panel" onclick="closeLiveChatPanelOnBackdrop(event)">
+  <div class="panel" onclick="event.stopPropagation()">
+    <div class="panel-head">
+      <h3 id="livechat-panel-subject">Live Chat</h3>
+      <div class="panel-head-actions">
+        <span id="livechat-panel-status" class="badge-status"></span>
+        <button class="btn btn-sm btn-ghost" id="livechat-close-btn" onclick="closeLiveChatSession()">Resolve</button>
+        <button class="panel-close" onclick="closeLiveChatPanel()">✕</button>
+      </div>
+    </div>
+    <div class="panel-meta" id="livechat-panel-meta"></div>
+    <div class="panel-thread" id="livechat-panel-thread"></div>
+    <div class="panel-reply" id="livechat-panel-reply">
+      <textarea id="livechat-reply-input" placeholder="Type a reply to the tenant…"></textarea>
+      <div class="panel-reply-actions">
+        <button class="btn btn-primary" id="livechat-accept-btn" onclick="acceptLiveChat()">Mark In Review</button>
+        <button class="btn btn-primary" id="livechat-send-btn" onclick="sendLiveChatReply()">Send Reply</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ── Announcement Modal ── -->
+<div class="modal-overlay hidden" id="ann-modal">
+  <div class="modal">
+    <h3>New Announcement</h3>
+    <div class="form-group"><label>Title</label><input type="text" id="ann-title" placeholder="Announcement title" /></div>
+    <div class="form-group"><label>Content</label><textarea id="ann-content" placeholder="Write your message…"></textarea></div>
+    <div class="form-group"><label>Category</label>
+      <select id="ann-category">
+        <option value="General">General</option>
+        <option value="Maintenance">Maintenance</option>
+        <option value="Billing">Billing</option>
+        <option value="Rules">Rules</option>
+        <option value="Emergency">Emergency</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Priority</label>
+      <select id="ann-priority">
+        <option value="normal">Normal</option>
+        <option value="high">High / Urgent</option>
+        <option value="low">Low</option>
+      </select>
+    </div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeAnnModal()">Cancel</button>
+      <button class="btn btn-primary" id="ann-submit-btn" onclick="submitAnnouncement()">Post Announcement</button>
+    </div>
+    <p class="err-msg hidden" id="ann-err"></p>
+  </div>
+</div>
+
+<!-- ── Maintenance Status Modal ── -->
+<div class="modal-overlay hidden" id="maint-modal">
+  <div class="modal">
+    <h3>Update Maintenance Status</h3>
+    <div class="form-group"><label>Status</label>
+      <select id="maint-new-status">
+        <option value="pending">Pending</option>
+        <option value="in_progress">In Progress</option>
+        <option value="resolved">Resolved</option>
+        <option value="completed">Completed</option>
+        <option value="rejected">Rejected</option>
+      </select>
+    </div>
+    <div class="form-group"><label>Admin Note (optional)</label><textarea id="maint-note" placeholder="Leave a note for the tenant…"></textarea></div>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeMaintModal()">Cancel</button>
+      <button class="btn btn-primary" id="maint-submit-btn" onclick="submitMaintStatus()">Update</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ── Config ──
+const API = '';  // same origin
+let sessionToken = localStorage.getItem('lc_admin_token');
+let currentAdmin = null;
+let currentPage = 'dashboard';
+let allTickets = [];
+let allUsers = [];
+let allMaintenance = [];
+let currentTicket = null;
+let currentMaintRequestId = null;
+let userMap = {}; // user_id → display name
+let liveChats = [];
+let currentLiveChat = null;
+let liveChatHistory = [];
+let liveChatMessages = [];
+let liveChatPoller = null;
+let liveChatListPoller = null;
+let ticketPoller = null;
+
+// ── API helpers ──
+async function apiFetch(path, options = {}) {
+  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
+  if (sessionToken) headers['Authorization'] = `Bearer ${sessionToken}`;
+  const res = await fetch(`/api${path}`, { ...options, headers });
+  if (res.status === 401) { doLogout(); return null; }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+  return data;
+}
+
+// ── Toast ──
+let toastTimer;
+function showToast(msg, type = 'success') {
+  clearTimeout(toastTimer);
+  const existing = document.getElementById('toast');
+  if (existing) existing.remove();
+  const t = document.createElement('div');
+  t.id = 'toast';
+  t.className = `toast ${type}`;
+  t.innerHTML = `<span class="dot ${type}"></span>${msg}`;
+  document.body.appendChild(t);
+  toastTimer = setTimeout(() => t.remove(), 3500);
+}
+
+// ── Auth ──
+async function doLogin() {
+  const email = document.getElementById('login-email').value.trim();
+  const pass = document.getElementById('login-password').value;
+  const btn = document.getElementById('login-btn');
+  const err = document.getElementById('login-err');
+  err.classList.add('hidden');
+  if (!email || !pass) { err.textContent = 'Email and password are required.'; err.classList.remove('hidden'); return; }
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Signing in…';
+  try {
+    const data = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password: pass })
+    }).then(r => r.json());
+    if (data.otp_required) { err.textContent = 'OTP login not supported in admin panel. Please use a non-OTP admin account.'; err.classList.remove('hidden'); return; }
+    if (!data.session_token) throw new Error(data.detail || 'Login failed');
+    if (!['admin','superadmin'].includes((data.user?.role || '').toLowerCase())) {
+      throw new Error('Access denied. Admin account required.');
+    }
+    sessionToken = data.session_token;
+    localStorage.setItem('lc_admin_token', sessionToken);
+    currentAdmin = data.user;
+    bootApp();
+  } catch(e) {
+    err.textContent = e.message;
+    err.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Sign In';
+  }
+}
+
+document.getElementById('login-password').addEventListener('keydown', e => { if(e.key === 'Enter') doLogin(); });
+
+function doLogout() {
+  apiFetch('/auth/logout', { method: 'POST' }).catch(() => {});
+  sessionToken = null;
+  localStorage.removeItem('lc_admin_token');
+  currentAdmin = null;
+  document.getElementById('auth-screen').classList.remove('hidden');
+  document.getElementById('app').classList.add('hidden');
+}
+
+// ── Boot ──
+async function bootApp() {
+  if (!sessionToken) return;
+  try {
+    if (!currentAdmin) {
+      const me = await apiFetch('/auth/me');
+      if (!me) return;
+      currentAdmin = me;
+    }
+    if (!['admin','superadmin'].includes((currentAdmin.role || '').toLowerCase())) {
+      showErr('Access denied. Admin account required.');
+      doLogout(); return;
+    }
+    document.getElementById('auth-screen').classList.add('hidden');
+    document.getElementById('app').classList.remove('hidden');
+    const name = currentAdmin.name || currentAdmin.fullName || 'Admin';
+    document.getElementById('admin-name-text').textContent = name;
+    document.getElementById('admin-role-text').textContent = currentAdmin.role || 'admin';
+    document.getElementById('admin-avatar-text').textContent = name.charAt(0).toUpperCase();
+    // Preload user map for name lookups
+    apiFetch('/users/admin/all').then(users => {
+      if (!users) return;
+      allUsers = users;
+      users.forEach(u => {
+        const displayName = u.name || u.fullName || [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email || u.user_id;
+        if (u.user_id) userMap[u.user_id] = displayName;
+      });
+    }).catch(() => {});
+    navigate('dashboard');
+  } catch(e) {
+    doLogout();
+  }
+}
+
+// ── Navigation ──
+function navigate(page) {
+  stopLiveChatListPoller();
+  stopTicketPoller();
+  currentPage = page;
+  document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+  const nav = document.querySelector(`.nav-item[data-page="${page}"]`);
+  if (nav) nav.classList.add('active');
+  document.querySelectorAll('[id^="page-"]').forEach(el => el.classList.add('hidden'));
+  const el = document.getElementById(`page-${page}`);
+  if (el) el.classList.remove('hidden');
+  const titles = { dashboard: 'Dashboard', tickets: 'Tenant Inquiries', livechat: 'Admin Support', announcements: 'Announcements', maintenance: 'Maintenance', users: 'Tenants' };
+  document.getElementById('page-title').textContent = titles[page] || page;
+  loadPage(page);
+  if (page === 'livechat') startLiveChatListPoller();
+  if (page === 'tickets') startTicketPoller();
+}
+
+function refreshPage() { loadPage(currentPage); }
+
+function loadPage(page) {
+  if (page === 'dashboard') loadDashboard();
+  else if (page === 'tickets') loadTickets();
+  else if (page === 'livechat') loadLiveChats();
+  else if (page === 'announcements') loadAnnouncements();
+  else if (page === 'maintenance') loadMaintenance();
+  else if (page === 'users') loadUsers();
+}
+
+// ── Dashboard ──
+async function loadDashboard() {
+  try {
+    const [tickets, maint, users, live] = await Promise.all([
+      apiFetch('/tickets/admin/all'),
+      apiFetch('/maintenance/admin/all'),
+      apiFetch('/users/admin/all'),
+      apiFetch('/chat/admin/conversations').catch(() => ({ conversations: [] })),
+    ]);
+    if (!tickets || !maint || !users) return;
+
+    const openCount = tickets.filter(t => t.status === 'open' || t.status === 'in_progress').length;
+    const pendingMaint = maint.filter(m => m.status === 'pending').length;
+    const tenants = users.filter(u => !['admin','superadmin'].includes((u.role||'').toLowerCase()));
+    const today = new Date().toDateString();
+    const resolvedToday = tickets.filter(t => t.status === 'solved' && t.updated_at && new Date(t.updated_at).toDateString() === today).length;
+
+    document.getElementById('stat-open').textContent = openCount;
+    document.getElementById('stat-maint').textContent = pendingMaint;
+    document.getElementById('stat-tenants').textContent = tenants.length;
+    document.getElementById('stat-resolved').textContent = resolvedToday;
+
+    // Update badge
+    if (openCount > 0) {
+      document.getElementById('ticket-badge').textContent = openCount;
+      document.getElementById('ticket-badge').classList.remove('hidden');
+    }
+
+    const tbody = document.getElementById('dash-tickets');
+    const recent = [...tickets].sort((a,b) => new Date(b.updated_at||b.created_at) - new Date(a.updated_at||a.created_at)).slice(0, 8);
+    tbody.innerHTML = recent.length ? recent.map(t => `
+      <tr style="cursor:pointer" onclick="openTicketPanel('${t.ticket_id}')">
+        <td class="text-sm">${escHtml(tenantName(t.user_id))}</td>
+        <td class="truncate">${escHtml(t.subject || '—')}</td>
+        <td><span class="badge-status badge-${t.status}">${t.status}</span></td>
+        <td class="text-sm text-muted">${formatDate(t.created_at)}</td>
+      </tr>`).join('') : '<tr><td colspan="4" class="loading">No recent inquiries</td></tr>';
+
+    allTickets = tickets;
+    updateLiveChatBadge(Array.isArray(live?.conversations) ? live.conversations : []);
+  } catch(e) { console.error(e); }
+}
+
+// ── Tickets ──
+async function loadTickets() {
+  const status = document.getElementById('ticket-filter-status').value;
+  document.getElementById('tickets-loading').classList.remove('hidden');
+  document.getElementById('tickets-table').classList.add('hidden');
+  document.getElementById('tickets-empty').classList.add('hidden');
+  try {
+    const url = status ? `/tickets/admin/all?status=${status}` : '/tickets/admin/all';
+    const tickets = await apiFetch(url);
+    if (!tickets) return;
+    allTickets = tickets;
+    renderTickets(tickets);
+  } catch(e) {
+    showToast(e.message, 'error');
+  } finally {
+    document.getElementById('tickets-loading').classList.add('hidden');
+  }
+}
+
+function renderTickets(tickets) {
+  const tbody = document.getElementById('tickets-tbody');
+  if (!tickets.length) {
+    document.getElementById('tickets-table').classList.add('hidden');
+    document.getElementById('tickets-empty').classList.remove('hidden');
+    return;
+  }
+  document.getElementById('tickets-empty').classList.add('hidden');
+  document.getElementById('tickets-table').classList.remove('hidden');
+  tbody.innerHTML = tickets.map(t => `
+    <tr>
+      <td class="text-sm text-muted">${escHtml(tenantName(t.user_id))}</td>
+      <td class="truncate fw-700">${escHtml(t.subject || '—')}</td>
+      <td class="text-sm">${escHtml(t.category || '—')}</td>
+      <td><span class="badge-status badge-${t.status}">${t.status}</span></td>
+      <td class="text-sm text-muted">${formatDate(t.created_at)}</td>
+      <td><button class="btn btn-sm btn-primary" onclick="openTicketPanel('${t.ticket_id}')">Open</button></td>
+    </tr>`).join('');
+}
+
+function filterTicketTable() {
+  const q = document.getElementById('ticket-search').value.toLowerCase();
+  const filtered = allTickets.filter(t => (t.subject||'').toLowerCase().includes(q) || (t.user_id||'').toLowerCase().includes(q) || (t.message||'').toLowerCase().includes(q));
+  renderTickets(filtered);
+}
+
+// ── Ticket Panel ──
+async function openTicketPanel(ticketId) {
+  const ticket = allTickets.find(t => t.ticket_id === ticketId);
+  if (!ticket) return;
+  currentTicket = ticket;
+  document.getElementById('panel-subject').textContent = ticket.subject || 'Inquiry';
+  const badge = document.getElementById('panel-status-badge');
+  badge.className = `badge-status badge-${ticket.status}`;
+  badge.textContent = ticket.status;
+
+  const meta = document.getElementById('panel-meta');
+  meta.innerHTML = `
+    <span><strong>Ticket ID:</strong> ${escHtml(ticket.ticket_id)}</span>
+    <span><strong>Category:</strong> ${escHtml(ticket.category || '—')}</span>
+    <span><strong>Created:</strong> ${formatDate(ticket.created_at)}</span>
+    <span><strong>Tenant:</strong> ${escHtml(tenantName(ticket.user_id))}</span>
+  `;
+
+  renderThread(ticket);
+
+  const isClosed = ticket.status === 'solved' || ticket.status === 'closed';
+  const replySection = document.getElementById('panel-reply-section');
+  replySection.style.display = isClosed ? 'none' : 'flex';
+
+  document.getElementById('reply-status').value = ticket.status === 'in_progress' ? 'in_progress' : 'open';
+  document.getElementById('reply-input').value = '';
+  document.getElementById('ticket-panel').classList.remove('hidden');
+  scrollThread();
+}
+
+function renderThread(ticket) {
+  const thread = document.getElementById('panel-thread');
+  const rows = [];
+  // Initial message
+  rows.push(`
+    <div>
+      <div class="panel-initial-label">Tenant's initial message</div>
+      <div class="panel-initial">${escHtml(ticket.message || '')}</div>
+    </div>
+    <div class="sys-msg">— Chat transferred to admin —</div>
+  `);
+  // Responses
+  const responses = Array.isArray(ticket.responses) ? ticket.responses : [];
+  for (const resp of responses) {
+    const isAdmin = resp.author_role === 'admin';
+    rows.push(`
+      <div class="msg-row ${isAdmin ? 'admin' : 'user'}">
+        <div class="msg-avatar ${isAdmin ? 'admin' : 'tenant'}">${isAdmin ? 'A' : 'T'}</div>
+        <div>
+          <div class="msg-label">${isAdmin ? (resp.author || 'Admin') : (resp.author || 'Tenant')}</div>
+          <div class="msg-bubble ${isAdmin ? 'admin' : 'tenant'}">${escHtml(resp.message || '')}
+            <span class="msg-time">${formatDateTime(resp.created_at)}</span>
+          </div>
+        </div>
+      </div>`);
+  }
+  thread.innerHTML = rows.join('');
+}
+
+function scrollThread() {
+  setTimeout(() => {
+    const t = document.getElementById('panel-thread');
+    t.scrollTop = t.scrollHeight;
+  }, 50);
+}
+
+function closePanel() {
+  document.getElementById('ticket-panel').classList.add('hidden');
+  currentTicket = null;
+}
+
+function closePanelOnBackdrop(e) {
+  if (e.target === document.getElementById('ticket-panel')) closePanel();
+}
+
+async function sendReply() {
+  if (!currentTicket) return;
+  const msg = document.getElementById('reply-input').value.trim();
+  const newStatus = document.getElementById('reply-status').value;
+  if (!msg) { showToast('Please type a reply first.', 'error'); return; }
+
+  const btn = document.getElementById('send-reply-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+
+  try {
+    await apiFetch(`/tickets/admin/${currentTicket.ticket_id}/reply`, {
+      method: 'POST',
+      body: JSON.stringify({ message: msg })
+    });
+    if (newStatus !== currentTicket.status) {
+      await apiFetch(`/tickets/admin/${currentTicket.ticket_id}/status`, {
+        method: 'PUT',
+        body: JSON.stringify({ status: newStatus })
+      });
+    }
+
+    // Refresh ticket data
+    const updated = await apiFetch(`/tickets/${currentTicket.ticket_id}`);
+    if (updated) {
+      currentTicket = updated;
+      allTickets = allTickets.map(t => t.ticket_id === updated.ticket_id ? updated : t);
+      renderThread(updated);
+      const badge = document.getElementById('panel-status-badge');
+      badge.className = `badge-status badge-${updated.status}`;
+      badge.textContent = updated.status;
+      document.getElementById('reply-input').value = '';
+      scrollThread();
+      const isClosed = updated.status === 'solved' || updated.status === 'closed';
+      document.getElementById('panel-reply-section').style.display = isClosed ? 'none' : 'flex';
+    }
+    showToast('Reply sent');
+  } catch(e) {
+    showToast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Send Reply';
+  }
+}
+
+// ── Live Chat ──
+function liveChatBadgeClass(status) {
+  if (status === 'waiting_tenant') return 'badge-open';
+  if (status === 'open' || status === 'in_review') return 'badge-pending';
+  return 'badge-closed';
+}
+
+function updateLiveChatBadge(list) {
+  const waiting = (list || []).filter(c => !['resolved', 'closed'].includes(c.status)).length;
+  const badge = document.getElementById('livechat-badge');
+  if (!badge) return;
+  if (waiting > 0) {
+    badge.textContent = waiting;
+    badge.classList.remove('hidden');
+  } else {
+    badge.classList.add('hidden');
+  }
+}
+
+function startTicketPoller() {
+  stopTicketPoller();
+  ticketPoller = setInterval(() => {
+    if (currentPage === 'tickets') loadTickets();
+  }, 20000);
+}
+function stopTicketPoller() {
+  if (ticketPoller) { clearInterval(ticketPoller); ticketPoller = null; }
+}
+
+function startLiveChatListPoller() {
+  stopLiveChatListPoller();
+  liveChatListPoller = setInterval(() => {
+    if (currentPage === 'livechat') loadLiveChats(true);
+  }, 8000);
+}
+
+function stopLiveChatListPoller() {
+  if (liveChatListPoller) {
+    clearInterval(liveChatListPoller);
+    liveChatListPoller = null;
+  }
+}
+
+async function loadLiveChats(silent = false) {
+  const status = document.getElementById('livechat-filter-status').value;
+  if (!silent) {
+    document.getElementById('livechat-loading').classList.remove('hidden');
+    document.getElementById('livechat-table').classList.add('hidden');
+    document.getElementById('livechat-empty').classList.add('hidden');
+  }
+  try {
+    const response = await apiFetch('/chat/admin/conversations');
+    const data = Array.isArray(response?.conversations) ? response.conversations : [];
+    if (!data) return;
+    liveChats = data.map((item) => ({
+      ...item,
+      session_id: item.id,
+      user_name: item.tenantName || 'Tenant',
+      reason: item.lastMessage || item.category || 'Support concern',
+      position: typeof item.unreadAdminCount === 'number' ? item.unreadAdminCount : 0,
+      created_at: item.lastMessageAt || item.updatedAt || item.createdAt,
+    }));
+    let filtered = liveChats;
+    if (status === 'waiting') filtered = liveChats.filter(c => c.status === 'open' || c.status === 'in_review');
+    else if (status === 'active') filtered = liveChats.filter(c => c.status === 'waiting_tenant');
+    else if (status) filtered = liveChats.filter(c => c.status === status);
+    renderLiveChats(filtered);
+    updateLiveChatBadge(liveChats);
+  } catch(e) {
+    if (!silent) showToast(e.message, 'error');
+  } finally {
+    if (!silent) document.getElementById('livechat-loading').classList.add('hidden');
+  }
+}
+
+function renderLiveChats(data) {
+  const tbody = document.getElementById('livechat-tbody');
+  if (!data.length) {
+    document.getElementById('livechat-table').classList.add('hidden');
+    document.getElementById('livechat-empty').classList.remove('hidden');
+    return;
+  }
+  document.getElementById('livechat-empty').classList.add('hidden');
+  document.getElementById('livechat-table').classList.remove('hidden');
+  tbody.innerHTML = data.map(c => {
+    const status = c.status || 'open';
+    const concern = c.lastMessage || c.category || 'Support concern';
+    const unread = typeof c.unreadAdminCount === 'number' ? c.unreadAdminCount : 0;
+    const dateValue = c.lastMessageAt || c.updatedAt || c.createdAt;
+    c = {
+      ...c,
+      user_name: c.tenantName || c.user_name,
+      reason: concern,
+      position: unread,
+      created_at: dateValue,
+      session_id: c.id,
+    };
+    const actionLabel = 'Open';
+    const actionFn = `openLiveChatPanel('${c.session_id}')`;
+    return `
+      <tr>
+        <td class="text-sm">${escHtml(c.tenantName || 'Tenant')}</td>
+        <td class="truncate">${escHtml(c.reason || '—')}</td>
+        <td><span class="badge-status ${liveChatBadgeClass(status)}">${status}</span></td>
+        <td class="text-sm text-muted">${typeof c.position === 'number' ? c.position : '—'}</td>
+        <td class="text-sm text-muted">${formatDate(c.created_at)}</td>
+        <td><button class="btn btn-sm btn-primary" onclick="${actionFn}">${actionLabel}</button></td>
+      </tr>`;
+  }).join('');
+}
+
+function openLiveChatPanel(sessionId) {
+  const existing = currentLiveChat && currentLiveChat.session_id === sessionId ? currentLiveChat : null;
+  const chat = existing || liveChats.find(c => c.session_id === sessionId);
+  if (!chat) return;
+  currentLiveChat = { ...chat };
+  liveChatMessages = [];
+  document.getElementById('livechat-panel-subject').textContent = `Live Chat • ${currentLiveChat.user_name || 'Tenant'}`;
+  setLiveChatMeta(currentLiveChat);
+  updateLiveChatStatusBadge(currentLiveChat.status);
+  updateLiveChatControls(currentLiveChat.status);
+  document.getElementById('livechat-panel').classList.remove('hidden');
+  renderLiveChatThread();
+  startLiveChatPoller();
+}
+
+async function acceptLiveChat(sessionIdOverride) {
+  const sessionId = sessionIdOverride || currentLiveChat?.session_id;
+  if (!sessionId) return;
+  const btn = document.getElementById('livechat-accept-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    const data = await apiFetch(`/chat/admin/${sessionId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        status: 'in_review',
+        note: 'Admin opened this support conversation.',
+      })
+    });
+    if (!data?.conversation) return;
+    currentLiveChat = {
+      ...data.conversation,
+      session_id: data.conversation.id,
+      user_name: data.conversation.tenantName || currentLiveChat?.user_name,
+      reason: data.conversation.lastMessage || data.conversation.category || '',
+      created_at: data.conversation.createdAt || currentLiveChat?.created_at || new Date().toISOString(),
+    };
+    showToast('Conversation marked in review');
+    pollLiveChatStatus();
+    loadLiveChats(true);
+  } catch(e) {
+    showToast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Mark In Review';
+  }
+}
+
+function setLiveChatMeta(chat) {
+  const meta = document.getElementById('livechat-panel-meta');
+  const category = String(chat.category || 'general_inquiry').replace(/_/g, ' ');
+  meta.innerHTML = `
+    <span><strong>Session ID:</strong> ${escHtml(chat.session_id || '—')}</span>
+    <span><strong>Tenant:</strong> ${escHtml(chat.user_name || 'Tenant')}</span>
+    <span><strong>Reason:</strong> ${escHtml(chat.reason || '—')}</span>
+    <span><strong>Status:</strong> ${escHtml(chat.status || 'waiting')}</span>
+  `;
+}
+
+function updateLiveChatStatusBadge(status = 'open') {
+  const badge = document.getElementById('livechat-panel-status');
+  badge.className = `badge-status ${liveChatBadgeClass(status)}`;
+  badge.textContent = String(status || 'open').replace(/_/g, ' ');
+}
+
+function updateLiveChatControls(status = 'open') {
+  const replySection = document.getElementById('livechat-panel-reply');
+  const input = document.getElementById('livechat-reply-input');
+  const acceptBtn = document.getElementById('livechat-accept-btn');
+  const sendBtn = document.getElementById('livechat-send-btn');
+  const closeBtn = document.getElementById('livechat-close-btn');
+  const isClosed = status === 'closed' || status === 'resolved';
+  const isWaiting = status === 'open';
+
+  replySection.style.display = isClosed ? 'none' : 'flex';
+  input.disabled = isClosed;
+  acceptBtn.style.display = isWaiting ? 'inline-flex' : 'none';
+  sendBtn.style.display = isClosed ? 'none' : 'inline-flex';
+  closeBtn.style.display = isClosed ? 'none' : 'inline-flex';
+}
+
+function renderLiveChatThread() {
+  const thread = document.getElementById('livechat-panel-thread');
+  const rows = [];
+
+  if (liveChatHistory.length) {
+    const preview = liveChatHistory.slice(-6).map(h => {
+      const label = h.role === 'user' ? 'Tenant' : 'Lily';
+      return `${label}: ${String(h.content || '')}`;
+    }).join('\n');
+    rows.push(`
+      <div>
+        <div class="panel-initial-label">Conversation snapshot (AI)</div>
+        <div class="panel-initial">${escHtml(preview).replace(/\n/g, '<br>')}</div>
+      </div>
+    `);
+  }
+
+  rows.push(`<div class="sys-msg">— Live chat ${currentLiveChat?.status || 'waiting'} —</div>`);
+
+  (liveChatMessages || []).forEach(msg => {
+    const sender = msg.sender || 'tenant';
+    if (sender === 'system') {
+      rows.push(`<div class="sys-msg">${escHtml(msg.content || msg.message || '')}</div>`);
+      return;
+    }
+    const isAdmin = sender === 'admin';
+    const label = isAdmin ? (msg.admin_name || currentAdmin?.name || 'Admin') : (currentLiveChat?.user_name || 'Tenant');
+    const body = escHtml(msg.content || msg.message || '');
+    rows.push(`
+      <div class="msg-row ${isAdmin ? 'admin' : 'user'}">
+        <div class="msg-avatar ${isAdmin ? 'admin' : 'tenant'}">${isAdmin ? 'A' : 'T'}</div>
+        <div>
+          <div class="msg-label">${escHtml(label)}</div>
+          <div class="msg-bubble ${isAdmin ? 'admin' : 'tenant'}">${body}
+            <span class="msg-time">${formatDateTime(msg.timestamp)}</span>
+          </div>
+        </div>
+      </div>
+    `);
+  });
+
+  thread.innerHTML = rows.join('');
+  scrollLiveChatThread();
+}
+
+function scrollLiveChatThread() {
+  setTimeout(() => {
+    const t = document.getElementById('livechat-panel-thread');
+    t.scrollTop = t.scrollHeight;
+  }, 50);
+}
+
+async function pollLiveChatStatus() {
+  if (!currentLiveChat?.session_id) return;
+  try {
+    const data = await apiFetch(`/chat/admin/${currentLiveChat.session_id}/messages`);
+    if (!data) return;
+    currentLiveChat = {
+      ...(data.conversation || currentLiveChat),
+      session_id: data?.conversation?.id || currentLiveChat.session_id,
+      user_name: data?.conversation?.tenantName || currentLiveChat.user_name,
+      reason: data?.conversation?.lastMessage || data?.conversation?.category || currentLiveChat.reason,
+      created_at: data?.conversation?.createdAt || currentLiveChat.created_at,
+    };
+    liveChatMessages = Array.isArray(data.messages)
+      ? data.messages.map((message) => ({
+          ...message,
+          sender: message.senderRole === 'tenant' ? 'tenant' : 'admin',
+          admin_name: message.senderName,
+          content: message.message,
+          timestamp: message.createdAt,
+        }))
+      : [];
+    updateLiveChatStatusBadge(currentLiveChat.status);
+    updateLiveChatControls(currentLiveChat.status);
+    setLiveChatMeta(currentLiveChat);
+    renderLiveChatThread();
+    if (currentLiveChat.status === 'closed' || currentLiveChat.status === 'resolved') stopLiveChatPoller();
+  } catch(e) {
+    console.warn('Live chat poll failed:', e.message);
+  }
+}
+
+function startLiveChatPoller() {
+  stopLiveChatPoller();
+  liveChatPoller = setInterval(pollLiveChatStatus, 4000);
+  pollLiveChatStatus();
+}
+
+function stopLiveChatPoller() {
+  if (liveChatPoller) {
+    clearInterval(liveChatPoller);
+    liveChatPoller = null;
+  }
+}
+
+function closeLiveChatPanel() {
+  document.getElementById('livechat-panel').classList.add('hidden');
+  stopLiveChatPoller();
+  currentLiveChat = null;
+}
+
+function closeLiveChatPanelOnBackdrop(e) {
+  if (e.target === document.getElementById('livechat-panel')) closeLiveChatPanel();
+}
+
+async function sendLiveChatReply() {
+  if (!currentLiveChat?.session_id) return;
+  const msg = document.getElementById('livechat-reply-input').value.trim();
+  if (!msg) { showToast('Please type a reply first.', 'error'); return; }
+  const btn = document.getElementById('livechat-send-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    await apiFetch(`/chat/admin/${currentLiveChat.session_id}/messages`, {
+      method: 'POST',
+      body: JSON.stringify({ message: msg })
+    });
+    document.getElementById('livechat-reply-input').value = '';
+    pollLiveChatStatus();
+  } catch(e) {
+    showToast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Send Reply';
+  }
+}
+
+async function closeLiveChatSession() {
+  if (!currentLiveChat?.session_id) return;
+  try {
+    const data = await apiFetch(`/chat/admin/${currentLiveChat.session_id}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({
+        status: 'resolved',
+        note: 'Resolved by admin from the support panel.'
+      })
+    });
+    currentLiveChat = {
+      ...(data?.conversation || currentLiveChat),
+      session_id: data?.conversation?.id || currentLiveChat.session_id,
+      user_name: data?.conversation?.tenantName || currentLiveChat.user_name,
+      reason: data?.conversation?.lastMessage || data?.conversation?.category || currentLiveChat.reason,
+      created_at: data?.conversation?.createdAt || currentLiveChat.created_at,
+    };
+    updateLiveChatStatusBadge(currentLiveChat.status);
+    updateLiveChatControls(currentLiveChat.status);
+    setLiveChatMeta(currentLiveChat);
+    renderLiveChatThread();
+    showToast('Conversation resolved');
+    stopLiveChatPoller();
+    loadLiveChats(true);
+  } catch(e) {
+    showToast(e.message, 'error');
+  }
+}
+
+// ── Announcements ──
+async function loadAnnouncements() {
+  document.getElementById('ann-loading').classList.remove('hidden');
+  document.getElementById('ann-table').classList.add('hidden');
+  document.getElementById('ann-empty').classList.add('hidden');
+  try {
+    const data = await apiFetch('/announcements');
+    if (!data) return;
+    const tbody = document.getElementById('ann-tbody');
+    if (!data.length) {
+      document.getElementById('ann-empty').classList.remove('hidden');
+    } else {
+      document.getElementById('ann-table').classList.remove('hidden');
+      tbody.innerHTML = data.map(a => `
+        <tr>
+          <td class="fw-700">${escHtml(a.title)}</td>
+          <td class="text-sm">${escHtml(a.category || '—')}</td>
+          <td><span class="badge-status badge-${a.priority === 'high' ? 'high' : 'normal'}">${a.priority || 'normal'}</span></td>
+          <td class="text-sm text-muted">${formatDate(a.created_at)}</td>
+        </tr>`).join('');
+    }
+  } catch(e) {
+    showToast(e.message, 'error');
+  } finally {
+    document.getElementById('ann-loading').classList.add('hidden');
+  }
+}
+
+function showAnnouncementModal() {
+  document.getElementById('ann-title').value = '';
+  document.getElementById('ann-content').value = '';
+  document.getElementById('ann-category').value = 'General';
+  document.getElementById('ann-priority').value = 'normal';
+  document.getElementById('ann-err').classList.add('hidden');
+  document.getElementById('ann-modal').classList.remove('hidden');
+}
+
+function closeAnnModal() {
+  document.getElementById('ann-modal').classList.add('hidden');
+}
+
+async function submitAnnouncement() {
+  const title = document.getElementById('ann-title').value.trim();
+  const content = document.getElementById('ann-content').value.trim();
+  const category = document.getElementById('ann-category').value;
+  const priority = document.getElementById('ann-priority').value;
+  const err = document.getElementById('ann-err');
+  err.classList.add('hidden');
+  if (!title || !content) { err.textContent = 'Title and content are required.'; err.classList.remove('hidden'); return; }
+
+  const btn = document.getElementById('ann-submit-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span> Posting…';
+  try {
+    await apiFetch('/announcements', {
+      method: 'POST',
+      body: JSON.stringify({ title, content, category, priority, is_urgent: priority === 'high' })
+    });
+    closeAnnModal();
+    showToast('Announcement posted!');
+    loadAnnouncements();
+  } catch(e) {
+    err.textContent = e.message;
+    err.classList.remove('hidden');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Post Announcement';
+  }
+}
+
+// ── Maintenance ──
+async function loadMaintenance() {
+  const status = document.getElementById('maint-filter-status').value;
+  document.getElementById('maint-loading').classList.remove('hidden');
+  document.getElementById('maint-table').classList.add('hidden');
+  document.getElementById('maint-empty').classList.add('hidden');
+  try {
+    const url = status ? `/maintenance/admin/all?status=${status}` : '/maintenance/admin/all';
+    const data = await apiFetch(url);
+    if (!data) return;
+    allMaintenance = data;
+    renderMaintenance(data);
+  } catch(e) {
+    showToast(e.message, 'error');
+  } finally {
+    document.getElementById('maint-loading').classList.add('hidden');
+  }
+}
+
+function renderMaintenance(data) {
+  const tbody = document.getElementById('maint-tbody');
+  if (!data.length) {
+    document.getElementById('maint-empty').classList.remove('hidden');
+    return;
+  }
+  document.getElementById('maint-table').classList.remove('hidden');
+  tbody.innerHTML = data.map(m => {
+    const rid = m.request_id || m._id || '';
+    return `<tr>
+      <td class="text-sm">${escHtml(tenantName(m.user_id || m.userId))}</td>
+      <td class="text-sm">${escHtml(m.type || m.category || '—')}</td>
+      <td class="truncate text-sm">${escHtml((m.description || m.issue || '').substring(0, 60))}</td>
+      <td><span class="badge-status badge-${m.urgency === 'high' ? 'high' : 'normal'}">${m.urgency || 'normal'}</span></td>
+      <td><span class="badge-status badge-${m.status}">${m.status || '—'}</span></td>
+      <td class="text-sm text-muted">${formatDate(m.created_at || m.createdAt)}</td>
+      <td><button class="btn btn-sm btn-ghost" onclick="openMaintModal('${rid}', '${m.status}')">Update</button></td>
+    </tr>`;
+  }).join('');
+}
+
+function filterMaintenanceTable() {
+  const q = document.getElementById('maint-search').value.toLowerCase();
+  const filtered = allMaintenance.filter(m =>
+    (m.description || m.issue || '').toLowerCase().includes(q) ||
+    (m.type || m.category || '').toLowerCase().includes(q) ||
+    (m.user_id || m.userId || '').toLowerCase().includes(q)
+  );
+  renderMaintenance(filtered);
+}
+
+function openMaintModal(rid, currentStatus) {
+  currentMaintRequestId = rid;
+  document.getElementById('maint-new-status').value = currentStatus || 'pending';
+  document.getElementById('maint-note').value = '';
+  document.getElementById('maint-modal').classList.remove('hidden');
+}
+
+function closeMaintModal() {
+  document.getElementById('maint-modal').classList.add('hidden');
+  currentMaintRequestId = null;
+}
+
+async function submitMaintStatus() {
+  if (!currentMaintRequestId) return;
+  const status = document.getElementById('maint-new-status').value;
+  const btn = document.getElementById('maint-submit-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>';
+  try {
+    await apiFetch(`/maintenance/admin/${currentMaintRequestId}/status`, {
+      method: 'PATCH',
+      body: JSON.stringify({ status, notes: document.getElementById('maint-note').value.trim() })
+    });
+    showToast('Status updated');
+    closeMaintModal();
+    loadMaintenance();
+  } catch(e) {
+    showToast(e.message, 'error');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Update';
+  }
+}
+
+// ── Users ──
+async function loadUsers() {
+  document.getElementById('users-loading').classList.remove('hidden');
+  document.getElementById('users-table').classList.add('hidden');
+  document.getElementById('users-empty').classList.add('hidden');
+  try {
+    const data = await apiFetch('/users/admin/all');
+    if (!data) return;
+    allUsers = data;
+    data.forEach(u => {
+      const displayName = u.name || u.fullName || [u.firstName, u.lastName].filter(Boolean).join(' ') || u.email || u.user_id;
+      if (u.user_id) userMap[u.user_id] = displayName;
+    });
+    renderUsers(data);
+  } catch(e) {
+    showToast(e.message, 'error');
+  } finally {
+    document.getElementById('users-loading').classList.add('hidden');
+  }
+}
+
+function renderUsers(users) {
+  const tbody = document.getElementById('users-tbody');
+  if (!users.length) {
+    document.getElementById('users-empty').classList.remove('hidden');
+    return;
+  }
+  document.getElementById('users-table').classList.remove('hidden');
+  tbody.innerHTML = users.map(u => {
+    const name = u.name || u.fullName || [u.firstName, u.lastName].filter(Boolean).join(' ') || '—';
+    const email = u.email || u.emailAddress || u.google_email || '—';
+    const role = u.role || 'tenant';
+    const room = u.room_number || u.roomNumber || u.room || '—';
+    const status = u.status || (u.isActive === false ? 'inactive' : 'active');
+    const color = ['admin','superadmin'].includes(role.toLowerCase()) ? '#D4682A' : '#334155';
+    return `<tr>
+      <td><div style="display:flex;align-items:center;gap:8px;">
+        <div class="avatar-circle" style="background:${color};color:#fff">${name.charAt(0).toUpperCase()}</div>
+        <span class="fw-700">${escHtml(name)}</span>
+      </div></td>
+      <td class="text-sm text-muted">${escHtml(email)}</td>
+      <td><span class="badge-status ${['admin','superadmin'].includes(role.toLowerCase()) ? 'badge-high' : 'badge-normal'}">${role}</span></td>
+      <td class="text-sm">${escHtml(String(room))}</td>
+      <td><span class="badge-status ${status === 'active' ? 'badge-open' : 'badge-closed'}">${status}</span></td>
+      <td class="text-sm text-muted">${formatDate(u.created_at || u.createdAt)}</td>
+    </tr>`;
+  }).join('');
+}
+
+function filterUserTable() {
+  const q = document.getElementById('user-search').value.toLowerCase();
+  const role = document.getElementById('user-filter-role').value;
+  const filtered = allUsers.filter(u => {
+    const name = (u.name || u.fullName || '').toLowerCase();
+    const email = (u.email || u.emailAddress || u.google_email || '').toLowerCase();
+    const matchQ = !q || name.includes(q) || email.includes(q);
+    const matchRole = !role || (u.role || '').toLowerCase().includes(role);
+    return matchQ && matchRole;
+  });
+  renderUsers(filtered);
+}
+
+// ── Helpers ──
+function tenantName(userId) {
+  return userMap[userId] || userId || '—';
+}
+
+function escHtml(str) {
+  return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+function formatDate(val) {
+  if (!val) return '—';
+  const d = new Date(val);
+  if (isNaN(d)) return '—';
+  return d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function formatDateTime(val) {
+  if (!val) return '—';
+  const d = new Date(val);
+  if (isNaN(d)) return '—';
+  return d.toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+}
+
+// ── Init ──
+if (sessionToken) {
+  bootApp();
+}
+</script>
+</body>
+</html>

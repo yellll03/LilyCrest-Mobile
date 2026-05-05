@@ -1,4 +1,4 @@
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+﻿import { Pressable, StyleSheet, Text, View } from 'react-native';
 
 export default function QuickActionCard({ label, note, onPress }) {
   return (
@@ -15,11 +15,11 @@ export default function QuickActionCard({ label, note, onPress }) {
 const styles = StyleSheet.create({
   card: {
     width: '48%',
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#F4F6FA',
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#D8E2F0',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -28,7 +28,7 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: '#D4682A',
+    backgroundColor: '#ff9000',
   },
   textCol: {
     flex: 1,
@@ -37,10 +37,10 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#0f172a',
+    color: '#1a2744',
   },
   note: {
     fontSize: 12,
-    color: '#475569',
+    color: '#4a5568',
   },
 });

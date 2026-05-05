@@ -1,4 +1,4 @@
-import { Ionicons } from '@expo/vector-icons';
+﻿import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useRef, useState } from 'react';
 import { KeyboardAvoidingView, Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 
@@ -137,7 +137,7 @@ export default function LilyChatbot() {
               <View style={styles.suggestions}>
                 {SUGGESTIONS.map((s) => (
                   <Pressable key={s} style={styles.chip} onPress={() => handleSend(s)}>
-                    <Ionicons name="sparkles" size={14} color="#0f172a" />
+                    <Ionicons name="sparkles" size={14} color="#204b7e" />
                     <Text style={styles.chipText}>{s}</Text>
                   </Pressable>
                 ))}
@@ -165,32 +165,32 @@ export default function LilyChatbot() {
 }
 
 const styles = StyleSheet.create({
-  safe: { flex: 1, backgroundColor: '#f5f7fa' },
+  safe: { flex: 1, backgroundColor: '#F4F6FA' },
   container: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, backgroundColor: '#ffffff', borderBottomWidth: 1, borderBottomColor: '#e2e8f0' },
-  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#0f172a', alignItems: 'center', justifyContent: 'center' },
+  header: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, backgroundColor: '#ffffff', borderBottomWidth: 1, borderBottomColor: '#D8E2F0' },
+  avatar: { width: 40, height: 40, borderRadius: 20, backgroundColor: '#204b7e', alignItems: 'center', justifyContent: 'center' },
   avatarText: { color: '#fff', fontWeight: '800' },
-  title: { fontSize: 16, fontWeight: '800', color: '#0f172a' },
+  title: { fontSize: 16, fontWeight: '800', color: '#1a2744' },
   subtitle: { fontSize: 12, color: '#22c55e', fontWeight: '700' },
   messages: { flex: 1 },
   row: { flexDirection: 'row', marginBottom: 12, alignItems: 'flex-end', gap: 8 },
   rowUser: { alignSelf: 'flex-end' },
   rowBot: { alignSelf: 'flex-start' },
-  botAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#0f172a', alignItems: 'center', justifyContent: 'center' },
+  botAvatar: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#204b7e', alignItems: 'center', justifyContent: 'center' },
   botAvatarText: { color: '#fff', fontWeight: '800' },
   bubble: { maxWidth: '78%', paddingVertical: 10, paddingHorizontal: 12, borderRadius: 14, borderWidth: 1 },
-  botBubble: { backgroundColor: '#f8fafc', borderColor: '#e2e8f0' },
-  userBubble: { backgroundColor: '#0f172a', borderColor: '#0f172a' },
-  text: { color: '#0f172a', fontSize: 15, lineHeight: 20 },
+  botBubble: { backgroundColor: '#f8fafc', borderColor: '#D8E2F0' },
+  userBubble: { backgroundColor: '#204b7e', borderColor: '#204b7e' },
+  text: { color: '#1a2744', fontSize: 15, lineHeight: 20 },
   userText: { color: '#ffffff' },
   time: { marginTop: 6, fontSize: 11, color: '#64748b', textAlign: 'right' },
   userTime: { color: '#cbd5e1' },
   suggestions: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 6 },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#e2e8f0', borderRadius: 14 },
-  chipText: { color: '#0f172a', fontWeight: '700', fontSize: 13 },
-  inputBar: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 10, backgroundColor: '#ffffff', borderTopWidth: 1, borderTopColor: '#e2e8f0' },
-  input: { flex: 1, minHeight: 40, maxHeight: 140, paddingVertical: 8, color: '#0f172a' },
-  sendBtn: { backgroundColor: '#D4682A', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12 },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, paddingVertical: 10, backgroundColor: '#e8f0fa', borderRadius: 14 },
+  chipText: { color: '#204b7e', fontWeight: '700', fontSize: 13 },
+  inputBar: { flexDirection: 'row', alignItems: 'center', padding: 12, gap: 10, backgroundColor: '#ffffff', borderTopWidth: 1, borderTopColor: '#D8E2F0' },
+  input: { flex: 1, minHeight: 40, maxHeight: 140, paddingVertical: 8, color: '#1a2744' },
+  sendBtn: { backgroundColor: '#204b7e', paddingHorizontal: 14, paddingVertical: 10, borderRadius: 12 },
   sendText: { color: '#fff', fontWeight: '800', fontSize: 13 },
   disabled: { opacity: 0.6 },
 });

@@ -7,6 +7,26 @@ const liveChatQueue = new Map();
 let genAIClient;
 // Use a v1beta-supported default without models/ prefix (per integration requirements)
 const DEFAULT_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash-lite';
+const MAX_HISTORY_MESSAGES = 8;
+
+/**
+ * Detects Gemini quota / rate-limit errors (HTTP 429, RESOURCE_EXHAUSTED,
+ * "quota exceeded", "Too Many Requests") so callers can degrade gracefully
+ * without exposing raw API error text to the client.
+ */
+function isQuotaError(err) {
+  if (!err) return false;
+  if (err.code === 'QUOTA_EXCEEDED') return true;
+  const httpStatus = err?.status ?? err?.response?.status;
+  if (httpStatus === 429) return true;
+  const msg = String(err?.message || '').toLowerCase();
+  return (
+    msg.includes('quota') ||
+    msg.includes('too many requests') ||
+    msg.includes('rate limit') ||
+    msg.includes('resource_exhausted')
+  );
+}
 
 function getGenAIClient() {
   const apiKey = process.env.GOOGLE_AI_API_KEY || process.env.GEMINI_API_KEY;
@@ -57,18 +77,14 @@ function getOrCreateSession(sessionId) {
   return chatSessions.get(sessionId);
 }
 
-function appendHistory(sessionId, userContent, botContent) {
-  const session = getOrCreateSession(sessionId);
-  session.history.push({ role: 'user', content: userContent });
-  if (botContent) {
-    session.history.push({ role: 'assistant', content: botContent });
-  }
-}
-
 // Full generative call with chat history
 async function sendGeminiMessage(sessionId, prompt) {
   const session = getOrCreateSession(sessionId);
-  const contents = session.history.map((h) => ({
+  const recentHistory = Array.isArray(session.history)
+    ? session.history.slice(-MAX_HISTORY_MESSAGES)
+    : [];
+
+  const contents = recentHistory.map((h) => ({
     role: h.role === 'assistant' ? 'model' : 'user',
     parts: [{ text: h.content }],
   }));
@@ -82,15 +98,22 @@ async function sendGeminiMessage(sessionId, prompt) {
 
     const result = await model.generateContent({
       contents,
-      generationConfig: { maxOutputTokens: 800, temperature: 0.75, topP: 0.92 },
+      generationConfig: { maxOutputTokens: 360, temperature: 0.65, topP: 0.9 },
     });
 
     const text = extractText(result);
     console.log(`[Gemini] Response received: ${text ? text.length + ' chars' : 'EMPTY'}`);
 
-    appendHistory(sessionId, prompt, text);
     return { text };
   } catch (err) {
+    // Quota / rate-limit: log internally, rethrow as a clean typed error.
+    // Never let raw Gemini quota messages reach the client.
+    if (isQuotaError(err)) {
+      console.warn(`[Gemini] Quota/rate-limit exceeded for model "${DEFAULT_MODEL}". Returning QUOTA_EXCEEDED to caller.`);
+      const quotaErr = new Error('Gemini quota exceeded');
+      quotaErr.code = 'QUOTA_EXCEEDED';
+      throw quotaErr;
+    }
     console.error(`[Gemini] API error for model "${DEFAULT_MODEL}":`, err.message);
     // If the model name is invalid, try a known fallback
     if (err.message?.includes('not found') || err.message?.includes('404') || err.message?.includes('not supported')) {
@@ -100,13 +123,18 @@ async function sendGeminiMessage(sessionId, prompt) {
         const fallbackModel = client.getGenerativeModel({ model: 'gemini-2.0-flash' });
         const result = await fallbackModel.generateContent({
           contents,
-          generationConfig: { maxOutputTokens: 800, temperature: 0.75, topP: 0.92 },
+          generationConfig: { maxOutputTokens: 360, temperature: 0.65, topP: 0.9 },
         });
         const text = extractText(result);
         console.log(`[Gemini] Fallback response: ${text ? text.length + ' chars' : 'EMPTY'}`);
-        appendHistory(sessionId, prompt, text);
         return { text };
       } catch (fallbackErr) {
+        if (isQuotaError(fallbackErr)) {
+          console.warn('[Gemini] Fallback model also quota-exceeded.');
+          const quotaErr = new Error('Gemini quota exceeded');
+          quotaErr.code = 'QUOTA_EXCEEDED';
+          throw quotaErr;
+        }
         console.error('[Gemini] Fallback model also failed:', fallbackErr.message);
       }
     }
@@ -116,23 +144,34 @@ async function sendGeminiMessage(sessionId, prompt) {
 
 // Intent classification (returns { intent, confidence })
 async function classifyIntent(message) {
-  const client = getGenAIClient();
-  const model = client.getGenerativeModel({ model: DEFAULT_MODEL });
-  const prompt = `You are an intent classifier for a dormitory assistant. Return strict JSON with keys intent (snake_case) and confidence (0-1). Possible intents include billing_due_date, payment_methods, late_fee, maintenance_request, house_rules, documents, account_support, move_in_requirements, amenities, emergency_contacts, room_types, general. If unsure, set intent="general" and confidence<=0.4.\r\nUser: ${message}`;
-
-  const result = await model.generateContent({
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: { temperature: 0.2, maxOutputTokens: 120 },
-  });
-
-  const text = extractText(result);
   try {
-    const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
-    return {
-      intent: parsed.intent || 'general',
-      confidence: typeof parsed.confidence === 'number' ? parsed.confidence : null,
-    };
-  } catch (_err) {
+    const client = getGenAIClient();
+    const model = client.getGenerativeModel({ model: DEFAULT_MODEL });
+    const prompt = `You are an intent classifier for a dormitory assistant. Return strict JSON with keys intent (snake_case) and confidence (0-1). Possible intents include billing_due_date, payment_methods, late_fee, maintenance_request, house_rules, documents, account_support, move_in_requirements, amenities, emergency_contacts, room_types, general. If unsure, set intent="general" and confidence<=0.4.\r\nUser: ${message}`;
+
+    const result = await model.generateContent({
+      contents: [{ role: 'user', parts: [{ text: prompt }] }],
+      generationConfig: { temperature: 0.2, maxOutputTokens: 120 },
+    });
+
+    const text = extractText(result);
+    try {
+      const parsed = JSON.parse(text.replace(/```json|```/g, '').trim());
+      return {
+        intent: parsed.intent || 'general',
+        confidence: typeof parsed.confidence === 'number' ? parsed.confidence : null,
+      };
+    } catch (_err) {
+      return { intent: 'general', confidence: null };
+    }
+  } catch (err) {
+    if (isQuotaError(err)) {
+      console.warn('[Gemini] classifyIntent: quota exceeded, falling back to general intent.');
+      const quotaErr = new Error('Gemini quota exceeded');
+      quotaErr.code = 'QUOTA_EXCEEDED';
+      throw quotaErr;
+    }
+    // Any other error: safe default
     return { intent: 'general', confidence: null };
   }
 }
@@ -164,4 +203,5 @@ module.exports = {
   resetSession,
   chatSessions,
   liveChatQueue,
+  isQuotaError,
 };

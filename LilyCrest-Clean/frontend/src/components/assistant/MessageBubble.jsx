@@ -1,14 +1,27 @@
-import { Platform, StyleSheet, Text, View } from 'react-native';
+﻿import { Platform, StyleSheet, Text, View } from 'react-native';
+import { useTheme } from '../../context/ThemeContext';
 import LilyFlowerIcon from './LilyFlowerIcon';
 
 export default function MessageBubble({ message, isUser }) {
+  const { colors, isDarkMode } = useTheme();
+
+  const systemLineColor = colors.border;
+  const systemTextColor = colors.textMuted;
+  const userBubbleColor = colors.primary;
+  const botBubbleColor = colors.surface;
+  const botBubbleBorder = colors.border;
+  const avatarBg = isDarkMode ? colors.surfaceSecondary : colors.primary;
+  const adminBubbleBg = isDarkMode ? '#1E1A2E' : '#f0f4ff';
+  const adminBubbleBorder = isDarkMode ? 'rgba(99,102,241,0.25)' : '#c7d2fe';
+  const botTextColor = colors.text;
+
   // ── System divider (transfer notice, resolved notice) ──
   if (message.sender === 'system') {
     return (
       <View style={styles.systemRow}>
-        <View style={styles.systemLine} />
-        <Text style={styles.systemText}>{message.text}</Text>
-        <View style={styles.systemLine} />
+        <View style={[styles.systemLine, { backgroundColor: systemLineColor }]} />
+        <Text style={[styles.systemText, { color: systemTextColor }]}>{message.text}</Text>
+        <View style={[styles.systemLine, { backgroundColor: systemLineColor }]} />
       </View>
     );
   }
@@ -19,7 +32,7 @@ export default function MessageBubble({ message, isUser }) {
     <View style={[styles.row, isUser ? styles.rowUser : styles.rowBot]}>
       {/* Left avatar — Lily or Admin */}
       {!isUser && (
-        <View style={[styles.avatar, isAdmin && styles.adminAvatar]}>
+        <View style={[styles.avatar, { backgroundColor: avatarBg }, isAdmin && styles.adminAvatar]}>
           {isAdmin
             ? <Text style={styles.adminAvatarText}>A</Text>
             : <LilyFlowerIcon size={22} glow={false} />
@@ -27,9 +40,9 @@ export default function MessageBubble({ message, isUser }) {
         </View>
       )}
 
-      <View style={[styles.bubble, isUser ? styles.userBubble : isAdmin ? styles.adminBubble : styles.botBubble]}>
+      <View style={[styles.bubble, isUser ? [styles.userBubble, { backgroundColor: userBubbleColor, borderColor: userBubbleColor }] : isAdmin ? [styles.adminBubble, { backgroundColor: adminBubbleBg, borderColor: adminBubbleBorder }] : [styles.botBubble, { backgroundColor: botBubbleColor, borderColor: botBubbleBorder }]]}>
         {isAdmin && <Text style={styles.adminLabel}>LilyCrest Admin</Text>}
-        <Text style={[styles.text, isUser && styles.userText]}>{message.text}</Text>
+        <Text style={[styles.text, { color: isUser ? '#f1f5f9' : botTextColor }]}>{message.text}</Text>
         {message.attachments?.length ? (
           <View style={styles.attachmentsRow}>
             {message.attachments.map((file, idx) => (
@@ -44,7 +57,7 @@ export default function MessageBubble({ message, isUser }) {
 
       {/* Right avatar — User */}
       {isUser && (
-        <View style={[styles.avatar, styles.userAvatar]}>
+        <View style={[styles.avatar, styles.userAvatar, { backgroundColor: userBubbleColor }]}>
           <Text style={styles.avatarUserText}>{message.avatar || 'U'}</Text>
         </View>
       )}
@@ -92,19 +105,17 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: '#0f172a',
+    backgroundColor: '#204b7e',
     justifyContent: 'center',
     alignItems: 'center',
     ...Platform.select({
-      ios: { shadowColor: '#D4682A', shadowOpacity: 0.25, shadowOffset: { width: 0, height: 2 }, shadowRadius: 6 },
+      ios: { shadowColor: '#204b7e', shadowOpacity: 0.25, shadowOffset: { width: 0, height: 2 }, shadowRadius: 6 },
       android: { elevation: 3 },
     }),
   },
-  userAvatar: {
-    backgroundColor: '#1e3a5f',
-  },
+  userAvatar: {},
   adminAvatar: {
-    backgroundColor: '#D4682A',
+    backgroundColor: '#ff9000',
   },
   avatarUserText: {
     color: '#ffffff',
@@ -145,12 +156,10 @@ const styles = StyleSheet.create({
     }),
   },
   userBubble: {
-    backgroundColor: '#1e3a5f',
-    borderColor: '#1e3a5f',
     borderBottomRightRadius: 4,
     ...Platform.select({
-      web: { boxShadow: '0 2px 6px rgba(30,58,95,0.2)' },
-      ios: { shadowColor: '#1e3a5f', shadowOpacity: 0.2, shadowOffset: { width: 0, height: 2 }, shadowRadius: 6 },
+      web: { boxShadow: '0 2px 6px rgba(0,0,0,0.15)' },
+      ios: { shadowOpacity: 0.2, shadowOffset: { width: 0, height: 2 }, shadowRadius: 6 },
       android: { elevation: 3 },
     }),
   },
@@ -159,7 +168,7 @@ const styles = StyleSheet.create({
   adminLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#D4682A',
+    color: '#ff9000',
     marginBottom: 4,
     letterSpacing: 0.2,
   },
@@ -168,6 +177,7 @@ const styles = StyleSheet.create({
     color: '#1e293b',
     lineHeight: 21,
   },
+  // note: botTextColor applied inline via colors.text
   userText: {
     color: '#f1f5f9',
   },

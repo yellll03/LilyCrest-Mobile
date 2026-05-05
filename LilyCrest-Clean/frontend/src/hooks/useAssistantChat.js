@@ -1,20 +1,36 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiService } from '../services/api';
 import { useAsyncCall } from './useAsyncCall';
 
-const MAX_RETRIES = 3;
+const MAX_RETRIES = 2;
 const RATE_LIMIT_MS = 900; // debounce to prevent spam submits
+
+function detectTypingIntent(text = '') {
+  const lower = String(text || '').toLowerCase();
+  if (/\b(bill|unpaid|bayarin|due|payment)\b/.test(lower)) return 'billing';
+  if (/\b(maintenance|repair|sira|request|fix)\b/.test(lower)) return 'maintenance';
+  if (/\b(account|profile|info|details)\b/.test(lower)) return 'profile';
+  return 'general';
+}
 
 export function useAssistantChat(initialSessionId) {
   const { run } = useAsyncCall();
   const [sessionId, setSessionId] = useState(initialSessionId);
   const [isTyping, setIsTyping] = useState(false);
+  const [typingIntent, setTypingIntent] = useState('general');
   const cooldownRef = useRef(0);
+
+  useEffect(() => {
+    setSessionId(initialSessionId);
+    setIsTyping(false);
+    setTypingIntent('general');
+    cooldownRef.current = 0;
+  }, [initialSessionId]);
 
   const loadPersistedSession = useCallback(async () => {
     // No persistence: always start fresh
     setSessionId(initialSessionId);
-  }, []);
+  }, [initialSessionId]);
 
   const sendMessage = useCallback(
     async (text) => {
@@ -25,11 +41,12 @@ export function useAssistantChat(initialSessionId) {
       cooldownRef.current = now;
 
       setIsTyping(true);
+      setTypingIntent(detectTypingIntent(text));
       let attempt = 0;
       let lastError = null;
 
       while (attempt < MAX_RETRIES) {
-        const backoffMs = attempt === 0 ? 0 : 500 * Math.pow(2, attempt - 1); // 0, 500, 1000
+        const backoffMs = attempt === 0 ? 0 : 350 * Math.pow(2, attempt - 1); // 0, 350
         if (backoffMs) await new Promise((res) => setTimeout(res, backoffMs));
         attempt += 1;
 
@@ -39,11 +56,12 @@ export function useAssistantChat(initialSessionId) {
 
         if (!error) {
           setIsTyping(false);
-          const response = data?.data?.response || '';
+          const response = data?.data?.message || data?.data?.response || '';
+          const intent = data?.data?.intent || 'general';
           const metadata = data?.data?.meta || {};
           const needsAdmin = data?.data?.needs_admin || false;
           const suggestions = Array.isArray(data?.data?.suggestions) ? data.data.suggestions : [];
-          return { response, metadata, needsAdmin, suggestions, attempt };
+          return { response, intent, metadata, needsAdmin, suggestions, attempt };
         }
 
         lastError = error;
@@ -52,6 +70,7 @@ export function useAssistantChat(initialSessionId) {
       }
 
       setIsTyping(false);
+      setTypingIntent('general');
       return { error: lastError || { code: 'network_error', detail: 'No response received.' } };
     },
     [run, sessionId]
@@ -68,5 +87,5 @@ export function useAssistantChat(initialSessionId) {
     return newSessionId;
   }, [sessionId, initialSessionId]);
 
-  return { sessionId, setSessionId, sendMessage, isTyping, loadPersistedSession, resetSession };
+  return { sessionId, setSessionId, sendMessage, isTyping, typingIntent, loadPersistedSession, resetSession };
 }

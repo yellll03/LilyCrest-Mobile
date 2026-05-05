@@ -39,6 +39,10 @@ router.use('/faqs', faqRoutes);
 const ticketRoutes = require('./ticket.routes');
 router.use('/tickets', ticketRoutes);
 
+// Support chat routes
+const chatRoutes = require('./chat.routes');
+router.use('/chat', chatRoutes);
+
 // Documents routes
 const documentRoutes = require('./documents.routes');
 router.use('/documents', documentRoutes);
