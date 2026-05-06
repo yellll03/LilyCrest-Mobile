@@ -548,7 +548,7 @@ export default function LoginScreen() {
 }
 
 const createStyles = (c, dark) => StyleSheet.create({
-  container: { flex: 1, backgroundColor: c.surface },
+  container: { flex: 1, backgroundColor: c.background },
   keyboardView: { flex: 1 },
   scrollContent: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 16, paddingBottom: 32 },
   backButton: {
@@ -636,5 +636,5 @@ const createStyles = (c, dark) => StyleSheet.create({
   googleLogoImage: { width: 18, height: 18 },
   googleButtonText: { color: c.text, fontSize: 15, fontWeight: '600' },
   noticeContainer: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: c.primaryLight, borderRadius: 12, padding: 16, marginTop: 24, gap: 10 },
-  noticeText: { flex: 1, fontSize: 13, color: dark ? c.textSecondary : c.textSecondary, lineHeight: 18 },
+  noticeText: { flex: 1, fontSize: 13, color: c.textSecondary, lineHeight: 18 },
 });

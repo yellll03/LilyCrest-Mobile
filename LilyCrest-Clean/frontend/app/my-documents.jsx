@@ -5,7 +5,7 @@ import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
 import * as Sharing from 'expo-sharing';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Image, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../src/context/AlertContext';
 import { useAuth } from '../src/context/AuthContext';
@@ -261,19 +261,26 @@ export default function MyDocumentsScreen() {
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deletingDocId, setDeletingDocId] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   // Fetch uploaded documents
-  const fetchUploadedDocs = useCallback(async () => {
+  const fetchUploadedDocs = useCallback(async ({ showLoader = true } = {}) => {
     try {
-      setLoadingDocs(true);
+      if (showLoader) setLoadingDocs(true);
       const response = await apiService.getUserDocuments();
       setUploadedDocs(response?.data || []);
     } catch (error) {
       console.error('Failed to fetch documents:', error);
     } finally {
-      setLoadingDocs(false);
+      if (showLoader) setLoadingDocs(false);
+      setRefreshing(false);
     }
   }, []);
+
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    fetchUploadedDocs({ showLoader: false });
+  }, [fetchUploadedDocs]);
 
   useEffect(() => {
     fetchUploadedDocs();
@@ -487,7 +494,19 @@ export default function MyDocumentsScreen() {
       </View>
 
       {/* Document List */}
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={(
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={[colors.accent]}
+            tintColor={colors.accent}
+          />
+        )}
+      >
 
         {/* ── Personal Documents (Uploaded IDs & Documents) ── */}
         {(!activeCategory || activeCategory === 'Personal') && (

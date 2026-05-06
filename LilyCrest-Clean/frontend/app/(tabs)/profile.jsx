@@ -1,8 +1,8 @@
-﻿import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Modal, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
 import { useTheme } from '../../src/context/ThemeContext';
@@ -79,9 +79,9 @@ export default function ProfileScreen() {
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
   const [profileError, setProfileError] = useState('');
   const [profileBanner, setProfileBanner] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
   const userId = user?.user_id || null;
 
-  // keep form in sync when user data changes
   useEffect(() => {
     setFormData({
       name: user?.name || '',
@@ -92,7 +92,6 @@ export default function ProfileScreen() {
     });
   }, [user?.name, user?.username, user?.email, user?.phone, user?.address]);
 
-  // Fetch fresh profile data from server
   const fetchProfile = useCallback(async () => {
     setProfileError('');
     try {
@@ -108,10 +107,17 @@ export default function ProfileScreen() {
         try { await checkAuth?.(); } catch (_) {}
       }
       setProfileError('Unable to load profile. Pull to refresh and try again.');
+    } finally {
+      setRefreshing(false);
     }
   }, [checkAuth, updateUser]);
 
-  // Refresh profile every time this tab gains focus
+  const handleRefresh = useCallback(() => {
+    if (isEditing) return;
+    setRefreshing(true);
+    fetchProfile();
+  }, [fetchProfile, isEditing]);
+
   useFocusEffect(
     useCallback(() => {
       if (!authLoading && userId) {
@@ -151,8 +157,6 @@ export default function ProfileScreen() {
     router.replace('/login');
   };
 
-
-
   const hasChanges = () => {
     return (
       formData.name.trim() !== (user?.name || '').trim() ||
@@ -191,11 +195,7 @@ export default function ProfileScreen() {
       if (!isProfilePayload(response?.data)) {
         throw new Error('Invalid profile update response shape');
       }
-
-      // Update auth context with fresh data from server
       updateUser(response.data);
-
-      // Update form with the server-confirmed values
       setFormData({
         name: response.data?.name || '',
         username: response.data?.username || '',
@@ -253,14 +253,29 @@ export default function ProfileScreen() {
     }
   };
 
-  const iconColor = isDarkMode ? colors.primary : colors.accent;
-  const menuItems = [
-    { icon: 'person-outline', label: 'Edit Profile', onPress: () => setIsEditing(true), color: iconColor },
-    { icon: 'receipt-outline', label: 'Billing History', onPress: () => router.push({ pathname: '/(tabs)/billing', params: { from: 'profile' } }), color: iconColor },
-    { icon: 'folder-outline', label: 'Documents', onPress: () => router.push('/my-documents'), color: iconColor },
-    { icon: 'settings-outline', label: 'Settings', onPress: () => router.push('/settings'), color: iconColor },
-    { icon: 'chatbubbles-outline', label: 'Help & Support', onPress: () => router.push('/(tabs)/chatbot'), color: iconColor },
-    { icon: 'information-circle-outline', label: 'About', onPress: () => router.push('/about'), color: iconColor },
+  const iconColor = colors.accent;
+  const menuGroups = [
+    {
+      label: 'ACCOUNT',
+      items: [
+        { icon: 'person-outline', label: 'Edit Profile', onPress: () => setIsEditing(true), color: iconColor },
+      ],
+    },
+    {
+      label: 'APP',
+      items: [
+        { icon: 'receipt-outline', label: 'Billing History', onPress: () => router.push({ pathname: '/(tabs)/billing', params: { from: 'profile' } }), color: iconColor },
+        { icon: 'folder-outline', label: 'Documents', onPress: () => router.push('/my-documents'), color: iconColor },
+        { icon: 'settings-outline', label: 'Settings', onPress: () => router.push('/settings'), color: iconColor },
+      ],
+    },
+    {
+      label: 'SUPPORT',
+      items: [
+        { icon: 'chatbubbles-outline', label: 'Help & Support', onPress: () => router.push('/(tabs)/chatbot'), color: iconColor },
+        { icon: 'information-circle-outline', label: 'About', onPress: () => router.push('/about'), color: iconColor },
+      ],
+    },
   ];
 
   const isFormValid = !errors.name && !errors.username && !errors.email && !errors.phone && !errors.address && formData.name.trim().length > 0 && formData.username.trim().length > 0 && formData.email.trim().length > 0 && hasChanges();
@@ -292,30 +307,52 @@ export default function ProfileScreen() {
     });
     setErrors({ name: '', username: '', email: '', phone: '', address: '' });
   };
+
   const styles = createStyles(colors, isDarkMode);
+
+  const bannerBg = profileBanner
+    ? profileBanner.type === 'success'
+      ? isDarkMode ? 'rgba(34,197,94,0.15)' : '#ecfdf3'
+      : profileBanner.type === 'warning'
+      ? isDarkMode ? 'rgba(245,158,11,0.15)' : '#fffbeb'
+      : isDarkMode ? 'rgba(239,68,68,0.15)' : '#fef2f2'
+    : 'transparent';
+  const bannerBorder = profileBanner
+    ? profileBanner.type === 'success'
+      ? isDarkMode ? 'rgba(34,197,94,0.4)' : '#bbf7d0'
+      : profileBanner.type === 'warning'
+      ? isDarkMode ? 'rgba(245,158,11,0.4)' : '#fde68a'
+      : isDarkMode ? 'rgba(239,68,68,0.4)' : '#fecaca'
+    : 'transparent';
+  const bannerIconColor = profileBanner
+    ? profileBanner.type === 'success' ? '#22c55e' : profileBanner.type === 'warning' ? '#f59e0b' : '#ef4444'
+    : '#000';
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.header}><Text style={styles.headerTitle}>Profile</Text></View>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Profile</Text>
+      </View>
+      <ScrollView
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={(
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={[colors.accent]}
+            tintColor={colors.accent}
+          />
+        )}
+      >
 
         {profileBanner ? (
-          <View style={{
-            flexDirection: 'row',
-            alignItems: 'center',
-            gap: 10,
-            marginHorizontal: 20,
-            marginBottom: 12,
-            padding: 12,
-            borderRadius: 12,
-            borderWidth: 1,
-            backgroundColor: profileBanner.type === 'success' ? '#ecfdf3' : profileBanner.type === 'warning' ? '#fffbeb' : '#fef2f2',
-            borderColor: profileBanner.type === 'success' ? '#bbf7d0' : profileBanner.type === 'warning' ? '#fde68a' : '#fecaca',
-          }}>
+          <View style={[styles.banner, { backgroundColor: bannerBg, borderColor: bannerBorder }]}>
             <Ionicons
               name={profileBanner.type === 'success' ? 'checkmark-circle' : profileBanner.type === 'warning' ? 'alert-circle' : 'close-circle'}
               size={18}
-              color={profileBanner.type === 'success' ? '#15803d' : profileBanner.type === 'warning' ? '#92400e' : '#b91c1c'}
+              color={bannerIconColor}
             />
             <Text style={styles.bannerText}>{profileBanner.text}</Text>
             <TouchableOpacity onPress={() => setProfileBanner(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -334,20 +371,32 @@ export default function ProfileScreen() {
 
         <View style={styles.profileCard}>
           <TouchableOpacity style={styles.avatarContainer} onPress={pickImage}>
-            {user?.picture ? <Image source={{ uri: user.picture }} style={styles.avatar} /> : <View style={styles.avatarPlaceholder}><Ionicons name="person" size={40} color="#9CA3AF" /></View>}
+            {user?.picture
+              ? <Image source={{ uri: user.picture }} style={styles.avatar} />
+              : <View style={styles.avatarPlaceholder}><Ionicons name="person" size={44} color={colors.textMuted} /></View>
+            }
             <View style={styles.editAvatarButton}><Ionicons name="camera" size={14} color="#FFFFFF" /></View>
           </TouchableOpacity>
           <Text style={styles.userName}>{user?.name || 'User'}</Text>
           {user?.username ? <Text style={styles.userHandle}>@{user.username}</Text> : null}
           <Text style={styles.userEmail}>{user?.email || ''}</Text>
-          <View style={styles.statusContainer}><View style={styles.statusBadge}><View style={styles.statusDot} /><Text style={styles.statusText}>Active Tenant</Text></View></View>
+          <View style={styles.statusContainer}>
+            <View style={styles.statusBadge}>
+              <View style={styles.statusDot} />
+              <Text style={styles.statusText}>Active Tenant</Text>
+            </View>
+          </View>
         </View>
 
         {isEditing ? (
           <View style={styles.editForm}>
-            <View style={styles.formHeader}><Text style={styles.sectionTitle}>Edit Profile</Text><TouchableOpacity onPress={handleDiscardEdit}><Ionicons name="close" size={24} color={colors.textMuted} /></TouchableOpacity></View>
+            <View style={styles.formHeader}>
+              <Text style={styles.sectionTitle}>Edit Profile</Text>
+              <TouchableOpacity onPress={handleDiscardEdit}>
+                <Ionicons name="close" size={24} color={colors.textMuted} />
+              </TouchableOpacity>
+            </View>
 
-            {/* Full Name */}
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>Full Name *</Text>
               <TextInput style={[styles.input, errors.name ? styles.inputError : null]} value={formData.name} onChangeText={(text) => setFormData({ ...formData, name: text.slice(0, NAME_MAX) })} placeholder="Enter your full name" placeholderTextColor={colors.textMuted} maxLength={NAME_MAX} />
@@ -357,7 +406,6 @@ export default function ProfileScreen() {
               </View>
             </View>
 
-            {/* Username */}
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>Username *</Text>
               <View style={[styles.inputWithPrefix, errors.username ? styles.inputError : null]}>
@@ -379,7 +427,6 @@ export default function ProfileScreen() {
               </View>
             </View>
 
-            {/* Email */}
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>Email Address *</Text>
               <TextInput
@@ -396,7 +443,6 @@ export default function ProfileScreen() {
               {errors.email ? <View style={styles.errorContainer}><Ionicons name="alert-circle" size={14} color="#EF4444" /><Text style={styles.fieldErrorText}>{errors.email}</Text></View> : null}
             </View>
 
-            {/* Phone */}
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>Phone Number</Text>
               <TextInput
@@ -415,7 +461,6 @@ export default function ProfileScreen() {
               {errors.phone ? <View style={styles.errorContainer}><Ionicons name="alert-circle" size={14} color="#EF4444" /><Text style={styles.fieldErrorText}>{errors.phone}</Text></View> : null}
             </View>
 
-            {/* Address */}
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>Address</Text>
               <TextInput style={[styles.input, styles.textArea, errors.address ? styles.inputError : null]} value={formData.address} onChangeText={(text) => setFormData({ ...formData, address: text.slice(0, ADDRESS_MAX) })} placeholder="Enter your address (optional)" placeholderTextColor={colors.textMuted} multiline numberOfLines={3} maxLength={ADDRESS_MAX} />
@@ -430,20 +475,39 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
         ) : (
-          <View style={styles.menuSection}>
-            {menuItems.map((item, index) => (
-              <TouchableOpacity key={index} style={[styles.menuItem, index === menuItems.length - 1 && styles.menuItemLast]} onPress={item.onPress} activeOpacity={0.7}>
-                <View style={styles.menuItemLeft}>
-                  <View style={[styles.menuIconContainer, { backgroundColor: isDarkMode ? `${item.color}20` : `${item.color}10` }]}><Ionicons name={item.icon} size={20} color={item.color} /></View>
-                  <Text style={styles.menuItemText}>{item.label}</Text>
+          <View style={styles.menuContainer}>
+            {menuGroups.map((group) => (
+              <View key={group.label} style={styles.menuGroupWrapper}>
+                <Text style={styles.menuGroupLabel}>{group.label}</Text>
+                <View style={styles.menuSection}>
+                  {group.items.map((item, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={[styles.menuItem, index === group.items.length - 1 && styles.menuItemLast]}
+                      onPress={item.onPress}
+                      activeOpacity={0.7}
+                    >
+                      <View style={styles.menuItemLeft}>
+                        <View style={[styles.menuIconContainer, { backgroundColor: isDarkMode ? `${item.color}25` : `${item.color}15` }]}>
+                          <Ionicons name={item.icon} size={20} color={item.color} />
+                        </View>
+                        <Text style={styles.menuItemText}>{item.label}</Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                    </TouchableOpacity>
+                  ))}
                 </View>
-                <Ionicons name="chevron-forward" size={20} color={colors.textMuted} />
-              </TouchableOpacity>
+              </View>
             ))}
           </View>
         )}
 
-        {!isEditing && <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}><Ionicons name="log-out-outline" size={20} color="#EF4444" /><Text style={styles.logoutText}>Sign Out</Text></TouchableOpacity>}
+        {!isEditing && (
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <Ionicons name="log-out-outline" size={20} color="#EF4444" />
+            <Text style={styles.logoutText}>Sign Out</Text>
+          </TouchableOpacity>
+        )}
         {!isEditing && <Text style={styles.versionText}>Version 1.0.0</Text>}
         <View style={styles.bottomSpacer} />
       </ScrollView>
@@ -462,7 +526,6 @@ export default function ProfileScreen() {
         </View>
       </Modal>
 
-      {/* Discard changes confirmation */}
       <Modal visible={discardModalVisible} transparent={true} animationType="fade" onRequestClose={() => setDiscardModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
@@ -481,40 +544,169 @@ export default function ProfileScreen() {
 }
 
 const createStyles = (colors, isDarkMode) => StyleSheet.create({
-    bannerText: { flex: 1, fontSize: 13, fontWeight: '700', color: colors.text },
   container: { flex: 1, backgroundColor: colors.background },
   scrollView: { flex: 1 },
   scrollContent: { paddingBottom: 16 },
-  header: { paddingHorizontal: 20, paddingVertical: 16 },
-  headerTitle: { fontSize: 28, fontWeight: '700', color: colors.text },
-  errorBanner: { flexDirection: 'row', alignItems: 'center', marginHorizontal: 20, marginBottom: 12, padding: 12, borderRadius: 10, backgroundColor: isDarkMode ? 'rgba(248,113,113,0.15)' : '#FEE2E2', borderWidth: 1, borderColor: isDarkMode ? 'rgba(248,113,113,0.4)' : '#FCA5A5', gap: 8 },
-  retryText: { color: '#b91c1c', fontWeight: '600', marginLeft: 'auto' },
-  profileCard: { backgroundColor: colors.surface, marginHorizontal: 20, marginBottom: 20, borderRadius: 20, padding: 24, alignItems: 'center', borderWidth: isDarkMode ? 1 : 0, borderColor: colors.border, ...Platform.select({ ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12 }, android: { elevation: 4 }, web: { boxShadow: '0 4px 12px rgba(0,0,0,0.08)' } }) },
+
+  header: {
+    backgroundColor: colors.headerBg,
+    paddingHorizontal: 20,
+    paddingVertical: 18,
+    borderBottomWidth: 3,
+    borderBottomColor: '#ff9000',
+  },
+  headerTitle: { fontSize: 22, fontWeight: '700', color: '#FFFFFF' },
+
+  banner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginHorizontal: 20,
+    marginTop: 16,
+    marginBottom: 4,
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  bannerText: { flex: 1, fontSize: 13, fontWeight: '600', color: colors.text },
+
+  errorBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 20,
+    marginTop: 16,
+    marginBottom: 4,
+    padding: 12,
+    borderRadius: 10,
+    backgroundColor: isDarkMode ? 'rgba(248,113,113,0.15)' : '#FEE2E2',
+    borderWidth: 1,
+    borderColor: isDarkMode ? 'rgba(248,113,113,0.4)' : '#FCA5A5',
+    gap: 8,
+  },
+  errorText: { flex: 1, fontSize: 13, color: isDarkMode ? '#fca5a5' : '#b91c1c' },
+  retryText: { color: '#b91c1c', fontWeight: '600' },
+
+  profileCard: {
+    backgroundColor: colors.surface,
+    marginHorizontal: 20,
+    marginTop: 20,
+    marginBottom: 20,
+    borderRadius: 20,
+    padding: 28,
+    alignItems: 'center',
+    borderWidth: isDarkMode ? 1 : 0,
+    borderColor: colors.border,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12 },
+      android: { elevation: 4 },
+      web: { boxShadow: '0 4px 12px rgba(0,0,0,0.08)' },
+    }),
+  },
   avatarContainer: { position: 'relative', marginBottom: 16 },
-  avatar: { width: 90, height: 90, borderRadius: 45, borderWidth: 3, borderColor: colors.border },
-  avatarPlaceholder: { width: 90, height: 90, borderRadius: 45, backgroundColor: colors.inputBg, justifyContent: 'center', alignItems: 'center', borderWidth: 3, borderColor: colors.border },
-  editAvatarButton: { position: 'absolute', bottom: 2, right: 2, width: 28, height: 28, borderRadius: 14, backgroundColor: colors.accent, justifyContent: 'center', alignItems: 'center', borderWidth: 2, borderColor: colors.surface },
-  userName: { fontSize: 20, fontWeight: '600', color: colors.text, marginBottom: 2 },
-  userHandle: { fontSize: 14, color: colors.primary, marginBottom: 4, fontWeight: '500' },
-  userEmail: { fontSize: 14, color: colors.textSecondary, marginBottom: 12 },
+  avatar: { width: 96, height: 96, borderRadius: 48, borderWidth: 3, borderColor: '#ff9000' },
+  avatarPlaceholder: {
+    width: 96,
+    height: 96,
+    borderRadius: 48,
+    backgroundColor: colors.inputBg,
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 3,
+    borderColor: '#ff9000',
+  },
+  editAvatarButton: {
+    position: 'absolute',
+    bottom: 2,
+    right: 2,
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#ff9000',
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderWidth: 2,
+    borderColor: colors.surface,
+  },
+  userName: { fontSize: 20, fontWeight: '700', color: colors.text, marginBottom: 3 },
+  userHandle: { fontSize: 14, color: colors.accent, marginBottom: 4, fontWeight: '600' },
+  userEmail: { fontSize: 13, color: colors.textSecondary, marginBottom: 14 },
   statusContainer: { flexDirection: 'row', alignItems: 'center' },
-  statusBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: isDarkMode ? 'rgba(34,197,94,0.2)' : '#DCFCE7', paddingVertical: 6, paddingHorizontal: 12, borderRadius: 20, gap: 6 },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: isDarkMode ? 'rgba(34,197,94,0.18)' : '#DCFCE7',
+    paddingVertical: 6,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+    gap: 6,
+  },
   statusDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E' },
-  statusText: { fontSize: 13, fontWeight: '500', color: '#166534' },
-  menuSection: { backgroundColor: colors.surface, marginHorizontal: 20, borderRadius: 16, overflow: 'hidden', borderWidth: isDarkMode ? 1 : 0, borderColor: colors.border },
-  menuItem: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: colors.border },
+  statusText: { fontSize: 13, fontWeight: '600', color: isDarkMode ? '#4ade80' : '#166534' },
+
+  menuContainer: { gap: 4 },
+  menuGroupWrapper: { marginHorizontal: 20, marginBottom: 8 },
+  menuGroupLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: colors.textMuted,
+    letterSpacing: 1.2,
+    marginBottom: 8,
+    marginLeft: 2,
+  },
+  menuSection: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    overflow: 'hidden',
+    borderWidth: isDarkMode ? 1 : 0,
+    borderColor: colors.border,
+    ...Platform.select({
+      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 },
+      android: { elevation: 2 },
+      web: { boxShadow: '0 2px 8px rgba(0,0,0,0.06)' },
+    }),
+  },
+  menuItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border,
+  },
   menuItemLast: { borderBottomWidth: 0 },
   menuItemLeft: { flexDirection: 'row', alignItems: 'center' },
-  menuIconContainer: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
+  menuIconContainer: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 14 },
   menuItemText: { fontSize: 15, color: colors.text, fontWeight: '500' },
-  logoutButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginHorizontal: 20, marginTop: 20, paddingVertical: 14, borderRadius: 12, borderWidth: 1.5, borderColor: isDarkMode ? 'rgba(239,68,68,0.3)' : '#FEE2E2', backgroundColor: isDarkMode ? 'rgba(239,68,68,0.1)' : '#FEF2F2', gap: 8 },
+
+  logoutButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginHorizontal: 20,
+    marginTop: 20,
+    paddingVertical: 14,
+    borderRadius: 14,
+    borderWidth: 1.5,
+    borderColor: isDarkMode ? 'rgba(239,68,68,0.3)' : '#FEE2E2',
+    backgroundColor: isDarkMode ? 'rgba(239,68,68,0.1)' : '#FEF2F2',
+    gap: 8,
+  },
   logoutText: { fontSize: 15, fontWeight: '600', color: '#EF4444' },
   versionText: { textAlign: 'center', fontSize: 12, color: colors.textMuted, marginTop: 16 },
-  editForm: { backgroundColor: colors.surface, marginHorizontal: 20, borderRadius: 16, padding: 20, borderWidth: isDarkMode ? 1 : 0, borderColor: colors.border },
+
+  editForm: {
+    backgroundColor: colors.surface,
+    marginHorizontal: 20,
+    borderRadius: 16,
+    padding: 20,
+    borderWidth: isDarkMode ? 1 : 0,
+    borderColor: colors.border,
+  },
   formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
-  sectionTitle: { fontSize: 18, fontWeight: '600', color: colors.text },
+  sectionTitle: { fontSize: 18, fontWeight: '700', color: colors.text },
   inputContainer: { marginBottom: 16 },
-  inputLabel: { fontSize: 13, fontWeight: '600', color: colors.textSecondary, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
+  inputLabel: { fontSize: 12, fontWeight: '700', color: colors.textSecondary, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.6 },
   input: { borderWidth: 1.5, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, fontSize: 15, color: colors.text, backgroundColor: colors.inputBg },
   inputWithPrefix: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: colors.border, borderRadius: 12, backgroundColor: colors.inputBg, overflow: 'hidden' },
   inputPrefix: { paddingLeft: 16, fontSize: 15, fontWeight: '600', color: colors.textMuted },
@@ -522,18 +714,18 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   inputError: { borderColor: '#EF4444', backgroundColor: isDarkMode ? 'rgba(239,68,68,0.1)' : '#FEF2F2' },
   textArea: { minHeight: 80, textAlignVertical: 'top' },
   errorContainer: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  errorText: { fontSize: 12, color: '#EF4444' },
   fieldErrorText: { fontSize: 12, color: '#EF4444' },
   fieldFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 },
   charCount: { fontSize: 11, color: colors.textMuted, fontWeight: '600' },
-  saveButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primary, paddingVertical: 14, borderRadius: 12, marginTop: 8, gap: 8 },
-  saveButtonDisabled: { backgroundColor: colors.textMuted },
-  saveButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '600' },
+  saveButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent, paddingVertical: 14, borderRadius: 12, marginTop: 8, gap: 8 },
+  saveButtonDisabled: { backgroundColor: colors.textMuted, opacity: 0.6 },
+  saveButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+
   bottomSpacer: { height: Platform.OS === 'ios' ? 100 : 80 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   modalContent: { backgroundColor: colors.surface, borderRadius: 20, padding: 24, width: '100%', maxWidth: 320, alignItems: 'center' },
   modalIconContainer: { width: 64, height: 64, borderRadius: 32, backgroundColor: isDarkMode ? 'rgba(239,68,68,0.2)' : '#FEE2E2', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
-  modalTitle: { fontSize: 20, fontWeight: '600', color: colors.text, marginBottom: 8 },
+  modalTitle: { fontSize: 20, fontWeight: '700', color: colors.text, marginBottom: 8 },
   modalMessage: { fontSize: 14, color: colors.textSecondary, textAlign: 'center', marginBottom: 24, lineHeight: 20 },
   modalButtons: { flexDirection: 'row', gap: 12, width: '100%' },
   modalCancelButton: { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1.5, borderColor: colors.border, alignItems: 'center' },

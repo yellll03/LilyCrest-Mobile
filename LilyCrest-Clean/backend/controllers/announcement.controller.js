@@ -1,6 +1,6 @@
 const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../config/database');
-const { notifyNewAnnouncement } = require('../services/pushService');
+const { notifyNewAnnouncement, notifyPrivateAnnouncement } = require('../services/pushService');
 
 function getAnnouncementDateValue(doc = {}) {
   return doc.publishedAt || doc.sentAt || doc.created_at || doc.createdAt || doc.updated_at || doc.updatedAt || null;
@@ -145,10 +145,13 @@ async function createAnnouncement(req, res) {
 
     await db.collection('announcements').insertOne(announcement);
 
-    // Push notification to all tenants (non-blocking, skip for private targeted announcements)
+    // Push/in-app notification delivery
     let notification_sent = false;
     if (!announcement.is_private) {
       notifyNewAnnouncement(db, announcement).catch(() => {});
+      notification_sent = true;
+    } else if (announcement.user_id) {
+      notifyPrivateAnnouncement(announcement.user_id, announcement).catch(() => {});
       notification_sent = true;
     } else {
       console.log(`[createAnnouncement] Skipping push notification for private announcement "${announcement.title}" (user_id: ${announcement.user_id})`);

@@ -3,7 +3,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../src/context/AlertContext';
 import { useTheme } from '../src/context/ThemeContext';
@@ -53,6 +53,7 @@ export default function PaymentScreen() {
   const [loading, setLoading] = useState(true);
   const [creatingCheckout, setCreatingCheckout] = useState(false);
   const [error, setError] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const loadBill = useCallback(async ({ showLoader = true } = {}) => {
     if (showLoader) setLoading(true);
@@ -63,6 +64,7 @@ export default function PaymentScreen() {
       setBill(null);
       setError(BILL_UNAVAILABLE_MESSAGE);
       if (showLoader) setLoading(false);
+      setRefreshing(false);
       return null;
     }
 
@@ -81,8 +83,14 @@ export default function PaymentScreen() {
       return null;
     } finally {
       if (showLoader) setLoading(false);
+      setRefreshing(false);
     }
   }, [billId]);
+
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    loadBill({ showLoader: false });
+  }, [loadBill]);
 
   // Load bill data.
   useEffect(() => {
@@ -148,7 +156,17 @@ export default function PaymentScreen() {
   if (error || !bill) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.center}>
+        <ScrollView
+          contentContainerStyle={[styles.center, { flexGrow: 1 }]}
+          refreshControl={(
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={handleRefresh}
+              colors={[colors.primary]}
+              tintColor={colors.primary}
+            />
+          )}
+        >
           <Ionicons name="alert-circle-outline" size={48} color={colors.textMuted} />
           <Text style={styles.errorLabel}>{error || BILL_UNAVAILABLE_MESSAGE}</Text>
           <View style={styles.errorActions}>
@@ -159,7 +177,7 @@ export default function PaymentScreen() {
               <Text style={styles.backBtnSmallText}>Go Back</Text>
             </Pressable>
           </View>
-        </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -183,7 +201,18 @@ export default function PaymentScreen() {
         <View style={styles.headerBack} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={(
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
+          />
+        )}
+      >
         <View style={styles.summaryCard}>
           <View style={styles.summaryRow}>
             <Ionicons name="receipt-outline" size={20} color={colors.primary} />

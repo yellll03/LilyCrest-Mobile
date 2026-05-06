@@ -252,33 +252,56 @@ export default function BillingScreen() {
   const getStatusConfig = (status) => STATUS_CONFIG[(status || 'pending').toLowerCase()] || STATUS_CONFIG.pending;
 
   // ── Outstanding Hero Card ──
-  const renderHero = () => (
-    <View style={styles.heroCard}>
-      <View style={styles.heroTop}>
-        <View>
+  const renderHero = () => {
+    const hasOverdue = history.some(b => (b.status || '').toLowerCase() === 'overdue');
+    const accountStatus = hasOverdue
+      ? { label: 'Overdue', color: '#EF4444', bg: 'rgba(239,68,68,0.18)', icon: 'alert-circle' }
+      : unpaidCount > 0
+      ? { label: 'Bills Pending', color: '#ff9000', bg: 'rgba(255,144,0,0.18)', icon: 'time' }
+      : { label: 'Good Standing', color: '#22C55E', bg: 'rgba(34,197,94,0.18)', icon: 'checkmark-circle' };
+
+    return (
+      <View style={styles.heroCard}>
+        {/* Row 1: label + unpaid count badge */}
+        <View style={styles.heroTop}>
           <Text style={styles.heroLabel}>Total Outstanding</Text>
-          <Text style={styles.heroAmount}>{safeCurrency(totalOutstanding)}</Text>
+          <View style={styles.heroBadge}>
+            <Ionicons name="receipt-outline" size={13} color="rgba(255,255,255,0.7)" />
+            <Text style={styles.heroBadgeText}>{unpaidCount} unpaid</Text>
+          </View>
         </View>
-        <View style={styles.heroBadge}>
-          <Ionicons name="receipt-outline" size={14} color={colors.accent} />
-          <Text style={styles.heroBadgeText}>{unpaidCount} unpaid</Text>
+
+        {/* Row 2: amount */}
+        <Text style={styles.heroAmount}>{safeCurrency(totalOutstanding)}</Text>
+
+        {/* Divider */}
+        <View style={styles.heroDivider} />
+
+        {/* Row 3: account status + pay button */}
+        <View style={styles.heroBottom}>
+          <View style={[styles.accountStatus, { backgroundColor: accountStatus.bg }]}>
+            <Ionicons name={accountStatus.icon} size={13} color={accountStatus.color} />
+            <Text style={[styles.accountStatusText, { color: accountStatus.color }]}>
+              {accountStatus.label}
+            </Text>
+          </View>
+          {totalOutstanding > 0 && (
+            <Pressable
+              style={styles.heroPayBtn}
+              onPress={() => {
+                const firstUnpaid = history.find(isBillOutstanding);
+                const id = getBillId(firstUnpaid);
+                router.push({ pathname: '/payment', params: { billId: id ? String(id) : undefined, mode: 'now' } });
+              }}
+            >
+              <Ionicons name="card-outline" size={15} color="#ffffff" />
+              <Text style={styles.heroPayText}>Pay Now</Text>
+            </Pressable>
+          )}
         </View>
       </View>
-      {totalOutstanding > 0 && (
-        <Pressable
-          style={styles.heroPayBtn}
-          onPress={() => {
-            const firstUnpaid = history.find(isBillOutstanding);
-            const id = getBillId(firstUnpaid);
-            router.push({ pathname: '/payment', params: { billId: id ? String(id) : undefined, mode: 'now' } });
-          }}
-        >
-          <Ionicons name="card-outline" size={18} color="#ffffff" />
-          <Text style={styles.heroPayText}>Pay Now</Text>
-        </Pressable>
-      )}
-    </View>
-  );
+    );
+  };
 
   // ── Clean Filter Pills ──
   const renderFilters = () => (
@@ -505,13 +528,17 @@ function createStyles(c, isDarkMode) {
         android: { elevation: 6 },
       }),
     },
-    heroTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' },
-    heroLabel: { fontSize: 13, color: 'rgba(255,255,255,0.6)', fontWeight: '600', marginBottom: 4 },
-    heroAmount: { fontSize: 30, fontWeight: '800', color: '#ffffff' },
-    heroBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(212,148,42,0.15)', paddingVertical: 5, paddingHorizontal: 10, borderRadius: 20 },
-    heroBadgeText: { fontSize: 12, fontWeight: '700', color: c.accent },
-    heroPayBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: c.primary, paddingVertical: 13, borderRadius: 14, marginTop: 16 },
-    heroPayText: { color: '#ffffff', fontWeight: '700', fontSize: 15 },
+    heroTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+    heroLabel: { fontSize: 13, color: 'rgba(255,255,255,0.6)', fontWeight: '600' },
+    heroAmount: { fontSize: 34, fontWeight: '800', color: '#ffffff', marginBottom: 16 },
+    heroDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginBottom: 14 },
+    heroBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    accountStatus: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 5, paddingHorizontal: 10, borderRadius: 20 },
+    accountStatusText: { fontSize: 12, fontWeight: '700' },
+    heroBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(255,255,255,0.12)', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 20 },
+    heroBadgeText: { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.85)' },
+    heroPayBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.accent, paddingVertical: 9, paddingHorizontal: 16, borderRadius: 20 },
+    heroPayText: { color: '#ffffff', fontWeight: '700', fontSize: 14 },
 
     insightCard: {
       backgroundColor: c.surface,

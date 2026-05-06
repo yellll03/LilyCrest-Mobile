@@ -4,6 +4,7 @@ import {
   KeyboardAvoidingView,
   Platform,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -15,6 +16,7 @@ import InquiryCard from '../components/assistant/InquiryCard';
 import LilyFlowerIcon from '../components/assistant/LilyFlowerIcon';
 import MessageBubble from '../components/assistant/MessageBubble';
 import { useAuth } from '../context/AuthContext';
+import { useTheme, useThemedStyles } from '../context/ThemeContext';
 import { useAssistantChat } from '../hooks/useAssistantChat';
 import { apiService } from '../services/api';
 import { pickDocument, pickFromCamera, pickFromLibrary } from '../utils/attachmentPicker';
@@ -304,6 +306,8 @@ export default function LilyAssistantScreen() {
   const escalationGuardRef = useRef(false);
   const sendCooldownRef = useRef(0);
   const { user } = useAuth();
+  const { colors } = useTheme();
+  const styles = useThemedStyles(createAssistantStyles);
   const insets = useSafeAreaInsets();
 
   const [activeTab, setActiveTab] = useState('chat');
@@ -326,6 +330,7 @@ export default function LilyAssistantScreen() {
   const [messages, setMessages] = useState([]);
   const [inquiries, setInquiries] = useState([]);
   const [selectedInquiry, setSelectedInquiry] = useState(null);
+  const [refreshingSupport, setRefreshingSupport] = useState(false);
 
   const initialSession = useMemo(
     () => `${user?.user_id || 'guest'}-chat-${Date.now()}`,
@@ -468,6 +473,40 @@ export default function LilyAssistantScreen() {
     }
 
     return { conversation, thread };
+  };
+
+  const handlePullToRefresh = async (view = activeTab) => {
+    if (refreshingSupport) return;
+
+    setRefreshingSupport(true);
+    setNetworkError(null);
+
+    try {
+      const conversations = await loadSupportInquiries({ preserveSelection: view !== 'chat' });
+      const activeConversation =
+        conversations.find((item) => item.id === selectedInquiry?.id)
+        || conversations.find((item) => item.id === supportConversationId)
+        || conversations.find((item) => item.status !== 'closed');
+
+      if (view === 'detail' && selectedInquiry?.id) {
+        await refreshSupportConversation(selectedInquiry.id, { replaceMainFeed: false, scroll: false });
+      } else if (view === 'chat' && activeConversation?.id) {
+        await refreshSupportConversation(activeConversation.id, {
+          replaceMainFeed:
+            activeConversation.id === supportConversationId
+            && (isSupportMode(chatMode) || chatMode === CHAT_MODE.RESOLVED),
+          scroll: false,
+        });
+      }
+    } catch (error) {
+      const message =
+        error?.response?.data?.detail ||
+        error?.response?.data?.error ||
+        'Unable to refresh support data right now.';
+      setNetworkError(message);
+    } finally {
+      setRefreshingSupport(false);
+    }
   };
 
   const requestAdminSupport = async (reason, options = {}) => {
@@ -1064,6 +1103,14 @@ export default function LilyAssistantScreen() {
           contentContainerStyle={styles.detailMessagesContent}
           showsVerticalScrollIndicator={false}
           onContentSizeChange={() => adminScrollRef.current?.scrollToEnd({ animated: false })}
+          refreshControl={(
+            <RefreshControl
+              refreshing={refreshingSupport}
+              onRefresh={() => handlePullToRefresh('detail')}
+              colors={[colors.primary]}
+              tintColor={colors.primary}
+            />
+          )}
         >
           <View style={styles.systemRow}>
             <View style={styles.systemLine} />
@@ -1213,7 +1260,7 @@ export default function LilyAssistantScreen() {
                   <Text style={[styles.tabText, activeTab === tab ? styles.tabTextActive : null]}>
                     {tab === 'chat' ? 'Chat' : 'My Inquiries'}
                   </Text>
-                  {activeTab === tab ? <View style={styles.tabIndicator} /> : null}
+                  {activeTab === tab ? <View style={[styles.tabIndicator, { backgroundColor: '#ff9000' }]} /> : null}
                 </Pressable>
               ))}
             </View>
@@ -1232,6 +1279,14 @@ export default function LilyAssistantScreen() {
                   contentContainerStyle={styles.messagesContent}
                   showsVerticalScrollIndicator={false}
                   keyboardShouldPersistTaps="handled"
+                  refreshControl={(
+                    <RefreshControl
+                      refreshing={refreshingSupport}
+                      onRefresh={() => handlePullToRefresh('chat')}
+                      colors={[colors.primary]}
+                      tintColor={colors.primary}
+                    />
+                  )}
                 >
                   <View style={styles.heroCard}>
                     <View style={styles.heroRow}>
@@ -1423,6 +1478,14 @@ export default function LilyAssistantScreen() {
                   style={styles.inquiryList}
                   contentContainerStyle={styles.inquiryContent}
                   showsVerticalScrollIndicator={false}
+                  refreshControl={(
+                    <RefreshControl
+                      refreshing={refreshingSupport}
+                      onRefresh={() => handlePullToRefresh('inquiries')}
+                      colors={[colors.primary]}
+                      tintColor={colors.primary}
+                    />
+                  )}
                 >
                   {filteredInquiries.length === 0 ? (
                     <View style={styles.emptyState}>
@@ -1476,23 +1539,29 @@ export default function LilyAssistantScreen() {
   );
 }
 
-const styles = StyleSheet.create({
+// styles defined inside component via useThemedStyles — see component body
+const _stylesPlaceholder = null; // eslint-disable-line
+// ─── THEMED STYLES FACTORY ───────────────────────────────────────────────────
+function createAssistantStyles(c, dark) {
+  return StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: '#faf8f5',
+    backgroundColor: c.background,
   },
   screen: {
     flex: 1,
-    backgroundColor: '#faf8f5',
+    backgroundColor: c.background,
   },
   header: {
     paddingHorizontal: 16,
     paddingBottom: 14,
-    backgroundColor: '#1e293b',
+    backgroundColor: c.headerBg,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     zIndex: 20,
+    borderBottomWidth: 3,
+    borderBottomColor: '#ff9000',
   },
   headerLeft: {
     flexDirection: 'row',
@@ -1504,11 +1573,11 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#16213b',
+    backgroundColor: 'rgba(0,0,0,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: 'rgba(255,255,255,0.15)',
   },
   headerTextWrap: {
     flex: 1,
@@ -1551,9 +1620,9 @@ const styles = StyleSheet.create({
   },
   tabs: {
     flexDirection: 'row',
-    backgroundColor: '#1e293b',
+    backgroundColor: c.headerBg,
     borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
+    borderBottomColor: 'rgba(255,255,255,0.08)',
   },
   tab: {
     flex: 1,
@@ -1563,11 +1632,11 @@ const styles = StyleSheet.create({
   },
   tabText: {
     fontSize: 13,
-    color: '#64748b',
+    color: 'rgba(255,255,255,0.5)',
     fontWeight: '700',
   },
   tabTextActive: {
-    color: '#f8fafc',
+    color: '#ffffff',
   },
   tabIndicator: {
     position: 'absolute',
@@ -1599,7 +1668,7 @@ const styles = StyleSheet.create({
   },
   messages: {
     flex: 1,
-    backgroundColor: '#faf8f5',
+    backgroundColor: c.background,
     borderRadius: 12,
   },
   messagesContent: {
@@ -1607,12 +1676,12 @@ const styles = StyleSheet.create({
     paddingBottom: 24,
   },
   heroCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 20,
     padding: 18,
     marginBottom: 14,
     borderWidth: 1,
-    borderColor: '#f1f5f9',
+    borderColor: c.border,
   },
   heroRow: {
     flexDirection: 'row',
@@ -1624,23 +1693,23 @@ const styles = StyleSheet.create({
     width: 70,
     height: 70,
     borderRadius: 35,
-    backgroundColor: '#16213b',
+    backgroundColor: 'rgba(0,0,0,0.2)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(212,226,255,0.2)',
+    borderColor: 'rgba(255,255,255,0.15)',
   },
   heroTextWrap: {
     flex: 1,
   },
   heroTitle: {
-    color: '#1a2744',
+    color: c.text,
     fontSize: 20,
     fontWeight: '800',
     marginBottom: 2,
   },
   heroSubtitle: {
-    color: '#64748b',
+    color: c.textSecondary,
     fontSize: 13,
     lineHeight: 19,
   },
@@ -1652,15 +1721,15 @@ const styles = StyleSheet.create({
   heroTopic: {
     paddingHorizontal: 14,
     paddingVertical: 9,
-    backgroundColor: '#faf8f5',
+    backgroundColor: c.surfaceSecondary,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: c.border,
   },
   heroTopicText: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#1e293b',
+    color: c.text,
   },
   suggestSection: {
     marginBottom: 16,
@@ -1669,7 +1738,7 @@ const styles = StyleSheet.create({
   suggestLabel: {
     fontSize: 12,
     fontWeight: '700',
-    color: '#94a3b8',
+    color: c.textMuted,
     textTransform: 'uppercase',
     letterSpacing: 0.5,
   },
@@ -1681,13 +1750,13 @@ const styles = StyleSheet.create({
   suggestChip: {
     paddingHorizontal: 14,
     paddingVertical: 10,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: c.border,
   },
   suggestChipText: {
-    color: '#334155',
+    color: c.text,
     fontWeight: '600',
     fontSize: 13,
   },
@@ -1736,11 +1805,11 @@ const styles = StyleSheet.create({
   supportBannerTitle: {
     fontSize: 13,
     fontWeight: '800',
-    color: '#1a2744',
+    color: c.text,
   },
   supportBannerText: {
     fontSize: 12,
-    color: '#475569',
+    color: c.textSecondary,
     lineHeight: 16,
   },
   supportBannerActions: {
@@ -1760,13 +1829,13 @@ const styles = StyleSheet.create({
     fontSize: 12,
   },
   supportGhostButton: {
-    backgroundColor: 'rgba(15,23,42,0.06)',
+    backgroundColor: dark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.06)',
     borderRadius: 18,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
   supportGhostButtonText: {
-    color: '#475569',
+    color: c.textSecondary,
     fontWeight: '700',
     fontSize: 12,
   },
@@ -1805,32 +1874,32 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 8,
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: c.border,
     padding: 10,
   },
   attachmentChip: {
     paddingHorizontal: 10,
     paddingVertical: 7,
-    backgroundColor: '#f8fafc',
+    backgroundColor: c.surfaceSecondary,
     borderRadius: 10,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: c.border,
   },
   attachmentChipText: {
     fontSize: 12,
-    color: '#334155',
+    color: c.textSecondary,
     fontWeight: '500',
   },
   inputBar: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderRadius: 24,
     borderWidth: 1.5,
-    borderColor: '#e2e8f0',
+    borderColor: c.border,
     paddingHorizontal: 10,
     paddingVertical: 8,
     gap: 10,
@@ -1845,9 +1914,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#f1f5f9',
+    backgroundColor: c.surfaceSecondary,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: c.border,
   },
   input: {
     flex: 1,
@@ -1855,7 +1924,7 @@ const styles = StyleSheet.create({
     maxHeight: 120,
     paddingVertical: 6,
     fontSize: 14,
-    color: '#1e293b',
+    color: c.text,
   },
   sendButton: {
     backgroundColor: '#204b7e',
@@ -1888,7 +1957,7 @@ const styles = StyleSheet.create({
     left: 16,
     bottom: 100,
     width: 210,
-    backgroundColor: '#1e293b',
+    backgroundColor: c.cardBg,
     borderRadius: 14,
     paddingVertical: 6,
   },
@@ -1919,16 +1988,16 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
-    backgroundColor: '#ffffff',
+    borderColor: c.border,
+    backgroundColor: c.surface,
   },
   filterChipActive: {
-    backgroundColor: '#1e293b',
-    borderColor: '#1e293b',
+    backgroundColor: c.primary,
+    borderColor: c.primary,
   },
   filterText: {
     fontSize: 13,
-    color: '#334155',
+    color: c.text,
     fontWeight: '600',
   },
   filterTextActive: {
@@ -1949,7 +2018,7 @@ const styles = StyleSheet.create({
     width: 72,
     height: 72,
     borderRadius: 20,
-    backgroundColor: '#f1f5f9',
+    backgroundColor: c.surfaceSecondary,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
@@ -1957,18 +2026,18 @@ const styles = StyleSheet.create({
   emptyStateTitle: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#334155',
+    color: c.text,
     marginBottom: 6,
   },
   emptyStateText: {
     fontSize: 13,
-    color: '#94a3b8',
+    color: c.textMuted,
     textAlign: 'center',
     lineHeight: 20,
   },
   detailScreen: {
     flex: 1,
-    backgroundColor: '#f0f2f5',
+    backgroundColor: c.background,
   },
   backButton: {
     paddingRight: 12,
@@ -2015,11 +2084,11 @@ const styles = StyleSheet.create({
   systemLine: {
     flex: 1,
     height: 1,
-    backgroundColor: '#c9cdd4',
+    backgroundColor: c.border,
   },
   systemText: {
     fontSize: 11,
-    color: '#8a8f99',
+    color: c.textMuted,
     textAlign: 'center',
     flexShrink: 1,
   },
@@ -2057,7 +2126,7 @@ const styles = StyleSheet.create({
     paddingBottom: 7,
   },
   threadBubbleAdmin: {
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderBottomLeftRadius: 4,
   },
   threadBubbleUser: {
@@ -2072,7 +2141,7 @@ const styles = StyleSheet.create({
   },
   threadText: {
     fontSize: 14,
-    color: '#1e293b',
+    color: c.text,
     lineHeight: 20,
   },
   threadTextUser: {
@@ -2088,9 +2157,9 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.65)',
   },
   detailFooter: {
-    backgroundColor: '#ffffff',
+    backgroundColor: c.surface,
     borderTopWidth: 1,
-    borderTopColor: '#e8eaed',
+    borderTopColor: c.border,
     paddingHorizontal: 16,
     paddingVertical: 14,
   },
@@ -2131,18 +2200,18 @@ const styles = StyleSheet.create({
     maxHeight: 110,
     paddingVertical: 9,
     paddingHorizontal: 14,
-    backgroundColor: '#f0f2f5',
+    backgroundColor: c.inputBg,
     borderRadius: 22,
     fontSize: 14,
-    color: '#1e293b',
+    color: c.text,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: c.border,
   },
   replySendButton: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#204b7e',
+    backgroundColor: c.primary,
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -2151,4 +2220,5 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     fontSize: 12,
   },
-});
+  });
+}

@@ -480,14 +480,14 @@ const styles = StyleSheet.create({
   ctaBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: PRIMARY,
+    backgroundColor: ACCENT,
     paddingVertical: 14,
     paddingLeft: 24,
     paddingRight: 16,
     borderRadius: 50,
     gap: 10,
     ...Platform.select({
-      ios: { shadowColor: PRIMARY, shadowOpacity: 0.45, shadowOffset: { width: 0, height: 6 }, shadowRadius: 12 },
+      ios: { shadowColor: ACCENT, shadowOpacity: 0.45, shadowOffset: { width: 0, height: 6 }, shadowRadius: 12 },
       android: { elevation: 8 },
     }),
   },

@@ -8,6 +8,77 @@ function formatRoomType(type) {
   return type.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
 
+function normalizeDateCandidate(...values) {
+  for (const value of values) {
+    if (!value) continue;
+    const parsed = new Date(value);
+    if (!Number.isNaN(parsed.getTime())) {
+      return value;
+    }
+  }
+  return null;
+}
+
+function parseLeaseDurationMonths(value) {
+  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) return null;
+
+    const numeric = Number.parseInt(trimmed, 10);
+    if (Number.isFinite(numeric) && numeric > 0) {
+      return numeric;
+    }
+  }
+
+  return null;
+}
+
+function deriveReservationContractEnd(reservation) {
+  if (!reservation || typeof reservation !== 'object') return null;
+
+  const explicitMoveOut = normalizeDateCandidate(
+    reservation.moveOutDate,
+    reservation.move_out_date,
+    reservation.contractEnd,
+    reservation.contractEndDate,
+    reservation.contract_end_date,
+    reservation.endDate,
+    reservation.end_date,
+    reservation.checkOutDate,
+    reservation.checkoutDate,
+    reservation.targetMoveOutDate,
+  );
+  if (explicitMoveOut) {
+    return explicitMoveOut;
+  }
+
+  const moveIn = normalizeDateCandidate(
+    reservation.moveInDate,
+    reservation.move_in_date,
+    reservation.checkInDate,
+    reservation.checkinDate,
+    reservation.targetMoveInDate,
+    reservation.startDate,
+    reservation.start_date,
+  );
+  const leaseDurationMonths = parseLeaseDurationMonths(
+    reservation.leaseDuration
+      ?? reservation.lease_duration
+      ?? reservation.durationMonths
+      ?? reservation.duration_months
+  );
+
+  if (!moveIn || !leaseDurationMonths) return null;
+
+  const endDate = new Date(moveIn);
+  endDate.setMonth(endDate.getMonth() + leaseDurationMonths);
+  return endDate;
+}
+
 // Get dashboard data
 async function getDashboard(req, res) {
   try {
@@ -113,66 +184,78 @@ async function getDashboard(req, res) {
       }
 
       // Source 3: reservations (web admin reservation flow — status moveIn/active)
-      if (!assignment) {
-        const reservation = await db.collection('reservations').findOne(
-          { userId: mongoId, status: { $in: ['moveIn', 'active', 'completed', 'confirmed'] } },
-          { sort: { createdAt: -1 } }
+      const reservation = await db.collection('reservations').findOne(
+        { userId: mongoId, status: { $in: ['moveIn', 'active', 'completed', 'confirmed'] } },
+        { sort: { createdAt: -1 } }
+      );
+
+      if (reservation?.roomId) {
+        const roomOid = typeof reservation.roomId === 'string'
+          ? new ObjectId(reservation.roomId)
+          : reservation.roomId;
+        const roomDoc = await db.collection('rooms').findOne({ _id: roomOid });
+        const selectedBed = reservation.selectedBed || {};
+        const bed = roomDoc?.beds?.find((b) => b.id === selectedBed.id);
+        const reservationMoveIn = normalizeDateCandidate(
+          reservation.moveInDate,
+          reservation.move_in_date,
+          reservation.checkInDate,
+          reservation.checkinDate,
+          reservation.targetMoveInDate,
+          reservation.startDate,
+          reservation.start_date,
         );
+        const reservationMoveOut = deriveReservationContractEnd(reservation);
 
-        if (reservation?.roomId) {
-          const roomOid = typeof reservation.roomId === 'string'
-            ? new ObjectId(reservation.roomId)
-            : reservation.roomId;
-          const roomDoc = await db.collection('rooms').findOne({ _id: roomOid });
-          const selectedBed = reservation.selectedBed || {};
-          const bed = roomDoc?.beds?.find((b) => b.id === selectedBed.id);
-
-          // Calculate contract end from move-in + lease duration
-          let contractEnd = null;
-          const moveIn = reservation.moveInDate || reservation.checkInDate || reservation.targetMoveInDate;
-          if (moveIn && reservation.leaseDuration) {
-            const endDate = new Date(moveIn);
-            endDate.setMonth(endDate.getMonth() + reservation.leaseDuration);
-            contractEnd = endDate;
-          }
-
+        if (!assignment) {
           assignment = {
             assignment_id: reservation._id?.toString(),
             user_id: userId,
             room_id: reservation.roomId?.toString(),
             status: 'active',
-            move_in_date: moveIn || null,
-            move_out_date: reservation.moveOutDate || contractEnd || null,
+            move_in_date: reservationMoveIn,
+            move_out_date: reservationMoveOut,
             bed_id: selectedBed.id || null,
             branch: reservation.branch,
           };
+        } else {
+          assignment.move_in_date = normalizeDateCandidate(
+            assignment.move_in_date,
+            reservationMoveIn,
+          );
+          assignment.move_out_date = normalizeDateCandidate(
+            assignment.move_out_date,
+            reservationMoveOut,
+          );
+          if (!assignment.bed_id && selectedBed.id) assignment.bed_id = selectedBed.id;
+          if (!assignment.branch && reservation.branch) assignment.branch = reservation.branch;
+        }
 
-          if (roomDoc) {
-            room = {
-              room_id: roomDoc._id?.toString(),
-              room_number: roomDoc.roomNumber,
-              room_type: formatRoomType(roomDoc.type),
-              bed_type: bed
-                ? bed.position === 'upper'
-                  ? 'Upper Bed'
-                  : selectedBed.position === 'upper'
-                    ? 'Upper Bed'
-                    : 'Lower Bed'
+        if (!room && roomDoc) {
+          room = {
+            room_id: roomDoc._id?.toString(),
+            room_number: roomDoc.roomNumber,
+            room_type: formatRoomType(roomDoc.type),
+            bed_type: bed
+              ? bed.position === 'upper'
+                ? 'Upper Bed'
                 : selectedBed.position === 'upper'
                   ? 'Upper Bed'
-                  : selectedBed.position === 'lower'
-                    ? 'Lower Bed'
-                    : 'N/A',
-              floor: roomDoc.floor,
-              capacity: roomDoc.capacity,
-              price: roomDoc.monthlyPrice || reservation.monthlyRent,
-              amenities: roomDoc.amenities || [],
-              policies: roomDoc.policies || [],
-              description: roomDoc.description || '',
-              images: roomDoc.images || [],
-              name: roomDoc.name,
-            };
-          }
+                  : 'Lower Bed'
+              : selectedBed.position === 'upper'
+                ? 'Upper Bed'
+                : selectedBed.position === 'lower'
+                  ? 'Lower Bed'
+                  : 'N/A',
+            floor: roomDoc.floor,
+            capacity: roomDoc.capacity,
+            price: roomDoc.monthlyPrice || reservation.monthlyRent,
+            amenities: roomDoc.amenities || [],
+            policies: roomDoc.policies || [],
+            description: roomDoc.description || '',
+            images: roomDoc.images || [],
+            name: roomDoc.name,
+          };
         }
       }
     }

@@ -18,10 +18,29 @@ const apiRoutes = require('./routes');
 const app = express();
 const PORT = process.env.PORT || 8001;
 
+function resolveTrustProxySetting() {
+  const rawValue = String(
+    process.env.TRUST_PROXY_HOPS
+      ?? process.env.TRUST_PROXY
+      ?? ''
+  ).trim().toLowerCase();
+
+  if (!rawValue) return null;
+  if (rawValue === 'true') return true;
+  if (rawValue === 'false') return false;
+
+  const numericValue = Number.parseInt(rawValue, 10);
+  if (Number.isInteger(numericValue) && numericValue >= 0) {
+    return numericValue;
+  }
+
+  return null;
+}
+
 // Only trust proxy headers when deployment explicitly opts in.
-const trustProxyHops = Number.parseInt(String(process.env.TRUST_PROXY_HOPS || '').trim(), 10);
-if (Number.isInteger(trustProxyHops) && trustProxyHops > 0) {
-  app.set('trust proxy', trustProxyHops);
+const trustProxySetting = resolveTrustProxySetting();
+if (trustProxySetting !== null) {
+  app.set('trust proxy', trustProxySetting);
 }
 
 // NOTE: For production, add your actual frontend domain(s) here or to FRONTEND_URL env var.
@@ -127,12 +146,27 @@ async function startServer() {
     const { getDb } = require('./config/database');
     const db = getDb();
     const users = db.collection('users');
+    const notifications = db.collection('notifications');
     const migrationsCol = db.collection('migrations');
 
     // Always ensure the sparse unique index — createIndex is idempotent and fast.
     await users.createIndex(
       { firebase_uid: 1 },
       { unique: true, sparse: true, name: 'firebase_uid_1_sparse' },
+    );
+    await notifications.createIndex(
+      { user_id: 1, created_at: -1 },
+      { name: 'user_id_created_at_desc' },
+    );
+    await notifications.createIndex(
+      { user_id: 1, event_key: 1 },
+      {
+        unique: true,
+        partialFilterExpression: {
+          event_key: { $exists: true, $type: 'string', $ne: '' },
+        },
+        name: 'user_id_event_key_unique',
+      },
     );
 
     const migrationDone = await migrationsCol.findOne({ name: 'v1_index_migration', completed: true });

@@ -78,6 +78,12 @@ function getCategoryMeta(notification = {}) {
   if (cat === 'assistant' || text.includes('lily assistant') || text.includes('chatbot')) {
     return { bg: '#F3E8FF', color: '#9333EA', icon: 'chatbubble-ellipses-outline' };
   }
+  if (cat === 'security' || text.includes('password') || text.includes('security')) {
+    return { bg: '#FEE2E2', color: '#DC2626', icon: 'shield-checkmark-outline' };
+  }
+  if (cat === 'announcement' || text.includes('announcement') || text.includes('notice')) {
+    return { bg: '#EEF2FF', color: '#4F46E5', icon: 'megaphone-outline' };
+  }
   if (text.includes('reminder') || text.includes('due') || text.includes('overdue')) {
     return { bg: '#FEE2E2', color: '#DC2626', icon: 'alarm-outline' };
   }
@@ -179,6 +185,8 @@ export default function AppHeader({ recentNotifications = [] }) {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
+        borderBottomWidth: 3,
+        borderBottomColor: '#ff9000',
       },
       spacer: { width: 40 },
       titleContainer: { flex: 1, alignItems: 'center' },

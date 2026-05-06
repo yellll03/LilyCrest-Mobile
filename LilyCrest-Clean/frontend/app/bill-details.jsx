@@ -3,7 +3,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAlert } from '../src/context/AlertContext';
 import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
 import { apiService } from '../src/services/api';
@@ -82,6 +82,7 @@ export default function BillDetailsScreen() {
   const [error, setError] = useState(null);
   const [downloading, setDownloading] = useState(false);
   const [creatingCheckout, setCreatingCheckout] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
 
   const loadBill = useCallback(async ({ showLoader = true } = {}) => {
     if (showLoader) setLoading(true);
@@ -92,6 +93,7 @@ export default function BillDetailsScreen() {
       setBill(null);
       setError(BILL_UNAVAILABLE_MESSAGE);
       if (showLoader) setLoading(false);
+      setRefreshing(false);
       return null;
     }
 
@@ -110,8 +112,14 @@ export default function BillDetailsScreen() {
       return null;
     } finally {
       if (showLoader) setLoading(false);
+      setRefreshing(false);
     }
   }, [billId]);
+
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    loadBill({ showLoader: false });
+  }, [loadBill]);
 
   useEffect(() => {
     loadBill();
@@ -177,10 +185,21 @@ export default function BillDetailsScreen() {
 
   if (error || !bill) {
     return (
-      <View style={styles.center}>
+      <ScrollView
+        style={styles.container}
+        contentContainerStyle={[styles.center, { flexGrow: 1 }]}
+        refreshControl={(
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
+          />
+        )}
+      >
         <Text style={styles.errorText}>{error || BILL_UNAVAILABLE_MESSAGE}</Text>
         <Pressable onPress={() => router.back()} style={styles.backBtn}><Text style={styles.backBtnText}>Go Back</Text></Pressable>
-      </View>
+      </ScrollView>
     );
   }
 
@@ -242,7 +261,18 @@ export default function BillDetailsScreen() {
         <View style={styles.headerBack} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={(
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            colors={[colors.primary]}
+            tintColor={colors.primary}
+          />
+        )}
+      >
         {/* ── Billing Header Card ── */}
         <View style={styles.headerCard}>
           <Text style={styles.brandText}>LILYCREST DORMITORY</Text>

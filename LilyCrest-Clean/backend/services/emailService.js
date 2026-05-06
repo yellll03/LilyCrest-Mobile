@@ -65,26 +65,49 @@ function escapeHtml(str = '') {
 function brandedHtml({ title, heading, bodyHtml, footerNote }) {
   return `
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" style="color-scheme:light;">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="light">
+  <meta name="supported-color-schemes" content="light">
   <title>${title}</title>
+  <style>
+    :root { color-scheme: light only; }
+    @media (prefers-color-scheme: dark) {
+      body { background-color: #EEF2F8 !important; }
+      table { background-color: #EEF2F8 !important; }
+      .email-card { background-color: #FFFFFF !important; }
+      .email-header { background-color: #204b7e !important; }
+      .email-heading-bar { background-color: #FAFBFD !important; }
+      .email-body { background-color: #FFFFFF !important; }
+      .email-footer { background-color: #FAFBFD !important; }
+      .email-bottom { background-color: #204b7e !important; }
+      .email-heading-text { color: #1a2744 !important; }
+      .email-body-text { color: #1a2744 !important; }
+      .email-muted { color: #6B7280 !important; }
+      .info-table { background-color: #FAFBFD !important; border-color: #E4EAF2 !important; }
+      .info-label { color: #8a97aa !important; }
+      .info-value { color: #1a2744 !important; }
+      .alert-box { background-color: #FFF8EC !important; }
+      .note-box { background-color: #FAFBFD !important; }
+    }
+  </style>
 </head>
-<body style="margin:0;padding:0;background:#EEF2F8;font-family:'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+<body style="margin:0;padding:0;background:#EEF2F8;font-family:'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;color-scheme:light;">
   <table cellpadding="0" cellspacing="0" width="100%" style="background:#EEF2F8;padding:40px 16px;">
     <tr>
       <td align="center">
-        <table cellpadding="0" cellspacing="0" width="580" style="max-width:580px;background:#FFFFFF;border-radius:6px;overflow:hidden;box-shadow:0 2px 16px rgba(32,75,126,0.12);">
+        <table class="email-card" cellpadding="0" cellspacing="0" width="580" style="max-width:580px;background:#FFFFFF;border-radius:6px;overflow:hidden;box-shadow:0 2px 16px rgba(32,75,126,0.12);">
 
           <!-- Primary top stripe -->
           <tr>
-            <td style="background:#204b7e;height:4px;font-size:0;line-height:0;">&nbsp;</td>
+            <td class="email-header" style="background:#204b7e;height:4px;font-size:0;line-height:0;">&nbsp;</td>
           </tr>
 
           <!-- Header -->
           <tr>
-            <td style="background:#204b7e;padding:36px 48px 32px;text-align:center;">
+            <td class="email-header" style="background:#204b7e;padding:36px 48px 32px;text-align:center;">
               <p style="margin:0 0 8px;color:#ff9000;font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase;">Dormitory Management System</p>
               <h1 style="margin:0;color:#FFFFFF;font-size:26px;font-weight:700;letter-spacing:1px;text-transform:uppercase;">LilyCrest</h1>
             </td>
@@ -92,24 +115,24 @@ function brandedHtml({ title, heading, bodyHtml, footerNote }) {
 
           <!-- Heading bar -->
           <tr>
-            <td style="background:#FAFBFD;padding:28px 48px 20px;border-bottom:1px solid #E4EAF2;">
-              <h2 style="margin:0 0 10px;color:#1a2744;font-size:19px;font-weight:700;letter-spacing:-0.2px;">${heading}</h2>
+            <td class="email-heading-bar" style="background:#FAFBFD;padding:28px 48px 20px;border-bottom:1px solid #E4EAF2;">
+              <h2 class="email-heading-text" style="margin:0 0 10px;color:#1a2744;font-size:19px;font-weight:700;letter-spacing:-0.2px;">${heading}</h2>
               <div style="width:36px;height:3px;background:#ff9000;border-radius:2px;"></div>
             </td>
           </tr>
 
           <!-- Body -->
           <tr>
-            <td style="padding:28px 48px 32px;">
+            <td class="email-body" style="padding:28px 48px 32px;background:#FFFFFF;">
               ${bodyHtml}
             </td>
           </tr>
 
           <!-- Footer -->
           <tr>
-            <td style="background:#FAFBFD;padding:20px 48px;border-top:1px solid #E4EAF2;">
-              ${footerNote ? `<p style="margin:0 0 10px;color:#6B7280;font-size:12.5px;line-height:1.6;">${footerNote}</p>` : ''}
-              <p style="margin:0;color:#9CA3AF;font-size:11.5px;line-height:1.6;">
+            <td class="email-footer" style="background:#FAFBFD;padding:20px 48px;border-top:1px solid #E4EAF2;">
+              ${footerNote ? `<p class="email-muted" style="margin:0 0 10px;color:#6B7280;font-size:12.5px;line-height:1.6;">${footerNote}</p>` : ''}
+              <p class="email-muted" style="margin:0;color:#9CA3AF;font-size:11.5px;line-height:1.6;">
                 This is an automated message from LilyCrest Dormitory Management System. Please do not reply to this email.
               </p>
             </td>
@@ -117,7 +140,7 @@ function brandedHtml({ title, heading, bodyHtml, footerNote }) {
 
           <!-- Bottom stripe -->
           <tr>
-            <td style="background:#204b7e;padding:16px 48px;text-align:center;">
+            <td class="email-bottom" style="background:#204b7e;padding:16px 48px;text-align:center;">
               <p style="margin:0;color:rgba(255,255,255,0.50);font-size:11px;letter-spacing:0.3px;">
                 &copy; ${new Date().getFullYear()} LilyCrest Dormitory. All rights reserved.
               </p>

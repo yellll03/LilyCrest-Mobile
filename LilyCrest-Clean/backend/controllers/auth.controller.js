@@ -946,10 +946,28 @@ async function changePassword(req, res) {
     // ── Push notification (non-blocking) ──────────────────────────────────
     try {
       const { sendPushToUser } = require('../services/pushService');
+      const { saveNotificationForUser } = require('../services/notificationService');
+      const securityNotification = {
+        title: 'Password Changed',
+        body: 'Your LilyCrest account password was just updated. If this was not you, contact admin immediately.',
+        category: 'Security',
+        priority: 'high',
+        source: 'security',
+        source_label: 'LilyCrest Security',
+        type: 'security_alert',
+        data: { type: 'security_alert', action: 'password_changed', screen: 'profile' },
+      };
+
+      saveNotificationForUser(userId, {
+        ...securityNotification,
+        eventKey: `security_alert:password_changed:${changeTimestamp.toISOString()}`,
+        created_at: changeTimestamp,
+      }).catch(() => {});
+
       sendPushToUser(userId, {
-        title: '🔒 Password Changed',
-        body: 'Your LilyCrest account password was just updated. If this wasn\'t you, contact admin immediately.',
-        data: { type: 'security_alert', action: 'password_changed' },
+        title: securityNotification.title,
+        body: securityNotification.body,
+        data: { type: 'security_alert', action: 'password_changed', screen: 'profile' },
       }).catch(() => {});
     } catch (_) { /* push service may not be available */ }
 

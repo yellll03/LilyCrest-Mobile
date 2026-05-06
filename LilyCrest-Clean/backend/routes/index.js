@@ -31,6 +31,10 @@ router.use('/maintenance', maintenanceRoutes);
 const announcementRoutes = require('./announcement.routes');
 router.use('/announcements', announcementRoutes);
 
+// Notification routes
+const notificationRoutes = require('./notification.routes');
+router.use('/notifications', notificationRoutes);
+
 // FAQ routes
 const faqRoutes = require('./faq.routes');
 router.use('/faqs', faqRoutes);

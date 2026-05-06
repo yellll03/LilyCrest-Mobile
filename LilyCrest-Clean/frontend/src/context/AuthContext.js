@@ -263,7 +263,7 @@ export function AuthProvider({ children }) {
     (async () => {
       try {
         const [response, lastSeenRaw] = await Promise.all([
-          api.get('/announcements'),
+          api.get('/notifications'),
           AsyncStorage.getItem(ANNOUNCEMENTS_LAST_SEEN_KEY),
         ]);
 

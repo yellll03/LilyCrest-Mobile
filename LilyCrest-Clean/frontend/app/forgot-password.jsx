@@ -31,6 +31,10 @@ export default function ForgotPasswordScreen() {
     setErrors({ email: validateEmail(email).error });
   }, [email, touched.email]);
 
+  const handleBackToLogin = () => {
+    router.replace('/login');
+  };
+
   const handleResetPassword = async () => {
     const emailValidation = validateEmail(email);
     setTouched({ email: true });
@@ -66,7 +70,11 @@ export default function ForgotPasswordScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardView}>
-        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          contentContainerStyle={styles.scrollContent}
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           <TouchableOpacity style={styles.backButton} onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color={colors.text} /></TouchableOpacity>
           
           <View style={styles.iconContainer}><Ionicons name={sent ? 'mail-open' : 'lock-closed'} size={48} color={colors.primary} /></View>
@@ -110,12 +118,14 @@ export default function ForgotPasswordScreen() {
               </TouchableOpacity>
             </>
           ) : (
-            <TouchableOpacity style={styles.resetButton} onPress={() => router.push('/login')}><Text style={styles.resetButtonText}>Return to Login</Text></TouchableOpacity>
+            <TouchableOpacity style={styles.resetButton} onPress={handleBackToLogin}><Text style={styles.resetButtonText}>Return to Login</Text></TouchableOpacity>
           )}
 
-          <TouchableOpacity style={styles.backToLogin} onPress={() => router.push('/login')}>
-            <Ionicons name="arrow-back" size={18} color={colors.primary} /><Text style={styles.backToLoginText}>Back to Login</Text>
-          </TouchableOpacity>
+          {!sent ? (
+            <TouchableOpacity style={styles.backToLogin} onPress={handleBackToLogin}>
+              <Ionicons name="arrow-back" size={18} color={colors.primary} /><Text style={styles.backToLoginText}>Back to Login</Text>
+            </TouchableOpacity>
+          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -143,7 +153,7 @@ function createStyles(c, dark) {
     resetButton: { backgroundColor: c.accent, paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginBottom: 16 },
     resetButtonDisabled: { backgroundColor: c.textMuted },
     resetButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
-    backToLogin: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 12 },
+    backToLogin: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingTop: 12, paddingBottom: 12, marginTop: 'auto' },
     backToLoginText: { color: c.primary, fontSize: 15, fontWeight: '600' },
   });
 }

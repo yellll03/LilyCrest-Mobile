@@ -63,14 +63,14 @@ function isNew(dateStr) {
 export default function AnnouncementsScreen() {
   const { colors } = useTheme();
   const { clearNotificationUnread } = useAuth();
-  const styles = useThemedStyles((c) => StyleSheet.create({
+  const styles = useThemedStyles((c, dark) => StyleSheet.create({
     container: { flex: 1, backgroundColor: c.background },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: c.background },
 
     // ── Header ──
     headerWrapper: {
       backgroundColor: c.surface,
-      borderBottomWidth: StyleSheet.hairlineWidth,
+      borderBottomWidth: 1,
       borderBottomColor: c.border,
     },
     headerRow: {
@@ -78,40 +78,40 @@ export default function AnnouncementsScreen() {
       justifyContent: 'space-between',
       alignItems: 'center',
       paddingHorizontal: 16,
-      paddingTop: 14,
-      paddingBottom: 8,
+      paddingTop: 16,
+      paddingBottom: 10,
+      gap: 8,
     },
     headerLeft: { flex: 1 },
-    headerTitle: { fontSize: 18, fontWeight: '700', color: c.text, letterSpacing: -0.2 },
-    headerSubtitle: { fontSize: 11.5, color: c.textMuted, marginTop: 1 },
+    headerTitle: { fontSize: 20, fontWeight: '800', color: c.text, letterSpacing: -0.3 },
+    headerSubtitle: { fontSize: 12, color: c.textMuted, marginTop: 2 },
     refreshBtn: {
-      width: 32, height: 32, borderRadius: 8,
+      width: 34, height: 34, borderRadius: 10,
       backgroundColor: c.surfaceSecondary,
       justifyContent: 'center', alignItems: 'center',
     },
 
-    // ── Sort button (in header) ──
+    // ── Sort button ──
     sortBtn: {
-      flexDirection: 'row', alignItems: 'center', gap: 3,
-      paddingVertical: 5, paddingHorizontal: 9,
-      borderRadius: 8, backgroundColor: c.surfaceSecondary,
-      marginRight: 6,
+      flexDirection: 'row', alignItems: 'center', gap: 4,
+      paddingVertical: 6, paddingHorizontal: 10,
+      borderRadius: 10, backgroundColor: c.surfaceSecondary,
     },
-    sortBtnText: { fontSize: 11.5, fontWeight: '600', color: c.textSecondary },
+    sortBtnText: { fontSize: 12, fontWeight: '600', color: c.textSecondary },
 
     // ── Filter strip ──
     filterScroll: { backgroundColor: c.surface },
     filterScrollContent: {
       paddingHorizontal: 14,
-      paddingTop: 4,
-      paddingBottom: 12,
+      paddingTop: 6,
+      paddingBottom: 14,
       flexDirection: 'row',
       alignItems: 'center',
       gap: 8,
     },
     chip: {
       flexDirection: 'row', alignItems: 'center',
-      paddingVertical: 6, paddingHorizontal: 12,
+      paddingVertical: 7, paddingHorizontal: 13,
       borderRadius: 999, backgroundColor: c.surfaceSecondary,
       gap: 5,
     },
@@ -121,126 +121,134 @@ export default function AnnouncementsScreen() {
       borderWidth: 1.5, borderColor: '#EF4444',
     },
     urgentChipActive: { backgroundColor: '#DC2626' },
-    chipText: { fontSize: 12.5, fontWeight: '600', color: c.textSecondary },
+    chipText: { fontSize: 13, fontWeight: '600', color: c.textSecondary },
     chipTextActive: { color: '#FFFFFF' },
     chipTextUrgent: { color: '#EF4444' },
     chipBadge: {
-      minWidth: 18, height: 18, borderRadius: 9,
-      backgroundColor: 'rgba(0,0,0,0.09)',
+      minWidth: 19, height: 19, borderRadius: 10,
+      backgroundColor: dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.09)',
       justifyContent: 'center', alignItems: 'center',
       paddingHorizontal: 4,
     },
     chipBadgeActive: { backgroundColor: 'rgba(255,255,255,0.25)' },
-    chipBadgeUrgent: { backgroundColor: '#FEE2E2' },
-    chipBadgeText: { fontSize: 10.5, fontWeight: '700', color: c.textSecondary },
+    chipBadgeUrgent: { backgroundColor: dark ? 'rgba(239,68,68,0.22)' : '#FEE2E2' },
+    chipBadgeText: { fontSize: 11, fontWeight: '700', color: c.textSecondary },
     chipBadgeTextActive: { color: '#FFFFFF' },
-    chipBadgeTextUrgent: { color: '#DC2626' },
+    chipBadgeTextUrgent: { color: '#EF4444' },
 
-    readMoreBtn: { marginTop: 4, alignSelf: 'flex-start' },
+    readMoreBtn: { marginTop: 6, alignSelf: 'flex-start' },
     readMoreText: { fontSize: 13, fontWeight: '600', color: c.primary },
 
     // ── Cards ──
     scrollView: { flex: 1 },
-    scrollContent: { padding: 12, paddingTop: 12 },
+    scrollContent: { padding: 14, paddingTop: 14, gap: 10 },
     announcementCard: {
-      backgroundColor: c.surface, borderRadius: 12, marginBottom: 9,
-      borderWidth: StyleSheet.hairlineWidth, borderColor: c.border,
+      backgroundColor: c.surface,
+      borderRadius: 16,
+      borderWidth: 1,
+      borderColor: c.border,
       overflow: 'hidden',
+      ...Platform.select({
+        web: { boxShadow: '0 2px 8px rgba(0,0,0,0.06)' },
+        default: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: dark ? 0.18 : 0.06, shadowRadius: 6, elevation: 2 },
+      }),
     },
     cardAccent: {
       position: 'absolute', left: 0, top: 0, bottom: 0,
-      width: 3, borderTopLeftRadius: 12, borderBottomLeftRadius: 12,
+      width: 4, borderTopLeftRadius: 16, borderBottomLeftRadius: 16,
     },
-    cardBody: { padding: 11, paddingLeft: 13 },
-    cardHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 6 },
+    cardBody: { padding: 14, paddingLeft: 16 },
+    cardHeader: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10, gap: 10 },
     priorityIcon: {
-      width: 28, height: 28, borderRadius: 8,
-      justifyContent: 'center', alignItems: 'center', marginRight: 8,
+      width: 36, height: 36, borderRadius: 11,
+      justifyContent: 'center', alignItems: 'center', flexShrink: 0,
     },
     titleColumn: { flex: 1 },
-    titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 5 },
-    announcementTitle: { fontSize: 14, fontWeight: '700', color: c.text, flex: 1, lineHeight: 20 },
+    titleRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
+    announcementTitle: { fontSize: 15, fontWeight: '700', color: c.text, flex: 1, lineHeight: 21 },
     newDot: {
-      width: 6, height: 6, borderRadius: 3,
-      backgroundColor: '#3B82F6', marginTop: 6,
+      width: 7, height: 7, borderRadius: 4,
+      backgroundColor: '#3B82F6', marginTop: 7, flexShrink: 0,
     },
-    announcementTime: { fontSize: 11.5, color: c.textMuted, marginTop: 2 },
-    badgeRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 6, gap: 4 },
+    announcementTime: { fontSize: 12, color: c.textMuted, marginTop: 3 },
+    badgeRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 10, gap: 6 },
     categoryBadge: {
       flexDirection: 'row', alignItems: 'center',
-      paddingVertical: 2, paddingHorizontal: 6,
-      borderRadius: 4, gap: 3,
+      paddingVertical: 3, paddingHorizontal: 8,
+      borderRadius: 6, gap: 4,
     },
-    categoryBadgeText: { fontSize: 11, fontWeight: '600' },
+    categoryBadgeText: { fontSize: 12, fontWeight: '600' },
     urgentBadge: {
       flexDirection: 'row', alignItems: 'center',
-      backgroundColor: '#FEE2E2', paddingVertical: 2, paddingHorizontal: 6,
-      borderRadius: 4, gap: 3,
+      backgroundColor: dark ? 'rgba(239,68,68,0.18)' : '#FEE2E2',
+      paddingVertical: 3, paddingHorizontal: 8,
+      borderRadius: 6, gap: 4,
     },
-    urgentText: { fontSize: 11, fontWeight: '600', color: '#DC2626' },
+    urgentText: { fontSize: 12, fontWeight: '600', color: dark ? '#FCA5A5' : '#DC2626' },
     announcementContent: {
-      fontSize: 13.5, color: c.textSecondary, lineHeight: 20,
+      fontSize: 14, color: c.textSecondary, lineHeight: 21,
     },
     announcementFooter: {
       flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-      borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border,
-      paddingTop: 8, marginTop: 8,
+      borderTopWidth: 1, borderTopColor: c.border,
+      paddingTop: 10, marginTop: 12,
     },
-    footerLeft: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-    announcementDate: { fontSize: 11, color: c.textMuted, fontWeight: '500' },
-    footerAuthor: { flexDirection: 'row', alignItems: 'center', gap: 3 },
-    authorText: { fontSize: 11, color: c.textMuted, fontWeight: '500' },
+    footerLeft: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    announcementDate: { fontSize: 12, color: c.textMuted, fontWeight: '500' },
+    footerAuthor: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+    authorText: { fontSize: 12, color: c.textMuted, fontWeight: '500' },
 
     // ── Error banner ──
     errorBanner: {
       flexDirection: 'row', alignItems: 'center', gap: 8,
-      backgroundColor: '#FEF3C7', borderWidth: 1, borderColor: '#FDE68A',
-      borderRadius: 8, padding: 10, marginBottom: 10,
+      backgroundColor: dark ? '#2C1A00' : '#FEF3C7',
+      borderWidth: 1, borderColor: dark ? '#78350F' : '#FDE68A',
+      borderRadius: 10, padding: 12, marginBottom: 10,
     },
-    errorBannerText: { flex: 1, fontSize: 12.5, color: '#92400E', fontWeight: '500' },
+    errorBannerText: { flex: 1, fontSize: 13, color: dark ? '#FCD34D' : '#92400E', fontWeight: '500' },
 
     // ── Empty state ──
-    emptyState: { alignItems: 'center', paddingVertical: 48 },
+    emptyState: { alignItems: 'center', paddingVertical: 56 },
     emptyIcon: {
-      width: 56, height: 56, borderRadius: 16,
+      width: 64, height: 64, borderRadius: 20,
       backgroundColor: c.surfaceSecondary,
       justifyContent: 'center', alignItems: 'center',
-      marginBottom: 12,
+      marginBottom: 14,
     },
-    emptyTitle: { fontSize: 14, fontWeight: '600', color: c.text, marginBottom: 4 },
-    emptyText: { fontSize: 12.5, color: c.textMuted, textAlign: 'center', lineHeight: 18, paddingHorizontal: 36 },
+    emptyTitle: { fontSize: 15, fontWeight: '700', color: c.text, marginBottom: 6 },
+    emptyText: { fontSize: 13, color: c.textMuted, textAlign: 'center', lineHeight: 19, paddingHorizontal: 36 },
 
     // ── Detail sheet ──
     modalOverlay: {
-      flex: 1, backgroundColor: 'rgba(0,0,0,0.42)',
+      flex: 1, backgroundColor: 'rgba(0,0,0,0.5)',
       justifyContent: 'flex-end',
     },
     modalSheet: {
       backgroundColor: c.surface,
-      borderTopLeftRadius: 20, borderTopRightRadius: 20,
-      padding: 16, paddingBottom: Platform.OS === 'ios' ? 32 : 18,
+      borderTopLeftRadius: 24, borderTopRightRadius: 24,
+      padding: 18, paddingBottom: Platform.OS === 'ios' ? 34 : 20,
       maxHeight: '82%',
     },
-    dragHandle: { alignItems: 'center', marginBottom: 12 },
+    dragHandle: { alignItems: 'center', marginBottom: 14 },
     dragHandlePill: {
-      width: 32, height: 3, borderRadius: 2,
-      backgroundColor: 'rgba(0,0,0,0.12)',
+      width: 36, height: 4, borderRadius: 2,
+      backgroundColor: dark ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.12)',
     },
     modalHeader: {
-      flexDirection: 'row', alignItems: 'flex-start', gap: 8, marginBottom: 10,
+      flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 12,
     },
     modalTitleWrap: { flex: 1 },
-    modalTitle: { fontSize: 14, fontWeight: '700', color: c.text, lineHeight: 20, flex: 1 },
-    modalTime: { fontSize: 11, color: c.textMuted, marginTop: 2 },
-    modalBody: { marginVertical: 10 },
-    modalContent: { fontSize: 13.5, color: c.textSecondary, lineHeight: 20 },
+    modalTitle: { fontSize: 15, fontWeight: '700', color: c.text, lineHeight: 22 },
+    modalTime: { fontSize: 12, color: c.textMuted, marginTop: 3 },
+    modalBody: { marginVertical: 12 },
+    modalContent: { fontSize: 14, color: c.textSecondary, lineHeight: 22 },
     modalFooter: {
       flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-      borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border, paddingTop: 10,
+      borderTopWidth: 1, borderTopColor: c.border, paddingTop: 12,
     },
     modalCloseBtn: {
-      width: 26, height: 26, borderRadius: 7,
-      backgroundColor: 'rgba(0,0,0,0.06)',
+      width: 28, height: 28, borderRadius: 8,
+      backgroundColor: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
       justifyContent: 'center', alignItems: 'center',
     },
 
@@ -260,12 +268,14 @@ export default function AnnouncementsScreen() {
   const fetchAnnouncements = useCallback(async (silent = false) => {
     if (!silent) setFetchError(null);
     try {
-      const response = await apiService.getAnnouncements();
+      const response = apiService.getNotifications
+        ? await apiService.getNotifications()
+        : await apiService.getAnnouncements();
       setAnnouncements(Array.isArray(response.data) ? response.data : []);
       setFetchError(null);
     } catch (error) {
       console.error('Fetch announcements error:', error);
-      if (!silent) setFetchError('Unable to load announcements. Pull down to refresh.');
+      if (!silent) setFetchError('Unable to load notifications. Pull down to refresh.');
     } finally {
       setIsLoading(false);
       setRefreshing(false);
@@ -303,8 +313,12 @@ export default function AnnouncementsScreen() {
 
   const getCategoryColor = (category) => {
     switch (category?.toLowerCase()) {
+      case 'announcement': return { bg: '#EEF2FF', text: '#4F46E5', icon: 'megaphone' };
       case 'billing':     return { bg: '#DBEAFE', text: '#2563EB', icon: 'card' };
       case 'maintenance': return { bg: '#FEF3C7', text: '#D97706', icon: 'construct' };
+      case 'assistant':   return { bg: '#F3E8FF', text: '#9333EA', icon: 'chatbubble-ellipses' };
+      case 'security':    return { bg: '#FEE2E2', text: '#DC2626', icon: 'shield-checkmark' };
+      case 'reservation': return { bg: '#DCFCE7', text: '#16A34A', icon: 'calendar' };
       case 'rules':       return { bg: '#EEF2FF', text: '#4F46E5', icon: 'document-text' };
       case 'promo':       return { bg: '#DCFCE7', text: '#16A34A', icon: 'pricetag' };
       case 'event':       return { bg: '#F3E8FF', text: '#9333EA', icon: 'calendar' };
@@ -348,9 +362,9 @@ export default function AnnouncementsScreen() {
       <View style={styles.headerWrapper}>
         <View style={styles.headerRow}>
           <View style={styles.headerLeft}>
-            <Text style={styles.headerTitle}>Announcements</Text>
+            <Text style={styles.headerTitle}>Notifications</Text>
             <Text style={styles.headerSubtitle}>
-              {filteredAnnouncements.length} of {announcements.length}{announcements.length !== 1 ? ' notices' : ' notice'} from management
+              {filteredAnnouncements.length} of {announcements.length}{announcements.length !== 1 ? ' updates' : ' update'} in your inbox
             </Text>
           </View>
           <TouchableOpacity
@@ -365,7 +379,7 @@ export default function AnnouncementsScreen() {
             style={styles.refreshBtn}
             onPress={() => { if (!refreshing) { setRefreshing(true); fetchAnnouncements(); } }}
             disabled={refreshing}
-            accessibilityLabel="Refresh announcements"
+            accessibilityLabel="Refresh notifications"
           >
             {refreshing
               ? <ActivityIndicator size={14} color={colors.primary} />
@@ -437,10 +451,10 @@ export default function AnnouncementsScreen() {
         {filteredAnnouncements.length === 0 ? (
           <View style={styles.emptyState}>
             <View style={styles.emptyIcon}>
-              <Ionicons name="megaphone-outline" size={26} color={colors.textMuted} />
+              <Ionicons name="notifications-outline" size={26} color={colors.textMuted} />
             </View>
-            <Text style={styles.emptyTitle}>{fetchError ? 'Could not load announcements' : 'No announcements'}</Text>
-            <Text style={styles.emptyText}>{fetchError ? 'Check your connection and pull down to refresh.' : 'No announcements in this category yet. Pull down to refresh.'}</Text>
+            <Text style={styles.emptyTitle}>{fetchError ? 'Could not load notifications' : 'No notifications'}</Text>
+            <Text style={styles.emptyText}>{fetchError ? 'Check your connection and pull down to refresh.' : 'No notifications in this category yet. Pull down to refresh.'}</Text>
           </View>
         ) : filteredAnnouncements.map((announcement) => {
           const catColor = getCategoryColor(announcement.category || 'General');
@@ -450,7 +464,7 @@ export default function AnnouncementsScreen() {
 
           return (
             <TouchableOpacity
-              key={announcement.announcement_id}
+              key={announcement.notification_id || announcement.announcement_id || `${announcement.title}-${String(announcementDate || '')}`}
               style={styles.announcementCard}
               onPress={() => setSelectedAnn(announcement)}
               activeOpacity={0.85}
@@ -522,7 +536,7 @@ export default function AnnouncementsScreen() {
                   </View>
                   <View style={styles.footerAuthor}>
                     <Ionicons name="person-circle-outline" size={11} color={colors.textMuted} />
-                    <Text style={styles.authorText}>Management</Text>
+                    <Text style={styles.authorText}>{announcement.author_name || announcement.source_label || 'LilyCrest System'}</Text>
                   </View>
                 </View>
               </View>
@@ -594,12 +608,12 @@ export default function AnnouncementsScreen() {
                       <Ionicons name="calendar-outline" size={11} color={colors.textMuted} />
                       <Text style={styles.announcementDate}>{safeFormat(getAnnouncementDateValue(selectedAnn), 'MMM dd, yyyy · h:mm a')}</Text>
                     </View>
-                    <View style={styles.footerAuthor}>
-                      <Ionicons name="person-circle-outline" size={11} color={colors.textMuted} />
-                      <Text style={styles.authorText}>Management</Text>
-                    </View>
+                  <View style={styles.footerAuthor}>
+                    <Ionicons name="person-circle-outline" size={11} color={colors.textMuted} />
+                    <Text style={styles.authorText}>{selectedAnn.author_name || selectedAnn.source_label || 'LilyCrest System'}</Text>
                   </View>
-                </>
+                </View>
+              </>
               );
             })()}
           </View>

@@ -512,6 +512,196 @@ function hasUsableElectricityBreakdown(bill) {
   });
 }
 
+function normalizeUtilityType(value) {
+  return String(value || '').trim().toLowerCase();
+}
+
+function toObjectIdIfValid(value) {
+  if (!value) return null;
+  try {
+    return new ObjectId(String(value));
+  } catch (_error) {
+    return null;
+  }
+}
+
+function humanizeUtilityLabel(value) {
+  return String(value || '')
+    .replace(/[-_]+/g, ' ')
+    .trim()
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function deriveElectricityBreakdownFromUtilityRecords(records = []) {
+  const segments = [];
+
+  records.forEach(({ period, summary }) => {
+    if (!period || typeof period !== 'object') return;
+
+    const sourceSegments = Array.isArray(period.segments) && period.segments.length
+      ? period.segments
+      : [{
+          startDate: period.startDate,
+          endDate: period.endDate,
+          readingFrom: period.startReading,
+          readingTo: period.endReading,
+          unitsConsumed: period.computedTotalUsage,
+          totalCost: period.computedTotalCost,
+          activeTenantCount: Array.isArray(period.tenantSummaries) ? period.tenantSummaries.length : null,
+          activeTenantIds: Array.isArray(summary?.activeTenantIds) ? summary.activeTenantIds : [],
+          sharePerTenantCost: summary?.billAmount,
+        }];
+
+    sourceSegments.forEach((segment) => {
+      const occupants = Number(segment?.activeTenantCount)
+        || (Array.isArray(segment?.activeTenantIds) ? segment.activeTenantIds.length : 0)
+        || (Array.isArray(period?.tenantSummaries) ? period.tenantSummaries.length : 0)
+        || 1;
+      const readingFrom = Number(segment?.readingFrom ?? period?.startReading ?? 0);
+      const readingTo = Number(segment?.readingTo ?? period?.endReading ?? 0);
+      const consumption = Number(
+        segment?.unitsConsumed
+          ?? segment?.consumption
+          ?? period?.computedTotalUsage
+          ?? (readingTo - readingFrom)
+      );
+      const segmentTotal = Number(segment?.totalCost ?? period?.computedTotalCost ?? 0);
+      const fallbackShare = occupants > 0 && Number.isFinite(segmentTotal)
+        ? segmentTotal / occupants
+        : 0;
+      const sharePerTenant = Number(
+        segment?.sharePerTenantCost
+          ?? segment?.share_per_tenant
+          ?? summary?.billAmount
+          ?? fallbackShare
+      );
+      const rate = Number(
+        segment?.rate
+          ?? period?.ratePerUnit
+          ?? ((Number.isFinite(consumption) && consumption > 0 && Number.isFinite(segmentTotal))
+            ? segmentTotal / consumption
+            : 0)
+      );
+
+      segments.push({
+        occupants,
+        reading_date_from: segment?.startDate || period?.startDate || null,
+        reading_date_to: segment?.endDate || period?.endDate || null,
+        period_start: segment?.startDate || period?.startDate || null,
+        period_end: segment?.endDate || period?.endDate || null,
+        reading_from: Number.isFinite(readingFrom) ? readingFrom : 0,
+        reading_to: Number.isFinite(readingTo) ? readingTo : 0,
+        consumption: Number.isFinite(consumption) ? consumption : 0,
+        rate: Number.isFinite(rate) ? rate : 0,
+        segment_total: Number.isFinite(segmentTotal) ? segmentTotal : 0,
+        share_per_tenant: Number.isFinite(sharePerTenant) ? sharePerTenant : 0,
+        active_tenants: Array.isArray(segment?.activeTenantIds) ? segment.activeTenantIds : [],
+      });
+    });
+  });
+
+  return segments.length ? segments : undefined;
+}
+
+function deriveWaterBreakdownFromUtilityRecords(records = [], bill = {}) {
+  const selected = records[records.length - 1];
+  if (!selected?.period) return undefined;
+
+  const { period, summary } = selected;
+  const total = Number(
+    summary?.billAmount
+      ?? bill?.charges?.water
+      ?? bill?.water
+      ?? period?.computedTotalCost
+      ?? 0
+  );
+  const rate = Number(period?.ratePerUnit ?? 0);
+  const consumption = Number(period?.computedTotalUsage ?? 0);
+  const sharingPolicy = summary?.allocationRule || summary?.billingBasis
+    ? [
+        humanizeUtilityLabel(summary?.allocationRule),
+        humanizeUtilityLabel(summary?.billingBasis),
+      ].filter(Boolean).join(' • ')
+    : (Array.isArray(period?.tenantSummaries) && period.tenantSummaries.length > 1
+      ? 'Shared among active tenants for the billing period'
+      : 'Assigned to this tenant for the billing period');
+
+  return {
+    reading_from: Number(period?.startReading ?? 0),
+    reading_to: Number(period?.endReading ?? 0),
+    consumption: Number.isFinite(consumption) ? consumption : 0,
+    rate: Number.isFinite(rate) ? rate : 0,
+    total: Number.isFinite(total) ? total : 0,
+    sharing_policy: sharingPolicy,
+  };
+}
+
+async function enrichRealBillsWithUtilityBreakdowns(db, bills = []) {
+  if (!Array.isArray(bills) || bills.length === 0) return bills;
+
+  const rawBillIds = bills
+    .map((bill) => toObjectIdIfValid(bill?._id))
+    .filter(Boolean);
+
+  if (!rawBillIds.length) return bills;
+
+  const utilityPeriods = await db.collection('utilityperiods')
+    .find({
+      isArchived: { $ne: true },
+      'tenantSummaries.billId': { $in: rawBillIds },
+    })
+    .toArray()
+    .catch(() => []);
+
+  if (!utilityPeriods.length) return bills;
+
+  const groupedByBillId = new Map();
+
+  utilityPeriods.forEach((period) => {
+    const utilityType = normalizeUtilityType(period?.utilityType);
+    if (!['electricity', 'water'].includes(utilityType)) return;
+
+    (Array.isArray(period?.tenantSummaries) ? period.tenantSummaries : []).forEach((summary) => {
+      const summaryBillId = String(summary?.billId || '').trim();
+      if (!summaryBillId) return;
+
+      const nextGroup = groupedByBillId.get(summaryBillId) || { electricity: [], water: [] };
+      nextGroup[utilityType].push({ period, summary });
+      groupedByBillId.set(summaryBillId, nextGroup);
+    });
+  });
+
+  return bills.map((bill) => {
+    const billId = String(bill?._id || '').trim();
+    const utilityGroup = groupedByBillId.get(billId);
+    if (!utilityGroup) return bill;
+
+    const nextBill = { ...bill };
+
+    const existingElectricityBreakdown = Array.isArray(nextBill.electricity_breakdown)
+      ? nextBill.electricity_breakdown
+      : (Array.isArray(nextBill.electricityBreakdown) ? nextBill.electricityBreakdown : []);
+    if (!existingElectricityBreakdown.length) {
+      const derivedElectricityBreakdown = deriveElectricityBreakdownFromUtilityRecords(utilityGroup.electricity || []);
+      if (Array.isArray(derivedElectricityBreakdown) && derivedElectricityBreakdown.length) {
+        nextBill.electricityBreakdown = derivedElectricityBreakdown;
+      }
+    }
+
+    const existingWaterBreakdown = nextBill.water_breakdown && typeof nextBill.water_breakdown === 'object'
+      ? nextBill.water_breakdown
+      : (nextBill.waterBreakdown && typeof nextBill.waterBreakdown === 'object' ? nextBill.waterBreakdown : null);
+    if (!existingWaterBreakdown) {
+      const derivedWaterBreakdown = deriveWaterBreakdownFromUtilityRecords(utilityGroup.water || [], nextBill);
+      if (derivedWaterBreakdown) {
+        nextBill.waterBreakdown = derivedWaterBreakdown;
+      }
+    }
+
+    return nextBill;
+  });
+}
+
 // Map a document from the real 'bills' collection to the legacy billing shape
 function mapRealBill(b, userId) {
   const c = b.charges || {};
@@ -596,7 +786,7 @@ async function fetchUserBills(db, user, {
   const userId = user.user_id;
   const mongoId = user._id;
 
-  const [legacyBills, realBills] = await Promise.all([
+  const [legacyBills, rawRealBills] = await Promise.all([
     db.collection('billing')
       .find({ user_id: userId })
       .toArray()
@@ -605,9 +795,11 @@ async function fetchUserBills(db, user, {
       ? db.collection('bills')
         .find({ userId: mongoId })
         .toArray()
-        .then((docs) => docs.map((bill) => ({ ...mapRealBill(bill, userId), __source: 'real' })))
       : Promise.resolve([]),
   ]);
+
+  const enrichedRealBills = await enrichRealBillsWithUtilityBreakdowns(db, rawRealBills);
+  const realBills = enrichedRealBills.map((bill) => ({ ...mapRealBill(bill, userId), __source: 'real' }));
 
   const visibleBills = dedupeTenantBills([...legacyBills, ...realBills]);
   return applyBillFilters(visibleBills, { billingId, paidOnly, unpaidOnly, limit });

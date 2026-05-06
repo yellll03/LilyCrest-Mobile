@@ -1,6 +1,10 @@
 const axios = require('axios');
 const { getDb } = require('../config/database');
 const { admin } = require('../config/firebase');
+const {
+  saveNotificationForAllTenants,
+  saveNotificationForUser,
+} = require('./notificationService');
 
 const DEFAULT_CHANNEL_ID = 'default';
 const MULTICAST_CHUNK_SIZE = 500;
@@ -384,8 +388,7 @@ async function notifyMaintenanceStatusChange(userId, request, newStatus) {
 
   const typeName = REQUEST_TYPES[request.request_type] || 'Service';
   const statusLabel = STATUS_LABELS[newStatus] || newStatus;
-
-  return sendPushToUser(userId, {
+  const payload = {
     title: `${typeName} Request Update`,
     body: `Your ${typeName.toLowerCase()} request is now ${statusLabel}.`,
     data: {
@@ -395,15 +398,29 @@ async function notifyMaintenanceStatusChange(userId, request, newStatus) {
       screen: 'services',
       url: '/(tabs)/services',
     },
-  });
+  };
+
+  const [, pushResult] = await Promise.allSettled([
+    saveNotificationForUser(userId, {
+      ...payload,
+      category: 'Maintenance',
+      source: 'maintenance',
+      source_label: 'Maintenance Team',
+      request_id: request.request_id,
+      eventKey: request.request_id ? `maintenance_status:${request.request_id}:${newStatus}` : '',
+      priority: ['rejected', 'cancelled'].includes(newStatus) ? 'high' : 'normal',
+    }),
+    sendPushToUser(userId, payload),
+  ]);
+
+  return pushResult.status === 'fulfilled' ? pushResult.value : false;
 }
 
 async function notifyBillCreated(userId, bill) {
   const period = bill.billing_period || bill.description || 'New billing statement';
   const amount = bill.total ?? bill.amount ?? 0;
   const billingId = bill.billing_id || bill.bill_id || '';
-
-  return sendPushToUser(userId, {
+  const payload = {
     title: 'New Billing Statement',
     body: `${period} is now available. Amount due: PHP ${Number(amount).toLocaleString('en-US', { minimumFractionDigits: 2 })}`,
     data: {
@@ -412,15 +429,29 @@ async function notifyBillCreated(userId, bill) {
       screen: 'billing',
       url: billingId ? `/bill-details?billId=${billingId}` : '/billing-history',
     },
-  });
+  };
+
+  const [, pushResult] = await Promise.allSettled([
+    saveNotificationForUser(userId, {
+      ...payload,
+      category: 'Billing',
+      source: 'billing',
+      source_label: 'Billing Office',
+      billing_id: billingId,
+      eventKey: billingId ? `billing_new:${billingId}` : '',
+      priority: 'normal',
+    }),
+    sendPushToUser(userId, payload),
+  ]);
+
+  return pushResult.status === 'fulfilled' ? pushResult.value : false;
 }
 
 async function notifyPaymentConfirmed(userId, bill) {
   const period = bill.billing_period || bill.description || 'Your bill';
   const amount = bill.total ?? bill.amount ?? 0;
   const billingId = bill.billing_id || bill.bill_id || '';
-
-  return sendPushToUser(userId, {
+  const payload = {
     title: 'Payment Confirmed',
     body: `${period} payment of PHP ${Number(amount).toLocaleString('en-US', { minimumFractionDigits: 2 })} has been received.`,
     data: {
@@ -429,15 +460,29 @@ async function notifyPaymentConfirmed(userId, bill) {
       screen: 'billing',
       url: billingId ? `/bill-details?billId=${billingId}` : '/billing-history',
     },
-  });
+  };
+
+  const [, pushResult] = await Promise.allSettled([
+    saveNotificationForUser(userId, {
+      ...payload,
+      category: 'Billing',
+      source: 'billing',
+      source_label: 'Billing Office',
+      billing_id: billingId,
+      eventKey: billingId ? `payment_confirmed:${billingId}` : '',
+      priority: 'low',
+    }),
+    sendPushToUser(userId, payload),
+  ]);
+
+  return pushResult.status === 'fulfilled' ? pushResult.value : false;
 }
 
 async function notifyNewAnnouncement(db, announcement) {
   const isUrgent = announcement.priority === 'high' || announcement.is_urgent;
   const title = isUrgent ? `Urgent: ${announcement.title}` : announcement.title;
   const body = clipText(announcement.content, 110);
-
-  return sendPushToAllTenants(db, {
+  const payload = {
     title,
     body,
     data: {
@@ -446,11 +491,63 @@ async function notifyNewAnnouncement(db, announcement) {
       screen: 'announcements',
       url: '/(tabs)/announcements',
     },
-  });
+  };
+
+  const [, pushResult] = await Promise.allSettled([
+    saveNotificationForAllTenants(db, {
+      ...payload,
+      category: announcement.category || 'Announcement',
+      source: 'announcement',
+      source_label: announcement.author_name || 'LilyCrest Admin',
+      author_name: announcement.author_name || 'LilyCrest Admin',
+      announcement_id: announcement.announcement_id,
+      eventKey: announcement.announcement_id ? `announcement:${announcement.announcement_id}` : '',
+      priority: isUrgent ? 'high' : (announcement.priority || 'normal'),
+      is_urgent: Boolean(isUrgent),
+      created_at: announcement.created_at || new Date(),
+    }),
+    sendPushToAllTenants(db, payload),
+  ]);
+
+  return pushResult.status === 'fulfilled' ? pushResult.value : 0;
+}
+
+async function notifyPrivateAnnouncement(userId, announcement = {}) {
+  const isUrgent = announcement.priority === 'high' || announcement.is_urgent;
+  const title = isUrgent ? `Urgent: ${announcement.title}` : announcement.title;
+  const body = clipText(announcement.content, 110);
+  const payload = {
+    title,
+    body,
+    data: {
+      type: 'announcement',
+      announcement_id: announcement.announcement_id,
+      screen: 'announcements',
+      url: '/(tabs)/announcements',
+    },
+  };
+
+  const [, pushResult] = await Promise.allSettled([
+    saveNotificationForUser(userId, {
+      ...payload,
+      category: announcement.category || 'Announcement',
+      source: 'announcement',
+      source_label: announcement.author_name || 'LilyCrest Admin',
+      author_name: announcement.author_name || 'LilyCrest Admin',
+      announcement_id: announcement.announcement_id,
+      eventKey: announcement.announcement_id ? `announcement:${announcement.announcement_id}` : '',
+      priority: isUrgent ? 'high' : (announcement.priority || 'normal'),
+      is_urgent: Boolean(isUrgent),
+      created_at: announcement.created_at || new Date(),
+    }),
+    sendPushToUser(userId, payload),
+  ]);
+
+  return pushResult.status === 'fulfilled' ? pushResult.value : false;
 }
 
 async function notifyAdminChatAccepted(userId, adminName, sessionId) {
-  return sendPushToUser(userId, {
+  const payload = {
     title: 'Admin Joined Your Chat',
     body: `${adminName || 'An admin'} is now ready to assist you.`,
     data: {
@@ -459,11 +556,26 @@ async function notifyAdminChatAccepted(userId, adminName, sessionId) {
       screen: 'chat',
       url: '/(tabs)/chatbot',
     },
-  });
+  };
+
+  const [, pushResult] = await Promise.allSettled([
+    saveNotificationForUser(userId, {
+      ...payload,
+      category: 'Assistant',
+      source: 'chat',
+      source_label: adminName || 'LilyCrest Support',
+      session_id: sessionId,
+      eventKey: sessionId ? `chat_assigned:${sessionId}` : '',
+      priority: 'normal',
+    }),
+    sendPushToUser(userId, payload),
+  ]);
+
+  return pushResult.status === 'fulfilled' ? pushResult.value : false;
 }
 
 async function notifyChatbotReply(userId, { adminName, message, sessionId }) {
-  return sendPushToUser(userId, {
+  const payload = {
     title: `${adminName || 'Admin'} replied`,
     body: clipText(message, 110) || 'You have a new message from LilyCrest support.',
     data: {
@@ -472,15 +584,28 @@ async function notifyChatbotReply(userId, { adminName, message, sessionId }) {
       screen: 'chat',
       url: '/(tabs)/chatbot',
     },
-  });
+  };
+
+  const [, pushResult] = await Promise.allSettled([
+    saveNotificationForUser(userId, {
+      ...payload,
+      category: 'Assistant',
+      source: 'chat',
+      source_label: adminName || 'LilyCrest Support',
+      session_id: sessionId,
+      priority: 'normal',
+    }),
+    sendPushToUser(userId, payload),
+  ]);
+
+  return pushResult.status === 'fulfilled' ? pushResult.value : false;
 }
 
 async function notifyReservationUpdate(userId, reservation = {}) {
   const reservationId = reservation.reservation_id || reservation._id?.toString() || '';
   const status = normalizeString(reservation.status) || 'updated';
   const statusLabel = status.replace(/_/g, ' ');
-
-  return sendPushToUser(userId, {
+  const payload = {
     title: 'Reservation Update',
     body: `Your reservation is now ${statusLabel}.`,
     data: {
@@ -490,7 +615,22 @@ async function notifyReservationUpdate(userId, reservation = {}) {
       screen: 'reservation',
       url: '/(tabs)/home',
     },
-  });
+  };
+
+  const [, pushResult] = await Promise.allSettled([
+    saveNotificationForUser(userId, {
+      ...payload,
+      category: 'Reservation',
+      source: 'reservation',
+      source_label: 'LilyCrest Reservations',
+      reservation_id: reservationId,
+      eventKey: reservationId ? `reservation_update:${reservationId}:${status}` : '',
+      priority: ['rejected', 'cancelled'].includes(status) ? 'high' : 'normal',
+    }),
+    sendPushToUser(userId, payload),
+  ]);
+
+  return pushResult.status === 'fulfilled' ? pushResult.value : false;
 }
 
 module.exports = {
@@ -500,6 +640,7 @@ module.exports = {
   notifyBillCreated,
   notifyPaymentConfirmed,
   notifyNewAnnouncement,
+  notifyPrivateAnnouncement,
   notifyAdminChatAccepted,
   notifyChatbotReply,
   notifyReservationUpdate,

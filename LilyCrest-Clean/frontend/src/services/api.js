@@ -206,6 +206,7 @@ export const apiService = {
   
   // Announcements
   getAnnouncements: () => api.get('/announcements'),
+  getNotifications: () => api.get('/notifications'),
   
   // User Profile
   getProfile: () => api.get('/users/me'),
