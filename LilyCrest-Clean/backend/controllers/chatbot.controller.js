@@ -23,6 +23,7 @@ const {
   notifyChatbotReply,
 } = require('../services/pushService');
 const { fetchUserBills } = require('./billing.controller');
+const { normalizeUser } = require('../utils/normalizeUser');
 
 function sanitizeResponse(text = '') {
   const withoutFences = text.replace(/```[\s\S]*?```/g, (block) => block.replace(/```/g, ''));
@@ -55,6 +56,55 @@ const SUPPORTED_INTENTS = {
   PROFILE: 'profile',
   GENERAL: 'general',
 };
+const COURTESY_PATTERNS = [
+  /^(thanks|thank you|thankyou|salamat|ok(?:ay)?|noted|got it|sige|bye|goodbye|see you|ingat)\b/i,
+];
+const FOLLOW_UP_PATTERNS = [
+  /^(what about|how about|what if|what happens|how long|when|then|also|and\b|so\b|can i\b|is that\b|does that\b|will that\b|overnight\b|pwede\b)/i,
+];
+const DORM_SCOPE_PATTERNS = [
+  /\blilycrest\b/i,
+  /\bdorm(?:itory)?\b/i,
+  /\btenant (?:app|application|account|profile)\b/i,
+  /\badmin (?:office|support)\b/i,
+  /\bannouncements?\b/i,
+  /\b(my|latest|current|unpaid)\s+(bill|billing|balance|payment|payments)\b/i,
+  /\bhow much do i owe\b/i,
+  /\b(show|check)\s+my\s+(bill|billing|balance|payments?)\b/i,
+  /^(how can i pay|how do i pay|where do i pay|payment methods?)\??$/i,
+  /\b(due date|late fee|rent|proof of payment|billing history|paymongo)\b/i,
+  /\bmaintenance\b/i,
+  /\b(service|repair)\s+request\b/i,
+  /\b(water leak|plumbing|electrical|no power|no water|flood(?:ing)?|gas smell)\b/i,
+  /\b(my\s+)?(room|bathroom|toilet|sink|shower|faucet|door|window|light|aircon|ceiling)\s+(is\s+)?(broken|damaged|not working)\b/i,
+  /\b(issue|problem)\s+(in|with)\s+my\s+(room|bathroom|toilet|sink|shower|door|window|light|aircon)\b/i,
+  /\b(house rules?|visitor policy|visitors?|guests?|curfew|quiet hours|gate)\b/i,
+  /\b(lease|contract|documents?|pdf|passport|student id|company id|government id|valid id)\b/i,
+  /\b(move in|move-in|move out|move-out|security deposit)\b/i,
+  /\b(full name|legal name|account name)\b/i,
+  /\bwhat(?:'s| is)\s+my\s+(full\s+)?name\b/i,
+  /\b(change|update|edit)\s+(my\s+)?name\b/i,
+  /\b(change|update|edit)\s+(my\s+)?full\s+name\b/i,
+  /\b(change|update|edit|reset|forgot)\s+(my\s+)?(password|email|phone|username|profile)\b/i,
+  /\b(login|log in|sign in|otp|username|profile picture|email address|phone number)\b/i,
+  /\b(amenities|wifi|laundry|kitchen|study lounge|rooftop|parking|cctv|security guard|emergency hotline|hospital)\b/i,
+  /\b(room type|room rate|premium room|deluxe room|standard room|bed space|bedspace)\b/i,
+  /\b(support ticket|live chat|lily assistant)\b/i,
+];
+const OUT_OF_SCOPE_PATTERNS = [
+  /\b(weather|temperature|forecast)\b/i,
+  /\b(nba|basketball|football|soccer|baseball|tennis)\b/i,
+  /\b(bitcoin|crypto|stock market|stocks|forex)\b/i,
+  /\b(movie|movies|tv show|series|anime|celebrity|song|music|album|band)\b/i,
+  /\b(recipe|cook|cooking|restaurant)\b/i,
+  /\b(code|coding|programming|javascript|python|java|react)\b/i,
+  /\b(homework|assignment|exam|essay|thesis)\b/i,
+  /\b(politics|president|senator|election)\b/i,
+  /\b(travel itinerary|flight|hotel|vacation)\b/i,
+  /\b(joke|poem|horoscope|zodiac|love advice)\b/i,
+  /\b(capital of|translate|meaning of life)\b/i,
+];
+const OUT_OF_SCOPE_RESPONSE = 'I can only help with LilyCrest dormitory and tenant app concerns, such as billing, maintenance, announcements, documents, house rules, room details, facilities, and account support.';
 
 function asObjectId(value) {
   if (!value) return null;
@@ -90,15 +140,63 @@ function normalizeUserMessage(rawMessage) {
   return { ok: true, value: collapsed };
 }
 
+function isCourtesyMessage(message = '') {
+  return COURTESY_PATTERNS.some((pattern) => pattern.test(message.trim()));
+}
+
+function hasDormitoryScopeSignal(message = '') {
+  return DORM_SCOPE_PATTERNS.some((pattern) => pattern.test(message.trim()));
+}
+
+function hasHighSignalOutOfScopeTopic(message = '') {
+  return OUT_OF_SCOPE_PATTERNS.some((pattern) => pattern.test(message.trim()));
+}
+
+function isDormitoryFollowUp(message = '', session = {}) {
+  if (!Array.isArray(session?.history) || session.history.length === 0) return false;
+  const trimmed = message.trim();
+  if (!trimmed || trimmed.split(/\s+/).length > 10) return false;
+  return FOLLOW_UP_PATTERNS.some((pattern) => pattern.test(trimmed));
+}
+
+function replyWithScopeGuard(res, sessionId, session, userMessage) {
+  const cleanResponse = OUT_OF_SCOPE_RESPONSE;
+  session.history = Array.isArray(session.history) ? session.history : [];
+  session.history.push({ role: 'user', content: userMessage });
+  session.history.push({ role: 'assistant', content: cleanResponse });
+  if (session.history.length > 30) {
+    session.history = session.history.slice(-30);
+  }
+  session.last_intent = SUPPORTED_INTENTS.GENERAL;
+  chatSessions.set(sessionId, session);
+
+  return res.json({
+    message: cleanResponse,
+    response: cleanResponse,
+    intent: SUPPORTED_INTENTS.GENERAL,
+    session_id: sessionId,
+    needs_admin: false,
+    live_chat_active: false,
+    fallback: false,
+    suggestions: DEFAULT_FOLLOWUPS,
+    meta: { intent: SUPPORTED_INTENTS.GENERAL, confidence: 1, source: 'scope_guard' },
+  });
+}
+
 function detectSystemIntent(message = '') {
   const lower = String(message || '').toLowerCase();
-  if (/\b(bill|unpaid|bayarin|due|payment)\b/.test(lower)) {
+  if (/\b(bills?|billing|balance|unpaid|bayarin|bayad|due|overdue|payment|payments?|owe|rent|charges?)\b/.test(lower)) {
     return SUPPORTED_INTENTS.BILLING;
   }
   if (/\b(maintenance|repair|sira|request|fix)\b/.test(lower)) {
     return SUPPORTED_INTENTS.MAINTENANCE;
   }
-  if (/\b(account|profile|info|details)\b/.test(lower)) {
+  if (
+    /\b(account|profile|info|details)\b/.test(lower)
+    || /\b(full name|legal name|account name)\b/.test(lower)
+    || /\bwhat(?:'s| is)\s+my\s+(full\s+)?name\b/.test(lower)
+    || /\b(change|update|edit)\s+(my\s+)?name\b/.test(lower)
+  ) {
     return SUPPORTED_INTENTS.PROFILE;
   }
   return SUPPORTED_INTENTS.GENERAL;
@@ -376,6 +474,14 @@ function buildAIPrompt(userMessage, contextLines, knowledgeHints, conversationHi
   return `${CHATBOT_SYSTEM_PROMPT}\n\n${timeContext}${contextBlock}${knowledgeBlock}${historyBlock}\n\nTenant: ${userMessage}`;
 }
 
+function buildSessionIdentityFingerprint(user = {}) {
+  return [
+    user.user_id || '',
+    user.name || '',
+    user.email || '',
+  ].join('|');
+}
+
 async function ensureLiveChatRequest(db, sessionId, userId, userName, userEmail, reason) {
   const existing = liveChatQueue.get(sessionId);
   if (existing) return existing;
@@ -441,8 +547,28 @@ async function sendMessage(req, res) {
     const sessionId = normalizedSession.value;
     const userMessage = normalizedMessage.value;
     const lowerUserMessage = userMessage.toLowerCase();
+    const existingSession = chatSessions.get(sessionId) || { history: [] };
+    const currentIdentityFingerprint = buildSessionIdentityFingerprint(req.user);
+    if (
+      existingSession.identity_fingerprint
+      && existingSession.identity_fingerprint !== currentIdentityFingerprint
+    ) {
+      existingSession.history = [];
+      existingSession.last_intent = null;
+    }
+    existingSession.identity_fingerprint = currentIdentityFingerprint;
+    chatSessions.set(sessionId, existingSession);
+    const greetingMessage = isGreeting(userMessage);
+    const courtesyMessage = isCourtesyMessage(userMessage);
+    const scopedMessage = hasDormitoryScopeSignal(userMessage);
+    const scopedFollowUp = isDormitoryFollowUp(userMessage, existingSession);
+    const outOfScopeTopic = hasHighSignalOutOfScopeTopic(userMessage);
     const routedIntent = detectSystemIntent(userMessage);
     const forceEscalation = ESCALATION_KEYWORDS.some((keyword) => lowerUserMessage.includes(keyword));
+
+    if (!forceEscalation && !greetingMessage && !courtesyMessage && !scopedMessage && outOfScopeTopic) {
+      return replyWithScopeGuard(res, sessionId, existingSession, userMessage);
+    }
 
     // Pull tenant context for grounded responses
     const db = getDb();
@@ -493,11 +619,12 @@ async function sendMessage(req, res) {
       contextLines.push(`Recent announcements:\n${annSummary}`);
     }
 
-    if (!forceEscalation && routedIntent === SUPPORTED_INTENTS.BILLING) {
+    if (!forceEscalation && (scopedMessage || scopedFollowUp) && routedIntent === SUPPORTED_INTENTS.BILLING) {
       const billingResult = await buildBillingResponse(db, req.user);
       const billingSess = chatSessions.get(sessionId) || { history: [] };
       billingSess.history.push({ role: 'user', content: userMessage });
       billingSess.history.push({ role: 'assistant', content: billingResult.message });
+      billingSess.last_intent = billingResult.intent;
       chatSessions.set(sessionId, billingSess);
       return res.json({
         message: billingResult.message,
@@ -512,11 +639,12 @@ async function sendMessage(req, res) {
       });
     }
 
-    if (!forceEscalation && routedIntent === SUPPORTED_INTENTS.MAINTENANCE) {
+    if (!forceEscalation && (scopedMessage || scopedFollowUp) && routedIntent === SUPPORTED_INTENTS.MAINTENANCE) {
       const maintenanceResult = await buildMaintenanceResponse(db, req.user);
       const maintenanceSess = chatSessions.get(sessionId) || { history: [] };
       maintenanceSess.history.push({ role: 'user', content: userMessage });
       maintenanceSess.history.push({ role: 'assistant', content: maintenanceResult.message });
+      maintenanceSess.last_intent = maintenanceResult.intent;
       chatSessions.set(sessionId, maintenanceSess);
       return res.json({
         message: maintenanceResult.message,
@@ -531,11 +659,12 @@ async function sendMessage(req, res) {
       });
     }
 
-    if (!forceEscalation && routedIntent === SUPPORTED_INTENTS.PROFILE) {
+    if (!forceEscalation && (scopedMessage || scopedFollowUp) && routedIntent === SUPPORTED_INTENTS.PROFILE) {
       const profileResult = buildProfileResponse(req.user);
       const profileSess = chatSessions.get(sessionId) || { history: [] };
       profileSess.history.push({ role: 'user', content: userMessage });
       profileSess.history.push({ role: 'assistant', content: profileResult.message });
+      profileSess.last_intent = profileResult.intent;
       chatSessions.set(sessionId, profileSess);
       return res.json({
         message: profileResult.message,
@@ -562,7 +691,7 @@ async function sendMessage(req, res) {
     meta.intent = inferredIntent.intent || 'general';
     meta.confidence = inferredIntent.confidence ?? null;
 
-    if (meta.intent === 'general' && knowledgeHints.length === 0 && !isGreeting(userMessage)) {
+    if (meta.intent === 'general' && knowledgeHints.length === 0 && !greetingMessage) {
       try {
         const intentResult = await classifyIntent(userMessage);
         meta.intent = intentResult.intent || 'general';
@@ -586,6 +715,10 @@ async function sendMessage(req, res) {
     const session = chatSessions.get(sessionId) || { history: [] };
     const conversationHistory = session.history || [];
 
+    if (!forceEscalation && !greetingMessage && !courtesyMessage && !scopedMessage && !scopedFollowUp && routedIntent === SUPPORTED_INTENTS.GENERAL) {
+      return replyWithScopeGuard(res, sessionId, session, userMessage);
+    }
+
     // ── Generate response ──
     try {
       if (escalate) {
@@ -601,7 +734,7 @@ async function sendMessage(req, res) {
         ) + '\n\nIMPORTANT: This message has been flagged for admin attention. Acknowledge the tenant\'s concern empathetically, let them know an admin will follow up shortly, and reassure them. Keep it short and warm.';
         const { text } = await sendGeminiMessage(sessionId, escalationPrompt);
         aiResponse = text || "I understand your concern po. I've flagged this for our admin team and they'll get back to you shortly. If it's urgent, you can also call +63 912 345 6789.";
-      } else if (isGreeting(userMessage) && userMessage.trim().split(/\s+/).length <= 4) {
+      } else if (greetingMessage && userMessage.trim().split(/\s+/).length <= 4) {
         // Pure greeting (short message) — let AI generate a warm, personalized greeting
         const greetingPrompt = buildAIPrompt(
           userMessage, contextLines, [], conversationHistory
@@ -662,6 +795,7 @@ async function sendMessage(req, res) {
     if (session.history.length > 30) {
       session.history = session.history.slice(-30);
     }
+    session.last_intent = normalizeAssistantIntent(meta.intent);
     chatSessions.set(sessionId, session);
 
     res.json({
@@ -706,7 +840,7 @@ async function requestAdmin(req, res) {
     const { session_id, reason } = req.body;
     const userId = req.user.user_id;
     const db = getDb();
-    const user = await db.collection('users').findOne({ user_id: userId });
+    const user = normalizeUser(await db.collection('users').findOne({ user_id: userId }));
     const normalizedSession = normalizeSessionId(session_id, userId);
     if (!normalizedSession.ok) {
       return res.status(400).json({ detail: normalizedSession.error });

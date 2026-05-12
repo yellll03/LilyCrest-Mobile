@@ -31,6 +31,83 @@ function safeFormat(dateStr, fmt) {
   } catch (_e) { return '—'; }
 }
 
+function formatStatusLabel(status = '') {
+  if (!status) return 'Update';
+  if (String(status).toLowerCase() === 'in_progress') return 'In Progress';
+  return String(status)
+    .replace(/_/g, ' ')
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getProgressTitle(entry = {}) {
+  const event = String(entry?.event || '').toLowerCase();
+  const statusLabel = formatStatusLabel(entry?.status);
+
+  if (event === 'created') return 'Request Submitted';
+  if (event === 'reopened') return 'Request Reopened';
+  if (event === 'cancelled') return 'Request Cancelled';
+  if (statusLabel && statusLabel !== 'Update') return statusLabel;
+  return 'Progress Update';
+}
+
+function isImageAttachment(attachment = {}) {
+  const type = String(attachment?.type || '').toLowerCase();
+  const uri = String(attachment?.uri || '').toLowerCase();
+  return type.startsWith('image/')
+    || uri.startsWith('data:image/')
+    || /\.(png|jpe?g|gif|webp|bmp)$/i.test(uri);
+}
+
+function buildRequestProgress(request) {
+  if (!request) return [];
+
+  const history = Array.isArray(request.statusHistory) ? request.statusHistory : [];
+  const progress = history
+    .map((entry, index) => {
+      const note = typeof entry?.note === 'string' && entry.note.trim()
+        ? entry.note.trim()
+        : null;
+      const timestamp = entry?.timestamp || entry?.created_at || entry?.createdAt || null;
+      const actorRole = String(entry?.actor_role || '').toLowerCase();
+
+      return {
+        id: `${entry?.event || 'progress'}_${entry?.status || 'update'}_${timestamp || index}`,
+        title: getProgressTitle(entry),
+        message: note,
+        timestamp,
+        attachments: Array.isArray(entry?.attachments) ? entry.attachments.filter(Boolean) : [],
+        actorLabel: actorRole === 'admin'
+          ? 'Admin'
+          : actorRole === 'tenant'
+            ? 'You'
+            : entry?.actor_name || null,
+      };
+    })
+    .filter((entry) => entry.title || entry.message)
+    .sort((left, right) => {
+      const leftTime = new Date(left.timestamp || 0).getTime();
+      const rightTime = new Date(right.timestamp || 0).getTime();
+      return rightTime - leftTime;
+    });
+
+  if (progress.length > 0) {
+    return progress;
+  }
+
+  if (request.notes) {
+    return [{
+      id: `legacy_${request.request_id || 'reply'}`,
+      title: formatStatusLabel(request.status),
+      message: request.notes,
+      timestamp: request.updated_at || request.updatedAt || request.created_at || request.createdAt || null,
+      attachments: [],
+      actorLabel: 'Admin',
+    }];
+  }
+
+  return [];
+}
+
 const REQUEST_TYPES = [
   { id: 'maintenance', label: 'Maintenance', icon: 'construct', color: '#F59E0B' },
   { id: 'plumbing', label: 'Plumbing', icon: 'water', color: '#3B82F6' },
@@ -190,6 +267,7 @@ export default function ServicesScreen() {
   const [editUrgency, setEditUrgency] = useState('normal');
   const [editDescription, setEditDescription] = useState('');
   const [saving, setSaving] = useState(false);
+  const [previewAttachment, setPreviewAttachment] = useState(null);
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [showReopenModal, setShowReopenModal] = useState(false);
   const [reopenNote, setReopenNote] = useState('');
@@ -242,6 +320,14 @@ export default function ServicesScreen() {
       description: hasAttemptedSubmit || fieldTouched.description ? createFormErrors.description : '',
     });
   }, [createFormErrors, fieldTouched.description, fieldTouched.type, hasAttemptedSubmit]);
+
+  useEffect(() => {
+    if (!detailRequest?.request_id) return;
+    const latestDetail = requests.find((request) => request.request_id === detailRequest.request_id);
+    if (latestDetail) {
+      setDetailRequest(latestDetail);
+    }
+  }, [detailRequest?.request_id, requests]);
 
   const confirmCloseModal = () => {
     if (!isDirty && !hasAttemptedSubmit) { setShowModal(false); return; }
@@ -446,6 +532,7 @@ export default function ServicesScreen() {
   const activeRequests = useMemo(() => filterBySearch(requests.filter((request) => ACTIVE_STATUSES.includes((request.status || 'pending').toLowerCase()))), [filterBySearch, requests]);
   const resolvedRequests = useMemo(() => filterBySearch(requests.filter((request) => RESOLVED_STATUSES.includes((request.status || '').toLowerCase()))), [filterBySearch, requests]);
   const cancelledRequests = useMemo(() => filterBySearch(requests.filter((request) => (request.status || '').toLowerCase() === 'cancelled')), [filterBySearch, requests]);
+  const detailProgressEntries = useMemo(() => buildRequestProgress(detailRequest), [detailRequest]);
   const currentList = useMemo(() => {
     if (activeTab === 'resolved') return resolvedRequests;
     if (activeTab === 'cancelled') return cancelledRequests;
@@ -811,14 +898,61 @@ export default function ServicesScreen() {
                     </View>
                   )}
 
-                  {/* Admin Notes */}
-                  {!editMode && detailRequest.notes && (
-                    <View style={{ backgroundColor: '#FFFBEB', borderRadius: 12, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#FDE68A' }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 }}>
-                        <Ionicons name="chatbubble-ellipses" size={16} color="#92400E" />
-                        <Text style={{ fontSize: 13, fontWeight: '700', color: '#92400E' }}>Admin Response</Text>
+                  {/* Progress Updates */}
+                  {!editMode && detailProgressEntries.length > 0 && (
+                    <View style={{ marginBottom: 14 }}>
+                      <Text style={{ fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: 8 }}>Progress Updates</Text>
+                      <View style={{ gap: 10 }}>
+                        {detailProgressEntries.map((entry) => (
+                          <View key={entry.id} style={{ backgroundColor: colors.surfaceSecondary, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#E5E7EB' }}>
+                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 10, marginBottom: entry.message ? 6 : 0 }}>
+                              <View style={{ flex: 1 }}>
+                                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>{entry.title}</Text>
+                                {entry.actorLabel ? (
+                                  <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>{entry.actorLabel}</Text>
+                                ) : null}
+                              </View>
+                              {entry.timestamp ? (
+                                <Text style={{ fontSize: 11, color: colors.textMuted, textAlign: 'right' }}>
+                                  {safeFormat(entry.timestamp, 'MMM dd, yyyy • h:mm a')}
+                                </Text>
+                              ) : null}
+                            </View>
+                            {entry.message ? (
+                              <Text style={{ fontSize: 14, color: colors.text, lineHeight: 20 }}>{entry.message}</Text>
+                            ) : null}
+                            {entry.attachments?.length > 0 ? (
+                              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
+                                <View style={{ flexDirection: 'row' }}>
+                                  {entry.attachments.map((att, idx) => (
+                                    <TouchableOpacity
+                                      key={`${att.uri || 'attachment'}_${idx}`}
+                                      style={{ width: 96, height: 96, borderRadius: 12, backgroundColor: colors.surface, marginRight: 10, overflow: 'hidden', borderWidth: 1, borderColor: '#D1D5DB', justifyContent: 'center', alignItems: 'center' }}
+                                      activeOpacity={0.85}
+                                      onPress={() => {
+                                        if (att?.uri && isImageAttachment(att)) {
+                                          setPreviewAttachment(att);
+                                        }
+                                      }}
+                                    >
+                                      {att?.uri && isImageAttachment(att) ? (
+                                        <Image source={{ uri: att.uri }} style={{ width: 96, height: 96 }} resizeMode="cover" />
+                                      ) : (
+                                        <View style={{ paddingHorizontal: 8, alignItems: 'center', gap: 6 }}>
+                                          <Ionicons name="document" size={24} color={colors.textMuted} />
+                                          <Text style={{ fontSize: 11, color: colors.textMuted, textAlign: 'center' }} numberOfLines={2}>
+                                            {att?.name || `Attachment ${idx + 1}`}
+                                          </Text>
+                                        </View>
+                                      )}
+                                    </TouchableOpacity>
+                                  ))}
+                                </View>
+                              </ScrollView>
+                            ) : null}
+                          </View>
+                        ))}
                       </View>
-                      <Text style={{ fontSize: 14, color: '#78350F', lineHeight: 20 }}>{detailRequest.notes}</Text>
                     </View>
                   )}
 
@@ -829,7 +963,7 @@ export default function ServicesScreen() {
                       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ gap: 8 }}>
                         {detailRequest.attachments.map((att, idx) => (
                           <View key={idx} style={{ width: 80, height: 80, borderRadius: 10, backgroundColor: colors.surfaceSecondary, marginRight: 8, overflow: 'hidden', justifyContent: 'center', alignItems: 'center' }}>
-                            {att.uri ? (
+                            {att.uri && isImageAttachment(att) ? (
                               <Image source={{ uri: att.uri }} style={{ width: 80, height: 80 }} resizeMode="cover" />
                             ) : (
                               <Ionicons name="document" size={28} color={colors.textMuted} />
@@ -894,6 +1028,43 @@ export default function ServicesScreen() {
             </View>
           </View>
         </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal visible={Boolean(previewAttachment)} transparent animationType="fade" onRequestClose={() => setPreviewAttachment(null)}>
+        <TouchableOpacity style={styles.confirmOverlay} activeOpacity={1} onPress={() => setPreviewAttachment(null)}>
+          <TouchableOpacity
+            activeOpacity={1}
+            onPress={() => {}}
+            style={{
+              width: '88%',
+              backgroundColor: colors.surface,
+              borderRadius: 18,
+              padding: 16,
+              gap: 12,
+              ...Platform.select({
+                ios: { shadowColor: '#000', shadowOpacity: 0.24, shadowRadius: 18, shadowOffset: { width: 0, height: 10 } },
+                android: { elevation: 12 },
+              }),
+            }}
+          >
+            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+              <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text }}>Progress Photo</Text>
+              <TouchableOpacity onPress={() => setPreviewAttachment(null)}>
+                <Ionicons name="close" size={22} color={colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+            {previewAttachment?.uri ? (
+              <Image
+                source={{ uri: previewAttachment.uri }}
+                style={{ width: '100%', height: 340, borderRadius: 14, backgroundColor: colors.surfaceSecondary }}
+                resizeMode="contain"
+              />
+            ) : null}
+            <Text style={{ fontSize: 13, color: colors.textMuted }}>
+              {previewAttachment?.name || 'Attachment preview'}
+            </Text>
+          </TouchableOpacity>
+        </TouchableOpacity>
       </Modal>
 
       {/* Cancel Confirmation */}

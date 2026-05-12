@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../config/database');
 const { verifyFirebaseIdToken, verifyTenantInFirebase, admin } = require('../config/firebase');
 const { sendPasswordResetEmail, sendPasswordChangedEmail } = require('../services/emailService');
+const { normalizeUser } = require('../utils/normalizeUser');
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────
 
@@ -159,15 +160,6 @@ async function registerFailedPasswordAttempt(db, user) {
   };
 }
 
-function firstNonEmptyString(...values) {
-  for (const value of values) {
-    if (typeof value !== 'string') continue;
-    const trimmed = value.trim();
-    if (trimmed) return trimmed;
-  }
-  return '';
-}
-
 function generateOtpCode() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
@@ -202,57 +194,6 @@ function validateAuthPassword(password, { requiredMessage = 'Password is require
   }
 
   return [];
-}
-
-/** Normalize camelCase admin-panel fields to the snake_case the app expects */
-function normalizeUser(doc) {
-  if (!doc) return doc;
-  const u = { ...doc };
-
-  const applicant = (u.applicantDetails && typeof u.applicantDetails === 'object')
-    ? u.applicantDetails
-    : ((u.applicant_details && typeof u.applicant_details === 'object') ? u.applicant_details : {});
-
-  const applicantFirstName = firstNonEmptyString(
-    applicant.firstName,
-    applicant.first_name,
-    u.firstName,
-    u.first_name,
-  );
-  const applicantLastName = firstNonEmptyString(
-    applicant.lastName,
-    applicant.last_name,
-    u.lastName,
-    u.last_name,
-  );
-
-  if (!u.firstName && applicantFirstName) u.firstName = applicantFirstName;
-  if (!u.lastName && applicantLastName) u.lastName = applicantLastName;
-
-  if (!u.name) {
-    const applicantFullName = [applicantFirstName, applicantLastName].filter(Boolean).join(' ').trim();
-    if (applicantFullName) {
-      u.name = applicantFullName;
-    } else if (u.fullName) {
-      u.name = u.fullName;
-    }
-  }
-
-  if (!u.email && u.emailAddress) u.email = u.emailAddress;
-  if (!u.phone && (u.contactNumber || u.phoneNumber)) u.phone = u.contactNumber || u.phoneNumber;
-  if (!u.address) {
-    u.address = firstNonEmptyString(
-      applicant.address,
-      applicant.homeAddress,
-      applicant.home_address,
-      applicant.currentAddress,
-      applicant.current_address,
-      u.homeAddress,
-      u.home_address,
-    );
-  }
-  if (!u.username && u.email) u.username = u.email.split('@')[0];
-  return u;
 }
 
 /** Return user object without MongoDB _id */

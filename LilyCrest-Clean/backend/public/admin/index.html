@@ -202,6 +202,10 @@
   .spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.2); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; flex-shrink: 0; }
   @keyframes spin { to { transform: rotate(360deg); } }
   .avatar-circle { width: 32px; height: 32px; border-radius: 16px; display: inline-flex; align-items: center; justify-content: center; font-size: 12px; font-weight: 800; flex-shrink: 0; }
+  .attachment-chip-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .attachment-chip { display: inline-flex; align-items: center; gap: 8px; padding: 8px 10px; background: var(--surface2); border: 1px solid var(--border); border-radius: 999px; font-size: 12px; color: var(--text); }
+  .attachment-chip button { background: none; border: none; color: var(--muted); font-size: 14px; padding: 0; line-height: 1; }
+  .helper-text { font-size: 12px; color: var(--muted); line-height: 1.5; }
 </style>
 </head>
 <body>
@@ -532,6 +536,12 @@
       </select>
     </div>
     <div class="form-group"><label>Admin Note (optional)</label><textarea id="maint-note" placeholder="Leave a note for the tenant…"></textarea></div>
+    <div class="form-group">
+      <label>Progress Photos (optional)</label>
+      <input type="file" id="maint-attachments" accept="image/*" multiple onchange="handleMaintAttachmentChange(event)" />
+      <p class="helper-text mt-2">Upload up to 4 photos. These will appear in the tenant's maintenance progress view.</p>
+      <div id="maint-attachments-preview" class="attachment-chip-list"></div>
+    </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeMaintModal()">Cancel</button>
       <button class="btn btn-primary" id="maint-submit-btn" onclick="submitMaintStatus()">Update</button>
@@ -550,6 +560,7 @@ let allUsers = [];
 let allMaintenance = [];
 let currentTicket = null;
 let currentMaintRequestId = null;
+let currentMaintAttachments = [];
 let userMap = {}; // user_id → display name
 let liveChats = [];
 let currentLiveChat = null;
@@ -1373,12 +1384,88 @@ function openMaintModal(rid, currentStatus) {
   currentMaintRequestId = rid;
   document.getElementById('maint-new-status').value = currentStatus || 'pending';
   document.getElementById('maint-note').value = '';
+  clearMaintAttachments();
   document.getElementById('maint-modal').classList.remove('hidden');
 }
 
 function closeMaintModal() {
   document.getElementById('maint-modal').classList.add('hidden');
   currentMaintRequestId = null;
+  clearMaintAttachments();
+}
+
+function clearMaintAttachments() {
+  currentMaintAttachments = [];
+  const input = document.getElementById('maint-attachments');
+  if (input) input.value = '';
+  renderMaintAttachmentPreview();
+}
+
+function renderMaintAttachmentPreview() {
+  const container = document.getElementById('maint-attachments-preview');
+  if (!container) return;
+
+  if (!currentMaintAttachments.length) {
+    container.innerHTML = '';
+    return;
+  }
+
+  container.innerHTML = currentMaintAttachments.map((attachment, index) => `
+    <div class="attachment-chip">
+      <span>${escHtml(attachment.name || `Photo ${index + 1}`)}</span>
+      <button type="button" onclick="removeMaintAttachment(${index})" aria-label="Remove attachment">&times;</button>
+    </div>
+  `).join('');
+}
+
+function removeMaintAttachment(index) {
+  currentMaintAttachments = currentMaintAttachments.filter((_, itemIndex) => itemIndex !== index);
+  renderMaintAttachmentPreview();
+}
+
+function readFileAsDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve({
+      name: file.name || 'progress-photo.jpg',
+      uri: String(reader.result || ''),
+      type: file.type || 'image/jpeg',
+    });
+    reader.onerror = () => reject(new Error(`Failed to read ${file.name || 'attachment'}.`));
+    reader.readAsDataURL(file);
+  });
+}
+
+async function handleMaintAttachmentChange(event) {
+  const files = Array.from(event.target.files || []).filter(Boolean);
+  if (!files.length) return;
+
+  if (currentMaintAttachments.length + files.length > 4) {
+    showToast('You can upload up to 4 progress photos only.', 'error');
+    event.target.value = '';
+    return;
+  }
+
+  try {
+    const nextAttachments = [];
+
+    for (const file of files) {
+      if (!String(file.type || '').startsWith('image/')) {
+        throw new Error(`${file.name || 'Attachment'} must be an image file.`);
+      }
+      if (typeof file.size === 'number' && file.size > 5 * 1024 * 1024) {
+        throw new Error(`${file.name || 'Attachment'} exceeds the 5 MB limit.`);
+      }
+      nextAttachments.push(await readFileAsDataUrl(file));
+    }
+
+    currentMaintAttachments = currentMaintAttachments.concat(nextAttachments);
+    renderMaintAttachmentPreview();
+  } catch (error) {
+    showToast(error.message || 'Failed to load attachment.', 'error');
+  } finally {
+    event.target.value = '';
+  }
 }
 
 async function submitMaintStatus() {
@@ -1390,7 +1477,11 @@ async function submitMaintStatus() {
   try {
     await apiFetch(`/maintenance/admin/${currentMaintRequestId}/status`, {
       method: 'PATCH',
-      body: JSON.stringify({ status, notes: document.getElementById('maint-note').value.trim() })
+      body: JSON.stringify({
+        status,
+        notes: document.getElementById('maint-note').value.trim(),
+        progress_attachments: currentMaintAttachments,
+      })
     });
     showToast('Status updated');
     closeMaintModal();

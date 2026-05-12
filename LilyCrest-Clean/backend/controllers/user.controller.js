@@ -1,82 +1,7 @@
 const { getDb } = require('../config/database');
 const { ObjectId } = require('mongodb');
 const { v4: uuidv4 } = require('uuid');
-
-function firstNonEmptyString(...values) {
-  for (const value of values) {
-    if (typeof value !== 'string') continue;
-    const trimmed = value.trim();
-    if (trimmed) return trimmed;
-  }
-  return '';
-}
-
-// Normalize a raw MongoDB user document to the shape the app expects.
-// Admin-panel documents use camelCase (fullName, emailAddress, contactNumber, etc.)
-// while app-created documents use snake_case (name, email, phone).
-// This bridges both schemas so the mobile app always sees consistent field names.
-function normalizeUser(doc) {
-  if (!doc) return doc;
-  const u = { ...doc };
-
-  const applicant = (u.applicantDetails && typeof u.applicantDetails === 'object')
-    ? u.applicantDetails
-    : ((u.applicant_details && typeof u.applicant_details === 'object') ? u.applicant_details : {});
-
-  const applicantFirstName = firstNonEmptyString(
-    applicant.firstName,
-    applicant.first_name,
-    u.firstName,
-    u.first_name,
-  );
-  const applicantLastName = firstNonEmptyString(
-    applicant.lastName,
-    applicant.last_name,
-    u.lastName,
-    u.last_name,
-  );
-
-  if (!u.firstName && applicantFirstName) u.firstName = applicantFirstName;
-  if (!u.lastName && applicantLastName) u.lastName = applicantLastName;
-
-  if (!u.name) {
-    const applicantFullName = [applicantFirstName, applicantLastName].filter(Boolean).join(' ').trim();
-    if (applicantFullName) {
-      u.name = applicantFullName;
-    }
-  }
-
-  // Name: fullName → name
-  if (!u.name && u.fullName) u.name = u.fullName;
-
-  // Email: emailAddress → email
-  if (!u.email && u.emailAddress) u.email = u.emailAddress;
-
-  // Phone: contactNumber / phoneNumber → phone
-  if (!u.phone && (u.contactNumber || u.phoneNumber)) {
-    u.phone = u.contactNumber || u.phoneNumber;
-  }
-
-  // Address from applicant details/home address fields → address
-  if (!u.address) {
-    u.address = firstNonEmptyString(
-      applicant.address,
-      applicant.homeAddress,
-      applicant.home_address,
-      applicant.currentAddress,
-      applicant.current_address,
-      u.homeAddress,
-      u.home_address,
-    );
-  }
-
-  // Username: fallback to email prefix if missing
-  if (!u.username && u.email) {
-    u.username = u.email.split('@')[0];
-  }
-
-  return u;
-}
+const { normalizeUser } = require('../utils/normalizeUser');
 
 // Get current user profile
 async function getMe(req, res) {
@@ -99,8 +24,6 @@ async function getMe(req, res) {
 }
 
 // ── Field-level validators ──
-const NAME_MIN = 2;
-const NAME_MAX = 60;
 const USERNAME_MIN = 3;
 const USERNAME_MAX = 30;
 const USERNAME_REGEX = /^[a-zA-Z0-9_]+$/;
@@ -125,14 +48,6 @@ function getDecodedBase64Bytes(value = '') {
 
 function validateField(field, value) {
   switch (field) {
-    case 'name': {
-      const clean = sanitize(value);
-      if (!clean) return { ok: false, error: 'Name is required.' };
-      if (clean.length < NAME_MIN) return { ok: false, error: `Name must be at least ${NAME_MIN} characters.` };
-      if (clean.length > NAME_MAX) return { ok: false, error: `Name must be at most ${NAME_MAX} characters.` };
-      if (!/^[a-zA-Z\u00c0-\u00ff\u00f1\u00d1\s.\-']+$/.test(clean)) return { ok: false, error: 'Name contains invalid characters.' };
-      return { ok: true, value: clean };
-    }
     case 'username': {
       const clean = sanitize(value).toLowerCase();
       if (!clean) return { ok: false, error: 'Username is required.' };
@@ -182,9 +97,13 @@ async function updateMe(req, res) {
       return res.status(400).json({ detail: 'Request body is required.' });
     }
 
-    const allowedFields = ['name', 'username', 'email', 'phone', 'address', 'picture'];
+    const allowedFields = ['username', 'email', 'phone', 'address', 'picture'];
     const updateData = {};
     const fieldErrors = {};
+
+    if (updates.name !== undefined) {
+      fieldErrors.name = 'Full name is managed from the tenant application. Please contact admin to request a change.';
+    }
 
     // Only validate fields that were actually sent
     for (const field of allowedFields) {

@@ -23,6 +23,8 @@ const validatePhone = (phone) => {
   return { valid: true, error: '' };
 };
 
+// Kept temporarily to preserve the existing name validation rules for future admin-managed flows.
+// eslint-disable-next-line no-unused-vars
 const validateName = (name) => {
   if (!name.trim()) return { valid: false, error: 'Name is required' };
   if (name.trim().length < 2) return { valid: false, error: 'Name must be at least 2 characters' };
@@ -74,7 +76,7 @@ export default function ProfileScreen() {
     phone: user?.phone || '+63',
     address: user?.address || '',
   });
-  const [errors, setErrors] = useState({ name: '', username: '', email: '', phone: '', address: '' });
+  const [errors, setErrors] = useState({ username: '', email: '', phone: '', address: '' });
   const [discardModalVisible, setDiscardModalVisible] = useState(false);
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
   const [profileError, setProfileError] = useState('');
@@ -128,13 +130,11 @@ export default function ProfileScreen() {
 
   useEffect(() => {
     if (isEditing) {
-      const nameValidation = validateName(formData.name);
       const usernameValidation = validateUsername(formData.username);
       const emailValidation = validateEmail(formData.email);
       const phoneValidation = validatePhone(formData.phone);
       const addressValidation = validateAddress(formData.address);
       setErrors({
-        name: nameValidation.error,
         username: usernameValidation.error,
         email: emailValidation.error,
         phone: phoneValidation.error,
@@ -159,7 +159,6 @@ export default function ProfileScreen() {
 
   const hasChanges = () => {
     return (
-      formData.name.trim() !== (user?.name || '').trim() ||
       formData.username.trim() !== (user?.username || '').trim() ||
       formData.email.trim().toLowerCase() !== (user?.email || '').trim().toLowerCase() ||
       (formData.phone || '').trim() !== (user?.phone || '+63').trim() ||
@@ -168,12 +167,11 @@ export default function ProfileScreen() {
   };
 
   const handleSave = async () => {
-    const nameValidation = validateName(formData.name);
     const usernameValidation = validateUsername(formData.username);
     const emailValidation = validateEmail(formData.email);
     const phoneValidation = validatePhone(formData.phone);
     const addressValidation = validateAddress(formData.address);
-    if (!nameValidation.valid || !usernameValidation.valid || !emailValidation.valid || !phoneValidation.valid || !addressValidation.valid) {
+    if (!usernameValidation.valid || !emailValidation.valid || !phoneValidation.valid || !addressValidation.valid) {
       setProfileBanner({ type: 'error', text: 'Please fix the highlighted fields.' });
       return;
     }
@@ -185,7 +183,6 @@ export default function ProfileScreen() {
     setIsLoading(true);
     try {
       const payload = {
-        name: formData.name.trim(),
         username: formData.username.trim().toLowerCase(),
         email: formData.email.trim().toLowerCase(),
         phone: formData.phone.trim() === '+63' ? '' : formData.phone.trim(),
@@ -211,7 +208,6 @@ export default function ProfileScreen() {
         const backendErrors = error.response.data.errors;
         setErrors((prev) => ({
           ...prev,
-          name: backendErrors.name || prev.name,
           username: backendErrors.username || prev.username,
           email: backendErrors.email || prev.email,
           phone: backendErrors.phone || prev.phone,
@@ -278,7 +274,7 @@ export default function ProfileScreen() {
     },
   ];
 
-  const isFormValid = !errors.name && !errors.username && !errors.email && !errors.phone && !errors.address && formData.name.trim().length > 0 && formData.username.trim().length > 0 && formData.email.trim().length > 0 && hasChanges();
+  const isFormValid = !errors.username && !errors.email && !errors.phone && !errors.address && formData.username.trim().length > 0 && formData.email.trim().length > 0 && hasChanges();
 
   const handleDiscardEdit = () => {
     if (hasChanges()) {
@@ -305,7 +301,7 @@ export default function ProfileScreen() {
       phone: user?.phone || '+63',
       address: user?.address || '',
     });
-    setErrors({ name: '', username: '', email: '', phone: '', address: '' });
+    setErrors({ username: '', email: '', phone: '', address: '' });
   };
 
   const styles = createStyles(colors, isDarkMode);
@@ -398,11 +394,18 @@ export default function ProfileScreen() {
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Full Name *</Text>
-              <TextInput style={[styles.input, errors.name ? styles.inputError : null]} value={formData.name} onChangeText={(text) => setFormData({ ...formData, name: text.slice(0, NAME_MAX) })} placeholder="Enter your full name" placeholderTextColor={colors.textMuted} maxLength={NAME_MAX} />
-              <View style={styles.fieldFooter}>
-                {errors.name ? <View style={styles.errorContainer}><Ionicons name="alert-circle" size={14} color="#EF4444" /><Text style={styles.fieldErrorText}>{errors.name}</Text></View> : <View />}
-                <Text style={styles.charCount}>{formData.name.length}/{NAME_MAX}</Text>
+              <Text style={styles.inputLabel}>Full Name</Text>
+              <TextInput
+                style={[styles.input, styles.readOnlyInput]}
+                value={formData.name}
+                editable={false}
+                selectTextOnFocus={false}
+                placeholder="No full name on file"
+                placeholderTextColor={colors.textMuted}
+              />
+              <View style={styles.helperRow}>
+                <Ionicons name="information-circle-outline" size={14} color={colors.textMuted} />
+                <Text style={styles.helperText}>Full name comes from your tenant application. Please contact admin if you need it changed.</Text>
               </View>
             </View>
 
@@ -708,6 +711,7 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   inputContainer: { marginBottom: 16 },
   inputLabel: { fontSize: 12, fontWeight: '700', color: colors.textSecondary, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.6 },
   input: { borderWidth: 1.5, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, fontSize: 15, color: colors.text, backgroundColor: colors.inputBg },
+  readOnlyInput: { color: colors.textSecondary, backgroundColor: isDarkMode ? 'rgba(148,163,184,0.12)' : '#F8FAFC' },
   inputWithPrefix: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: colors.border, borderRadius: 12, backgroundColor: colors.inputBg, overflow: 'hidden' },
   inputPrefix: { paddingLeft: 16, fontSize: 15, fontWeight: '600', color: colors.textMuted },
   inputInner: { flex: 1, paddingHorizontal: 4, paddingVertical: 14, fontSize: 15, color: colors.text, paddingRight: 16 },
@@ -716,6 +720,8 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   errorContainer: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
   fieldErrorText: { fontSize: 12, color: '#EF4444' },
   fieldFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 },
+  helperRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 8 },
+  helperText: { flex: 1, fontSize: 12, lineHeight: 18, color: colors.textMuted },
   charCount: { fontSize: 11, color: colors.textMuted, fontWeight: '600' },
   saveButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent, paddingVertical: 14, borderRadius: 12, marginTop: 8, gap: 8 },
   saveButtonDisabled: { backgroundColor: colors.textMuted, opacity: 0.6 },

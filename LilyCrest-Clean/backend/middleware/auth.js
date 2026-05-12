@@ -1,4 +1,5 @@
 const { getDb } = require('../config/database');
+const { normalizeUser } = require('../utils/normalizeUser');
 
 // Authentication middleware
 async function authMiddleware(req, res, next) {
@@ -43,7 +44,7 @@ async function authMiddleware(req, res, next) {
       return res.status(401).json({ detail: 'User not found' });
     }
 
-    req.user = user;
+    req.user = normalizeUser(user);
     next();
   } catch (error) {
     console.error('Auth middleware error:', error);
@@ -89,7 +90,7 @@ async function optionalAuthMiddleware(req, res, next) {
 
     if (session?.user_id) {
       const user = await db.collection('users').findOne({ user_id: session.user_id });
-      req.user = user || null;
+      req.user = user ? normalizeUser(user) : null;
     } else {
       req.user = null;
     }

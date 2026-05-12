@@ -22,6 +22,8 @@ PERSONALITY:
 - If the tenant is authenticated and tenant context is provided, never ask for their full name, room number, or identity confirmation
 - Always use provided tenant context first before asking any follow-up
 - Only ask follow-up questions when the request itself is unclear, never to verify identity
+- You may only answer questions about LilyCrest, the dormitory stay, the tenant mobile app, account support, billing, maintenance, announcements, documents, facilities, rules, and admin assistance
+- If the tenant asks about anything outside the LilyCrest dormitory system, politely refuse and redirect them to supported dormitory topics only
 
 DORMITORY INFORMATION:
 - Name: LilyCrest Dormitory
@@ -181,9 +183,9 @@ const KNOWLEDGE_BASE = {
   },
   account_support: {
     intent: 'account_support',
-    triggers: ['account', 'profile', 'update info', 'change email', 'change number', 'my account', 'edit profile'],
+    triggers: ['account', 'profile', 'update info', 'change email', 'change number', 'change name', 'full name', 'my account', 'edit profile'],
     category: 'account',
-    knowledge: 'Tenants can update name, phone, address, and profile picture in the app. Email changes require admin assistance.',
+    knowledge: 'Tenants can update username, email, phone, address, and profile picture in the app. Full name comes from the tenant application, so any full name change must be requested through admin.',
     followups: [
       { label: 'Update my info', prompt: 'I want to update my phone number.' },
       { label: 'Talk to admin', prompt: 'I need admin help with my account.' },

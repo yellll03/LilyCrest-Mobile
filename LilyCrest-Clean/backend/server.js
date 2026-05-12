@@ -89,7 +89,8 @@ app.use(cors({
   maxAge: 86400
 }));
 
-app.use(express.json({ limit: '10mb' }));
+// Allow base64-encoded maintenance progress photos in admin status updates.
+app.use(express.json({ limit: '30mb' }));
 app.use(cookieParser());
 
 // Rate limiting — general API (100 requests per minute per IP)

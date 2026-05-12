@@ -15,6 +15,8 @@ const COLLECTIONS = [...new Set([PRIMARY_COLLECTION, LEGACY_COLLECTION])];
 const ACTIVE_RESERVATION_STATUSES = ['moveIn', 'active', 'completed', 'confirmed'];
 const VALID_URGENCIES = ['low', 'normal', 'high'];
 const VALID_STATUSES = ['pending', 'viewed', 'in_progress', 'resolved', 'completed', 'rejected', 'cancelled'];
+const MAX_PROGRESS_ATTACHMENTS = 4;
+const MAX_PROGRESS_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 
 function asObjectId(value) {
   if (!value) return null;
@@ -41,6 +43,40 @@ function requestTimestampValue(request) {
   const dt = request?.created_at || request?.createdAt || 0;
   const time = new Date(dt).getTime();
   return Number.isFinite(time) ? time : 0;
+}
+
+function getDecodedBase64Bytes(value = '') {
+  const raw = String(value || '').replace(/^data:[^;]+;base64,/, '');
+  if (!raw) return 0;
+  const padding = raw.endsWith('==') ? 2 : raw.endsWith('=') ? 1 : 0;
+  return Math.floor((raw.length * 3) / 4) - padding;
+}
+
+function normalizeProgressAttachments(rawAttachments) {
+  if (!Array.isArray(rawAttachments)) return [];
+
+  return rawAttachments
+    .slice(0, MAX_PROGRESS_ATTACHMENTS)
+    .map((entry, index) => {
+      const uri = typeof entry?.uri === 'string' ? entry.uri.trim() : '';
+      const name = typeof entry?.name === 'string' && entry.name.trim()
+        ? entry.name.trim()
+        : `progress-photo-${index + 1}.jpg`;
+      const type = typeof entry?.type === 'string' && entry.type.trim()
+        ? entry.type.trim()
+        : 'image/jpeg';
+
+      if (!uri) return null;
+      if (!/^data:image\//i.test(uri) && !/^https?:\/\//i.test(uri)) {
+        return null;
+      }
+      if (/^data:image\//i.test(uri) && getDecodedBase64Bytes(uri) > MAX_PROGRESS_ATTACHMENT_BYTES) {
+        return null;
+      }
+
+      return { name, uri, type };
+    })
+    .filter(Boolean);
 }
 
 function stripInternalRequestFields(request) {
@@ -523,6 +559,11 @@ async function adminUpdateStatus(req, res) {
     const { requestId } = req.params;
     const { status, notes, assigned_to } = req.body;
     const normalizedStatus = typeof status === 'string' ? status.trim().toLowerCase() : '';
+    const progressAttachments = normalizeProgressAttachments(
+      req.body?.progress_attachments !== undefined
+        ? req.body.progress_attachments
+        : req.body?.attachments
+    );
 
     if (!normalizedStatus || !VALID_STATUSES.includes(normalizedStatus)) {
       return res.status(400).json({ detail: `status must be one of: ${VALID_STATUSES.join(', ')}` });
@@ -545,6 +586,7 @@ async function adminUpdateStatus(req, res) {
       actor_name: actorNameFromUser(req.user),
       actor_role: req.user?.role || null,
       note: typeof notes === 'string' ? notes.trim() : null,
+      attachments: progressAttachments,
       timestamp: now,
     });
 

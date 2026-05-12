@@ -9,6 +9,7 @@ const EXPLICIT_BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
 // Default the chatbot port to the main backend unless explicitly overridden.
 const CHATBOT_PORT = process.env.EXPO_PUBLIC_CHATBOT_PORT || DEFAULT_PORT;
 const DEV_FALLBACK_HOST = process.env.EXPO_PUBLIC_DEV_HOST || null;
+const IS_NATIVE_RELEASE_BUILD = !__DEV__ && Platform.OS !== 'web';
 
 function normalizeUrl(value) {
   return String(value || '').trim().replace(/\/+$/, '');
@@ -35,23 +36,50 @@ function resolveDevHost() {
     console.log('Backend URL resolved from Expo host:', backendUrl);
     return backendUrl;
   }
-  const fallbackHost = DEV_FALLBACK_HOST || Platform.select({ android: '10.0.2.2', default: 'localhost' });
-  const fallbackBase = ensureHttpBase(fallbackHost);
-  const fallbackUrl = `${fallbackBase}:${DEFAULT_PORT}`;
-  console.log('Backend URL using fallback:', fallbackUrl);
-  return fallbackUrl;
+
+  const fallbackBase = ensureHttpBase(DEV_FALLBACK_HOST);
+  if (fallbackBase) {
+    const fallbackUrl = `${fallbackBase}:${DEFAULT_PORT}`;
+    console.log('Backend URL using EXPO_PUBLIC_DEV_HOST:', fallbackUrl);
+    return fallbackUrl;
+  }
+
+  throw new Error('Unable to resolve a development backend URL. Set EXPO_PUBLIC_BACKEND_URL or EXPO_PUBLIC_DEV_HOST.');
 }
 
+function requireReleaseBackendUrl() {
+  const explicit = ensureHttpBase(EXPLICIT_BACKEND_URL);
+  if (explicit) {
+    console.log('Backend URL resolved for release build:', explicit);
+    return explicit;
+  }
+
+  throw new Error('EXPO_PUBLIC_BACKEND_URL must be set for native release/test builds.');
+}
+
+function resolveWebBackendUrl() {
+  const explicit = ensureHttpBase(EXPLICIT_BACKEND_URL);
+  if (explicit) return explicit;
+
+  if (typeof window !== 'undefined' && window.location?.hostname) {
+    const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
+    return `${protocol}//${window.location.hostname}:${DEFAULT_PORT}`;
+  }
+
+  throw new Error('Unable to resolve a web backend URL. Set EXPO_PUBLIC_BACKEND_URL for web builds.');
+}
 
 let BACKEND_URL;
 const explicitBackend = ensureHttpBase(EXPLICIT_BACKEND_URL);
-if (explicitBackend) {
+if (IS_NATIVE_RELEASE_BUILD) {
+  BACKEND_URL = requireReleaseBackendUrl();
+} else if (explicitBackend) {
   BACKEND_URL = explicitBackend;
 } else if (Platform.OS === 'android') {
   // Prefer Expo hostUri (works for both emulator and physical device); fall back to emulator loopback.
   BACKEND_URL = resolveDevHost();
 } else if (Platform.OS === 'web') {
-  BACKEND_URL = `http://localhost:${DEFAULT_PORT}`;
+  BACKEND_URL = resolveWebBackendUrl();
 } else {
   BACKEND_URL = resolveDevHost();
 }
