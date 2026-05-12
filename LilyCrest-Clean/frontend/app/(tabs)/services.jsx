@@ -21,6 +21,7 @@ import LilyFlowerIcon from '../../src/components/assistant/LilyFlowerIcon';
 import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
 import { useToast } from '../../src/context/ToastContext';
 import { apiService } from '../../src/services/api';
+import { ensureCloudImageAttachments, isImageAttachmentCandidate } from '../../src/services/imageUpload';
 import { pickFromCamera, pickFromLibrary } from '../../src/utils/attachmentPicker';
 
 function safeFormat(dateStr, fmt) {
@@ -378,11 +379,13 @@ export default function ServicesScreen() {
 
     setSubmitting(true);
     try {
+      const uploadedAttachments = await ensureCloudImageAttachments(attachments);
+      setAttachments(uploadedAttachments);
       const payload = {
         request_type: selectedType,
         description: description.trim(),
         urgency: selectedUrgency,
-        attachments: attachments.map(({ name, uri, type }) => ({ name, uri, type })),
+        attachments: uploadedAttachments.map(({ name, uri, type }) => ({ name, uri, type })),
       };
       await apiService.createMaintenance(payload);
       showBannerMessage('success', 'Maintenance request submitted successfully.');
@@ -390,7 +393,10 @@ export default function ServicesScreen() {
       resetForm();
       fetchRequests();
     } catch (error) {
-      showBannerMessage('error', error?.response?.data?.detail || 'Failed to submit request. Please try again.');
+      const message = error?.message === 'Image upload failed. Please try again.'
+        ? 'Image upload failed. Please try again.'
+        : error?.response?.data?.detail || 'Failed to submit request. Please try again.';
+      showBannerMessage('error', message);
     } finally {
       setSubmitting(false);
     }
@@ -415,7 +421,12 @@ export default function ServicesScreen() {
   const handleAttach = async (pickerFn) => {
     try {
       const file = await pickerFn();
-      if (file) setAttachments((prev) => [...prev, file]);
+      if (!file) return;
+      if (!isImageAttachmentCandidate(file)) {
+        showBannerMessage('error', 'Please select an image file.');
+        return;
+      }
+      setAttachments((prev) => [...prev, file]);
     } catch (err) {
       showBannerMessage('error', err?.message || 'Unable to add attachment.');
     }

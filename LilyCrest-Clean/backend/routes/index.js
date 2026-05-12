@@ -47,6 +47,10 @@ router.use('/tickets', ticketRoutes);
 const chatRoutes = require('./chat.routes');
 router.use('/chat', chatRoutes);
 
+// Upload routes
+const uploadRoutes = require('./upload.routes');
+router.use('/upload', uploadRoutes);
+
 // Documents routes
 const documentRoutes = require('./documents.routes');
 router.use('/documents', documentRoutes);

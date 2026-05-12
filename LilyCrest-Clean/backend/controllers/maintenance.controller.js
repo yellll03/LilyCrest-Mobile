@@ -17,6 +17,7 @@ const VALID_URGENCIES = ['low', 'normal', 'high'];
 const VALID_STATUSES = ['pending', 'viewed', 'in_progress', 'resolved', 'completed', 'rejected', 'cancelled'];
 const MAX_PROGRESS_ATTACHMENTS = 4;
 const MAX_PROGRESS_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+const LOCAL_ONLY_URI_PATTERN = /^(?:file|content|ph|assets-library|blob|ms-appdata):\/\/|^\/data\/user\/|^\/storage\/|^\/private\/var\/|^\/var\/mobile\/|(?:^|[\\/])cache(?:[\\/]|$)/i;
 
 function asObjectId(value) {
   if (!value) return null;
@@ -52,10 +53,48 @@ function getDecodedBase64Bytes(value = '') {
   return Math.floor((raw.length * 3) / 4) - padding;
 }
 
-function normalizeProgressAttachments(rawAttachments) {
-  if (!Array.isArray(rawAttachments)) return [];
+function isLocalOnlyAttachmentUri(value = '') {
+  const normalized = String(value || '').trim();
+  if (!normalized || /^https?:\/\//i.test(normalized)) {
+    return false;
+  }
+  return LOCAL_ONLY_URI_PATTERN.test(normalized);
+}
 
-  return rawAttachments
+function validateAttachmentUri(uri, { allowDataImage = false } = {}) {
+  const normalized = String(uri || '').trim();
+
+  if (!normalized) {
+    return { ok: false, error: 'Attachment URL is required.' };
+  }
+
+  if (isLocalOnlyAttachmentUri(normalized)) {
+    return {
+      ok: false,
+      error: 'Attachments must be uploaded before submission. Local device paths are not allowed.',
+    };
+  }
+
+  if (/^https:\/\//i.test(normalized)) {
+    return { ok: true, value: normalized };
+  }
+
+  if (allowDataImage && /^data:image\//i.test(normalized)) {
+    return { ok: true, value: normalized };
+  }
+
+  return {
+    ok: false,
+    error: allowDataImage
+      ? 'Attachments must use HTTPS upload URLs or image data URLs.'
+      : 'Attachments must use uploaded HTTPS URLs.',
+  };
+}
+
+function normalizeProgressAttachments(rawAttachments) {
+  if (!Array.isArray(rawAttachments)) return { attachments: [], error: null };
+
+  const attachments = rawAttachments
     .slice(0, MAX_PROGRESS_ATTACHMENTS)
     .map((entry, index) => {
       const uri = typeof entry?.uri === 'string' ? entry.uri.trim() : '';
@@ -65,18 +104,58 @@ function normalizeProgressAttachments(rawAttachments) {
       const type = typeof entry?.type === 'string' && entry.type.trim()
         ? entry.type.trim()
         : 'image/jpeg';
+      const uriCheck = validateAttachmentUri(uri, { allowDataImage: true });
 
-      if (!uri) return null;
-      if (!/^data:image\//i.test(uri) && !/^https?:\/\//i.test(uri)) {
-        return null;
+      if (!uriCheck.ok) {
+        return { error: uriCheck.error };
       }
-      if (/^data:image\//i.test(uri) && getDecodedBase64Bytes(uri) > MAX_PROGRESS_ATTACHMENT_BYTES) {
-        return null;
+      if (/^data:image\//i.test(uriCheck.value) && getDecodedBase64Bytes(uriCheck.value) > MAX_PROGRESS_ATTACHMENT_BYTES) {
+        return { error: 'Progress photo exceeds the 5 MB limit.' };
       }
 
-      return { name, uri, type };
-    })
-    .filter(Boolean);
+      return { name, uri: uriCheck.value, type };
+    });
+
+  const invalidEntry = attachments.find((entry) => entry?.error);
+  if (invalidEntry?.error) {
+    return { attachments: [], error: invalidEntry.error };
+  }
+
+  return {
+    attachments: attachments.filter(Boolean),
+    error: null,
+  };
+}
+
+function normalizeTenantAttachments(rawAttachments) {
+  if (!Array.isArray(rawAttachments)) return { attachments: [], error: null };
+
+  const attachments = rawAttachments.map((entry, index) => {
+    const uri = typeof entry?.uri === 'string' ? entry.uri.trim() : '';
+    const name = typeof entry?.name === 'string' && entry.name.trim()
+      ? entry.name.trim()
+      : `attachment-${index + 1}`;
+    const type = typeof entry?.type === 'string' && entry.type.trim()
+      ? entry.type.trim()
+      : 'application/octet-stream';
+    const uriCheck = validateAttachmentUri(uri);
+
+    if (!uriCheck.ok) {
+      return { error: uriCheck.error };
+    }
+
+    return { name, uri: uriCheck.value, type };
+  });
+
+  const invalidEntry = attachments.find((entry) => entry?.error);
+  if (invalidEntry?.error) {
+    return { attachments: [], error: invalidEntry.error };
+  }
+
+  return {
+    attachments: attachments.filter(Boolean),
+    error: null,
+  };
 }
 
 function stripInternalRequestFields(request) {
@@ -333,15 +412,10 @@ async function createMaintenance(req, res) {
     }
 
     const urgency = VALID_URGENCIES.includes(urgencyRaw) ? urgencyRaw : 'normal';
-    const attachments = Array.isArray(attachmentsRaw)
-      ? attachmentsRaw
-        .map((entry) => ({
-          name: typeof entry?.name === 'string' ? entry.name.trim() : '',
-          uri: typeof entry?.uri === 'string' ? entry.uri.trim() : '',
-          type: typeof entry?.type === 'string' ? entry.type.trim() : '',
-        }))
-        .filter((entry) => entry.name && entry.uri && entry.type)
-      : [];
+    const { attachments, error: attachmentError } = normalizeTenantAttachments(attachmentsRaw);
+    if (attachmentError) {
+      return res.status(400).json({ detail: attachmentError });
+    }
 
     const tenantContext = await resolveTenantContext(db, req.user);
     const now = new Date();
@@ -559,11 +633,14 @@ async function adminUpdateStatus(req, res) {
     const { requestId } = req.params;
     const { status, notes, assigned_to } = req.body;
     const normalizedStatus = typeof status === 'string' ? status.trim().toLowerCase() : '';
-    const progressAttachments = normalizeProgressAttachments(
+    const { attachments: progressAttachments, error: progressAttachmentError } = normalizeProgressAttachments(
       req.body?.progress_attachments !== undefined
         ? req.body.progress_attachments
         : req.body?.attachments
     );
+    if (progressAttachmentError) {
+      return res.status(400).json({ detail: progressAttachmentError });
+    }
 
     if (!normalizedStatus || !VALID_STATUSES.includes(normalizedStatus)) {
       return res.status(400).json({ detail: `status must be one of: ${VALID_STATUSES.join(', ')}` });

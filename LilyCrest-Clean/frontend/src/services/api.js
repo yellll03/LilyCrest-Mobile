@@ -231,6 +231,7 @@ export const apiService = {
   updateMaintenance: (requestId, data) => api.put(`/maintenance/${requestId}`, data),
   cancelMaintenance: (requestId) => api.patch(`/maintenance/${requestId}/cancel`),
   reopenMaintenance: (requestId, data) => api.patch(`/maintenance/${requestId}/reopen`, data),
+  getImageUploadAuth: () => api.get('/upload/imagekit-auth'),
   
   // Announcements
   getAnnouncements: () => api.get('/announcements'),
