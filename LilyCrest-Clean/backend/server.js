@@ -90,7 +90,12 @@ app.use(cors({
 }));
 
 // Allow base64-encoded maintenance progress photos in admin status updates.
-app.use(express.json({ limit: '30mb' }));
+// The `verify` callback preserves the raw body buffer so the PayMongo webhook
+// handler can compute and verify the HMAC-SHA256 signature.
+app.use(express.json({
+  limit: '30mb',
+  verify: (req, _res, buf) => { req.rawBody = buf; },
+}));
 app.use(cookieParser());
 
 // Rate limiting — general API (100 requests per minute per IP)
@@ -134,8 +139,120 @@ app.use('/api/m', apiRoutes);
 // Serve admin panel static files
 app.use('/admin', express.static(path.join(__dirname, 'public', 'admin')));
 
+// Validate required environment variables before anything else starts
+function validateEnv() {
+  const required = [
+    'MONGO_URL',
+    'FIREBASE_PROJECT_ID',
+    'FIREBASE_CLIENT_EMAIL',
+    'FIREBASE_PRIVATE_KEY',
+    'PAYMONGO_SECRET_KEY',
+  ];
+  const missing = required.filter((v) => !process.env[v]);
+  if (missing.length) {
+    console.error(`[Config] Missing required env vars: ${missing.join(', ')}`);
+    process.exit(1);
+  }
+
+  const optionalFeatureWarnings = [
+    {
+      name: 'PAYMONGO_WEBHOOK_SECRET',
+      detail: 'Webhook signature verification is disabled outside production and will reject production calls until this is configured.',
+    },
+    {
+      name: 'IMAGEKIT_PRIVATE_KEY',
+      detail: 'ImageKit uploads will return a configuration error until this is configured.',
+    },
+  ];
+
+  optionalFeatureWarnings.forEach(({ name, detail }) => {
+    if (!process.env[name]) {
+      console.warn(`[Config] ${name} is not set. ${detail}`);
+    }
+  });
+}
+
+async function ensureNotificationIndexes(notifications) {
+  await notifications.createIndex(
+    { user_id: 1, created_at: -1 },
+    { name: 'user_id_created_at_desc' },
+  );
+
+  await notifications.updateMany(
+    { event_key: '' },
+    { $unset: { event_key: '' } },
+  );
+  await notifications.updateMany(
+    {
+      event_key: { $exists: true },
+      $or: [
+        { user_id: { $exists: false } },
+        { user_id: null },
+        { user_id: '' },
+      ],
+    },
+    { $unset: { event_key: '' } },
+  );
+
+  const duplicateEventKeys = await notifications.aggregate([
+    {
+      $match: {
+        user_id: { $exists: true, $nin: [null, ''] },
+        event_key: { $exists: true, $type: 'string', $ne: '' },
+      },
+    },
+    { $sort: { updated_at: -1, created_at: -1, _id: -1 } },
+    {
+      $group: {
+        _id: { user_id: '$user_id', event_key: '$event_key' },
+        ids: { $push: '$_id' },
+        count: { $sum: 1 },
+      },
+    },
+    { $match: { count: { $gt: 1 } } },
+  ]).toArray();
+
+  for (const dupe of duplicateEventKeys) {
+    const staleIds = dupe.ids.slice(1);
+    if (!staleIds.length) continue;
+    await notifications.updateMany(
+      { _id: { $in: staleIds } },
+      { $unset: { event_key: '' }, $set: { updated_at: new Date() } },
+    );
+  }
+
+  const indexName = 'user_id_event_key_unique';
+  const indexes = await notifications.indexes();
+  const existingIndex = indexes.find((idx) => idx.name === indexName);
+  const existingUserFilter = existingIndex?.partialFilterExpression?.user_id || {};
+  const existingFilter = existingIndex?.partialFilterExpression?.event_key || {};
+  const hasSupportedFilter = existingUserFilter.$exists === true
+    && existingUserFilter.$type === 'string'
+    && existingFilter.$exists === true
+    && existingFilter.$type === 'string'
+    && !Object.prototype.hasOwnProperty.call(existingFilter, '$ne');
+
+  if (existingIndex && (!existingIndex.unique || !hasSupportedFilter)) {
+    await notifications.dropIndex(indexName);
+  }
+
+  await notifications.createIndex(
+    { user_id: 1, event_key: 1 },
+    {
+      unique: true,
+      partialFilterExpression: {
+        user_id: { $exists: true, $type: 'string' },
+        event_key: { $exists: true, $type: 'string' },
+      },
+      name: indexName,
+    },
+  );
+}
+
 // Start server
 async function startServer() {
+  validateEnv();
+
   // Initialize Firebase
   initializeFirebase();
   
@@ -155,20 +272,39 @@ async function startServer() {
       { firebase_uid: 1 },
       { unique: true, sparse: true, name: 'firebase_uid_1_sparse' },
     );
-    await notifications.createIndex(
-      { user_id: 1, created_at: -1 },
-      { name: 'user_id_created_at_desc' },
-    );
-    await notifications.createIndex(
-      { user_id: 1, event_key: 1 },
-      {
-        unique: true,
-        partialFilterExpression: {
-          event_key: { $exists: true, $type: 'string', $ne: '' },
-        },
-        name: 'user_id_event_key_unique',
-      },
-    );
+    await ensureNotificationIndexes(notifications);
+
+    // Billing collection indexes (frequently queried)
+    const billing = db.collection('billing');
+    await billing.createIndex({ user_id: 1, created_at: -1 }, { name: 'billing_user_id_created_at' });
+    await billing.createIndex({ user_id: 1, status: 1, due_date: -1 }, { name: 'billing_user_status_due_date' });
+    await billing.createIndex({ billing_id: 1 }, { unique: true, sparse: true, name: 'billing_id_unique' });
+    await billing.createIndex({ paymongo_checkout_id: 1 }, { sparse: true, name: 'billing_paymongo_checkout_id' });
+
+    // Bills collection indexes
+    const bills = db.collection('bills');
+    await bills.createIndex({ userId: 1, createdAt: -1 }, { name: 'bills_userId_createdAt' });
+    await bills.createIndex({ userId: 1, status: 1, dueDate: -1 }, { name: 'bills_userId_status_dueDate' });
+    await bills.createIndex({ billing_id: 1 }, { sparse: true, name: 'bills_billing_id' });
+    await bills.createIndex({ legacyBillingId: 1 }, { sparse: true, name: 'bills_legacyBillingId' });
+    await bills.createIndex({ paymongoSessionId: 1 }, { sparse: true, name: 'bills_paymongoSessionId' });
+
+    // Maintenance indexes for the canonical + legacy dual-read migration window.
+    for (const collectionName of ['maintenance_requests', 'maintenancerequests']) {
+      const maintenance = db.collection(collectionName);
+      await maintenance.createIndex({ request_id: 1 }, { sparse: true, name: `${collectionName}_request_id` });
+      await maintenance.createIndex({ user_id: 1, status: 1, created_at: -1 }, { name: `${collectionName}_user_status_created_at` });
+      await maintenance.createIndex({ userId: 1, status: 1, createdAt: -1 }, { name: `${collectionName}_userId_status_createdAt` });
+    }
+
+    // TTL index: auto-expire OTP records after expires_at
+    const otpStore = db.collection('otp_store');
+    await otpStore.createIndex({ expires_at: 1 }, { expireAfterSeconds: 0, name: 'otp_ttl' });
+
+    // TTL index: auto-expire sessions after expires_at
+    const userSessions = db.collection('user_sessions');
+    await userSessions.createIndex({ expires_at: 1 }, { expireAfterSeconds: 0, name: 'sessions_ttl' });
+    await userSessions.createIndex({ user_id: 1 }, { name: 'sessions_user_id' });
 
     const migrationDone = await migrationsCol.findOne({ name: 'v1_index_migration', completed: true });
     if (migrationDone) {

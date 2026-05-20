@@ -1,5 +1,5 @@
-﻿import { Ionicons } from '@expo/vector-icons';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
 import { useEffect, useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,7 +7,6 @@ import { useTheme } from '../src/context/ThemeContext';
 
 export default function PaymentCancelScreen() {
   const router = useRouter();
-  const { billing_id } = useLocalSearchParams();
   const { colors, isDarkMode } = useTheme();
   const styles = useMemo(() => createStyles(colors, isDarkMode), [colors, isDarkMode]);
 
@@ -16,7 +15,7 @@ export default function PaymentCancelScreen() {
       router.replace('/(tabs)/billing');
     }, 5000);
     return () => clearTimeout(timer);
-  }, []);
+  }, [router]);
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>

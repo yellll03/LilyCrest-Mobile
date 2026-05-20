@@ -1,13 +1,11 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import axios from 'axios';
+import axios, { create as createAxios } from 'axios';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { getFreshIdToken } from '../config/firebase';
 
 const DEFAULT_PORT = process.env.EXPO_PUBLIC_BACKEND_PORT || '8001';
 const EXPLICIT_BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
-// Default the chatbot port to the main backend unless explicitly overridden.
-const CHATBOT_PORT = process.env.EXPO_PUBLIC_CHATBOT_PORT || DEFAULT_PORT;
 const DEV_FALLBACK_HOST = process.env.EXPO_PUBLIC_DEV_HOST || null;
 const IS_NATIVE_RELEASE_BUILD = !__DEV__ && Platform.OS !== 'web';
 
@@ -100,19 +98,14 @@ export async function checkBackendConnection() {
   }
 }
 
-function withPort(baseUrl, port) {
-  // Use simple string replacement — new URL() may not work reliably on all Hermes versions
-  return `${baseUrl.replace(/:\d+$/, '')}:${port}`;
-}
 
-const CHATBOT_BASE_URL = withPort(BACKEND_URL, CHATBOT_PORT);
 const AUTH_REFRESH_URL = `${BACKEND_URL}/api/auth/google`;
 let refreshSessionPromise = null;
 
 // Export base URL for non-axios downloads (e.g., Linking openURL)
 export const BASE_BACKEND_URL = BACKEND_URL;
 
-export const api = axios.create({
+export const api = createAxios({
   baseURL: `${BACKEND_URL}/api/m`,
   headers: {
     'Content-Type': 'application/json',
@@ -142,7 +135,7 @@ async function refreshGoogleSession() {
   return refreshSessionPromise;
 }
 
-// Request interceptor — attach session token to every request
+// Request interceptor - attach session token to every request
 api.interceptors.request.use(
   async (config) => {
     const token = await AsyncStorage.getItem('session_token');
@@ -160,8 +153,8 @@ api.interceptors.response.use(
   async (error) => {
     const originalRequest = error.config;
     
-    // Handle 401 — try to refresh session once.
-    // Skip for auth endpoints (login/register) — those 401s mean wrong credentials,
+    // Handle 401 - try to refresh session once.
+    // Skip for auth endpoints (login/register) - those 401s mean wrong credentials,
     // not an expired session. Retrying them would show the wrong error.
     const isAuthEndpoint = /\/auth\/(login|register|google|forgot-password|login\/verify-otp|login\/resend-otp)/.test(originalRequest?.url || '');
     if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
@@ -181,7 +174,7 @@ api.interceptors.response.use(
         });
       }
 
-      // Refresh failed or no Firebase user — clear session
+      // Refresh failed or no Firebase user - clear session
       try {
         await AsyncStorage.multiRemove(['session_token', 'session_user']);
       } catch (_) {}
@@ -231,7 +224,6 @@ export const apiService = {
   updateMaintenance: (requestId, data) => api.put(`/maintenance/${requestId}`, data),
   cancelMaintenance: (requestId) => api.patch(`/maintenance/${requestId}/cancel`),
   reopenMaintenance: (requestId, data) => api.patch(`/maintenance/${requestId}/reopen`, data),
-  getImageUploadAuth: () => api.get('/upload/imagekit-auth'),
   
   // Announcements
   getAnnouncements: () => api.get('/announcements'),
@@ -278,7 +270,7 @@ export const apiService = {
   adminReplyToTicket: (ticketId, message) => api.post(`/tickets/admin/${ticketId}/reply`, { message }),
   adminUpdateTicketStatus: (ticketId, status) => api.put(`/tickets/admin/${ticketId}/status`, { status }),
 
-  // Human support chat — synced with the web admin panel in real-time.
+  // Human support chat - synced with the web admin panel in real-time.
   // Uses /api/m/chat/... endpoints (mobile bridge in Capstone server) which
   // write to chat_conversations + chat_messages collections the web admin reads.
   startSupportChat: (data) => api.post('/chat/start', data),

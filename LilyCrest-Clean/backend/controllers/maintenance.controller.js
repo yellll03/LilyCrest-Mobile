@@ -17,7 +17,10 @@ const VALID_URGENCIES = ['low', 'normal', 'high'];
 const VALID_STATUSES = ['pending', 'viewed', 'in_progress', 'resolved', 'completed', 'rejected', 'cancelled'];
 const MAX_PROGRESS_ATTACHMENTS = 4;
 const MAX_PROGRESS_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+const MAX_TENANT_ATTACHMENTS = 4;
+const MAX_TENANT_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const LOCAL_ONLY_URI_PATTERN = /^(?:file|content|ph|assets-library|blob|ms-appdata):\/\/|^\/data\/user\/|^\/storage\/|^\/private\/var\/|^\/var\/mobile\/|(?:^|[\\/])cache(?:[\\/]|$)/i;
+const IMAGE_ATTACHMENT_NAME_PATTERN = /\.(png|jpe?g|gif|webp|bmp|heic|heif)(?:\?.*)?$/i;
 
 function asObjectId(value) {
   if (!value) return null;
@@ -91,6 +94,45 @@ function validateAttachmentUri(uri, { allowDataImage = false } = {}) {
   };
 }
 
+function attachmentUrlFromEntry(entry = {}) {
+  return typeof entry?.downloadUrl === 'string' && entry.downloadUrl.trim()
+    ? entry.downloadUrl.trim()
+    : typeof entry?.uri === 'string'
+      ? entry.uri.trim()
+      : '';
+}
+
+function attachmentNameFromEntry(entry = {}, fallback = 'attachment') {
+  const name = typeof entry?.originalName === 'string' && entry.originalName.trim()
+    ? entry.originalName.trim()
+    : typeof entry?.name === 'string' && entry.name.trim()
+      ? entry.name.trim()
+      : fallback;
+  return name.replace(/[<>]/g, '').slice(0, 180);
+}
+
+function attachmentMimeTypeFromEntry(entry = {}, fallback = 'application/octet-stream') {
+  const type = typeof entry?.mimeType === 'string' && entry.mimeType.trim()
+    ? entry.mimeType.trim()
+    : typeof entry?.type === 'string' && entry.type.trim()
+      ? entry.type.trim()
+      : fallback;
+  return type.slice(0, 120);
+}
+
+function attachmentProviderFromEntry(entry = {}, url = '') {
+  if (typeof entry?.provider === 'string' && entry.provider.trim()) {
+    return entry.provider.trim().slice(0, 80);
+  }
+  return /firebasestorage(?:\.googleapis\.com|\.app)/i.test(url) ? 'firebase-storage' : 'https-url';
+}
+
+function isImageTenantAttachment({ downloadUrl = '', originalName = '', mimeType = '' } = {}) {
+  return String(mimeType || '').toLowerCase().startsWith('image/')
+    || IMAGE_ATTACHMENT_NAME_PATTERN.test(String(originalName || ''))
+    || IMAGE_ATTACHMENT_NAME_PATTERN.test(String(downloadUrl || '').split('?')[0]);
+}
+
 function normalizeProgressAttachments(rawAttachments) {
   if (!Array.isArray(rawAttachments)) return { attachments: [], error: null };
 
@@ -129,22 +171,48 @@ function normalizeProgressAttachments(rawAttachments) {
 
 function normalizeTenantAttachments(rawAttachments) {
   if (!Array.isArray(rawAttachments)) return { attachments: [], error: null };
+  if (rawAttachments.length > MAX_TENANT_ATTACHMENTS) {
+    return { attachments: [], error: `You can upload up to ${MAX_TENANT_ATTACHMENTS} maintenance photos only.` };
+  }
 
   const attachments = rawAttachments.map((entry, index) => {
-    const uri = typeof entry?.uri === 'string' ? entry.uri.trim() : '';
-    const name = typeof entry?.name === 'string' && entry.name.trim()
-      ? entry.name.trim()
-      : `attachment-${index + 1}`;
-    const type = typeof entry?.type === 'string' && entry.type.trim()
-      ? entry.type.trim()
-      : 'application/octet-stream';
-    const uriCheck = validateAttachmentUri(uri);
+    const downloadUrl = attachmentUrlFromEntry(entry);
+    const originalName = attachmentNameFromEntry(entry, `attachment-${index + 1}`);
+    const mimeType = attachmentMimeTypeFromEntry(entry);
+    const storagePath = typeof entry?.storagePath === 'string' ? entry.storagePath.trim().slice(0, 500) : '';
+    const uriCheck = validateAttachmentUri(downloadUrl);
 
     if (!uriCheck.ok) {
       return { error: uriCheck.error };
     }
 
-    return { name, uri: uriCheck.value, type };
+    const size = Number(entry?.size);
+    const provider = attachmentProviderFromEntry(entry, uriCheck.value);
+    if (provider !== 'firebase-storage') {
+      return { error: 'Maintenance attachments must be uploaded to Firebase Storage.' };
+    }
+    if (!/firebasestorage(?:\.googleapis\.com|\.app)/i.test(uriCheck.value)) {
+      return { error: 'Maintenance attachments must use Firebase Storage download URLs.' };
+    }
+    if (!storagePath) {
+      return { error: 'Maintenance attachment storagePath is required.' };
+    }
+    if (!isImageTenantAttachment({ downloadUrl: uriCheck.value, originalName, mimeType })) {
+      return { error: 'Maintenance attachments must be image files.' };
+    }
+    if (Number.isFinite(size) && size > MAX_TENANT_ATTACHMENT_BYTES) {
+      return { error: 'Maintenance attachment exceeds the 5 MB limit.' };
+    }
+
+    return {
+      downloadUrl: uriCheck.value,
+      storagePath,
+      originalName,
+      mimeType,
+      size: Number.isFinite(size) ? size : null,
+      uploadedAt: entry?.uploadedAt ? new Date(entry.uploadedAt) : new Date(),
+      provider,
+    };
   });
 
   const invalidEntry = attachments.find((entry) => entry?.error);
@@ -316,6 +384,30 @@ async function loadRequestsAcrossCollections(db, filter) {
     .sort((left, right) => requestTimestampValue(right) - requestTimestampValue(left));
 }
 
+function buildUserMaintenanceFilter(user, extraFilter = {}) {
+  const userId = user?.user_id;
+  const mongoId = asObjectId(user?._id);
+
+  return {
+    ...extraFilter,
+    $or: [
+      ...(userId ? [{ user_id: userId }] : []),
+      ...(mongoId ? [{ userId: mongoId }] : []),
+    ],
+  };
+}
+
+async function countActiveMaintenanceForUser(db, user) {
+  const filter = buildUserMaintenanceFilter(user, {
+    status: { $in: ['pending', 'viewed', 'in_progress'] },
+  });
+
+  if (!filter.$or.length) return 0;
+
+  const requests = await loadRequestsAcrossCollections(db, filter);
+  return requests.length;
+}
+
 async function findRequestForUser(db, requestId, userId) {
   for (const collectionName of [PRIMARY_COLLECTION, LEGACY_COLLECTION]) {
     try {
@@ -366,20 +458,8 @@ async function promoteRequestToPrimary(db, request, user = {}) {
 async function getMyMaintenance(req, res) {
   try {
     const db = getDb();
-    const userId = req.user.user_id;
-    const mongoId = asObjectId(req.user._id);
     const status = typeof req.query.status === 'string' ? req.query.status.trim() : '';
-
-    const filter = {
-      $or: [
-        { user_id: userId },
-        ...(mongoId ? [{ userId: mongoId }] : []),
-      ],
-    };
-
-    if (status) {
-      filter.status = status;
-    }
+    const filter = buildUserMaintenanceFilter(req.user, status ? { status } : {});
 
     const requests = await loadRequestsAcrossCollections(db, filter);
     res.json(requests.map(stripInternalRequestFields));
@@ -736,4 +816,5 @@ module.exports = {
   reopenMaintenance,
   adminUpdateStatus,
   adminGetAll,
+  countActiveMaintenanceForUser,
 };

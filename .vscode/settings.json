@@ -14,5 +14,13 @@
 	],
 	"java.import.gradle.enabled": false,
 	"java.project.importOnFirstTimeStartup": "disabled",
-	"java.server.launchMode": "LightWeight"
+	"java.server.launchMode": "LightWeight",
+	"typescript.tsserver.experimental.enableProjectDiagnostics": false,
+	"typescript.tsserver.watchOptions": {
+		"excludeDirectories": [
+			"**/node_modules",
+			"**/.expo",
+			"**/.git"
+		]
+	}
 }

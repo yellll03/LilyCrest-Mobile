@@ -1,6 +1,7 @@
 const { getDb } = require('../config/database');
 const { ObjectId } = require('mongodb');
 const { fetchUserBills } = require('./billing.controller');
+const { countActiveMaintenanceForUser } = require('./maintenance.controller');
 
 // Convert slug like 'quadruple-sharing' → 'Quadruple Sharing'
 function formatRoomType(type) {
@@ -266,41 +267,7 @@ async function getDashboard(req, res) {
     const latestBill = billing[0] || null;
 
     // ── Maintenance ──────────────────────────────────────────────────────────
-    // Read from canonical + legacy collections and de-duplicate by request_id.
-    const maintenanceQuery = {
-      $or: [
-        { user_id: userId },
-        ...(mongoId ? [{ userId: mongoId }] : []),
-      ],
-      status: { $in: ['pending', 'viewed', 'in_progress'] },
-    };
-
-    const maintenanceCollections = ['maintenance_requests', 'maintenancerequests'];
-    const activeMaintenanceMap = new Map();
-
-    for (const collectionName of maintenanceCollections) {
-      const docs = await db.collection(collectionName)
-        .find(maintenanceQuery, { projection: { _id: 1, request_id: 1 } })
-        .toArray()
-        .catch(() => []);
-
-      docs.forEach((doc) => {
-        const key = doc.request_id || `${collectionName}:${String(doc._id)}`;
-        const existing = activeMaintenanceMap.get(key);
-
-        if (!existing) {
-          activeMaintenanceMap.set(key, { ...doc, __source: collectionName });
-          return;
-        }
-
-        // Prefer canonical collection when duplicate request IDs exist.
-        if (existing.__source === 'maintenancerequests' && collectionName === 'maintenance_requests') {
-          activeMaintenanceMap.set(key, { ...doc, __source: collectionName });
-        }
-      });
-    }
-
-    const activeMaintenanceCount = activeMaintenanceMap.size;
+    const activeMaintenanceCount = await countActiveMaintenanceForUser(db, req.user);
 
     res.json({
       user: { ...req.user, _id: undefined },

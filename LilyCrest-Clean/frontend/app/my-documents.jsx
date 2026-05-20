@@ -1,4 +1,4 @@
-﻿import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
@@ -12,6 +12,13 @@ import { useAuth } from '../src/context/AuthContext';
 import { useTheme } from '../src/context/ThemeContext';
 import { useToast } from '../src/context/ToastContext';
 import { apiService } from '../src/services/api';
+import {
+  ensureFirebaseStorageAttachments,
+  getAttachmentDownloadUrl,
+  IMAGE_UPLOAD_MIME_TYPES,
+  MAX_IMAGE_UPLOAD_BYTES,
+  toStoredAttachmentMetadata,
+} from '../src/services/firebaseStorageUpload';
 
 // ── Document types for upload picker ──
 const UPLOAD_TYPES = [
@@ -257,6 +264,7 @@ export default function MyDocumentsScreen() {
   const [uploadedDocs, setUploadedDocs] = useState([]);
   const [loadingDocs, setLoadingDocs] = useState(true);
   const [uploading, setUploading] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState('');
   const [showUploadPicker, setShowUploadPicker] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [deletingDocId, setDeletingDocId] = useState(null);
@@ -360,22 +368,39 @@ export default function MyDocumentsScreen() {
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: false,
         quality: 0.7,
-        base64: true,
+        base64: false,
       });
 
-      if (result.canceled || !result.assets?.[0]?.base64) return;
+      const asset = result.assets?.[0];
+      if (result.canceled || !asset?.uri) return;
 
-      const base64 = `data:image/jpeg;base64,${result.assets[0].base64}`;
-      if (base64.length > 5 * 1024 * 1024) {
+      const attachment = {
+        name: asset.fileName || asset.uri?.split('/')?.pop() || `${docType.key}.jpg`,
+        uri: asset.uri,
+        type: asset.mimeType || 'image/jpeg',
+        size: asset.fileSize || asset.size,
+      };
+
+      if (attachment.size && attachment.size > MAX_IMAGE_UPLOAD_BYTES) {
         showAlert({ title: 'File Too Large', message: 'Please select a file under 5 MB.', type: 'warning' });
         return;
       }
 
       setUploading(true);
+      setUploadStatus('Uploading attachment...');
+      const [uploadedDocument] = await ensureFirebaseStorageAttachments([attachment], {
+        allowedMimeTypes: IMAGE_UPLOAD_MIME_TYPES,
+        entityId: docType.key,
+        folder: 'tenant-documents',
+        maxBytes: MAX_IMAGE_UPLOAD_BYTES,
+        tenantId: user?.user_id || user?.id || 'unknown-tenant',
+      });
+      setUploadStatus('Attachment uploaded');
+
       await apiService.uploadUserDocument({
         type: docType.key,
         label: docType.label,
-        file_data: base64,
+        ...toStoredAttachmentMetadata(uploadedDocument),
       });
 
       await fetchUploadedDocs();
@@ -389,10 +414,11 @@ export default function MyDocumentsScreen() {
       });
     } catch (error) {
       console.error('Upload error:', error);
+      setUploadStatus('Upload failed, please retry');
       showToast({
         type: 'error',
         title: 'Upload Failed',
-        message: error?.response?.data?.detail || 'Please try again.',
+        message: error?.response?.data?.detail || error?.message || 'Please try again.',
       });
     } finally {
       setUploading(false);
@@ -429,12 +455,31 @@ export default function MyDocumentsScreen() {
   const handleViewUploadedDoc = async (doc) => {
     try {
       const response = await apiService.getUserDocumentFile(doc.doc_id);
-      const fileData = response?.data?.file_data;
-      if (fileData) {
-        // file_data may be a base64 string (mobile upload) or a URL (reservation docs)
+      const documentData = response?.data || {};
+      const fileData = documentData.file_data || getAttachmentDownloadUrl(documentData);
+      const mimeType = String(documentData.mimeType || documentData.type || '').toLowerCase();
+      const isPreviewableImage = /^data:image\//i.test(fileData)
+        || (/^https:\/\//i.test(fileData) && (!mimeType || mimeType.startsWith('image/')));
+      const isInvalidLocal = /^(?:file|content|blob|ph|assets-library):\/\//i.test(String(fileData || ''));
+
+      if (fileData && isPreviewableImage && !isInvalidLocal) {
         setPreviewImage({ uri: fileData, label: doc.label, status: doc.status, uploaded_at: doc.uploaded_at, source: doc.source });
+      } else if (fileData && /^https:\/\//i.test(fileData)) {
+        setPreviewImage({
+          label: doc.label,
+          status: doc.status,
+          uploaded_at: doc.uploaded_at,
+          source: doc.source,
+          error: 'Preview is not available for this document type.',
+        });
       } else {
-        showAlert({ title: 'Error', message: 'Could not load document preview.', type: 'error' });
+        setPreviewImage({
+          label: doc.label,
+          status: doc.status,
+          uploaded_at: doc.uploaded_at,
+          source: doc.source,
+          error: 'Document file is missing or no longer available.',
+        });
       }
     } catch (error) {
       console.error('View doc error:', error);
@@ -518,7 +563,10 @@ export default function MyDocumentsScreen() {
               <Text style={styles.categoryTitle}>My Documents</Text>
               <TouchableOpacity
                 style={styles.uploadButton}
-                onPress={() => setShowUploadPicker(true)}
+                onPress={() => {
+                  setUploadStatus('');
+                  setShowUploadPicker(true);
+                }}
                 disabled={uploading || Boolean(deletingDocId)}
               >
                 {uploading ? (
@@ -531,6 +579,11 @@ export default function MyDocumentsScreen() {
                 )}
               </TouchableOpacity>
             </View>
+            {uploadStatus ? (
+              <Text style={[styles.emptyUploadHint, { marginBottom: 10, textAlign: 'left' }]}>
+                {uploadStatus}
+              </Text>
+            ) : null}
 
             {/* ── Reservation Documents (submitted during web reservation) ── */}
             {reservationDocs.length > 0 && (
@@ -825,8 +878,20 @@ export default function MyDocumentsScreen() {
             <View style={{ width: 40 }} />
           </View>
           <View style={styles.imagePreviewBody}>
-            {previewImage?.uri && (
-              <Image source={{ uri: previewImage.uri }} style={styles.imagePreviewImage} resizeMode="contain" />
+            {previewImage?.uri ? (
+              <Image
+                source={{ uri: previewImage.uri }}
+                style={styles.imagePreviewImage}
+                resizeMode="contain"
+                onError={() => setPreviewImage((prev) => prev ? { ...prev, uri: '', error: 'Could not load this document preview.' } : prev)}
+              />
+            ) : (
+              <View style={{ alignItems: 'center', gap: 10, paddingHorizontal: 28 }}>
+                <Ionicons name="document-text-outline" size={42} color={colors.textMuted} />
+                <Text style={{ color: colors.textMuted, textAlign: 'center', fontSize: 14 }}>
+                  {previewImage?.error || 'Document preview is unavailable.'}
+                </Text>
+              </View>
             )}
           </View>
           {previewImage?.uploaded_at && (

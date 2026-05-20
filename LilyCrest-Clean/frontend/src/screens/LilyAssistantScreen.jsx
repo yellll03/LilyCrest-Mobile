@@ -1,4 +1,4 @@
-﻿import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -19,6 +19,11 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
 import { useAssistantChat } from '../hooks/useAssistantChat';
 import { apiService } from '../services/api';
+import {
+  DEFAULT_UPLOAD_MIME_TYPES,
+  ensureFirebaseStorageAttachments,
+  getAttachmentDisplayName,
+} from '../services/firebaseStorageUpload';
 import { pickDocument, pickFromCamera, pickFromLibrary } from '../utils/attachmentPicker';
 
 function FollowupChips({ suggestions, onSelect }) {
@@ -314,6 +319,7 @@ export default function LilyAssistantScreen() {
   const [filter, setFilter] = useState('all');
   const [inputValue, setInputValue] = useState('');
   const [attachments, setAttachments] = useState([]);
+  const [attachmentUploadStatus, setAttachmentUploadStatus] = useState('');
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [isSending, setIsSending] = useState(false);
   const [replyText, setReplyText] = useState('');
@@ -676,6 +682,8 @@ export default function LilyAssistantScreen() {
 
   useEffect(() => {
     chat.loadPersistedSession();
+    // Load the persisted assistant session only once for this hook instance.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [chat.loadPersistedSession]);
 
   useEffect(() => {
@@ -698,6 +706,8 @@ export default function LilyAssistantScreen() {
     };
 
     bootstrapSupport();
+    // These support helpers intentionally use the latest selected conversation refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user?.user_id]);
 
   useEffect(() => {
@@ -722,6 +732,8 @@ export default function LilyAssistantScreen() {
       cancelled = true;
       clearInterval(interval);
     };
+    // Polling uses the current conversation id and mode; helper identity is not a trigger.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supportConversationId, chatMode]);
 
   const handleSend = async (presetText) => {
@@ -754,24 +766,41 @@ export default function LilyAssistantScreen() {
       setChatMode(CHAT_MODE.AI);
     }
 
-    const userMessage = {
-      id: `user-${Date.now()}`,
-      sender: 'user',
-      text: text || 'Shared attachments',
-      time: formatTime(new Date()),
-      avatar: 'U',
-      attachments,
-    };
-
     sendGuardRef.current = true;
-    markInteracted();
-    setMessages((prev) => [...prev, userMessage]);
-    setInputValue('');
-    setAttachments([]);
     setNetworkError(null);
-    setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
 
     try {
+      let uploadedAttachments = attachments;
+      if (attachments.length) {
+        setIsSending(true);
+        setAttachmentUploadStatus('Uploading attachment...');
+        uploadedAttachments = await ensureFirebaseStorageAttachments(attachments, {
+          allowedMimeTypes: DEFAULT_UPLOAD_MIME_TYPES,
+          entityId: supportConversationId || chat.sessionId || initialSession,
+          folder: 'ai-assistant-attachments',
+          maxBytes: MAX_ATTACHMENT_BYTES,
+          tenantId: user?.user_id || user?.id || 'unknown-tenant',
+        });
+        setAttachmentUploadStatus('Attachment uploaded');
+      } else {
+        setAttachmentUploadStatus('');
+      }
+
+      const userMessage = {
+        id: `user-${Date.now()}`,
+        sender: 'user',
+        text: text || 'Shared attachments',
+        time: formatTime(new Date()),
+        avatar: 'U',
+        attachments: uploadedAttachments,
+      };
+
+      markInteracted();
+      setMessages((prev) => [...prev, userMessage]);
+      setInputValue('');
+      setAttachments([]);
+      setTimeout(() => scrollRef.current?.scrollToEnd({ animated: true }), 80);
+
       if (supportConversationId && isSupportMode(chatMode) && text) {
         await sendSupportMessage(text);
         return;
@@ -843,6 +872,11 @@ export default function LilyAssistantScreen() {
         setPendingAdminIntent(intent || metadata?.intent || 'general');
         setChatMode(CHAT_MODE.NEEDS_ADMIN);
       }
+    } catch (error) {
+      if (attachments.length) {
+        setAttachmentUploadStatus('Upload failed, please retry');
+      }
+      setNetworkError(error?.message || 'Unable to send your message. Please try again.');
     } finally {
       setIsSending(false);
       sendGuardRef.current = false;
@@ -928,6 +962,7 @@ export default function LilyAssistantScreen() {
           setNetworkError(`You can attach up to ${MAX_ATTACHMENT_COUNT} files only.`);
           return prev;
         }
+        setAttachmentUploadStatus('');
         setNetworkError(null);
         return [...prev, file];
       });
@@ -940,7 +975,8 @@ export default function LilyAssistantScreen() {
   };
 
   const removeAttachment = (name) => {
-    setAttachments((prev) => prev.filter((item) => item.name !== name));
+    setAttachmentUploadStatus('');
+    setAttachments((prev) => prev.filter((item) => getAttachmentDisplayName(item) !== name));
   };
 
   const handleQuickAction = (action) => {
@@ -1243,6 +1279,7 @@ export default function LilyAssistantScreen() {
                     setMessages([]);
                     setInputValue('');
                     setAttachments([]);
+                    setAttachmentUploadStatus('');
                     setHasInteracted(false);
                     setNetworkError(null);
                     clearEscalationPrompt();
@@ -1371,12 +1408,15 @@ export default function LilyAssistantScreen() {
                         <Pressable
                           key={attachmentKey(file)}
                           style={styles.attachmentChip}
-                          onLongPress={() => removeAttachment(file.name)}
+                          onLongPress={() => removeAttachment(getAttachmentDisplayName(file))}
                         >
-                          <Text style={styles.attachmentChipText}>{file.name}</Text>
+                          <Text style={styles.attachmentChipText}>{getAttachmentDisplayName(file)}</Text>
                         </Pressable>
                       ))}
                     </View>
+                  ) : null}
+                  {attachmentUploadStatus ? (
+                    <Text style={styles.attachmentStatusText}>{attachmentUploadStatus}</Text>
                   ) : null}
 
                   <View style={styles.inputBar}>
@@ -1892,6 +1932,12 @@ function createAssistantStyles(c, dark) {
     fontSize: 12,
     color: c.textSecondary,
     fontWeight: '500',
+  },
+  attachmentStatusText: {
+    color: c.textMuted,
+    fontSize: 12,
+    fontWeight: '600',
+    paddingHorizontal: 6,
   },
   inputBar: {
     flexDirection: 'row',

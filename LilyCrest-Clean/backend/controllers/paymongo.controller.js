@@ -1,4 +1,5 @@
 const axios = require('axios');
+const crypto = require('crypto');
 const { ObjectId } = require('mongodb');
 const { getDb } = require('../config/database');
 const {
@@ -165,19 +166,30 @@ async function resolveBillWithSource(db, billingId, user) {
     return { bill: null, source: null };
   }
 
-  let source = 'legacy';
-  try {
-    source = ObjectId.isValid(billingId) ? 'real' : 'legacy';
-  } catch (_) {
-    source = 'legacy';
-  }
+  const realBill = await findRealBillByBillingId(db, billingId, user?._id, { projection: { _id: 1 } });
+  const source = realBill ? 'real' : 'legacy';
 
   return { bill, source };
 }
 
 // ── Save checkout reference to the correct collection ────────────────────────
 async function saveCheckoutRef(db, billingId, userId, mongoId, checkoutId, referenceNumber) {
-  // Try legacy collection first
+  const realFilter = buildRealBillLookupFilter(billingId, mongoId);
+  if (realFilter) {
+    const realResult = await db.collection('bills').updateOne(
+      realFilter,
+      {
+        $set: {
+          paymongoSessionId: checkoutId,
+          paymongoReference: referenceNumber,
+          paymentMethod: 'paymongo',
+          updatedAt: new Date(),
+        },
+      }
+    );
+    if (realResult.matchedCount > 0) return;
+  }
+
   const legacyResult = await db.collection('billing').updateOne(
     { billing_id: billingId, user_id: userId },
     {
@@ -190,23 +202,6 @@ async function saveCheckoutRef(db, billingId, userId, mongoId, checkoutId, refer
     }
   );
   if (legacyResult.matchedCount > 0) return;
-
-  // Try real 'bills' collection
-  if (mongoId) {
-    try {
-      await db.collection('bills').updateOne(
-        { _id: new ObjectId(billingId), userId: mongoId },
-        {
-          $set: {
-            paymongoSessionId: checkoutId,
-            paymongoReference: referenceNumber,
-            paymentMethod: 'paymongo',
-            updatedAt: new Date(),
-          },
-        }
-      );
-    } catch (_) { /* billingId not a valid ObjectId */ }
-  }
 }
 
 function isPaidStatus(status) {
@@ -215,6 +210,32 @@ function isPaidStatus(status) {
 
 function unwrapMongoDocument(result) {
   return result?.value ?? result ?? null;
+}
+
+function buildRealBillLookupFilter(billingId, mongoId, extraFilter = {}) {
+  const id = String(billingId || '').trim();
+  if (!id) return null;
+
+  const matches = [
+    { billing_id: id },
+    { legacyBillingId: id },
+  ];
+
+  if (ObjectId.isValid(id)) {
+    matches.unshift({ _id: new ObjectId(id) });
+  }
+
+  return {
+    ...extraFilter,
+    ...(mongoId ? { userId: mongoId } : {}),
+    $or: matches,
+  };
+}
+
+async function findRealBillByBillingId(db, billingId, mongoId, options = {}) {
+  const filter = buildRealBillLookupFilter(billingId, mongoId);
+  if (!filter) return null;
+  return db.collection('bills').findOne(filter, options);
 }
 
 async function markLegacyBillPaidAtomic(db, filter, {
@@ -299,7 +320,32 @@ async function markRealBillPaidAtomic(db, filter, userId, {
 // checkoutId is an optional fallback key used when billing_id/user_id matching
 // fails (e.g. metadata mismatch or presentation-mode bills that were upgraded).
 async function markBillPaid(db, billingId, userId, options = {}) {
-  const { paymentId, eventType, checkoutId } = options;
+  const { checkoutId } = options;
+
+  try {
+    const user = await db.collection('users').findOne({ user_id: userId });
+    const mongoId = user?._id;
+    if (mongoId) {
+      const realFilter = buildRealBillLookupFilter(billingId, mongoId);
+      if (realFilter) {
+        const realResult = await markRealBillPaidAtomic(
+          db,
+          realFilter,
+          userId,
+          options
+        );
+        if (realResult.matched) {
+          console.log(`[markBillPaid] Bill ${billingId} resolved in bills collection`);
+          return realResult;
+        }
+      }
+    } else {
+      console.warn(`[markBillPaid] User not found for user_id=${userId}`);
+    }
+  } catch (err) {
+    console.error(`[markBillPaid] DB error for bill ${billingId}:`, err.message);
+  }
+
   const legacyResult = await markLegacyBillPaidAtomic(
     db,
     { billing_id: billingId, user_id: userId },
@@ -309,56 +355,10 @@ async function markBillPaid(db, billingId, userId, options = {}) {
     return legacyResult;
   }
 
-  // 2. Try real 'bills' collection (billingId is the ObjectId string)
-  let objId;
-  try {
-    objId = new ObjectId(billingId);
-  } catch (_) {
-    objId = null;
-  }
-
-  if (objId) {
-    try {
-      const user = await db.collection('users').findOne({ user_id: userId });
-      const mongoId = user?._id;
-      if (mongoId) {
-        const realResult = await markRealBillPaidAtomic(
-          db,
-          { _id: objId, userId: mongoId },
-          userId,
-          options
-        );
-        if (realResult.matched) {
-          console.log(`[markBillPaid] Bill ${billingId} resolved in bills collection`);
-          return realResult;
-        }
-      } else {
-        console.warn(`[markBillPaid] User not found for user_id=${userId}`);
-      }
-    } catch (err) {
-      console.error(`[markBillPaid] DB error for bill ${billingId}:`, err.message);
-    }
-  }
-
-  // 3. Fallback: find by paymongo_checkout_id (handles metadata mismatch cases).
+  // Fallback: find by paymongo checkout id (handles metadata mismatch cases).
   // This ensures payment is persisted even if the billing_id/user_id in the
   // PayMongo metadata didn't exactly match the stored record.
   if (checkoutId) {
-    try {
-      const legacyCheckoutResult = await markLegacyBillPaidAtomic(
-        db,
-        { paymongo_checkout_id: checkoutId },
-        options
-      );
-      if (legacyCheckoutResult.matched) {
-        console.log(`[markBillPaid] Bill found by checkout_id ${checkoutId}`);
-        return legacyCheckoutResult;
-      }
-    } catch (err) {
-      console.error(`[markBillPaid] Checkout-ID fallback error:`, err.message);
-    }
-
-    // Also try 'bills' collection by paymongoSessionId
     try {
       const bySession = await db.collection('bills').findOne(
         { paymongoSessionId: checkoutId },
@@ -383,6 +383,20 @@ async function markBillPaid(db, billingId, userId, options = {}) {
       }
     } catch (err) {
       console.error(`[markBillPaid] bills checkout-ID fallback error:`, err.message);
+    }
+
+    try {
+      const legacyCheckoutResult = await markLegacyBillPaidAtomic(
+        db,
+        { paymongo_checkout_id: checkoutId },
+        options
+      );
+      if (legacyCheckoutResult.matched) {
+        console.log(`[markBillPaid] Bill found by checkout_id ${checkoutId}`);
+        return legacyCheckoutResult;
+      }
+    } catch (err) {
+      console.error(`[markBillPaid] Checkout-ID fallback error:`, err.message);
     }
   }
 
@@ -454,22 +468,20 @@ async function sendPaymentReceiptForBill(db, {
 async function resolveCheckoutIdForBill(db, billingId) {
   if (!billingId) return '';
 
+  const realFilter = buildRealBillLookupFilter(billingId, null);
+  if (realFilter) {
+    const realBill = await db.collection('bills').findOne(
+      realFilter,
+      { projection: { _id: 0, paymongoSessionId: 1 } },
+    );
+    if (realBill?.paymongoSessionId) return String(realBill.paymongoSessionId);
+  }
+
   const legacy = await db.collection('billing').findOne(
     { billing_id: billingId },
     { projection: { _id: 0, paymongo_checkout_id: 1 } },
   );
   if (legacy?.paymongo_checkout_id) return String(legacy.paymongo_checkout_id);
-
-  try {
-    const objId = new ObjectId(billingId);
-    const realBill = await db.collection('bills').findOne(
-      { _id: objId },
-      { projection: { _id: 0, paymongoSessionId: 1 } },
-    );
-    if (realBill?.paymongoSessionId) return String(realBill.paymongoSessionId);
-  } catch (_) {
-    // billingId is not an ObjectId
-  }
 
   return '';
 }
@@ -665,9 +677,50 @@ async function getCheckoutStatus(req, res) {
   }
 }
 
+/**
+ * Verify a PayMongo webhook request using HMAC-SHA256.
+ * Header format: "t=TIMESTAMP,te=TEST_SIG" (test) or "t=TIMESTAMP,li=LIVE_SIG" (live).
+ * Signed payload: "<timestamp>.<rawBody>"
+ */
+function verifyWebhookSignature(req) {
+  const secret = process.env.PAYMONGO_WEBHOOK_SECRET;
+  if (!secret) return process.env.NODE_ENV !== 'production';
+
+  const sigHeader = req.headers['paymongo-signature'];
+  if (!sigHeader) return false;
+
+  const parts = {};
+  sigHeader.split(',').forEach((part) => {
+    const [k, v] = part.split('=');
+    if (k && v) parts[k.trim()] = v.trim();
+  });
+
+  const timestamp = parts.t;
+  const signature = parts.te || parts.li; // te = test, li = live
+  if (!timestamp || !signature) return false;
+
+  const rawBody = req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(req.body);
+  const signedPayload = `${timestamp}.${rawBody}`;
+  const expected = crypto
+    .createHmac('sha256', secret)
+    .update(signedPayload)
+    .digest('hex');
+
+  const expectedBuffer = Buffer.from(expected, 'hex');
+  const receivedBuffer = Buffer.from(signature, 'hex');
+  if (expectedBuffer.length !== receivedBuffer.length) return false;
+
+  return crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
+}
+
 // PayMongo webhook handler — receives events from PayMongo
 async function handleWebhook(req, res) {
   try {
+    if (!verifyWebhookSignature(req)) {
+      console.warn('[PayMongo Webhook] Signature verification failed — request rejected');
+      return res.status(400).json({ detail: 'Invalid webhook signature' });
+    }
+
     const event = req.body?.data;
     const eventType = event?.attributes?.type;
 
@@ -756,9 +809,14 @@ async function registerWebhook() {
     );
 
     const webhookId = resp.data?.data?.id;
+    const webhookSecret = resp.data?.data?.attributes?.secret_key;
     console.log(`[PayMongo] ✓ Webhook registered successfully!`);
     console.log(`[PayMongo]   URL: ${webhookUrl}`);
     console.log(`[PayMongo]   ID: ${webhookId}`);
+    if (webhookSecret && !process.env.PAYMONGO_WEBHOOK_SECRET) {
+      console.log('[PayMongo]   ACTION REQUIRED: Add the webhook signing secret to PAYMONGO_WEBHOOK_SECRET.');
+      console.log('[PayMongo]   Retrieve the secret from the PayMongo dashboard; it is not printed in logs.');
+    }
   } catch (error) {
     console.error('[PayMongo] Webhook registration failed:', error?.response?.data?.errors?.[0]?.detail || error.message);
     console.log('[PayMongo] You can manually register at: https://dashboard.paymongo.com/developers/webhooks');

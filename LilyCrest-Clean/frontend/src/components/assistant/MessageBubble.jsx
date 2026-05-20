@@ -1,4 +1,4 @@
-﻿import { Platform, StyleSheet, Text, View } from 'react-native';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import LilyFlowerIcon from './LilyFlowerIcon';
 

@@ -1,4 +1,4 @@
-﻿import { useEffect, useRef } from 'react';
+import { useEffect, useRef } from 'react';
 import { Animated, Modal, Platform, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
@@ -40,7 +40,7 @@ export default function StyledModal({
       scaleAnim.setValue(0.85);
       opacityAnim.setValue(0);
     }
-  }, [visible]);
+  }, [opacityAnim, scaleAnim, visible]);
 
   const typeConfig = {
     success: { icon: 'checkmark-circle', color: '#22C55E' },

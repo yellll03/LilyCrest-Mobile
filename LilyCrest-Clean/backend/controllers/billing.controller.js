@@ -96,6 +96,8 @@ const NON_PAYABLE_BILL_STATUSES = new Set([
 function normalizeBillId(bill = {}) {
   const candidates = [
     bill.billing_id,
+    bill.legacyBillingId,
+    bill.legacy_billing_id,
     bill.id,
     bill.billingId,
     bill.billId,
@@ -110,6 +112,23 @@ function normalizeBillId(bill = {}) {
   }
 
   return '';
+}
+
+function getBillLookupIds(bill = {}) {
+  return [
+    bill.billing_id,
+    bill.bill_id,
+    bill.legacyBillingId,
+    bill.legacy_billing_id,
+    bill.id,
+    bill.billingId,
+    bill.billId,
+    bill.reference_id,
+    bill._id,
+  ]
+    .filter((value) => value !== null && value !== undefined)
+    .map((value) => String(value).trim())
+    .filter(Boolean);
 }
 
 function normalizeBillStatus(status) {
@@ -459,7 +478,8 @@ function applyBillFilters(bills, { billingId = null, paidOnly = false, unpaidOnl
   let results = Array.isArray(bills) ? [...bills] : [];
 
   if (targetId) {
-    results = results.filter((bill) => normalizeBillId(bill).trim().toLowerCase() === targetId);
+    results = results.filter((bill) => getBillLookupIds(bill)
+      .some((id) => id.toLowerCase() === targetId));
   }
 
   if (paidOnly) {
@@ -723,7 +743,9 @@ function mapRealBill(b, userId) {
   const billingPeriod = normalizeBillingPeriod(b.billingMonth ?? b.description, '');
 
   return {
-    billing_id: b._id?.toString(),
+    billing_id: b.billing_id || b.legacyBillingId || b._id?.toString(),
+    bill_id: b._id?.toString(),
+    legacy_billing_id: b.legacyBillingId || b.billing_id || '',
     user_id: userId,
     description: billingPeriod ? `${billingPeriod} Billing Statement` : 'Billing Statement',
     billing_period: billingPeriod,
@@ -888,6 +910,16 @@ async function createBilling(req, res) {
       + (Number(water) || 0) + (Number(penalties) || 0)
       + (Array.isArray(items) ? items.reduce((s, i) => s + (Number(i.amount) || 0), 0) : 0);
     const total = Number(amount) || computedTotal || 0;
+
+    if (total <= 0) {
+      return res.status(400).json({ detail: 'Bill total must be greater than zero.' });
+    }
+    if (total > 500000) {
+      return res.status(400).json({ detail: 'Bill total exceeds the maximum allowed amount (₱500,000).' });
+    }
+    if (!due_date || isNaN(new Date(due_date).getTime())) {
+      return res.status(400).json({ detail: 'A valid due_date is required.' });
+    }
 
     const newBill = {
       billing_id: `bill_${uuidv4().replace(/-/g, '').substring(0, 12)}`,

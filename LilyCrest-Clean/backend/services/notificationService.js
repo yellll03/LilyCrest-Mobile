@@ -33,6 +33,7 @@ function buildNotificationDocument(userId, payload = {}) {
   const body = normalizeString(payload.body || payload.content || payload.message);
   const sourceLabel = normalizeString(payload.source_label || payload.author_name || payload.authorName || 'LilyCrest System');
   const data = sanitizePayload(payload.data);
+  const eventKey = normalizeString(payload.eventKey || payload.event_key || '');
 
   return {
     notification_id: `notif_${uuidv4().replace(/-/g, '').substring(0, 12)}`,
@@ -49,7 +50,7 @@ function buildNotificationDocument(userId, payload = {}) {
     author_name: sourceLabel,
     data,
     url: normalizeString(payload.url || data.url || ''),
-    event_key: normalizeString(payload.eventKey || payload.event_key || ''),
+    ...(eventKey ? { event_key: eventKey } : {}),
     announcement_id: normalizeString(payload.announcement_id || data.announcement_id || ''),
     billing_id: normalizeString(payload.billing_id || data.billing_id || data.bill_id || ''),
     request_id: normalizeString(payload.request_id || data.request_id || ''),

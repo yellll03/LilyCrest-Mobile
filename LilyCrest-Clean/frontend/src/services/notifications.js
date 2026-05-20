@@ -1,4 +1,4 @@
-﻿import AsyncStorage from '@react-native-async-storage/async-storage';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { api } from './api';
@@ -218,7 +218,7 @@ export async function savePushTokenToServer(token, options = {}) {
 }
 
 export function setupNotificationListeners(onNotificationReceived, onNotificationTapped) {
-  if (!Notifications) return () => {};
+  if (!Notifications || Platform.OS === 'web') return () => {};
   initializeNotificationHandler();
 
   try {
@@ -244,7 +244,7 @@ export function setupNotificationListeners(onNotificationReceived, onNotificatio
 }
 
 export function subscribeToPushTokenChanges(onTokenChanged) {
-  if (!Notifications?.addPushTokenListener) return () => {};
+  if (!Notifications?.addPushTokenListener || Platform.OS === 'web') return () => {};
   initializeNotificationHandler();
 
   try {
@@ -272,7 +272,7 @@ export async function getStoredPushToken() {
 }
 
 export async function getLastNotificationResponseData() {
-  if (!Notifications?.getLastNotificationResponseAsync) return null;
+  if (!Notifications?.getLastNotificationResponseAsync || Platform.OS === 'web') return null;
 
   try {
     const response = await Notifications.getLastNotificationResponseAsync();
@@ -284,7 +284,7 @@ export async function getLastNotificationResponseData() {
 }
 
 export async function clearLastNotificationResponse() {
-  if (!Notifications?.clearLastNotificationResponseAsync) return;
+  if (!Notifications?.clearLastNotificationResponseAsync || Platform.OS === 'web') return;
 
   try {
     await Notifications.clearLastNotificationResponseAsync();
@@ -339,7 +339,7 @@ export function resolveNotificationRoute(data = {}) {
 }
 
 export async function sendLocalNotification(title, body, data = {}) {
-  if (!Notifications) return;
+  if (!Notifications || Platform.OS === 'web') return;
 
   try {
     await ensureAndroidNotificationChannel();
@@ -358,7 +358,7 @@ export async function sendLocalNotification(title, body, data = {}) {
 }
 
 export async function getBadgeCount() {
-  if (!Notifications) return 0;
+  if (!Notifications || Platform.OS === 'web') return 0;
   try {
     return await Notifications.getBadgeCountAsync();
   } catch (_error) {
@@ -367,7 +367,7 @@ export async function getBadgeCount() {
 }
 
 export async function setBadgeCount(count) {
-  if (!Notifications) return;
+  if (!Notifications || Platform.OS === 'web') return;
   try {
     await Notifications.setBadgeCountAsync(count);
   } catch (_error) {

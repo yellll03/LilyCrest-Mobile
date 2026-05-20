@@ -25,6 +25,8 @@ const ENV = {
   GOOGLE_ANDROID_CLIENT_ID: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID || '',
 };
 
+const FIREBASE_STORAGE_BUCKET_FALLBACK = 'dormitorymanagement-caps-572cf.firebasestorage.app';
+
 function requiredEnv(label, value, fallback = '') {
   const resolved = value || fallback;
   if (!resolved) {
@@ -47,7 +49,11 @@ const firebaseAndroidApiKey = requiredEnv(
 
 const firebaseAuthDomain = requiredEnv('EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN', ENV.FIREBASE_AUTH_DOMAIN);
 const firebaseProjectId = requiredEnv('EXPO_PUBLIC_FIREBASE_PROJECT_ID', ENV.FIREBASE_PROJECT_ID);
-const firebaseStorageBucket = requiredEnv('EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET', ENV.FIREBASE_STORAGE_BUCKET);
+const firebaseStorageBucket = requiredEnv(
+  'EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET',
+  ENV.FIREBASE_STORAGE_BUCKET,
+  FIREBASE_STORAGE_BUCKET_FALLBACK,
+);
 const firebaseMessagingSenderId = requiredEnv('EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID', ENV.FIREBASE_MESSAGING_SENDER_ID);
 const firebaseWebAppId = requiredEnv('EXPO_PUBLIC_FIREBASE_WEB_APP_ID', ENV.FIREBASE_WEB_APP_ID);
 const firebaseAndroidAppId = requiredEnv('EXPO_PUBLIC_FIREBASE_ANDROID_APP_ID', ENV.FIREBASE_ANDROID_APP_ID);

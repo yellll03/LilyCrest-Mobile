@@ -1,4 +1,4 @@
-﻿import { Image, Platform, StyleSheet, Text, View } from 'react-native';
+import { Image, Platform, StyleSheet, Text, View } from 'react-native';
 
 const ACCENT = '#ff9000';
 const PRIMARY_TEXT = '#204b7e';

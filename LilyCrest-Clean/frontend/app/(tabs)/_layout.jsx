@@ -66,7 +66,7 @@ function AnimatedTabIcon({ focused, iconName, focusedIconName, label, colors, st
         useNativeDriver: false,
       }),
     ]).start();
-  }, [focused]);
+  }, [bgAnim, focused, scaleAnim]);
 
   const bgColor = bgAnim.interpolate({
     inputRange: [0, 1],
@@ -114,7 +114,7 @@ function HomeTabIcon({ focused, colors, styles }) {
         useNativeDriver: true,
       }),
     ]).start();
-  }, [focused]);
+  }, [elevateAnim, focused, scaleAnim]);
 
   return (
     <View style={styles.homeTabItem}>

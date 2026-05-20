@@ -33,6 +33,18 @@ const PHONE_REGEX = /^\+63\d{10}$/;
 const ADDRESS_MAX = 200;
 const PICTURE_MAX_BYTES = 2 * 1024 * 1024; // 2 MB decoded image payload
 const DOC_MAX_BYTES = 5 * 1024 * 1024; // 5 MB for document uploads
+const LOCAL_ONLY_URI_PATTERN = /^(?:file|content|ph|assets-library|blob|ms-appdata):\/\/|^\/data\/user\/|^\/storage\/|^\/private\/var\/|^\/var\/mobile\/|(?:^|[\\/])cache(?:[\\/]|$)/i;
+const ALLOWED_DOCUMENT_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'image/bmp',
+  'image/heic',
+  'image/heif',
+  'application/pdf',
+]);
 
 function sanitize(str) {
   if (typeof str !== 'string') return '';
@@ -44,6 +56,55 @@ function getDecodedBase64Bytes(value = '') {
   if (!raw) return 0;
   const padding = raw.endsWith('==') ? 2 : raw.endsWith('=') ? 1 : 0;
   return Math.floor((raw.length * 3) / 4) - padding;
+}
+
+function isLocalOnlyStoredUrl(value = '') {
+  const normalized = String(value || '').trim();
+  return Boolean(normalized) && LOCAL_ONLY_URI_PATTERN.test(normalized);
+}
+
+function normalizeUploadedDocumentMetadata(body = {}) {
+  const downloadUrl = sanitize(body.downloadUrl || body.file_url || body.url);
+  const mimeType = sanitize(body.mimeType || body.type || '').toLowerCase();
+  const originalName = sanitize(body.originalName || body.name || 'Uploaded document');
+  const storagePath = sanitize(body.storagePath || '');
+  const provider = sanitize(body.provider || 'firebase-storage') || 'firebase-storage';
+  const size = Number(body.size);
+
+  if (!downloadUrl) {
+    return { error: 'downloadUrl is required.' };
+  }
+  if (isLocalOnlyStoredUrl(downloadUrl) || !/^https:\/\//i.test(downloadUrl)) {
+    return { error: 'Document upload must use a Firebase HTTPS download URL.' };
+  }
+  if (provider !== 'firebase-storage') {
+    return { error: 'Document upload provider must be firebase-storage.' };
+  }
+  if (!/firebasestorage(?:\.googleapis\.com|\.app)/i.test(downloadUrl)) {
+    return { error: 'Document upload must use a Firebase Storage download URL.' };
+  }
+  if (!mimeType || !ALLOWED_DOCUMENT_MIME_TYPES.has(mimeType)) {
+    return { error: 'File must be an image or PDF.' };
+  }
+  if (!storagePath) {
+    return { error: 'storagePath is required.' };
+  }
+  if (Number.isFinite(size) && size > DOC_MAX_BYTES) {
+    return { error: 'File is too large (max 5 MB).' };
+  }
+
+  return {
+    value: {
+      file_url: downloadUrl,
+      downloadUrl,
+      storagePath,
+      originalName,
+      mimeType,
+      size: Number.isFinite(size) ? size : null,
+      uploadedAt: body.uploadedAt ? new Date(body.uploadedAt) : new Date(),
+      provider,
+    },
+  };
 }
 
 function validateField(field, value) {
@@ -192,28 +253,25 @@ const DOC_TYPE_LABELS = {
 // Upload a document (ID or file)
 async function uploadDocument(req, res) {
   try {
-    const { type, label, file_data } = req.body;
+    const { type, label } = req.body;
 
     if (!type || !ALLOWED_DOC_TYPES.includes(type)) {
       return res.status(400).json({ detail: `Invalid document type. Allowed: ${ALLOWED_DOC_TYPES.join(', ')}` });
     }
-    if (!file_data || typeof file_data !== 'string') {
-      return res.status(400).json({ detail: 'file_data is required (base64 encoded).' });
-    }
-    if (!file_data.startsWith('data:image/') && !file_data.startsWith('data:application/pdf')) {
-      return res.status(400).json({ detail: 'File must be an image or PDF.' });
-    }
-    if (getDecodedBase64Bytes(file_data) > DOC_MAX_BYTES) {
-      return res.status(400).json({ detail: 'File is too large (max 5 MB).' });
-    }
 
     const docId = `doc_${uuidv4().replace(/-/g, '').substring(0, 12)}`;
+    const uploadedAt = new Date();
+    const metadata = normalizeUploadedDocumentMetadata(req.body);
+    if (metadata.error) {
+      return res.status(400).json({ detail: metadata.error });
+    }
+
     const docEntry = {
       doc_id: docId,
       type,
       label: sanitize(label) || DOC_TYPE_LABELS[type] || type,
-      file_data,
-      uploaded_at: new Date(),
+      ...metadata.value,
+      uploaded_at: uploadedAt,
       status: 'pending_review',
     };
 
@@ -229,6 +287,12 @@ async function uploadDocument(req, res) {
       label: docEntry.label,
       uploaded_at: docEntry.uploaded_at,
       status: docEntry.status,
+      downloadUrl: docEntry.downloadUrl,
+      storagePath: docEntry.storagePath,
+      originalName: docEntry.originalName,
+      mimeType: docEntry.mimeType,
+      size: docEntry.size,
+      provider: docEntry.provider,
     });
   } catch (error) {
     console.error('Upload document error:', error);
@@ -420,6 +484,13 @@ async function getDocumentFile(req, res) {
     const doc = (user?.uploaded_documents || []).find(d => d.doc_id === docId);
     if (!doc) {
       return res.status(404).json({ detail: 'Document not found.' });
+    }
+
+    if (doc.file_url || doc.downloadUrl) {
+      return res.json({
+        ...doc,
+        file_data: doc.file_url || doc.downloadUrl,
+      });
     }
 
     res.json(doc);

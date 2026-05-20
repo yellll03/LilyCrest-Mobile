@@ -18,10 +18,19 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import LilyFlowerIcon from '../../src/components/assistant/LilyFlowerIcon';
+import { useAuth } from '../../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
 import { useToast } from '../../src/context/ToastContext';
 import { apiService } from '../../src/services/api';
-import { ensureCloudImageAttachments, isImageAttachmentCandidate } from '../../src/services/imageUpload';
+import {
+  ensureFirebaseStorageAttachments,
+  getAttachmentDisplayName,
+  getAttachmentDownloadUrl,
+  IMAGE_UPLOAD_MIME_TYPES,
+  isImageAttachmentCandidate,
+  MAX_IMAGE_UPLOAD_BYTES,
+  toStoredAttachmentMetadata,
+} from '../../src/services/firebaseStorageUpload';
 import { pickFromCamera, pickFromLibrary } from '../../src/utils/attachmentPicker';
 
 function safeFormat(dateStr, fmt) {
@@ -52,11 +61,10 @@ function getProgressTitle(entry = {}) {
 }
 
 function isImageAttachment(attachment = {}) {
-  const type = String(attachment?.type || '').toLowerCase();
-  const uri = String(attachment?.uri || '').toLowerCase();
-  return type.startsWith('image/')
-    || uri.startsWith('data:image/')
-    || /\.(png|jpe?g|gif|webp|bmp)$/i.test(uri);
+  const url = getAttachmentDownloadUrl(attachment).toLowerCase();
+  return isImageAttachmentCandidate(attachment)
+    || url.startsWith('data:image/')
+    || /\.(png|jpe?g|gif|webp|bmp)$/i.test(url);
 }
 
 function buildRequestProgress(request) {
@@ -136,8 +144,10 @@ const STATUS_STEPS = ['pending', 'viewed', 'in_progress', 'resolved'];
 const MIN_DESCRIPTION_LENGTH = 10;
 const ACTIVE_STATUSES = ['pending', 'viewed', 'in_progress'];
 const RESOLVED_STATUSES = ['completed', 'resolved', 'rejected'];
+const MAX_MAINTENANCE_ATTACHMENTS = 4;
 
 export default function ServicesScreen() {
+  const { user } = useAuth();
   const { colors } = useTheme();
   const { showToast } = useToast();
   const styles = useThemedStyles((c) => StyleSheet.create({
@@ -259,6 +269,7 @@ export default function ServicesScreen() {
   const [fieldTouched, setFieldTouched] = useState({ type: false, description: false });
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
+  const [attachmentUploadStatus, setAttachmentUploadStatus] = useState('');
 
   // Detail modal state
   const [detailRequest, setDetailRequest] = useState(null);
@@ -306,6 +317,24 @@ export default function ServicesScreen() {
       showToast({ type, title, message: text });
     }
   }, [showToast]);
+
+  const renderBanner = () => {
+    if (!banner) return null;
+
+    return (
+      <View style={[styles.banner, banner.type === 'success' && styles.bannerSuccess, banner.type === 'error' && styles.bannerError, banner.type === 'warning' && styles.bannerWarning]}>
+        <Ionicons
+          name={banner.type === 'success' ? 'checkmark-circle' : banner.type === 'error' ? 'alert-circle' : 'information-circle'}
+          size={18}
+          color={banner.type === 'success' ? '#15803d' : banner.type === 'error' ? '#b91c1c' : '#92400e'}
+        />
+        <Text style={styles.bannerText}>{banner.text}</Text>
+        <TouchableOpacity onPress={() => setBanner(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <Ionicons name="close" size={16} color={colors.textMuted} />
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   useEffect(() => {
     return () => {
@@ -378,14 +407,25 @@ export default function ServicesScreen() {
     }
 
     setSubmitting(true);
+    setAttachmentUploadStatus(attachments.length ? 'Uploading attachment...' : '');
     try {
-      const uploadedAttachments = await ensureCloudImageAttachments(attachments);
+      const tempRequestId = `maintenance-${Date.now()}`;
+      const uploadedAttachments = await ensureFirebaseStorageAttachments(attachments, {
+        allowedMimeTypes: IMAGE_UPLOAD_MIME_TYPES,
+        entityId: tempRequestId,
+        folder: 'maintenance-attachments',
+        maxBytes: MAX_IMAGE_UPLOAD_BYTES,
+        tenantId: user?.user_id || user?.id || 'unknown-tenant',
+      });
       setAttachments(uploadedAttachments);
+      if (uploadedAttachments.length) {
+        setAttachmentUploadStatus('Attachment uploaded');
+      }
       const payload = {
         request_type: selectedType,
         description: description.trim(),
         urgency: selectedUrgency,
-        attachments: uploadedAttachments.map(({ name, uri, type }) => ({ name, uri, type })),
+        attachments: uploadedAttachments.map(toStoredAttachmentMetadata),
       };
       await apiService.createMaintenance(payload);
       showBannerMessage('success', 'Maintenance request submitted successfully.');
@@ -393,8 +433,9 @@ export default function ServicesScreen() {
       resetForm();
       fetchRequests();
     } catch (error) {
-      const message = error?.message === 'Image upload failed. Please try again.'
-        ? 'Image upload failed. Please try again.'
+      setAttachmentUploadStatus(attachments.length ? 'Upload failed, please retry' : '');
+      const message = error?.message === 'Upload failed, please retry'
+        ? 'Upload failed, please retry'
         : error?.response?.data?.detail || 'Failed to submit request. Please try again.';
       showBannerMessage('error', message);
     } finally {
@@ -407,6 +448,7 @@ export default function ServicesScreen() {
     setSelectedUrgency('normal');
     setDescription('');
     setAttachments([]);
+    setAttachmentUploadStatus('');
     setFieldTouched({ type: false, description: false });
     setFieldErrors({ type: '', description: '' });
     setHasAttemptedSubmit(false);
@@ -426,14 +468,26 @@ export default function ServicesScreen() {
         showBannerMessage('error', 'Please select an image file.');
         return;
       }
-      setAttachments((prev) => [...prev, file]);
+      if (file.size && file.size > MAX_IMAGE_UPLOAD_BYTES) {
+        showBannerMessage('error', 'Attachment exceeds 5 MB limit.');
+        return;
+      }
+      setAttachmentUploadStatus('');
+      setAttachments((prev) => {
+        if (prev.length >= MAX_MAINTENANCE_ATTACHMENTS) {
+          showBannerMessage('error', `You can upload up to ${MAX_MAINTENANCE_ATTACHMENTS} photos only.`);
+          return prev;
+        }
+        return [...prev, file];
+      });
     } catch (err) {
       showBannerMessage('error', err?.message || 'Unable to add attachment.');
     }
   };
 
   const removeAttachment = (name) => {
-    setAttachments((prev) => prev.filter((item) => item.name !== name));
+    setAttachmentUploadStatus('');
+    setAttachments((prev) => prev.filter((item) => getAttachmentDisplayName(item) !== name));
   };
 
   const getStatusColor = (status) => {
@@ -566,19 +620,7 @@ export default function ServicesScreen() {
       </View>
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />} showsVerticalScrollIndicator={false}>
-        {banner ? (
-          <View style={[styles.banner, banner.type === 'success' && styles.bannerSuccess, banner.type === 'error' && styles.bannerError, banner.type === 'warning' && styles.bannerWarning]}>
-            <Ionicons
-              name={banner.type === 'success' ? 'checkmark-circle' : banner.type === 'error' ? 'alert-circle' : 'information-circle'}
-              size={18}
-              color={banner.type === 'success' ? '#15803d' : banner.type === 'error' ? '#b91c1c' : '#92400e'}
-            />
-            <Text style={styles.bannerText}>{banner.text}</Text>
-            <TouchableOpacity onPress={() => setBanner(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="close" size={16} color={colors.textMuted} />
-            </TouchableOpacity>
-          </View>
-        ) : null}
+        {!showModal ? renderBanner() : null}
 
         <TouchableOpacity style={styles.submitCard} onPress={() => setShowModal(true)}>
           <View style={styles.submitIcon}><Ionicons name="add-circle" size={32} color={colors.primary} /></View>
@@ -704,6 +746,7 @@ export default function ServicesScreen() {
                 <TouchableOpacity onPress={confirmCloseModal}><Ionicons name="close" size={24} color={colors.textMuted} /></TouchableOpacity>
               </View>
               <ScrollView showsVerticalScrollIndicator={false}>
+                {showModal ? renderBanner() : null}
                 <Text style={styles.modalSectionTitle}>Select Service Type</Text>
                 <View style={styles.typeGrid}>
                   {REQUEST_TYPES.map((type) => (
@@ -762,12 +805,19 @@ export default function ServicesScreen() {
                     </TouchableOpacity>
                   </View>
                   <Text style={styles.uploadNote}>Accepted: JPG, PNG • Max size: 5MB</Text>
+                  {attachmentUploadStatus ? (
+                    <Text style={styles.uploadNote}>{attachmentUploadStatus}</Text>
+                  ) : null}
                 </View>
                 {attachments.length > 0 && (
                   <View style={styles.attachmentPreview}>
                     {attachments.map((file) => (
-                      <TouchableOpacity key={file.name} style={styles.previewChip} onLongPress={() => removeAttachment(file.name)}>
-                        <Text style={styles.previewText}>{file.name}</Text>
+                      <TouchableOpacity
+                        key={getAttachmentDisplayName(file)}
+                        style={styles.previewChip}
+                        onLongPress={() => removeAttachment(getAttachmentDisplayName(file))}
+                      >
+                        <Text style={styles.previewText}>{getAttachmentDisplayName(file)}</Text>
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -937,22 +987,22 @@ export default function ServicesScreen() {
                                 <View style={{ flexDirection: 'row' }}>
                                   {entry.attachments.map((att, idx) => (
                                     <TouchableOpacity
-                                      key={`${att.uri || 'attachment'}_${idx}`}
+                                      key={`${getAttachmentDownloadUrl(att) || 'attachment'}_${idx}`}
                                       style={{ width: 96, height: 96, borderRadius: 12, backgroundColor: colors.surface, marginRight: 10, overflow: 'hidden', borderWidth: 1, borderColor: '#D1D5DB', justifyContent: 'center', alignItems: 'center' }}
                                       activeOpacity={0.85}
                                       onPress={() => {
-                                        if (att?.uri && isImageAttachment(att)) {
+                                        if (getAttachmentDownloadUrl(att) && isImageAttachment(att)) {
                                           setPreviewAttachment(att);
                                         }
                                       }}
                                     >
-                                      {att?.uri && isImageAttachment(att) ? (
-                                        <Image source={{ uri: att.uri }} style={{ width: 96, height: 96 }} resizeMode="cover" />
+                                      {getAttachmentDownloadUrl(att) && isImageAttachment(att) ? (
+                                        <Image source={{ uri: getAttachmentDownloadUrl(att) }} style={{ width: 96, height: 96 }} resizeMode="cover" />
                                       ) : (
                                         <View style={{ paddingHorizontal: 8, alignItems: 'center', gap: 6 }}>
                                           <Ionicons name="document" size={24} color={colors.textMuted} />
                                           <Text style={{ fontSize: 11, color: colors.textMuted, textAlign: 'center' }} numberOfLines={2}>
-                                            {att?.name || `Attachment ${idx + 1}`}
+                                            {getAttachmentDisplayName(att, idx)}
                                           </Text>
                                         </View>
                                       )}
@@ -974,8 +1024,8 @@ export default function ServicesScreen() {
                       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ gap: 8 }}>
                         {detailRequest.attachments.map((att, idx) => (
                           <View key={idx} style={{ width: 80, height: 80, borderRadius: 10, backgroundColor: colors.surfaceSecondary, marginRight: 8, overflow: 'hidden', justifyContent: 'center', alignItems: 'center' }}>
-                            {att.uri && isImageAttachment(att) ? (
-                              <Image source={{ uri: att.uri }} style={{ width: 80, height: 80 }} resizeMode="cover" />
+                            {getAttachmentDownloadUrl(att) && isImageAttachment(att) ? (
+                              <Image source={{ uri: getAttachmentDownloadUrl(att) }} style={{ width: 80, height: 80 }} resizeMode="cover" />
                             ) : (
                               <Ionicons name="document" size={28} color={colors.textMuted} />
                             )}
@@ -1064,15 +1114,15 @@ export default function ServicesScreen() {
                 <Ionicons name="close" size={22} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
-            {previewAttachment?.uri ? (
+            {getAttachmentDownloadUrl(previewAttachment) ? (
               <Image
-                source={{ uri: previewAttachment.uri }}
+                source={{ uri: getAttachmentDownloadUrl(previewAttachment) }}
                 style={{ width: '100%', height: 340, borderRadius: 14, backgroundColor: colors.surfaceSecondary }}
                 resizeMode="contain"
               />
             ) : null}
             <Text style={{ fontSize: 13, color: colors.textMuted }}>
-              {previewAttachment?.name || 'Attachment preview'}
+              {previewAttachment ? getAttachmentDisplayName(previewAttachment) : 'Attachment preview'}
             </Text>
           </TouchableOpacity>
         </TouchableOpacity>

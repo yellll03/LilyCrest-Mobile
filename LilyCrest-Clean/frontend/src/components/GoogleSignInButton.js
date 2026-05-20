@@ -38,6 +38,8 @@ export default function GoogleSignInButton({
     if (Platform.OS === 'web') {
       handleRedirectResult();
     }
+    // This legacy callback screen only needs the initial web redirect result.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   /**

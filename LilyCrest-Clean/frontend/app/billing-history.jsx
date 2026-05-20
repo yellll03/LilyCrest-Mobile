@@ -1,4 +1,4 @@
-﻿import { Ionicons } from '@expo/vector-icons';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { Link, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -55,7 +55,7 @@ const TYPE_ICONS = {
   other: { icon: 'receipt', color: '#6B7280' },
 };
 
-// ── Filter Definitions ──
+// Filter Definitions
 const STATUS_FILTERS = [
   { id: 'all', label: 'All', icon: 'list-outline' },
   { id: 'pending', label: 'Pending', icon: 'time-outline', dotColor: '#F59E0B' },
@@ -63,7 +63,7 @@ const STATUS_FILTERS = [
   { id: 'paid', label: 'Paid', icon: 'checkmark-circle-outline', dotColor: '#22C55E' },
 ];
 
-// Type filters removed — consolidated bills contain all charge types
+// Type filters removed - consolidated bills contain all charge types
 
 const normalizeBreakdown = (bill) => {
   const parts = [];
@@ -97,61 +97,6 @@ const getBillOwedAmount = (bill) => {
   return 0;
 };
 
-const getBillDateValue = (bill) => (
-  bill?.billing_period ||
-  bill?.due_date ||
-  bill?.dueDate ||
-  bill?.release_date ||
-  bill?.releaseDate ||
-  bill?.created_at ||
-  bill?.createdAt ||
-  null
-);
-
-const getBillTimestamp = (bill) => {
-  const value = getBillDateValue(bill);
-  if (!value) return 0;
-  const parsed = new Date(value).getTime();
-  return Number.isFinite(parsed) ? parsed : 0;
-};
-
-const sortBillsNewestFirst = (bills) => [...bills].sort((a, b) => getBillTimestamp(b) - getBillTimestamp(a));
-
-const getFiniteAmountValue = (value) => {
-  if (value === null || value === undefined || value === '') return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
-};
-
-
-
-const getPreferredInsightAmount = (bill) => {
-  // Use total/amount for trend comparison — remaining_amount reflects partial payments
-  // and would produce misleading comparisons (e.g. paid ₱0 vs new bill's full amount).
-  const candidates = [bill?.total, bill?.amount];
-  for (const value of candidates) {
-    const parsed = getFiniteAmountValue(value);
-    if (parsed !== null) return parsed;
-  }
-  return null;
-};
-
-const getUtilityAmount = (bill, utility) => {
-  const directAmount = getFiniteAmountValue(bill?.[utility]);
-  if (directAmount !== null) return directAmount;
-
-  const breakdownItem = normalizeBreakdown(bill).find((item) => item.type === utility);
-  const breakdownAmount = getFiniteAmountValue(breakdownItem?.amount);
-  if (breakdownAmount !== null) return breakdownAmount;
-
-  const billType = String(bill?.billing_type || bill?.type || '').toLowerCase();
-  if (billType === utility) {
-    return getPreferredInsightAmount(bill);
-  }
-
-  return null;
-};
-
 export default function BillingScreen() {
   const router = useRouter();
   const { isLoading: authLoading, checkAuth } = useAuth();
@@ -163,7 +108,7 @@ export default function BillingScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState(null);
   const [activeStatus, setActiveStatus] = useState('all');
-  // Type filter removed — consolidated bills contain all charge types
+  // Type filter removed - consolidated bills contain all charge types
   const [downloadingId, setDownloadingId] = useState(null);
   const latestBillingRequestRef = useRef(0);
   const [latestBillingDegraded, setLatestBillingDegraded] = useState(false);
@@ -218,7 +163,7 @@ export default function BillingScreen() {
 
 
 
-  // ── Computed values ──
+  // Computed values
   const totalOutstanding = useMemo(() => {
     return history
       .filter(isBillOutstanding)
@@ -251,7 +196,7 @@ export default function BillingScreen() {
   const isPaid = (bill) => (bill?.status || '').toLowerCase() === 'paid';
   const getStatusConfig = (status) => STATUS_CONFIG[(status || 'pending').toLowerCase()] || STATUS_CONFIG.pending;
 
-  // ── Outstanding Hero Card ──
+  // Outstanding Hero Card
   const renderHero = () => {
     const hasOverdue = history.some(b => (b.status || '').toLowerCase() === 'overdue');
     const accountStatus = hasOverdue
@@ -303,7 +248,7 @@ export default function BillingScreen() {
     );
   };
 
-  // ── Clean Filter Pills ──
+  // Clean Filter Pills
   const renderFilters = () => (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.filterRow} contentContainerStyle={styles.filterRowContent}>
       {STATUS_FILTERS.map(f => {
@@ -331,7 +276,7 @@ export default function BillingScreen() {
   );
 
 
-  // ── Bill Card ──
+  // Bill Card
   const renderBillCard = ({ item: bill }) => {
     const billId = getBillId(bill);
     const paid = isPaid(bill);
@@ -351,7 +296,7 @@ export default function BillingScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.billTitle} numberOfLines={1}>{bill.billing_period || bill.description || 'Billing Statement'}</Text>
             <Text style={styles.billDue}>
-              {bill.release_date ? `Released ${safeDate(bill.release_date)} • ` : ''}Due {safeDate(bill.due_date)}
+              {bill.release_date ? `Released ${safeDate(bill.release_date)} - ` : ''}Due {safeDate(bill.due_date)}
             </Text>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: statusCfg.bg }]}>
@@ -399,7 +344,7 @@ export default function BillingScreen() {
             }}
           >
             <Ionicons name="download-outline" size={14} color={colors.text} />
-            <Text style={styles.outlineBtnText}>{downloadingId === billId ? 'Preparing…' : 'PDF'}</Text>
+            <Text style={styles.outlineBtnText}>{downloadingId === billId ? 'Preparing...' : 'PDF'}</Text>
           </Pressable>
           {paid && bill.payment_date && (
             <View style={styles.paidMeta}>
@@ -412,7 +357,7 @@ export default function BillingScreen() {
     );
   };
 
-  // ── List Header ──
+  // List Header
   const renderListHeader = () => (
     <View style={styles.listHeader}>
       {renderHero()}
@@ -506,7 +451,7 @@ export default function BillingScreen() {
   );
 }
 
-// ── Styles ──
+// Styles
 function createStyles(c, isDarkMode) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: c.background },
@@ -601,7 +546,7 @@ function createStyles(c, isDarkMode) {
       fontWeight: '600',
     },
 
-    // ── Clean Filter Pills ──
+    // Clean Filter Pills
     filterRow: {
       flexGrow: 0,
     },

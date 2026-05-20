@@ -44,10 +44,9 @@ function maskEmail(email = '') {
   return user.length <= 2 ? `${user[0]}***@${domain}` : `${user.slice(0, 2)}***@${domain}`;
 }
 
-/** Case-insensitive exact email match using native MongoDB regex syntax */
+/** Exact email match — callers must pre-normalize to lowercase via normalizeEmailInput */
 function emailRegex(email) {
-  const escaped = email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-  return { $regex: `^${escaped}$`, $options: 'i' };
+  return { $eq: email };
 }
 
 function normalizeEmailInput(value) {

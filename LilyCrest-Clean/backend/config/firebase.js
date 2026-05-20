@@ -2,6 +2,14 @@ const admin = require('firebase-admin');
 
 let firebaseApp;
 
+function resolveStorageBucket() {
+  const explicitBucket = String(process.env.FIREBASE_STORAGE_BUCKET || '').trim();
+  if (explicitBucket) return explicitBucket.replace(/^gs:\/\//i, '');
+
+  const projectId = String(process.env.FIREBASE_PROJECT_ID || '').trim();
+  return projectId ? `${projectId}.firebasestorage.app` : '';
+}
+
 function buildServiceAccountFromEnv() {
   const {
     FIREBASE_TYPE,
@@ -61,8 +69,10 @@ function initializeFirebase() {
   }
 
   try {
+    const storageBucket = resolveStorageBucket();
     firebaseApp = admin.initializeApp({
-      credential: admin.credential.cert(serviceAccount)
+      credential: admin.credential.cert(serviceAccount),
+      ...(storageBucket ? { storageBucket } : {}),
     });
     console.log('Firebase Admin SDK initialized successfully');
     return firebaseApp;
@@ -117,5 +127,6 @@ module.exports = {
   verifyFirebaseIdToken,
   verifyTenantInFirebase,
   getFirebaseApp,
+  resolveStorageBucket,
   admin
 };

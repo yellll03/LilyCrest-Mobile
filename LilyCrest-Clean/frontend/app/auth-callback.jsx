@@ -11,7 +11,7 @@ export default function AuthCallbackScreen() {
 
   useEffect(() => {
     router.replace('/login');
-  }, []);
+  }, [router]);
 
   return (
     <View style={styles.container}>

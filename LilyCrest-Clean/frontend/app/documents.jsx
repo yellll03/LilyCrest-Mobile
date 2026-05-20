@@ -1,4 +1,7 @@
-﻿import React from 'react';
+import React from 'react';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -24,15 +27,61 @@ export default function DocumentsScreen() {
   const handlePress = async (doc) => {
     if (doc.download) {
       const url = apiService.downloadDocumentUrl('contract');
+      const fileName = 'LilyCrest_Contract_Agreement.pdf';
+      const token = await AsyncStorage.getItem('session_token');
+
+      if (!token) {
+        showAlert({ title: 'Login Required', message: 'Please log in to download this document.', type: 'warning' });
+        return;
+      }
+
       try {
-        const supported = await Linking.canOpenURL(url);
-        if (supported) {
-          await Linking.openURL(url);
+        if (Platform.OS === 'web') {
+          const response = await fetch(url, {
+            headers: { Authorization: `Bearer ${token}` },
+          });
+          if (!response.ok) throw new Error(`Download failed (${response.status})`);
+
+          const blob = await response.blob();
+          const objectUrl = window.URL.createObjectURL(blob);
+          const anchor = document.createElement('a');
+          anchor.href = objectUrl;
+          anchor.download = fileName;
+          document.body.appendChild(anchor);
+          anchor.click();
+          anchor.remove();
+          window.URL.revokeObjectURL(objectUrl);
+          return;
+        }
+
+        const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
+        const result = await FileSystem.downloadAsync(url, fileUri, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+
+        if (!result?.uri || result.status < 200 || result.status >= 300) {
+          throw new Error(`Download failed (${result?.status || 'unknown status'})`);
+        }
+
+        if (await Sharing.isAvailableAsync()) {
+          await Sharing.shareAsync(result.uri, {
+            mimeType: 'application/pdf',
+            dialogTitle: 'Contract Agreement PDF',
+            UTI: 'com.adobe.pdf',
+          });
         } else {
-          showAlert({ title: 'Unable to Open', message: 'Could not open the download link. Please try again later.', type: 'error' });
+          showAlert({ title: 'Saved', message: `Document saved to ${result.uri}`, type: 'success' });
         }
       } catch (error) {
         console.error('Contract download error:', error);
+
+        if (Platform.OS === 'android') {
+          try {
+            await Linking.openURL(`${url}?token=${encodeURIComponent(token)}`);
+            return;
+          } catch (_) {}
+        }
+
         showAlert({ title: 'Download Failed', message: 'There was a problem downloading the document. Please try again.', type: 'error' });
       }
     }
