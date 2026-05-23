@@ -168,8 +168,21 @@
   /* ── Modal ── */
   .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 300; display: flex; align-items: center; justify-content: center; }
   .modal { background: var(--surface); border-radius: 16px; padding: 28px; width: 100%; max-width: 460px; border: 1px solid var(--border); }
+  .modal.modal-wide { max-width: 640px; max-height: 90vh; overflow-y: auto; }
   .modal h3 { font-size: 16px; font-weight: 800; margin-bottom: 20px; }
   .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 20px; }
+  .form-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .checkbox-row { display: flex; align-items: center; gap: 10px; color: var(--text); font-size: 13px; font-weight: 700; }
+  .checkbox-row input { width: auto; }
+  .maint-thread-box { background: #0d1929; border: 1px solid var(--border); border-radius: 12px; padding: 12px; max-height: 220px; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
+  .maint-update-card { background: var(--surface2); border: 1px solid var(--border); border-radius: 10px; padding: 10px 12px; }
+  .maint-update-head { display: flex; justify-content: space-between; gap: 10px; font-size: 11px; color: var(--muted); margin-bottom: 6px; }
+  .maint-update-head strong { color: var(--text); }
+  .maint-update-body { font-size: 13px; line-height: 1.45; white-space: pre-wrap; }
+  .maint-update-tags { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+  .mini-tag { border-radius: 999px; padding: 2px 8px; background: rgba(255,255,255,0.08); color: var(--muted); font-size: 10px; font-weight: 800; }
+  .mini-tag.tenant-visible { color: var(--success); background: rgba(34,197,94,0.12); }
+  .mini-tag.internal { color: var(--warning); background: rgba(245,158,11,0.12); }
 
   /* ── Utility ── */
   .hidden { display: none !important; }
@@ -524,23 +537,58 @@
 
 <!-- ── Maintenance Status Modal ── -->
 <div class="modal-overlay hidden" id="maint-modal">
-  <div class="modal">
+  <div class="modal modal-wide">
     <h3>Update Maintenance Status</h3>
     <div class="form-group"><label>Status</label>
       <select id="maint-new-status">
         <option value="pending">Pending</option>
+        <option value="viewed">Viewed</option>
         <option value="in_progress">In Progress</option>
+        <option value="assigned">Assigned</option>
+        <option value="scheduled">Scheduled</option>
         <option value="resolved">Resolved</option>
         <option value="completed">Completed</option>
         <option value="rejected">Rejected</option>
+        <option value="cancelled">Cancelled</option>
       </select>
+    </div>
+    <div class="form-grid-2">
+      <div class="form-group"><label>Visibility</label>
+        <select id="maint-visibility">
+          <option value="tenant">Tenant-visible reply</option>
+          <option value="internal">Internal admin-only note</option>
+        </select>
+      </div>
+      <div class="form-group"><label>Shown As</label>
+        <select id="maint-sender-role">
+          <option value="admin">Dormitory Admin</option>
+          <option value="branch_admin">Branch Admin</option>
+          <option value="owner">Owner</option>
+          <option value="service_provider">Service Provider</option>
+        </select>
+      </div>
+    </div>
+    <div class="form-grid-2">
+      <div class="form-group"><label>Assigned Provider</label><input id="maint-assigned-to" placeholder="Name or company" /></div>
+      <div class="form-group"><label>Schedule</label><input id="maint-scheduled-for" placeholder="Date/time or visit window" /></div>
+    </div>
+    <div class="form-grid-2">
+      <div class="form-group"><label>Next Step</label><input id="maint-next-step" placeholder="What the tenant should expect" /></div>
+      <div class="form-group"><label>Completion Note</label><input id="maint-completion-note" placeholder="Used when resolved/completed" /></div>
     </div>
     <div class="form-group"><label>Admin Note (optional)</label><textarea id="maint-note" placeholder="Leave a note for the tenant…"></textarea></div>
     <div class="form-group">
-      <label>Progress Photos (optional)</label>
-      <input type="file" id="maint-attachments" accept="image/*" multiple onchange="handleMaintAttachmentChange(event)" />
-      <p class="helper-text mt-2">Upload up to 4 photos. These will appear in the tenant's maintenance progress view.</p>
+      <label>Attachments</label>
+      <input type="file" id="maint-attachments" accept="image/*,.pdf,.doc,.docx,.txt,.csv" multiple onchange="handleMaintAttachmentChange(event)" />
+      <p class="helper-text mt-2">Tenant-visible attachments appear in the mobile thread. Internal-note attachments stay hidden.</p>
       <div id="maint-attachments-preview" class="attachment-chip-list"></div>
+    </div>
+    <div class="form-group">
+      <label class="checkbox-row"><input type="checkbox" id="maint-send-summary" /> Send tenant maintenance summary</label>
+    </div>
+    <div class="form-group">
+      <label>Thread</label>
+      <div id="maint-thread-preview" class="maint-thread-box"></div>
     </div>
     <div class="modal-actions">
       <button class="btn btn-ghost" onclick="closeMaintModal()">Cancel</button>
@@ -560,6 +608,7 @@ let allUsers = [];
 let allMaintenance = [];
 let currentTicket = null;
 let currentMaintRequestId = null;
+let currentMaintRequest = null;
 let currentMaintAttachments = [];
 let userMap = {}; // user_id → display name
 let liveChats = [];
@@ -569,6 +618,21 @@ let liveChatMessages = [];
 let liveChatPoller = null;
 let liveChatListPoller = null;
 let ticketPoller = null;
+const MAINT_ALLOWED_ATTACHMENT_TYPES = [
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'image/bmp',
+  'image/heic',
+  'image/heif',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
+  'text/csv',
+];
 
 // ── API helpers ──
 async function apiFetch(path, options = {}) {
@@ -1358,6 +1422,8 @@ function renderMaintenance(data) {
   document.getElementById('maint-table').classList.remove('hidden');
   tbody.innerHTML = data.map(m => {
     const rid = m.request_id || m._id || '';
+    m.type = m.request_type || m.type;
+    m.created_at = m.lastActivityAt || m.updated_at || m.updatedAt || m.created_at || m.createdAt;
     return `<tr>
       <td class="text-sm">${escHtml(tenantName(m.user_id || m.userId))}</td>
       <td class="text-sm">${escHtml(m.type || m.category || '—')}</td>
@@ -1374,7 +1440,7 @@ function filterMaintenanceTable() {
   const q = document.getElementById('maint-search').value.toLowerCase();
   const filtered = allMaintenance.filter(m =>
     (m.description || m.issue || '').toLowerCase().includes(q) ||
-    (m.type || m.category || '').toLowerCase().includes(q) ||
+    (m.request_type || m.type || m.category || '').toLowerCase().includes(q) ||
     (m.user_id || m.userId || '').toLowerCase().includes(q)
   );
   renderMaintenance(filtered);
@@ -1382,16 +1448,94 @@ function filterMaintenanceTable() {
 
 function openMaintModal(rid, currentStatus) {
   currentMaintRequestId = rid;
+  currentMaintRequest = allMaintenance.find(m => (m.request_id || m._id || '') === rid) || null;
   document.getElementById('maint-new-status').value = currentStatus || 'pending';
   document.getElementById('maint-note').value = '';
+  document.getElementById('maint-visibility').value = 'tenant';
+  document.getElementById('maint-sender-role').value = 'admin';
+  document.getElementById('maint-assigned-to').value = currentMaintRequest?.assigned_to || '';
+  document.getElementById('maint-scheduled-for').value = currentMaintRequest?.scheduled_for || '';
+  document.getElementById('maint-next-step').value = '';
+  document.getElementById('maint-completion-note').value = '';
+  document.getElementById('maint-send-summary').checked = false;
   clearMaintAttachments();
+  renderMaintThreadPreview(currentMaintRequest);
   document.getElementById('maint-modal').classList.remove('hidden');
 }
 
 function closeMaintModal() {
   document.getElementById('maint-modal').classList.add('hidden');
   currentMaintRequestId = null;
+  currentMaintRequest = null;
   clearMaintAttachments();
+}
+
+function maintSenderLabel(entry = {}) {
+  const role = String(entry.sender_role || entry.actor_role || '').toLowerCase();
+  if (role === 'tenant') return 'Tenant';
+  if (role === 'service_provider') return 'Service Provider';
+  if (role === 'branch_admin') return 'Branch Admin';
+  if (role === 'owner') return 'Owner';
+  if (role === 'system') return 'Maintenance Team';
+  return entry.sender_name || entry.actor_name || 'Admin';
+}
+
+function maintUpdateMessage(entry = {}) {
+  if (entry.message || entry.note) return entry.message || entry.note;
+  if (entry.summary || entry.tenantSummary) return 'Maintenance summary sent.';
+  if (entry.status_to || entry.status) return `Status: ${entry.status_to || entry.status}`;
+  return 'Maintenance update';
+}
+
+function maintThreadEntries(request = {}) {
+  const updates = Array.isArray(request.updates) ? request.updates : [];
+  const history = Array.isArray(request.statusHistory) ? request.statusHistory : [];
+  const mappedHistory = history
+    .filter(item => !updates.some(update => update.update_id && update.update_id === item.update_id))
+    .map(item => ({
+      update_id: item.update_id || `${item.event || 'history'}-${item.timestamp || ''}`,
+      type: item.event || 'status_change',
+      visibility: item.visibility || (item.visibleToTenant === false ? 'internal' : 'tenant'),
+      visibleToTenant: item.visibleToTenant !== false,
+      actor_name: item.actor_name,
+      actor_role: item.actor_role,
+      note: item.note,
+      status: item.status,
+      attachments: item.attachments || [],
+      created_at: item.timestamp || item.created_at || item.createdAt,
+    }));
+  return [...updates, ...mappedHistory]
+    .sort((a, b) => new Date(a.created_at || a.createdAt || 0) - new Date(b.created_at || b.createdAt || 0));
+}
+
+function renderMaintThreadPreview(request) {
+  const container = document.getElementById('maint-thread-preview');
+  if (!container) return;
+
+  const entries = maintThreadEntries(request || {});
+  if (!entries.length) {
+    container.innerHTML = '<div class="text-sm text-muted">No updates yet.</div>';
+    return;
+  }
+
+  container.innerHTML = entries.map(entry => {
+    const visibility = String(entry.visibility || (entry.visibleToTenant === false ? 'internal' : 'tenant')).toLowerCase();
+    const attachments = Array.isArray(entry.attachments) ? entry.attachments : [];
+    return `
+      <div class="maint-update-card">
+        <div class="maint-update-head">
+          <strong>${escHtml(maintSenderLabel(entry))}</strong>
+          <span>${formatDate(entry.created_at || entry.createdAt)}</span>
+        </div>
+        <div class="maint-update-body">${escHtml(maintUpdateMessage(entry))}</div>
+        <div class="maint-update-tags">
+          <span class="mini-tag ${visibility === 'tenant' ? 'tenant-visible' : 'internal'}">${visibility === 'tenant' ? 'Tenant-visible' : 'Internal'}</span>
+          ${entry.status || entry.status_to ? `<span class="mini-tag">${escHtml(entry.status_to || entry.status)}</span>` : ''}
+          ${attachments.length ? `<span class="mini-tag">${attachments.length} attachment${attachments.length > 1 ? 's' : ''}</span>` : ''}
+        </div>
+      </div>
+    `;
+  }).join('');
 }
 
 function clearMaintAttachments() {
@@ -1427,13 +1571,38 @@ function readFileAsDataUrl(file) {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve({
-      name: file.name || 'progress-photo.jpg',
+      name: file.name || 'maintenance-attachment',
       uri: String(reader.result || ''),
-      type: file.type || 'image/jpeg',
+      type: file.type || 'application/octet-stream',
+      size: file.size || null,
     });
     reader.onerror = () => reject(new Error(`Failed to read ${file.name || 'attachment'}.`));
     reader.readAsDataURL(file);
   });
+}
+
+async function uploadMaintAttachment(file) {
+  const data = await readFileAsDataUrl(file);
+  try {
+    return await apiFetch('/upload/firebase-storage', {
+      method: 'POST',
+      body: JSON.stringify({
+        allowedMimeTypes: MAINT_ALLOWED_ATTACHMENT_TYPES,
+        dataBase64: data.uri,
+        entityId: currentMaintRequestId || 'maintenance-update',
+        fileName: data.name,
+        folder: 'maintenance-admin-updates',
+        maxBytes: 10 * 1024 * 1024,
+        mimeType: data.type,
+        size: data.size,
+      }),
+    });
+  } catch (error) {
+    if (String(data.type || '').startsWith('image/')) {
+      return data;
+    }
+    throw error;
+  }
 }
 
 async function handleMaintAttachmentChange(event) {
@@ -1450,13 +1619,16 @@ async function handleMaintAttachmentChange(event) {
     const nextAttachments = [];
 
     for (const file of files) {
-      if (!String(file.type || '').startsWith('image/')) {
-        throw new Error(`${file.name || 'Attachment'} must be an image file.`);
+      const allowed = String(file.type || '').startsWith('image/')
+        || ['application/pdf', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'text/plain', 'text/csv'].includes(String(file.type || '').toLowerCase())
+        || /\.(pdf|docx?|txt|csv)$/i.test(file.name || '');
+      if (!allowed) {
+        throw new Error(`${file.name || 'Attachment'} is not a supported file type.`);
       }
-      if (typeof file.size === 'number' && file.size > 5 * 1024 * 1024) {
-        throw new Error(`${file.name || 'Attachment'} exceeds the 5 MB limit.`);
+      if (typeof file.size === 'number' && file.size > 10 * 1024 * 1024) {
+        throw new Error(`${file.name || 'Attachment'} exceeds the 10 MB limit.`);
       }
-      nextAttachments.push(await readFileAsDataUrl(file));
+      nextAttachments.push(await uploadMaintAttachment(file));
     }
 
     currentMaintAttachments = currentMaintAttachments.concat(nextAttachments);
@@ -1480,6 +1652,13 @@ async function submitMaintStatus() {
       body: JSON.stringify({
         status,
         notes: document.getElementById('maint-note').value.trim(),
+        visibility: document.getElementById('maint-visibility').value,
+        sender_role: document.getElementById('maint-sender-role').value,
+        assigned_to: document.getElementById('maint-assigned-to').value.trim(),
+        scheduled_for: document.getElementById('maint-scheduled-for').value.trim(),
+        next_step: document.getElementById('maint-next-step').value.trim(),
+        completion_note: document.getElementById('maint-completion-note').value.trim(),
+        send_tenant_summary: document.getElementById('maint-send-summary').checked,
         progress_attachments: currentMaintAttachments,
       })
     });

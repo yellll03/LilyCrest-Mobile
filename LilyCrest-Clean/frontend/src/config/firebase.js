@@ -144,7 +144,7 @@ export async function getFreshIdToken(forceRefresh = false) {
     const idToken = await currentUser.getIdToken(forceRefresh);
     return idToken;
   } catch (error) {
-    console.error('Error getting fresh ID token:', error);
+    console.error('Error getting fresh ID token:', error?.message || 'Unexpected error');
     throw error;
   }
 }

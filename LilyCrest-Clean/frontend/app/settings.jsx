@@ -12,7 +12,7 @@ import {
   savePushTokenToServer,
   setPushNotificationsEnabled,
 } from '../src/services/notifications';
-import { clearCredentials } from '../src/services/secureCredentials';
+import { clearCredentials, enableBiometricSession } from '../src/services/secureCredentials';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
 
@@ -120,9 +120,10 @@ export default function SettingsScreen() {
       if (result.success) {
         setBiometrics(true);
         await AsyncStorage.setItem('biometricLogin', 'true');
+        await enableBiometricSession();
         showAlert({
           title: `${biometricType} Login Enabled`,
-          message: `${biometricType} login is now activated. Sign in with your email and password once more — after that, you can use ${biometricType} to log in instantly.`,
+          message: `${biometricType} login is enabled for your current session. For your security, please log in again when this session expires.`,
           type: 'success',
         });
       } else {

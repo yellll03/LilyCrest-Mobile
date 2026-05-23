@@ -19,6 +19,13 @@ import {
 import { useGoogleSignIn } from '../config/googleSignIn';
 import { useAuth } from '../context/AuthContext';
 
+function safeErrorLog(error) {
+  return {
+    code: error?.code,
+    message: error?.message || 'Unexpected error',
+  };
+}
+
 export default function GoogleSignInButton({ 
   onSuccess, 
   onError,
@@ -53,7 +60,7 @@ export default function GoogleSignInButton({
         await handleSuccessfulGoogleSignIn(result);
       }
     } catch (error) {
-      console.error('Redirect result error:', error);
+      console.error('Redirect result error:', safeErrorLog(error));
     }
   };
 
@@ -94,7 +101,7 @@ export default function GoogleSignInButton({
       await handleSuccessfulGoogleSignIn(googleResult);
 
     } catch (error) {
-      console.error('Google Sign-In Error:', error);
+      console.error('Google Sign-In Error:', safeErrorLog(error));
       
       const errorMessage = error.message || 'Failed to sign in with Google. Please try again.';
       
@@ -163,7 +170,7 @@ export default function GoogleSignInButton({
       );
 
     } catch (error) {
-      console.error('Backend authentication error:', error);
+      console.error('Backend authentication error:', safeErrorLog(error));
       throw error; // Re-throw to be caught by outer try-catch
     }
   };

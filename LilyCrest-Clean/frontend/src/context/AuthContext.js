@@ -18,7 +18,10 @@ import {
   setupNotificationListeners,
   subscribeToPushTokenChanges,
 } from '../services/notifications';
-import { clearCredentials } from '../services/secureCredentials';
+import {
+  clearCredentials,
+  migrateLegacyCredentials,
+} from '../services/secureCredentials';
 
 const AuthContext = createContext(undefined);
 const SESSION_TOKEN_KEY = 'session_token';
@@ -295,6 +298,7 @@ export function AuthProvider({ children }) {
 
     (async () => {
       try {
+        await migrateLegacyCredentials();
         const token = await AsyncStorage.getItem(SESSION_TOKEN_KEY);
         if (!token) {
           await AsyncStorage.removeItem(SESSION_USER_KEY).catch(() => {});
@@ -324,6 +328,7 @@ export function AuthProvider({ children }) {
 
         if (status === 401) {
           await clearPersistedSession();
+          await clearCredentials({ disableBiometric: false });
           if (!cancelled) {
             setUser(null);
             setAuthStatus('unauthenticated');
@@ -392,12 +397,11 @@ export function AuthProvider({ children }) {
     });
   }, [authStatus, user?.user_id]);
 
-  const loginWithEmail = async (email, password, { biometricLogin = false } = {}) => {
+  const loginWithEmail = async (email, password) => {
     try {
       const { data } = await api.post('/auth/login', {
         email,
         password,
-        biometric_login: biometricLogin,
       });
 
       if (data.otp_required) {
@@ -609,6 +613,7 @@ export function AuthProvider({ children }) {
     } catch (error) {
       if (error?.response?.status === 401) {
         await clearPersistedSession();
+        await clearCredentials({ disableBiometric: false });
         setUser(null);
         setAuthStatus('unauthenticated');
         return { authenticated: false };

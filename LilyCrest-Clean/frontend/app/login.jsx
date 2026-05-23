@@ -22,7 +22,12 @@ import { useGoogleSignIn } from '../src/config/googleSignIn';
 import { useAlert } from '../src/context/AlertContext';
 import { useAuth } from '../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
-import { clearCredentials, getCredentials, hasStoredCredentials, saveCredentials } from '../src/services/secureCredentials';
+import {
+  clearCredentials,
+  enableBiometricSession,
+  hasStoredCredentials,
+  savePendingLogin,
+} from '../src/services/secureCredentials';
 import { blockPasswordWhitespaceInput, validateLoginPassword } from '../src/utils/passwordValidation';
 
 /* cspell:words creds prefs lilycrest wordmark */
@@ -39,7 +44,7 @@ const validateEmail = (email) => {
 
 export default function LoginScreen() {
   const router = useRouter();
-  const { loginWithEmail, signInWithGoogle, isLoading } = useAuth();
+  const { loginWithEmail, signInWithGoogle, isLoading, checkAuth } = useAuth();
   const { signInWithGoogle: googleSignIn } = useGoogleSignIn();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -144,14 +149,16 @@ export default function LoginScreen() {
 
       // OTP required — credentials were valid, navigate to verification screen
       if (result.otpRequired) {
+        await savePendingLogin({
+          otpToken: result.otpToken,
+          maskedEmail: result.maskedEmail,
+          rememberMe,
+          email: normalizedEmail,
+        });
         router.push({
           pathname: '/otp-verify',
           params: {
-            otp_token: result.otpToken,
             masked_email: result.maskedEmail,
-            remember_me: rememberMe ? 'true' : 'false',
-            email: normalizedEmail,
-            password: normalizedPassword,
           },
         });
         return;
@@ -193,14 +200,14 @@ export default function LoginScreen() {
         if (bioSetting === 'true') {
           // Biometric was previously enabled — refresh stored credentials silently
           // (covers password-change scenario where old credentials were cleared)
-          await saveCredentials(normalizedEmail, normalizedPassword);
+          await enableBiometricSession(normalizedEmail);
           setCanUseBiometric(true);
           router.replace('/(tabs)/home');
         } else {
           // First time on this device — offer to enable biometric login
           showAlert({
             title: 'Enable Biometric Login',
-            message: `Sign in faster next time using ${biometricType}.`,
+            message: `Use ${biometricType} to unlock this valid session on this device. For your security, you will need to log in again when the session expires.`,
             type: 'info',
             icon: 'finger-print',
             buttons: [
@@ -219,8 +226,8 @@ export default function LoginScreen() {
                       disableDeviceFallback: false,
                     });
                     if (bioResult.success) {
-                      await saveCredentials(normalizedEmail, normalizedPassword);
                       await AsyncStorage.setItem('biometricLogin', 'true');
+                      await enableBiometricSession(normalizedEmail);
                       setCanUseBiometric(true);
                     }
                   } catch (_) {}
@@ -234,7 +241,7 @@ export default function LoginScreen() {
         router.replace('/(tabs)/home');
       }
     } catch (error) {
-      console.error('Login error:', error);
+      console.error('Login error:', error?.message || 'Unexpected error');
       setLoginError({ message: 'An unexpected error occurred. Please try again.', type: 'network' });
     } finally {
       setIsEmailLoading(false);
@@ -285,7 +292,7 @@ export default function LoginScreen() {
         setLoginError({ message: resultError || 'Google sign-in failed. Please try again.', type: 'credentials' });
       }
     } catch (error) {
-      console.error('Google login error:', error);
+      console.error('Google login error:', error?.message || 'Unexpected error');
       setLoginError({ message: 'Google sign-in failed. Please try again or use email/password.', type: 'network' });
     } finally {
       setIsGoogleLoading(false);
@@ -295,7 +302,7 @@ export default function LoginScreen() {
   const handleBiometricLogin = async () => {
     setLoginError(null);
     if (!canUseBiometric) {
-      setLoginError({ message: 'Biometric login unavailable. Please sign in with email instead.', type: 'network' });
+      setLoginError({ message: 'For your security, please log in again.', type: 'access' });
       return;
     }
 
@@ -319,30 +326,18 @@ export default function LoginScreen() {
         return;
       }
 
-      const creds = await getCredentials();
-      if (!creds) {
-        setLoginError({ message: 'Stored credentials not found. Please sign in with your password to re-enable biometric login.', type: 'access' });
+      const authResult = await checkAuth();
+      if (!authResult?.authenticated || authResult?.restoredFromCache) {
+        await clearCredentials({ disableBiometric: false });
         setCanUseBiometric(false);
-        return;
-      }
-
-      const loginResult = await loginWithEmail(creds.email, creds.password, { biometricLogin: true });
-      if (!loginResult.success) {
-        if (loginResult.status === 401 || loginResult.status === 400) {
-          await clearCredentials();
-          setCanUseBiometric(false);
-          setLoginError({ message: 'Your password was changed. Please sign in with your new password to re-enable biometric login.', type: 'access' });
-        } else {
-          setLoginError({ message: loginResult.error || 'Sign-in failed. Please try again.', type: 'credentials' });
-        }
+        setLoginError({ message: 'For your security, please log in again.', type: 'access' });
         return;
       }
 
       await AsyncStorage.setItem('remember_me', 'true');
-      await AsyncStorage.setItem('last_email', creds.email);
       router.replace('/(tabs)/home');
     } catch (error) {
-      console.error('Biometric login error:', error);
+      console.error('Biometric login error:', error?.message || 'Unexpected error');
       setLoginError({ message: 'Biometric sign-in failed. Please use email or Google.', type: 'network' });
     } finally {
       setIsBiometricLoading(false);

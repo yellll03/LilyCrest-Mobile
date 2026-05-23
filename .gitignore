@@ -86,3 +86,16 @@ dist/
 # ========================================
 coverage/
 .nyc_output/
+_old-root-deps/
+_old-backend-deps/
+_old-frontend-deps/
+_archive/
+logs/
+memory/
+test_reports/
+.expo/
+.claude/
+.emergent/
+.gitconfig
+cloudflare_new_tunnel.err
+LilyCrest-Clean/backend/.latest-tunnel-url

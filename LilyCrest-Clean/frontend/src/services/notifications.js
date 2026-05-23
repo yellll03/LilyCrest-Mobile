@@ -133,7 +133,7 @@ export async function registerForPushNotifications({ requestPermission = false }
         const expoTokenData = await Notifications.getExpoPushTokenAsync({ projectId });
         token = typeof expoTokenData?.data === 'string' ? expoTokenData.data.trim() : '';
         if (token) {
-          console.log('[Notifications] Expo push token:', token);
+          console.log('[Notifications] Expo push token acquired');
         }
       } catch (error) {
         console.warn('[Notifications] Expo push token fetch failed, falling back to native token:', error?.message);
@@ -147,7 +147,9 @@ export async function registerForPushNotifications({ requestPermission = false }
       }
       const tokenData = await Notifications.getDevicePushTokenAsync();
       token = typeof tokenData?.data === 'string' ? tokenData.data.trim() : '';
-      console.log('[Notifications] Native push token:', token);
+      if (token) {
+        console.log('[Notifications] Native push token acquired');
+      }
     }
 
     if (!token) return null;

@@ -113,7 +113,7 @@ export function useGoogleSignIn() {
       }
 
       if (!idToken && !accessToken) {
-        console.warn('[Google] All token methods exhausted. signIn data:', JSON.stringify(signInData));
+        console.warn('[Google] All token methods exhausted.');
         return { success: false, error: 'No authentication token returned from Google.' };
       }
 
@@ -139,7 +139,7 @@ export function useGoogleSignIn() {
       if (error?.message?.toLowerCase().includes('canceled') || error?.message?.toLowerCase().includes('cancelled')) {
         return { success: false, cancelled: true, error: 'Sign-in cancelled' };
       }
-      console.error('Google Sign-In Error:', error);
+      console.error('Google Sign-In Error:', error?.message || 'Unexpected error');
       return { success: false, error: error.message || 'Failed to sign in with Google' };
     } finally {
       setIsLoading(false);

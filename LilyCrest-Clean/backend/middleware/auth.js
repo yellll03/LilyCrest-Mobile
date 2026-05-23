@@ -5,16 +5,10 @@ const { normalizeUser } = require('../utils/normalizeUser');
 async function authMiddleware(req, res, next) {
 
   const authHeader = req.headers.authorization;
-  const cookieToken = req.cookies?.session_token;
-  const queryToken = req.query?.token;
 
   let token = null;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     token = authHeader.substring(7);
-  } else if (cookieToken) {
-    token = cookieToken;
-  } else if (queryToken) {
-    token = queryToken;
   }
 
   if (!token) {
@@ -64,16 +58,10 @@ function adminMiddleware(req, res, next) {
 // Attaches req.user if a valid session is found; sets req.user = null otherwise.
 async function optionalAuthMiddleware(req, res, next) {
   const authHeader = req.headers.authorization;
-  const cookieToken = req.cookies?.session_token;
-  const queryToken = req.query?.token;
 
   let token = null;
   if (authHeader && authHeader.startsWith('Bearer ')) {
     token = authHeader.substring(7);
-  } else if (cookieToken) {
-    token = cookieToken;
-  } else if (queryToken) {
-    token = queryToken;
   }
 
   if (!token) {

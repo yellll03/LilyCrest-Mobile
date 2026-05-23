@@ -19,7 +19,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../src/context/AuthContext';
-import { getCredentials, hasStoredCredentials } from '../src/services/secureCredentials';
+import { clearCredentials, hasStoredCredentials } from '../src/services/secureCredentials';
 
 const { width, height } = Dimensions.get('window');
 
@@ -57,7 +57,7 @@ const ACCENT_LIGHT = '#cc7200';
 
 export default function OnboardingScreen() {
   const router = useRouter();
-  const { user, authStatus, loginWithEmail } = useAuth();
+  const { user, authStatus, checkAuth } = useAuth();
   const [isAutoBiometricLoading, setIsAutoBiometricLoading] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const flatListRef = useRef(null);
@@ -69,8 +69,8 @@ export default function OnboardingScreen() {
     try {
       const bioSetting = await AsyncStorage.getItem('biometricLogin');
       if (bioSetting !== 'true') return;
-      const hasCreds = await hasStoredCredentials();
-      if (!hasCreds) return;
+      const hasBiometricSession = await hasStoredCredentials();
+      if (!hasBiometricSession) return;
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
       const isEnrolled = await LocalAuthentication.isEnrolledAsync();
       if (!hasHardware || !isEnrolled) return;
@@ -80,13 +80,14 @@ export default function OnboardingScreen() {
         disableDeviceFallback: false,
       });
       if (!authResult.success) return;
-      const creds = await getCredentials();
-      if (!creds) return;
-      await loginWithEmail(creds.email, creds.password, { biometricLogin: true });
+      const restored = await checkAuth();
+      if (!restored?.authenticated || restored?.restoredFromCache) {
+        await clearCredentials({ disableBiometric: false });
+      }
     } catch (err) {
       console.warn('[AutoBiometric] Skipped:', err?.message);
     }
-  }, [loginWithEmail]);
+  }, [checkAuth]);
 
   useEffect(() => {
     Animated.parallel([
@@ -104,7 +105,7 @@ export default function OnboardingScreen() {
     const maybeAutoLogin = async () => {
       hasAttemptedAutoBiometric.current = true;
       const token = await AsyncStorage.getItem('session_token');
-      if (token) return;
+      if (!token) return;
 
       if (!cancelled) setIsAutoBiometricLoading(true);
       await tryAutoBiometric();

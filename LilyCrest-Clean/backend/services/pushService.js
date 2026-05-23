@@ -416,6 +416,59 @@ async function notifyMaintenanceStatusChange(userId, request, newStatus) {
   return pushResult.status === 'fulfilled' ? pushResult.value : false;
 }
 
+async function notifyMaintenanceTenantUpdate(userId, request, update = {}) {
+  const REQUEST_TYPES = {
+    maintenance: 'Maintenance',
+    plumbing: 'Plumbing',
+    electrical: 'Electrical',
+    aircon: 'Air Conditioning',
+    cleaning: 'Cleaning',
+    pest: 'Pest Control',
+    furniture: 'Furniture',
+    other: 'Other',
+  };
+
+  const typeName = REQUEST_TYPES[request.request_type] || 'Maintenance';
+  const updateType = normalizeString(update.type || update.kind).toLowerCase();
+  const hasAttachments = Array.isArray(update.attachments) && update.attachments.length > 0;
+  const message = clipText(update.message || update.note || '', 120);
+  const title = updateType === 'tenant_summary'
+    ? `${typeName} Summary`
+    : hasAttachments
+      ? `${typeName} Files Sent`
+      : `${typeName} Update`;
+  const body = updateType === 'tenant_summary'
+    ? 'A tenant-safe maintenance summary is ready to view.'
+    : message || (hasAttachments ? 'New file or photo was attached by the maintenance team.' : 'A new maintenance update is available.');
+
+  const payload = {
+    title,
+    body,
+    data: {
+      type: 'maintenance_update',
+      request_id: request.request_id,
+      update_id: update.update_id || '',
+      screen: 'services',
+      url: '/(tabs)/services',
+    },
+  };
+
+  const [, pushResult] = await Promise.allSettled([
+    saveNotificationForUser(userId, {
+      ...payload,
+      category: 'Maintenance',
+      source: 'maintenance',
+      source_label: update.sender_name || update.actor_name || 'Maintenance Team',
+      request_id: request.request_id,
+      eventKey: update.update_id ? `maintenance_update:${request.request_id}:${update.update_id}` : '',
+      priority: ['rejected', 'cancelled'].includes(String(request.status || '').toLowerCase()) ? 'high' : 'normal',
+    }),
+    sendPushToUser(userId, payload),
+  ]);
+
+  return pushResult.status === 'fulfilled' ? pushResult.value : false;
+}
+
 async function notifyBillCreated(userId, bill) {
   const period = bill.billing_period || bill.description || 'New billing statement';
   const amount = bill.total ?? bill.amount ?? 0;
@@ -637,6 +690,7 @@ module.exports = {
   sendPushToUser,
   sendPushToAllTenants,
   notifyMaintenanceStatusChange,
+  notifyMaintenanceTenantUpdate,
   notifyBillCreated,
   notifyPaymentConfirmed,
   notifyNewAnnouncement,

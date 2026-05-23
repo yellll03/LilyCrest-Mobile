@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const seedController = require('../controllers/seed.controller');
-const { authMiddleware, adminMiddleware } = require('../middleware/auth');
+const { authMiddleware } = require('../middleware/auth');
 
 // Auth routes
 const authRoutes = require('./auth.routes');
@@ -63,8 +63,21 @@ router.use('/chatbot', chatbotRoutes);
 const paymongoRoutes = require('./paymongo.routes');
 router.use('/paymongo', paymongoRoutes);
 
-// Seed route (auth only — for demo/presentation use)
-router.post('/seed', authMiddleware, seedController.seedData);
+function seedAccessMiddleware(req, res, next) {
+  if (process.env.NODE_ENV === 'production') {
+    return res.status(404).json({ detail: 'Not found' });
+  }
+
+  const role = String(req.user?.role || '').toLowerCase();
+  if (!['admin', 'superadmin', 'owner'].includes(role)) {
+    return res.status(403).json({ detail: 'Admin access required' });
+  }
+
+  return next();
+}
+
+// Seed route is development-only and admin/owner gated.
+router.post('/seed', authMiddleware, seedAccessMiddleware, seedController.seedData);
 
 // Health check
 router.get('/health', (req, res) => {

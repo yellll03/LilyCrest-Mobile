@@ -402,17 +402,7 @@ async function login(req, res) {
     }
   }
 
-  // Step 4: Biometric login bypasses OTP — biometric IS the second factor
-  if (req.body.biometric_login === true) {
-    const session = await createSession(db, tenant.user_id);
-    res.cookie('session_token', session.session_token, cookieOptions());
-    const userData = await getCleanUser(db, tenant.user_id);
-    logAttempt(db, emailRaw, true, 'biometric_success', req);
-    console.log(`[Login] ✓ Biometric login (OTP skipped) for user_id=${tenant.user_id}`);
-    return res.json({ user: userData, session_token: session.session_token });
-  }
-
-  // Step 5: Password login — generate OTP and send to email
+  // Password login: generate OTP and send to email.
   const otpCode = generateOtpCode();
   const otpToken = uuidv4();
   const otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes

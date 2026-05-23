@@ -20,7 +20,11 @@ import { useAuth } from '../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
 import { useToast } from '../src/context/ToastContext';
 import { apiService } from '../src/services/api';
-import { saveCredentials } from '../src/services/secureCredentials';
+import {
+  clearPendingLogin,
+  enableBiometricSession,
+  getPendingLogin,
+} from '../src/services/secureCredentials';
 
 const OTP_LENGTH = 6;
 const RESEND_COOLDOWN = 60; // seconds
@@ -39,27 +43,41 @@ export default function OtpVerifyScreen() {
   const styles = useThemedStyles(createStyles);
   const { showToast } = useToast();
 
-  const otpToken = readParam(params.otp_token, '');
-  const maskedEmail = readParam(params.masked_email, 'your email');
-  const rememberMe = readParam(params.remember_me, 'false') === 'true';
-  const savedEmail = readParam(params.email, '');
-  const savedPassword = readParam(params.password, '');
+  const routeMaskedEmail = readParam(params.masked_email, '');
 
   const [digits, setDigits] = useState(Array(OTP_LENGTH).fill(''));
   const [isLoading, setIsLoading] = useState(false);
+  const [isSessionLoading, setIsSessionLoading] = useState(true);
   const [error, setError] = useState(null);
   const [cooldown, setCooldown] = useState(RESEND_COOLDOWN);
   const [isResending, setIsResending] = useState(false);
+  const [pendingLogin, setPendingLogin] = useState(null);
 
   const inputRefs = useRef([]);
   const cooldownRef = useRef(null);
+  const otpToken = pendingLogin?.otpToken || '';
+  const maskedEmail = pendingLogin?.maskedEmail || routeMaskedEmail || 'your email';
+  const rememberMe = pendingLogin?.rememberMe === true;
+  const savedEmail = pendingLogin?.email || '';
 
-  // Start cooldown timer on mount
   useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const pending = await getPendingLogin();
+      if (cancelled) return;
+      setPendingLogin(pending);
+      setIsSessionLoading(false);
+      if (!pending) {
+        setError('Your verification session has expired. Please log in again.');
+      }
+    })();
+
     startCooldown();
-    // Focus first box
     setTimeout(() => inputRefs.current[0]?.focus(), 300);
-    return () => { if (cooldownRef.current) clearInterval(cooldownRef.current); };
+    return () => {
+      cancelled = true;
+      if (cooldownRef.current) clearInterval(cooldownRef.current);
+    };
   }, []);
 
   const startCooldown = () => {
@@ -113,6 +131,7 @@ export default function OtpVerifyScreen() {
   };
 
   const handleVerify = async () => {
+    if (isSessionLoading) return;
     if (!otpToken) {
       setError('Your verification session has expired. Please log in again.');
       return;
@@ -138,6 +157,8 @@ export default function OtpVerifyScreen() {
       return;
     }
 
+    await clearPendingLogin();
+
     // Persist remember-me and biometric preferences post-OTP
     await AsyncStorage.setItem('remember_me', rememberMe ? 'true' : 'false');
     if (rememberMe && savedEmail) {
@@ -151,15 +172,15 @@ export default function OtpVerifyScreen() {
     const isEnrolled = await LocalAuthentication.isEnrolledAsync();
     const bioSetting = await AsyncStorage.getItem('biometricLogin');
 
-    if (hasHardware && isEnrolled && bioSetting === 'true' && savedEmail && savedPassword) {
-      await saveCredentials(savedEmail, savedPassword);
+    if (hasHardware && isEnrolled && bioSetting === 'true') {
+      await enableBiometricSession(savedEmail);
       setIsLoading(false);
       router.replace('/(tabs)/home');
-    } else if (hasHardware && isEnrolled && bioSetting !== 'true' && savedEmail && savedPassword) {
+    } else if (hasHardware && isEnrolled && bioSetting !== 'true') {
       setIsLoading(false);
       showAlert({
         title: 'Enable Biometric Login',
-        message: 'Sign in faster next time using Biometrics.',
+        message: 'Use Biometrics to unlock this valid session on this device. For your security, you will need to log in again when the session expires.',
         type: 'info',
         icon: 'finger-print',
         buttons: [
@@ -174,8 +195,8 @@ export default function OtpVerifyScreen() {
                   disableDeviceFallback: false,
                 });
                 if (bioResult.success) {
-                  await saveCredentials(savedEmail, savedPassword);
                   await AsyncStorage.setItem('biometricLogin', 'true');
+                  await enableBiometricSession(savedEmail);
                 }
               } catch (_) {}
               router.replace('/(tabs)/home');
@@ -278,9 +299,9 @@ export default function OtpVerifyScreen() {
 
           {/* Verify Button */}
           <TouchableOpacity
-            style={[styles.verifyBtn, (!isComplete || isLoading) && styles.verifyBtnDisabled]}
+            style={[styles.verifyBtn, (!isComplete || isLoading || isSessionLoading) && styles.verifyBtnDisabled]}
             onPress={handleVerify}
-            disabled={!isComplete || isLoading}
+            disabled={!isComplete || isLoading || isSessionLoading}
           >
             {isLoading
               ? <ActivityIndicator color="#FFFFFF" />

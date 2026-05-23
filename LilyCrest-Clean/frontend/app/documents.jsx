@@ -2,7 +2,7 @@ import React from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform, Linking } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -74,13 +74,6 @@ export default function DocumentsScreen() {
         }
       } catch (error) {
         console.error('Contract download error:', error);
-
-        if (Platform.OS === 'android') {
-          try {
-            await Linking.openURL(`${url}?token=${encodeURIComponent(token)}`);
-            return;
-          } catch (_) {}
-        }
 
         showAlert({ title: 'Download Failed', message: 'There was a problem downloading the document. Please try again.', type: 'error' });
       }

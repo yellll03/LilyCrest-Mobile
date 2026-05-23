@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
-import { Alert, Platform } from 'react-native';
+import { Alert } from 'react-native';
 import { BASE_BACKEND_URL } from '../services/api';
 
 const buildBillPdfUrl = (billId) => {
@@ -79,16 +79,6 @@ export async function downloadBillPdf(billId, setBusy) {
     return true;
   } catch (error) {
     console.error('[PDF] download error:', error?.message);
-
-    // On Android, sometimes we need to fall back to opening in browser
-    if (Platform.OS === 'android') {
-      try {
-        const { Linking } = await import('react-native');
-        const urlWithToken = `${url}?token=${encodeURIComponent(token)}`;
-        await Linking.openURL(urlWithToken);
-        return true;
-      } catch (_) {}
-    }
 
     Alert.alert(
       'Download failed',

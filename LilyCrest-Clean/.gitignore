@@ -15,6 +15,9 @@ pnpm-debug.log*
 .env.*
 *.env
 *.env.*
+!.env.example
+!frontend/.env.example
+!backend/.env.example
 firebase-credentials.json
 backend/firebase-credentials.json
 *.pem
@@ -34,6 +37,7 @@ local.properties
 # Android build outputs
 frontend/android/build/
 frontend/android/app/build/
+frontend/android/.kotlin/
 
 # Expo / Metro
 .expo/
@@ -49,6 +53,11 @@ frontend/.expo-export-check*/
 # Logs
 logs/
 *.log
+backend/.latest-tunnel-url
+build_output*.txt
+frontend/build_output*.txt
+frontend/android/build_output*.txt
+frontend/android/build_command_output.txt
 
 # Build / dist
 build/
@@ -60,3 +69,12 @@ dist/
 # Coverage
 coverage/
 .nyc_output/
+test-results/
+playwright-report/
+junit.xml
+
+# Generated documentation artifacts
+docs/generated/
+LILYCREST_*_MANUAL.html
+LILYCREST_*_MANUAL.pdf
+module_progress_report.html

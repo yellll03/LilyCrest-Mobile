@@ -1,7 +1,10 @@
 const { v4: uuidv4 } = require('uuid');
 const { ObjectId } = require('mongodb');
 const { getDb } = require('../config/database');
-const { notifyMaintenanceStatusChange } = require('../services/pushService');
+const {
+  notifyMaintenanceStatusChange,
+  notifyMaintenanceTenantUpdate,
+} = require('../services/pushService');
 
 // Canonical collection used by the website backend (Mongoose model collection).
 const PRIMARY_COLLECTION = 'maintenance_requests';
@@ -14,13 +17,32 @@ const COLLECTIONS = [...new Set([PRIMARY_COLLECTION, LEGACY_COLLECTION])];
 
 const ACTIVE_RESERVATION_STATUSES = ['moveIn', 'active', 'completed', 'confirmed'];
 const VALID_URGENCIES = ['low', 'normal', 'high'];
-const VALID_STATUSES = ['pending', 'viewed', 'in_progress', 'resolved', 'completed', 'rejected', 'cancelled'];
+const VALID_STATUSES = ['pending', 'viewed', 'in_progress', 'assigned', 'scheduled', 'resolved', 'completed', 'rejected', 'cancelled'];
+const ACTIVE_MAINTENANCE_STATUSES = ['pending', 'viewed', 'in_progress', 'assigned', 'scheduled'];
+const TERMINAL_STATUSES = ['cancelled', 'rejected'];
 const MAX_PROGRESS_ATTACHMENTS = 4;
-const MAX_PROGRESS_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+const MAX_PROGRESS_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const MAX_TENANT_ATTACHMENTS = 4;
-const MAX_TENANT_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+const MAX_TENANT_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const LOCAL_ONLY_URI_PATTERN = /^(?:file|content|ph|assets-library|blob|ms-appdata):\/\/|^\/data\/user\/|^\/storage\/|^\/private\/var\/|^\/var\/mobile\/|(?:^|[\\/])cache(?:[\\/]|$)/i;
 const IMAGE_ATTACHMENT_NAME_PATTERN = /\.(png|jpe?g|gif|webp|bmp|heic|heif)(?:\?.*)?$/i;
+const DOCUMENT_ATTACHMENT_NAME_PATTERN = /\.(pdf|docx?|txt|csv)(?:\?.*)?$/i;
+const DATA_ATTACHMENT_PATTERN = /^data:([^;]+);base64,/i;
+const ALLOWED_ATTACHMENT_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'image/bmp',
+  'image/heic',
+  'image/heif',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
+  'text/csv',
+]);
 
 function asObjectId(value) {
   if (!value) return null;
@@ -44,7 +66,13 @@ function actorNameFromUser(user) {
 }
 
 function requestTimestampValue(request) {
-  const dt = request?.created_at || request?.createdAt || 0;
+  const dt = request?.lastActivityAt
+    || request?.last_activity_at
+    || request?.updated_at
+    || request?.updatedAt
+    || request?.created_at
+    || request?.createdAt
+    || 0;
   const time = new Date(dt).getTime();
   return Number.isFinite(time) ? time : 0;
 }
@@ -64,7 +92,7 @@ function isLocalOnlyAttachmentUri(value = '') {
   return LOCAL_ONLY_URI_PATTERN.test(normalized);
 }
 
-function validateAttachmentUri(uri, { allowDataImage = false } = {}) {
+function validateAttachmentUri(uri, { allowDataAttachment = false, allowDataImage = false } = {}) {
   const normalized = String(uri || '').trim();
 
   if (!normalized) {
@@ -86,20 +114,33 @@ function validateAttachmentUri(uri, { allowDataImage = false } = {}) {
     return { ok: true, value: normalized };
   }
 
+  if (allowDataAttachment) {
+    const dataMatch = normalized.match(DATA_ATTACHMENT_PATTERN);
+    const dataMimeType = String(dataMatch?.[1] || '').trim().toLowerCase();
+    if (dataMimeType && ALLOWED_ATTACHMENT_MIME_TYPES.has(dataMimeType)) {
+      return { ok: true, value: normalized, mimeType: dataMimeType };
+    }
+  }
+
   return {
     ok: false,
-    error: allowDataImage
-      ? 'Attachments must use HTTPS upload URLs or image data URLs.'
+    error: allowDataImage || allowDataAttachment
+      ? 'Attachments must use HTTPS upload URLs or supported data URLs.'
       : 'Attachments must use uploaded HTTPS URLs.',
   };
 }
 
 function attachmentUrlFromEntry(entry = {}) {
+  if (typeof entry === 'string') return entry.trim();
   return typeof entry?.downloadUrl === 'string' && entry.downloadUrl.trim()
     ? entry.downloadUrl.trim()
-    : typeof entry?.uri === 'string'
-      ? entry.uri.trim()
-      : '';
+    : typeof entry?.file_url === 'string' && entry.file_url.trim()
+      ? entry.file_url.trim()
+      : typeof entry?.url === 'string' && entry.url.trim()
+        ? entry.url.trim()
+        : typeof entry?.uri === 'string'
+          ? entry.uri.trim()
+          : '';
 }
 
 function attachmentNameFromEntry(entry = {}, fallback = 'attachment') {
@@ -133,29 +174,74 @@ function isImageTenantAttachment({ downloadUrl = '', originalName = '', mimeType
     || IMAGE_ATTACHMENT_NAME_PATTERN.test(String(downloadUrl || '').split('?')[0]);
 }
 
+function isDocumentTenantAttachment({ downloadUrl = '', originalName = '', mimeType = '' } = {}) {
+  const normalizedMimeType = String(mimeType || '').toLowerCase();
+  return normalizedMimeType === 'application/pdf'
+    || normalizedMimeType === 'application/msword'
+    || normalizedMimeType === 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'
+    || normalizedMimeType === 'text/plain'
+    || normalizedMimeType === 'text/csv'
+    || DOCUMENT_ATTACHMENT_NAME_PATTERN.test(String(originalName || ''))
+    || DOCUMENT_ATTACHMENT_NAME_PATTERN.test(String(downloadUrl || '').split('?')[0]);
+}
+
+function isSupportedTenantAttachment(attachment = {}) {
+  return isImageTenantAttachment(attachment) || isDocumentTenantAttachment(attachment);
+}
+
+function sanitizeAttachmentForTenant(attachment = {}, index = 0) {
+  const url = attachmentUrlFromEntry(attachment);
+  const name = attachmentNameFromEntry(attachment, `attachment-${index + 1}`);
+  const mimeType = attachmentMimeTypeFromEntry(attachment);
+  const size = Number(attachment?.size);
+
+  return {
+    downloadUrl: url,
+    uri: url,
+    url,
+    originalName: name,
+    name,
+    fileName: name,
+    mimeType,
+    type: mimeType,
+    size: Number.isFinite(size) ? size : null,
+    uploadedAt: attachment?.uploadedAt || attachment?.uploaded_at || attachment?.created_at || attachment?.createdAt || null,
+  };
+}
+
 function normalizeProgressAttachments(rawAttachments) {
   if (!Array.isArray(rawAttachments)) return { attachments: [], error: null };
+  if (rawAttachments.length > MAX_PROGRESS_ATTACHMENTS) {
+    return { attachments: [], error: `You can attach up to ${MAX_PROGRESS_ATTACHMENTS} files per update.` };
+  }
 
   const attachments = rawAttachments
     .slice(0, MAX_PROGRESS_ATTACHMENTS)
     .map((entry, index) => {
-      const uri = typeof entry?.uri === 'string' ? entry.uri.trim() : '';
-      const name = typeof entry?.name === 'string' && entry.name.trim()
-        ? entry.name.trim()
-        : `progress-photo-${index + 1}.jpg`;
-      const type = typeof entry?.type === 'string' && entry.type.trim()
-        ? entry.type.trim()
-        : 'image/jpeg';
-      const uriCheck = validateAttachmentUri(uri, { allowDataImage: true });
+      const uri = attachmentUrlFromEntry(entry);
+      const name = attachmentNameFromEntry(entry, `maintenance-file-${index + 1}`);
+      const type = attachmentMimeTypeFromEntry(entry, 'application/octet-stream');
+      const uriCheck = validateAttachmentUri(uri, { allowDataAttachment: true, allowDataImage: true });
 
       if (!uriCheck.ok) {
         return { error: uriCheck.error };
       }
-      if (/^data:image\//i.test(uriCheck.value) && getDecodedBase64Bytes(uriCheck.value) > MAX_PROGRESS_ATTACHMENT_BYTES) {
-        return { error: 'Progress photo exceeds the 5 MB limit.' };
+      if (DATA_ATTACHMENT_PATTERN.test(uriCheck.value) && getDecodedBase64Bytes(uriCheck.value) > MAX_PROGRESS_ATTACHMENT_BYTES) {
+        return { error: 'Maintenance update attachment exceeds the 10 MB limit.' };
+      }
+      if (!isSupportedTenantAttachment({ downloadUrl: uriCheck.value, originalName: name, mimeType: uriCheck.mimeType || type })) {
+        return { error: 'Maintenance update attachments must be images, PDFs, documents, text, or CSV files.' };
       }
 
-      return { name, uri: uriCheck.value, type };
+      return {
+        name,
+        originalName: name,
+        uri: uriCheck.value,
+        downloadUrl: /^https:\/\//i.test(uriCheck.value) ? uriCheck.value : '',
+        type: uriCheck.mimeType || type,
+        mimeType: uriCheck.mimeType || type,
+        size: Number.isFinite(Number(entry?.size)) ? Number(entry.size) : null,
+      };
     });
 
   const invalidEntry = attachments.find((entry) => entry?.error);
@@ -172,7 +258,7 @@ function normalizeProgressAttachments(rawAttachments) {
 function normalizeTenantAttachments(rawAttachments) {
   if (!Array.isArray(rawAttachments)) return { attachments: [], error: null };
   if (rawAttachments.length > MAX_TENANT_ATTACHMENTS) {
-    return { attachments: [], error: `You can upload up to ${MAX_TENANT_ATTACHMENTS} maintenance photos only.` };
+    return { attachments: [], error: `You can upload up to ${MAX_TENANT_ATTACHMENTS} maintenance files only.` };
   }
 
   const attachments = rawAttachments.map((entry, index) => {
@@ -197,11 +283,11 @@ function normalizeTenantAttachments(rawAttachments) {
     if (!storagePath) {
       return { error: 'Maintenance attachment storagePath is required.' };
     }
-    if (!isImageTenantAttachment({ downloadUrl: uriCheck.value, originalName, mimeType })) {
-      return { error: 'Maintenance attachments must be image files.' };
+    if (!isSupportedTenantAttachment({ downloadUrl: uriCheck.value, originalName, mimeType })) {
+      return { error: 'Maintenance attachments must be images, PDFs, documents, text, or CSV files.' };
     }
     if (Number.isFinite(size) && size > MAX_TENANT_ATTACHMENT_BYTES) {
-      return { error: 'Maintenance attachment exceeds the 5 MB limit.' };
+      return { error: 'Maintenance attachment exceeds the 10 MB limit.' };
     }
 
     return {
@@ -224,6 +310,429 @@ function normalizeTenantAttachments(rawAttachments) {
     attachments: attachments.filter(Boolean),
     error: null,
   };
+}
+
+function normalizeVisibility(value) {
+  const raw = String(value || '').trim().toLowerCase();
+  if (['internal', 'admin', 'private', 'admin_only', 'admin-only'].includes(raw)) {
+    return 'internal';
+  }
+  return 'tenant';
+}
+
+function isTenantVisibleEntry(entry = {}) {
+  const visibility = normalizeVisibility(entry.visibility || (entry.visibleToTenant === false ? 'internal' : 'tenant'));
+  if (visibility !== 'tenant') return false;
+  if (entry.isTenantVisible === false || entry.visibleToTenant === false) return false;
+  if (entry.internal === true || entry.adminOnly === true || entry.isInternal === true) return false;
+  return true;
+}
+
+function normalizeSenderRole(value, fallback = 'admin') {
+  const raw = String(value || fallback || '').trim().toLowerCase().replace(/\s+/g, '_');
+  if (['tenant', 'you'].includes(raw)) return 'tenant';
+  if (['service_provider', 'provider', 'contractor', 'technician'].includes(raw)) return 'service_provider';
+  if (['branch_admin', 'branch'].includes(raw)) return 'branch_admin';
+  if (['owner', 'property_owner'].includes(raw)) return 'owner';
+  if (['system', 'maintenance_system'].includes(raw)) return 'system';
+  return 'admin';
+}
+
+function senderLabelFromRole(role, fallbackName = '') {
+  const normalized = normalizeSenderRole(role);
+  if (normalized === 'tenant') return 'You';
+  if (normalized === 'service_provider') return 'Service Provider';
+  if (normalized === 'branch_admin') return 'Branch Admin';
+  if (normalized === 'owner') return 'Owner';
+  if (normalized === 'system') return 'Maintenance Team';
+  return fallbackName || 'Dormitory Admin';
+}
+
+function friendlyStatusCopy(status = '') {
+  switch (String(status || '').toLowerCase()) {
+    case 'pending':
+      return 'Your request has been received and is waiting for admin review.';
+    case 'viewed':
+      return 'Admin has viewed your request.';
+    case 'in_progress':
+      return 'Your request is currently being handled.';
+    case 'assigned':
+      return 'A service provider has been assigned.';
+    case 'scheduled':
+      return 'A maintenance visit has been scheduled.';
+    case 'resolved':
+      return 'This request has been marked as resolved.';
+    case 'completed':
+      return 'This request has been completed.';
+    case 'rejected':
+      return 'This request was rejected. Please review the reason below.';
+    case 'cancelled':
+      return 'This request was cancelled.';
+    default:
+      return 'A maintenance update was sent.';
+  }
+}
+
+function nextStepCopy(status = '', request = {}) {
+  switch (String(status || '').toLowerCase()) {
+    case 'pending':
+      return 'Please wait while the admin team reviews your request.';
+    case 'viewed':
+      return 'The team will update you once the next action is ready.';
+    case 'in_progress':
+      return 'The team is working on your concern and will share updates here.';
+    case 'assigned':
+      return request.assigned_to
+        ? `${request.assigned_to} has been assigned to handle this request.`
+        : 'A service provider has been assigned to handle this request.';
+    case 'scheduled':
+      return request.scheduled_for
+        ? `A maintenance visit is scheduled for ${request.scheduled_for}.`
+        : 'Please watch for the scheduled maintenance visit details.';
+    case 'resolved':
+    case 'completed':
+      return 'Please confirm if the issue has been fixed, or report if it is still a problem.';
+    case 'rejected':
+      return 'Please review the admin note and submit a new request if needed.';
+    case 'cancelled':
+      return 'You can submit a new request if you still need help.';
+    default:
+      return 'Check the latest update below for details.';
+  }
+}
+
+function updateTitleFromEntry(entry = {}) {
+  const type = String(entry.type || entry.kind || entry.event || '').toLowerCase();
+  if (type === 'tenant_summary' || type === 'summary') return 'Maintenance Summary';
+  if (type === 'tenant_reply') return 'Tenant Follow-up';
+  if (type === 'tenant_submitted' || type === 'submitted') return 'Request Submitted';
+  if (type === 'tenant_cancelled' || type === 'cancelled') return 'Request Cancelled';
+  if (type === 'tenant_reopened' || type === 'reopened') return 'Still an Issue';
+  if (type === 'tenant_confirmed_resolved') return 'Tenant Confirmed Resolved';
+  if (entry.status_to || entry.status) return friendlyStatusCopy(entry.status_to || entry.status);
+  return 'Maintenance Update';
+}
+
+function updatePreviewText(entry = {}) {
+  const message = String(entry.message || entry.note || entry.content || '').trim();
+  if (message) return message.length > 140 ? `${message.slice(0, 137)}...` : message;
+  if (entry.summary || entry.tenantSummary) return 'Maintenance summary was sent.';
+  if (Array.isArray(entry.attachments) && entry.attachments.length) {
+    return `${entry.attachments.length} attachment${entry.attachments.length > 1 ? 's' : ''} sent.`;
+  }
+  return updateTitleFromEntry(entry);
+}
+
+function normalizeDate(value) {
+  if (!value) return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function toDateValue(value, fallback = null) {
+  const date = normalizeDate(value);
+  return date || fallback;
+}
+
+function getEntryTimestamp(entry = {}) {
+  return entry.created_at || entry.createdAt || entry.timestamp || entry.updated_at || entry.updatedAt || null;
+}
+
+function getEntryTimeValue(entry = {}) {
+  const date = normalizeDate(getEntryTimestamp(entry));
+  return date ? date.getTime() : 0;
+}
+
+function sanitizeTenantSummary(summary = null) {
+  if (!summary || typeof summary !== 'object' || Array.isArray(summary)) return null;
+  return {
+    request_type: String(summary.request_type || '').trim(),
+    current_status: String(summary.current_status || summary.status || '').trim(),
+    action_taken: String(summary.action_taken || '').trim(),
+    assigned_provider: String(summary.assigned_provider || '').trim(),
+    schedule: String(summary.schedule || '').trim(),
+    next_step: String(summary.next_step || '').trim(),
+    completion_note: String(summary.completion_note || '').trim(),
+    attachments: Array.isArray(summary.attachments)
+      ? summary.attachments.map(sanitizeAttachmentForTenant).filter((item) => item.uri)
+      : [],
+    created_at: summary.created_at || summary.createdAt || null,
+  };
+}
+
+function buildTenantSummary(request = {}, input = {}) {
+  const status = input.status || request.status || 'pending';
+  const note = String(input.notes || input.note || '').trim();
+  const completionNote = String(input.completion_note || '').trim();
+  const assignedProvider = String(input.assigned_to || request.assigned_to || '').trim();
+  const schedule = String(input.schedule || input.scheduled_for || request.scheduled_for || '').trim();
+
+  return sanitizeTenantSummary({
+    request_type: request.request_type || 'maintenance',
+    current_status: status,
+    action_taken: note || friendlyStatusCopy(status),
+    assigned_provider: assignedProvider,
+    schedule,
+    next_step: String(input.next_step || '').trim() || nextStepCopy(status, { ...request, assigned_to: assignedProvider, scheduled_for: schedule }),
+    completion_note: completionNote || (['resolved', 'completed'].includes(String(status).toLowerCase()) ? note : ''),
+    attachments: Array.isArray(input.attachments) ? input.attachments : [],
+    created_at: input.created_at || new Date(),
+  });
+}
+
+function summaryToMessage(summary = {}) {
+  const lines = [
+    summary.action_taken ? `Action taken: ${summary.action_taken}` : '',
+    summary.assigned_provider ? `Assigned provider: ${summary.assigned_provider}` : '',
+    summary.schedule ? `Schedule: ${summary.schedule}` : '',
+    summary.next_step ? `Next step: ${summary.next_step}` : '',
+    summary.completion_note ? `Completion note: ${summary.completion_note}` : '',
+  ].filter(Boolean);
+  return lines.join('\n') || 'A maintenance summary was sent.';
+}
+
+function buildUpdateEntry({
+  type = 'admin_update',
+  visibility = 'tenant',
+  actor = {},
+  message = '',
+  attachments = [],
+  status = null,
+  statusFrom = null,
+  statusTo = null,
+  senderRole = null,
+  senderLabel = null,
+  summary = null,
+  readByTenant = false,
+  extra = {},
+} = {}) {
+  const now = extra.created_at || extra.createdAt || new Date();
+  const normalizedVisibility = normalizeVisibility(visibility);
+  const role = normalizeSenderRole(senderRole || actor.role, type.startsWith('tenant') ? 'tenant' : 'admin');
+  const actorName = actor.name || actor.actor_name || actor.fullName || '';
+
+  return {
+    update_id: extra.update_id || `upd_${uuidv4().replace(/-/g, '').substring(0, 12)}`,
+    type,
+    kind: type,
+    visibility: normalizedVisibility,
+    visibleToTenant: normalizedVisibility === 'tenant',
+    isTenantVisible: normalizedVisibility === 'tenant',
+    actor_id: actor.id || actor.user_id || actor.actor_id || null,
+    actor_name: actorName || senderLabelFromRole(role),
+    actor_role: role,
+    sender_name: senderLabel || senderLabelFromRole(role, actorName),
+    sender_role: role,
+    message: String(message || '').trim(),
+    attachments: Array.isArray(attachments) ? attachments : [],
+    status,
+    status_from: statusFrom,
+    status_to: statusTo || status,
+    summary: summary || null,
+    tenantSummary: summary || null,
+    readByTenant: readByTenant === true,
+    created_at: now,
+    createdAt: now,
+    ...extra,
+  };
+}
+
+function mapLegacyStatusHistoryEntry(entry = {}, index = 0) {
+  if (!isTenantVisibleEntry(entry)) return null;
+  const role = normalizeSenderRole(entry.actor_role || entry.sender_role || (entry.event === 'submitted' ? 'tenant' : 'admin'));
+  const timestamp = getEntryTimestamp(entry);
+  const attachments = Array.isArray(entry.attachments)
+    ? entry.attachments.map(sanitizeAttachmentForTenant).filter((item) => item.uri)
+    : [];
+
+  return {
+    update_id: entry.update_id || `legacy_${entry.event || 'status'}_${timestamp || index}`,
+    type: entry.event === 'submitted'
+      ? 'tenant_submitted'
+      : entry.event === 'reopened'
+        ? 'tenant_reopened'
+        : entry.event === 'cancelled'
+          ? 'tenant_cancelled'
+          : 'status_change',
+    kind: entry.event || 'status_change',
+    title: updateTitleFromEntry(entry),
+    senderName: senderLabelFromRole(role, entry.actor_name),
+    senderRole: role,
+    actor_name: entry.actor_name || senderLabelFromRole(role),
+    actor_role: role,
+    message: String(entry.note || '').trim() || (entry.status ? friendlyStatusCopy(entry.status) : ''),
+    status: entry.status || null,
+    status_from: entry.previous_status || null,
+    status_to: entry.status || null,
+    attachments,
+    readByTenant: entry.readByTenant === true,
+    visibleToTenant: true,
+    visibility: 'tenant',
+    created_at: timestamp,
+    createdAt: timestamp,
+  };
+}
+
+function mapUpdateForTenant(entry = {}, index = 0) {
+  if (!isTenantVisibleEntry(entry)) return null;
+  const role = normalizeSenderRole(entry.sender_role || entry.actor_role || entry.role, entry.type?.startsWith?.('tenant') ? 'tenant' : 'admin');
+  const attachments = Array.isArray(entry.attachments)
+    ? entry.attachments.map(sanitizeAttachmentForTenant).filter((item) => item.uri)
+    : [];
+  const summary = sanitizeTenantSummary(entry.summary || entry.tenantSummary);
+  const timestamp = getEntryTimestamp(entry);
+
+  return {
+    update_id: entry.update_id || entry.id || `update_${timestamp || index}`,
+    type: entry.type || entry.kind || 'maintenance_update',
+    kind: entry.kind || entry.type || 'maintenance_update',
+    title: updateTitleFromEntry(entry),
+    senderName: entry.sender_name || entry.senderName || senderLabelFromRole(role, entry.actor_name),
+    senderRole: role,
+    actor_name: entry.actor_name || entry.sender_name || senderLabelFromRole(role),
+    actor_role: role,
+    message: String(entry.message || entry.note || entry.content || '').trim(),
+    status: entry.status_to || entry.status || null,
+    status_from: entry.status_from || null,
+    status_to: entry.status_to || entry.status || null,
+    attachments,
+    summary,
+    tenantSummary: summary,
+    readByTenant: entry.readByTenant === true,
+    visibleToTenant: true,
+    visibility: 'tenant',
+    created_at: timestamp,
+    createdAt: timestamp,
+  };
+}
+
+function buildTenantThread(request = {}) {
+  const updates = Array.isArray(request.updates) ? request.updates : [];
+  const mappedUpdates = updates
+    .map(mapUpdateForTenant)
+    .filter(Boolean);
+  const updateIds = new Set(mappedUpdates.map((entry) => entry.update_id).filter(Boolean));
+  const hasMappedSubmitted = mappedUpdates.some((entry) => entry.type === 'tenant_submitted');
+
+  const legacyEntries = (Array.isArray(request.statusHistory) ? request.statusHistory : [])
+    .map(mapLegacyStatusHistoryEntry)
+    .filter((entry) => entry && !updateIds.has(entry.update_id) && !(hasMappedSubmitted && entry.type === 'tenant_submitted'));
+
+  const hasSubmitted = [...mappedUpdates, ...legacyEntries].some((entry) => entry.type === 'tenant_submitted');
+  const submittedEntry = hasSubmitted
+    ? null
+    : {
+        update_id: `submitted_${request.request_id || request._id || 'request'}`,
+        type: 'tenant_submitted',
+        kind: 'tenant_submitted',
+        title: 'Request Submitted',
+        senderName: 'You',
+        senderRole: 'tenant',
+        actor_name: 'You',
+        actor_role: 'tenant',
+        message: 'Your request was submitted successfully.',
+        status: request.status || 'pending',
+        status_from: null,
+        status_to: request.status || 'pending',
+        attachments: Array.isArray(request.attachments)
+          ? request.attachments.map(sanitizeAttachmentForTenant).filter((item) => item.uri)
+          : [],
+        summary: null,
+        tenantSummary: null,
+        readByTenant: true,
+        visibleToTenant: true,
+        visibility: 'tenant',
+        created_at: request.created_at || request.createdAt || null,
+        createdAt: request.created_at || request.createdAt || null,
+      };
+
+  return [
+    ...(submittedEntry ? [submittedEntry] : []),
+    ...legacyEntries,
+    ...mappedUpdates,
+  ].sort((left, right) => getEntryTimeValue(left) - getEntryTimeValue(right));
+}
+
+function isUnreadForTenant(entry = {}, lastTenantSeenAt = null) {
+  if (normalizeSenderRole(entry.senderRole || entry.actor_role) === 'tenant') return false;
+  const timestamp = normalizeDate(getEntryTimestamp(entry));
+  if (!timestamp) return false;
+  const lastSeen = normalizeDate(lastTenantSeenAt);
+  if (!lastSeen) return true;
+  return timestamp > lastSeen;
+}
+
+function getLatestTenantVisibleUpdate(thread = []) {
+  return [...thread]
+    .filter((entry) => entry.type !== 'tenant_submitted')
+    .sort((left, right) => getEntryTimeValue(right) - getEntryTimeValue(left))[0] || null;
+}
+
+function buildTenantRequestResponse(request = {}, { includeThread = false } = {}) {
+  const thread = buildTenantThread(request);
+  const latestUpdate = getLatestTenantVisibleUpdate(thread);
+  const lastTenantSeenAt = request.lastTenantSeenAt || request.last_tenant_seen_at || null;
+  const unreadTenantCount = thread.filter((entry) => isUnreadForTenant(entry, lastTenantSeenAt)).length;
+  const tenantSummary = sanitizeTenantSummary(request.tenant_summary || request.tenantSummary);
+
+  const response = {
+    request_id: request.request_id || String(request._id || ''),
+    request_type: request.request_type || request.type || request.category || 'maintenance',
+    description: request.description || request.issue || '',
+    urgency: request.urgency || 'normal',
+    status: request.status || 'pending',
+    assigned_to: request.assigned_to || '',
+    scheduled_for: request.scheduled_for || '',
+    branch: request.branch || null,
+    roomId: request.roomId ? String(request.roomId) : null,
+    room_id: request.room_id || (request.roomId ? String(request.roomId) : null),
+    attachments: Array.isArray(request.attachments)
+      ? request.attachments.map(sanitizeAttachmentForTenant).filter((item) => item.uri)
+      : [],
+    tenant_summary: tenantSummary,
+    tenantSummary,
+    tenant_confirmed_resolved: request.tenant_confirmed_resolved === true,
+    lastTenantSeenAt,
+    lastActivityAt: request.lastActivityAt || request.last_activity_at || request.updated_at || request.updatedAt || request.created_at || request.createdAt || null,
+    latestActivityAt: request.lastActivityAt || request.last_activity_at || request.updated_at || request.updatedAt || request.created_at || request.createdAt || null,
+    lastTenantVisibleActivityAt: request.lastTenantVisibleActivityAt || request.last_tenant_visible_activity_at || latestUpdate?.created_at || null,
+    unreadTenantCount,
+    hasUnreadTenantUpdates: unreadTenantCount > 0,
+    latestTenantVisibleUpdate: latestUpdate
+      ? {
+          update_id: latestUpdate.update_id,
+          type: latestUpdate.type,
+          title: latestUpdate.title,
+          senderName: latestUpdate.senderName,
+          senderRole: latestUpdate.senderRole,
+          preview: updatePreviewText(latestUpdate),
+          hasAttachments: Array.isArray(latestUpdate.attachments) && latestUpdate.attachments.length > 0,
+          attachmentCount: Array.isArray(latestUpdate.attachments) ? latestUpdate.attachments.length : 0,
+          created_at: latestUpdate.created_at,
+        }
+      : null,
+    created_at: request.created_at || request.createdAt || null,
+    updated_at: request.updated_at || request.updatedAt || null,
+  };
+
+  if (includeThread) {
+    response.thread = thread;
+    response.statusHistory = thread
+      .filter((entry) => entry.status)
+      .map((entry) => ({
+        event: entry.kind || entry.type,
+        status: entry.status,
+        actor_name: entry.actor_name,
+        actor_role: entry.actor_role,
+        note: entry.message,
+        attachments: entry.attachments,
+        timestamp: entry.created_at,
+        visibleToTenant: true,
+        visibility: 'tenant',
+      }));
+  }
+
+  return response;
 }
 
 function stripInternalRequestFields(request) {
@@ -252,21 +761,28 @@ function normalizeRequestForPrimary(request, user = {}) {
   normalized.urgency = VALID_URGENCIES.includes(normalized.urgency) ? normalized.urgency : 'normal';
   normalized.status = normalized.status || 'pending';
   normalized.assigned_to = normalized.assigned_to ?? null;
+  normalized.scheduled_for = normalized.scheduled_for ?? null;
   normalized.notes = normalized.notes ?? null;
   normalized.reopen_note = normalized.reopen_note ?? null;
 
   normalized.attachments = Array.isArray(normalized.attachments) ? normalized.attachments : [];
+  normalized.updates = Array.isArray(normalized.updates) ? normalized.updates : [];
   normalized.reopen_history = Array.isArray(normalized.reopen_history) ? normalized.reopen_history : [];
   normalized.statusHistory = Array.isArray(normalized.statusHistory) ? normalized.statusHistory : [];
+  normalized.tenant_summary = sanitizeTenantSummary(normalized.tenant_summary || normalized.tenantSummary) || null;
 
   normalized.created_at = normalized.created_at || normalized.createdAt || now;
   normalized.updated_at = normalized.updated_at || normalized.updatedAt || now;
   normalized.createdAt = normalized.createdAt || normalized.created_at;
   normalized.updatedAt = normalized.updatedAt || normalized.updated_at;
+  normalized.lastActivityAt = normalized.lastActivityAt || normalized.last_activity_at || normalized.updated_at || now;
+  normalized.lastTenantVisibleActivityAt = normalized.lastTenantVisibleActivityAt || normalized.last_tenant_visible_activity_at || normalized.created_at || now;
+  normalized.lastTenantSeenAt = normalized.lastTenantSeenAt || normalized.last_tenant_seen_at || null;
 
   normalized.cancelled_at = normalized.cancelled_at ?? null;
   normalized.reopened_at = normalized.reopened_at ?? null;
   normalized.resolved_at = normalized.resolved_at ?? null;
+  normalized.tenant_confirmed_resolved = normalized.tenant_confirmed_resolved === true;
   normalized.isArchived = typeof normalized.isArchived === 'boolean' ? normalized.isArchived : false;
 
   normalized.branch = sanitizeBranch(normalized.branch || user.branch || user.branchId) || null;
@@ -399,7 +915,7 @@ function buildUserMaintenanceFilter(user, extraFilter = {}) {
 
 async function countActiveMaintenanceForUser(db, user) {
   const filter = buildUserMaintenanceFilter(user, {
-    status: { $in: ['pending', 'viewed', 'in_progress'] },
+    status: { $in: ACTIVE_MAINTENANCE_STATUSES },
   });
 
   if (!filter.$or.length) return 0;
@@ -408,12 +924,17 @@ async function countActiveMaintenanceForUser(db, user) {
   return requests.length;
 }
 
-async function findRequestForUser(db, requestId, userId) {
+async function findRequestForUser(db, requestId, user) {
+  const userFilter = typeof user === 'string'
+    ? { $or: [{ user_id: user }] }
+    : buildUserMaintenanceFilter(user);
+  if (!userFilter.$or?.length) return null;
+
   for (const collectionName of [PRIMARY_COLLECTION, LEGACY_COLLECTION]) {
     try {
       const request = await db.collection(collectionName).findOne({
         request_id: requestId,
-        user_id: userId,
+        $or: userFilter.$or,
       });
 
       if (request) {
@@ -462,10 +983,248 @@ async function getMyMaintenance(req, res) {
     const filter = buildUserMaintenanceFilter(req.user, status ? { status } : {});
 
     const requests = await loadRequestsAcrossCollections(db, filter);
-    res.json(requests.map(stripInternalRequestFields));
+    res.json(requests.map((request) => buildTenantRequestResponse(request)));
   } catch (error) {
     console.error('Get maintenance error:', error);
     res.status(500).json({ detail: 'Failed to fetch maintenance requests' });
+  }
+}
+
+// Get one tenant-owned maintenance request with tenant-visible thread.
+async function getMaintenanceDetail(req, res) {
+  try {
+    const db = getDb();
+    const { requestId } = req.params;
+    const located = await findRequestForUser(db, requestId, req.user);
+
+    if (!located) {
+      return res.status(404).json({ detail: 'Request not found' });
+    }
+
+    res.json(buildTenantRequestResponse(located.request, { includeThread: true }));
+  } catch (error) {
+    console.error('Get maintenance detail error:', error);
+    res.status(500).json({ detail: 'Failed to fetch maintenance request' });
+  }
+}
+
+// Mark tenant-visible updates as read for the signed-in tenant.
+async function markMaintenanceRead(req, res) {
+  try {
+    const db = getDb();
+    const { requestId } = req.params;
+    const located = await findRequestForUser(db, requestId, req.user);
+
+    if (!located) {
+      return res.status(404).json({ detail: 'Request not found' });
+    }
+
+    const now = new Date();
+    const updates = Array.isArray(located.request.updates)
+      ? located.request.updates.map((entry) => (
+          isTenantVisibleEntry(entry)
+            ? { ...entry, readByTenant: true, read_by_tenant: true, readByTenantAt: now }
+            : entry
+        ))
+      : [];
+
+    await db.collection(located.collectionName).updateOne(
+      { request_id: requestId },
+      {
+        $set: {
+          updates,
+          lastTenantSeenAt: now,
+          last_tenant_seen_at: now,
+          updatedAt: located.request.updatedAt || located.request.updated_at || now,
+          updated_at: located.request.updated_at || located.request.updatedAt || now,
+        },
+      }
+    );
+
+    const updatedSource = await db.collection(located.collectionName).findOne({ request_id: requestId });
+    const updated = await promoteRequestToPrimary(db, updatedSource, req.user)
+      .catch(() => updatedSource);
+
+    res.json(buildTenantRequestResponse(updated, { includeThread: true }));
+  } catch (error) {
+    console.error('Mark maintenance read error:', error);
+    res.status(500).json({ detail: 'Failed to mark maintenance updates as read' });
+  }
+}
+
+async function addTenantMaintenanceReply(req, res) {
+  try {
+    const db = getDb();
+    const { requestId } = req.params;
+    const message = typeof req.body?.message === 'string' ? req.body.message.trim() : '';
+    const { attachments, error: attachmentError } = normalizeTenantAttachments(req.body?.attachments);
+
+    if (attachmentError) {
+      return res.status(400).json({ detail: attachmentError });
+    }
+    if (!message && !attachments.length) {
+      return res.status(400).json({ detail: 'Message or attachment is required' });
+    }
+    if (message.length > 2000) {
+      return res.status(400).json({ detail: 'Message must be 2000 characters or fewer' });
+    }
+
+    const located = await findRequestForUser(db, requestId, req.user);
+    if (!located) {
+      return res.status(404).json({ detail: 'Request not found' });
+    }
+
+    const currentStatus = String(located.request.status || '').toLowerCase();
+    if (TERMINAL_STATUSES.includes(currentStatus) || ['resolved', 'completed'].includes(currentStatus)) {
+      return res.status(400).json({ detail: 'This request is closed. Please reopen it if the issue is still happening.' });
+    }
+
+    const now = new Date();
+    const update = buildUpdateEntry({
+      type: 'tenant_reply',
+      visibility: 'tenant',
+      actor: {
+        id: req.user.user_id,
+        name: actorNameFromUser(req.user),
+        role: 'tenant',
+      },
+      message,
+      attachments,
+      status: located.request.status || 'pending',
+      senderRole: 'tenant',
+      readByTenant: true,
+      extra: { created_at: now, createdAt: now },
+    });
+
+    const statusHistory = Array.isArray(located.request.statusHistory)
+      ? [...located.request.statusHistory]
+      : [];
+    statusHistory.push({
+      event: 'tenant_reply',
+      status: located.request.status || 'pending',
+      actor_id: req.user.user_id || null,
+      actor_name: actorNameFromUser(req.user),
+      actor_role: 'tenant',
+      note: message,
+      attachments,
+      update_id: update.update_id,
+      visibility: 'tenant',
+      visibleToTenant: true,
+      timestamp: now,
+    });
+
+    const updates = Array.isArray(located.request.updates)
+      ? [...located.request.updates, update]
+      : [update];
+
+    await db.collection(located.collectionName).updateOne(
+      { request_id: requestId },
+      {
+        $set: {
+          updates,
+          statusHistory,
+          tenant_confirmed_resolved: false,
+          lastActivityAt: now,
+          last_activity_at: now,
+          lastTenantVisibleActivityAt: now,
+          last_tenant_visible_activity_at: now,
+          updated_at: now,
+          updatedAt: now,
+        },
+      }
+    );
+
+    const updatedSource = await db.collection(located.collectionName).findOne({ request_id: requestId });
+    const updated = await promoteRequestToPrimary(db, updatedSource, req.user)
+      .catch(() => updatedSource);
+
+    res.status(201).json(buildTenantRequestResponse(updated, { includeThread: true }));
+  } catch (error) {
+    console.error('Tenant maintenance reply error:', error);
+    res.status(500).json({ detail: 'Failed to send maintenance reply' });
+  }
+}
+
+async function confirmMaintenanceResolved(req, res) {
+  try {
+    const db = getDb();
+    const { requestId } = req.params;
+    const located = await findRequestForUser(db, requestId, req.user);
+
+    if (!located) {
+      return res.status(404).json({ detail: 'Request not found' });
+    }
+
+    const currentStatus = String(located.request.status || '').toLowerCase();
+    if (!['resolved', 'completed'].includes(currentStatus)) {
+      return res.status(400).json({ detail: 'Only resolved requests can be confirmed.' });
+    }
+
+    const now = new Date();
+    const update = buildUpdateEntry({
+      type: 'tenant_confirmed_resolved',
+      visibility: 'tenant',
+      actor: {
+        id: req.user.user_id,
+        name: actorNameFromUser(req.user),
+        role: 'tenant',
+      },
+      message: 'Tenant confirmed the issue has been fixed.',
+      status: 'completed',
+      statusFrom: located.request.status || null,
+      statusTo: 'completed',
+      senderRole: 'tenant',
+      readByTenant: true,
+      extra: { created_at: now, createdAt: now },
+    });
+
+    const statusHistory = Array.isArray(located.request.statusHistory)
+      ? [...located.request.statusHistory]
+      : [];
+    statusHistory.push({
+      event: 'tenant_confirmed_resolved',
+      status: 'completed',
+      previous_status: located.request.status || null,
+      actor_id: req.user.user_id || null,
+      actor_name: actorNameFromUser(req.user),
+      actor_role: 'tenant',
+      note: update.message,
+      update_id: update.update_id,
+      visibility: 'tenant',
+      visibleToTenant: true,
+      timestamp: now,
+    });
+
+    const updates = Array.isArray(located.request.updates)
+      ? [...located.request.updates, update]
+      : [update];
+
+    await db.collection(located.collectionName).updateOne(
+      { request_id: requestId },
+      {
+        $set: {
+          status: 'completed',
+          tenant_confirmed_resolved: true,
+          updates,
+          statusHistory,
+          lastActivityAt: now,
+          last_activity_at: now,
+          lastTenantVisibleActivityAt: now,
+          last_tenant_visible_activity_at: now,
+          updated_at: now,
+          updatedAt: now,
+        },
+      }
+    );
+
+    const updatedSource = await db.collection(located.collectionName).findOne({ request_id: requestId });
+    const updated = await promoteRequestToPrimary(db, updatedSource, req.user)
+      .catch(() => updatedSource);
+
+    res.json(buildTenantRequestResponse(updated, { includeThread: true }));
+  } catch (error) {
+    console.error('Confirm maintenance resolved error:', error);
+    res.status(500).json({ detail: 'Failed to confirm maintenance resolution' });
   }
 }
 
@@ -499,6 +1258,21 @@ async function createMaintenance(req, res) {
 
     const tenantContext = await resolveTenantContext(db, req.user);
     const now = new Date();
+    const submittedUpdate = buildUpdateEntry({
+      type: 'tenant_submitted',
+      visibility: 'tenant',
+      actor: {
+        id: req.user.user_id,
+        name: actorNameFromUser(req.user),
+        role: 'tenant',
+      },
+      message: 'Your request was submitted successfully.',
+      attachments,
+      status: 'pending',
+      senderRole: 'tenant',
+      readByTenant: true,
+      extra: { created_at: now, createdAt: now },
+    });
 
     const newRequest = normalizeRequestForPrimary(
       {
@@ -512,6 +1286,7 @@ async function createMaintenance(req, res) {
         assigned_to: null,
         notes: null,
         attachments,
+        updates: [submittedUpdate],
         reopen_note: null,
         reopen_history: [],
         statusHistory: [
@@ -522,6 +1297,10 @@ async function createMaintenance(req, res) {
             actor_name: actorNameFromUser(req.user),
             actor_role: req.user.role || null,
             note: null,
+            attachments,
+            update_id: submittedUpdate.update_id,
+            visibility: 'tenant',
+            visibleToTenant: true,
             timestamp: now,
           },
         ],
@@ -529,6 +1308,13 @@ async function createMaintenance(req, res) {
         reservationId: tenantContext.reservationId,
         roomId: tenantContext.roomId,
         isArchived: false,
+        tenant_confirmed_resolved: false,
+        lastActivityAt: now,
+        last_activity_at: now,
+        lastTenantVisibleActivityAt: now,
+        last_tenant_visible_activity_at: now,
+        lastTenantSeenAt: now,
+        last_tenant_seen_at: now,
         created_at: now,
         updated_at: now,
         createdAt: now,
@@ -538,7 +1324,7 @@ async function createMaintenance(req, res) {
     );
 
     await db.collection(PRIMARY_COLLECTION).insertOne(newRequest);
-    res.status(201).json(stripInternalRequestFields(newRequest));
+    res.status(201).json(buildTenantRequestResponse(newRequest, { includeThread: true }));
   } catch (error) {
     console.error('Create maintenance error:', error);
     res.status(500).json({ detail: 'Failed to create maintenance request' });
@@ -552,7 +1338,7 @@ async function updateMaintenance(req, res) {
     const { request_type, description, urgency } = req.body;
     const db = getDb();
 
-    const located = await findRequestForUser(db, requestId, req.user.user_id);
+    const located = await findRequestForUser(db, requestId, req.user);
     if (!located) {
       return res.status(404).json({ detail: 'Request not found' });
     }
@@ -580,7 +1366,7 @@ async function updateMaintenance(req, res) {
     const updatedSource = await db.collection(located.collectionName).findOne({ request_id: requestId });
     const updated = await promoteRequestToPrimary(db, updatedSource, req.user)
       .catch(() => updatedSource);
-    res.json(stripInternalRequestFields(updated));
+    res.json(buildTenantRequestResponse(updated, { includeThread: true }));
   } catch (error) {
     console.error('Update maintenance error:', error);
     res.status(500).json({ detail: 'Failed to update maintenance request' });
@@ -593,7 +1379,7 @@ async function cancelMaintenance(req, res) {
     const { requestId } = req.params;
     const db = getDb();
 
-    const located = await findRequestForUser(db, requestId, req.user.user_id);
+    const located = await findRequestForUser(db, requestId, req.user);
     if (!located) {
       return res.status(404).json({ detail: 'Request not found' });
     }
@@ -605,6 +1391,22 @@ async function cancelMaintenance(req, res) {
     const statusHistory = Array.isArray(located.request.statusHistory)
       ? [...located.request.statusHistory]
       : [];
+    const update = buildUpdateEntry({
+      type: 'tenant_cancelled',
+      visibility: 'tenant',
+      actor: {
+        id: req.user.user_id,
+        name: actorNameFromUser(req.user),
+        role: 'tenant',
+      },
+      message: 'Your request was cancelled.',
+      status: 'cancelled',
+      statusFrom: located.request.status || null,
+      statusTo: 'cancelled',
+      senderRole: 'tenant',
+      readByTenant: true,
+      extra: { created_at: now, createdAt: now },
+    });
     statusHistory.push({
       event: 'cancelled',
       status: 'cancelled',
@@ -612,8 +1414,14 @@ async function cancelMaintenance(req, res) {
       actor_name: actorNameFromUser(req.user),
       actor_role: req.user.role || null,
       note: null,
+      update_id: update.update_id,
+      visibility: 'tenant',
+      visibleToTenant: true,
       timestamp: now,
     });
+    const updates = Array.isArray(located.request.updates)
+      ? [...located.request.updates, update]
+      : [update];
 
     await db.collection(located.collectionName).updateOne(
       { request_id: requestId },
@@ -621,7 +1429,12 @@ async function cancelMaintenance(req, res) {
         $set: {
           status: 'cancelled',
           cancelled_at: now,
+          updates,
           statusHistory,
+          lastActivityAt: now,
+          last_activity_at: now,
+          lastTenantVisibleActivityAt: now,
+          last_tenant_visible_activity_at: now,
           updated_at: now,
           updatedAt: now,
         },
@@ -631,7 +1444,7 @@ async function cancelMaintenance(req, res) {
     const updatedSource = await db.collection(located.collectionName).findOne({ request_id: requestId });
     const updated = await promoteRequestToPrimary(db, updatedSource, req.user)
       .catch(() => updatedSource);
-    res.json(stripInternalRequestFields(updated));
+    res.json(buildTenantRequestResponse(updated, { includeThread: true }));
   } catch (error) {
     console.error('Cancel maintenance error:', error);
     res.status(500).json({ detail: 'Failed to cancel maintenance request' });
@@ -645,7 +1458,7 @@ async function reopenMaintenance(req, res) {
     const { reopen_note } = req.body;
     const db = getDb();
 
-    const located = await findRequestForUser(db, requestId, req.user.user_id);
+    const located = await findRequestForUser(db, requestId, req.user);
     if (!located) {
       return res.status(404).json({ detail: 'Request not found' });
     }
@@ -672,6 +1485,22 @@ async function reopenMaintenance(req, res) {
     const statusHistory = Array.isArray(located.request.statusHistory)
       ? [...located.request.statusHistory]
       : [];
+    const update = buildUpdateEntry({
+      type: 'tenant_reopened',
+      visibility: 'tenant',
+      actor: {
+        id: req.user.user_id,
+        name: actorNameFromUser(req.user),
+        role: 'tenant',
+      },
+      message: note || 'The issue is still happening.',
+      status: 'pending',
+      statusFrom: located.request.status || null,
+      statusTo: 'pending',
+      senderRole: 'tenant',
+      readByTenant: true,
+      extra: { created_at: now, createdAt: now },
+    });
     statusHistory.push({
       event: 'reopened',
       status: 'pending',
@@ -679,8 +1508,14 @@ async function reopenMaintenance(req, res) {
       actor_name: actorNameFromUser(req.user),
       actor_role: req.user.role || null,
       note,
+      update_id: update.update_id,
+      visibility: 'tenant',
+      visibleToTenant: true,
       timestamp: now,
     });
+    const updates = Array.isArray(located.request.updates)
+      ? [...located.request.updates, update]
+      : [update];
 
     await db.collection(located.collectionName).updateOne(
       { request_id: requestId },
@@ -690,7 +1525,13 @@ async function reopenMaintenance(req, res) {
           reopen_note: note,
           reopen_history: reopenHistory,
           reopened_at: now,
+          updates,
           statusHistory,
+          tenant_confirmed_resolved: false,
+          lastActivityAt: now,
+          last_activity_at: now,
+          lastTenantVisibleActivityAt: now,
+          last_tenant_visible_activity_at: now,
           updated_at: now,
           updatedAt: now,
         },
@@ -700,7 +1541,7 @@ async function reopenMaintenance(req, res) {
     const updatedSource = await db.collection(located.collectionName).findOne({ request_id: requestId });
     const updated = await promoteRequestToPrimary(db, updatedSource, req.user)
       .catch(() => updatedSource);
-    res.json(stripInternalRequestFields(updated));
+    res.json(buildTenantRequestResponse(updated, { includeThread: true }));
   } catch (error) {
     console.error('Reopen maintenance error:', error);
     res.status(500).json({ detail: 'Failed to reopen maintenance request' });
@@ -711,8 +1552,21 @@ async function reopenMaintenance(req, res) {
 async function adminUpdateStatus(req, res) {
   try {
     const { requestId } = req.params;
-    const { status, notes, assigned_to } = req.body;
+    const {
+      status,
+      notes,
+      assigned_to,
+      scheduled_for,
+      next_step,
+      completion_note,
+      sender_role,
+      sender_label,
+    } = req.body;
     const normalizedStatus = typeof status === 'string' ? status.trim().toLowerCase() : '';
+    const noteText = typeof notes === 'string' ? notes.trim() : '';
+    const visibility = normalizeVisibility(req.body?.visibility || (req.body?.isTenantVisible === false ? 'internal' : 'tenant'));
+    const isTenantVisible = visibility === 'tenant';
+    const shouldSendSummary = req.body?.send_tenant_summary === true || req.body?.sendTenantSummary === true;
     const { attachments: progressAttachments, error: progressAttachmentError } = normalizeProgressAttachments(
       req.body?.progress_attachments !== undefined
         ? req.body.progress_attachments
@@ -733,38 +1587,183 @@ async function adminUpdateStatus(req, res) {
     }
 
     const now = new Date();
+    const previousStatus = located.request.status || null;
+    const statusChanged = String(previousStatus || '').toLowerCase() !== normalizedStatus;
+    const actor = {
+      id: req.user?.user_id || null,
+      name: actorNameFromUser(req.user),
+      role: normalizeSenderRole(sender_role || req.user?.role || 'admin'),
+    };
+    const adminUpdate = buildUpdateEntry({
+      type: isTenantVisible ? 'admin_update' : 'internal_note',
+      visibility,
+      actor,
+      message: noteText,
+      attachments: progressAttachments,
+      status: normalizedStatus,
+      statusFrom: previousStatus,
+      statusTo: normalizedStatus,
+      senderRole: sender_role || req.user?.role || 'admin',
+      senderLabel: typeof sender_label === 'string' && sender_label.trim()
+        ? sender_label.trim()
+        : null,
+      readByTenant: false,
+      extra: {
+        assigned_to: typeof assigned_to === 'string' ? assigned_to.trim() : located.request.assigned_to || '',
+        scheduled_for: typeof scheduled_for === 'string' ? scheduled_for.trim() : located.request.scheduled_for || '',
+        next_step: typeof next_step === 'string' ? next_step.trim() : '',
+        completion_note: typeof completion_note === 'string' ? completion_note.trim() : '',
+        created_at: now,
+        createdAt: now,
+      },
+    });
+
+    const tenantStatusUpdate = (!isTenantVisible && statusChanged)
+      ? buildUpdateEntry({
+          type: 'status_change',
+          visibility: 'tenant',
+          actor: { role: 'system', name: 'Maintenance Team' },
+          message: friendlyStatusCopy(normalizedStatus),
+          attachments: [],
+          status: normalizedStatus,
+          statusFrom: previousStatus,
+          statusTo: normalizedStatus,
+          senderRole: 'system',
+          readByTenant: false,
+          extra: { created_at: now, createdAt: now },
+        })
+      : null;
+
+    const summary = shouldSendSummary && isTenantVisible
+      ? buildTenantSummary(located.request, {
+          status: normalizedStatus,
+          notes: noteText,
+          assigned_to,
+          schedule: scheduled_for,
+          next_step,
+          completion_note,
+          attachments: progressAttachments,
+          created_at: now,
+        })
+      : null;
+    const summaryUpdate = summary
+      ? buildUpdateEntry({
+          type: 'tenant_summary',
+          visibility: 'tenant',
+          actor,
+          message: summaryToMessage(summary),
+          attachments: summary.attachments,
+          status: normalizedStatus,
+          statusFrom: previousStatus,
+          statusTo: normalizedStatus,
+          senderRole: sender_role || req.user?.role || 'admin',
+          senderLabel: typeof sender_label === 'string' && sender_label.trim()
+            ? sender_label.trim()
+            : null,
+          summary,
+          readByTenant: false,
+          extra: { created_at: now, createdAt: now },
+        })
+      : null;
+
+    const nextUpdates = Array.isArray(located.request.updates)
+      ? [...located.request.updates]
+      : [];
+    const hasAdminUpdateContent = noteText || progressAttachments.length || statusChanged || assigned_to !== undefined || scheduled_for !== undefined;
+    if (hasAdminUpdateContent) nextUpdates.push(adminUpdate);
+    if (tenantStatusUpdate) nextUpdates.push(tenantStatusUpdate);
+    if (summaryUpdate) nextUpdates.push(summaryUpdate);
+
     const statusHistory = Array.isArray(located.request.statusHistory)
       ? [...located.request.statusHistory]
       : [];
     statusHistory.push({
       event: 'status_changed',
       status: normalizedStatus,
+      previous_status: previousStatus,
       actor_id: req.user?.user_id || null,
       actor_name: actorNameFromUser(req.user),
-      actor_role: req.user?.role || null,
-      note: typeof notes === 'string' ? notes.trim() : null,
+      actor_role: actor.role,
+      note: noteText || null,
       attachments: progressAttachments,
+      update_id: adminUpdate.update_id,
+      visibility,
+      visibleToTenant: isTenantVisible,
+      isTenantVisible,
       timestamp: now,
     });
+    if (tenantStatusUpdate) {
+      statusHistory.push({
+        event: 'status_visible',
+        status: normalizedStatus,
+        previous_status: previousStatus,
+        actor_id: null,
+        actor_name: 'Maintenance Team',
+        actor_role: 'system',
+        note: tenantStatusUpdate.message,
+        attachments: [],
+        update_id: tenantStatusUpdate.update_id,
+        visibility: 'tenant',
+        visibleToTenant: true,
+        isTenantVisible: true,
+        timestamp: now,
+      });
+    }
+    if (summaryUpdate) {
+      statusHistory.push({
+        event: 'tenant_summary',
+        status: normalizedStatus,
+        previous_status: previousStatus,
+        actor_id: req.user?.user_id || null,
+        actor_name: actorNameFromUser(req.user),
+        actor_role: actor.role,
+        note: summaryUpdate.message,
+        attachments: summaryUpdate.attachments,
+        update_id: summaryUpdate.update_id,
+        visibility: 'tenant',
+        visibleToTenant: true,
+        isTenantVisible: true,
+        timestamp: now,
+      });
+    }
+
+    const tenantVisibleUpdateSent = [adminUpdate, tenantStatusUpdate, summaryUpdate]
+      .filter(Boolean)
+      .some((entry) => isTenantVisibleEntry(entry) && normalizeSenderRole(entry.actor_role) !== 'tenant');
 
     const updates = {
       status: normalizedStatus,
+      updates: nextUpdates,
       statusHistory,
+      lastActivityAt: now,
+      last_activity_at: now,
       updated_at: now,
       updatedAt: now,
     };
 
     if (notes !== undefined) {
-      updates.notes = typeof notes === 'string' ? notes.trim() : null;
+      updates.notes = isTenantVisible ? noteText || null : located.request.notes || null;
     }
     if (assigned_to !== undefined) {
       updates.assigned_to = typeof assigned_to === 'string' ? assigned_to.trim() : null;
     }
+    if (scheduled_for !== undefined) {
+      updates.scheduled_for = typeof scheduled_for === 'string' ? scheduled_for.trim() : null;
+    }
+    if (summary) {
+      updates.tenant_summary = summary;
+      updates.tenantSummary = summary;
+    }
+    if (tenantVisibleUpdateSent) {
+      updates.lastTenantVisibleActivityAt = now;
+      updates.last_tenant_visible_activity_at = now;
+    }
     if (['resolved', 'completed'].includes(normalizedStatus)) {
       updates.resolved_at = now;
     }
-    if (['pending', 'viewed', 'in_progress'].includes(normalizedStatus)) {
+    if (ACTIVE_MAINTENANCE_STATUSES.includes(normalizedStatus)) {
       updates.cancelled_at = null;
+      updates.tenant_confirmed_resolved = false;
     }
 
     await db.collection(located.collectionName).updateOne(
@@ -776,9 +1775,15 @@ async function adminUpdateStatus(req, res) {
     const updated = await promoteRequestToPrimary(db, updatedSource, req.user)
       .catch(() => updatedSource);
 
-    // Notify the tenant (non-blocking)
-    notifyMaintenanceStatusChange(updated?.user_id || located.request.user_id, updated || located.request, normalizedStatus)
-      .catch(() => {});
+    const tenantUserId = updated?.user_id || located.request.user_id;
+    if (tenantVisibleUpdateSent) {
+      const notifyEntry = summaryUpdate || (isTenantVisible ? adminUpdate : tenantStatusUpdate);
+      notifyMaintenanceTenantUpdate(tenantUserId, updated || located.request, notifyEntry)
+        .catch(() => {});
+    } else if (statusChanged) {
+      notifyMaintenanceStatusChange(tenantUserId, updated || located.request, normalizedStatus)
+        .catch(() => {});
+    }
 
     res.json(stripInternalRequestFields(updated));
   } catch (error) {
@@ -810,7 +1815,11 @@ async function adminGetAll(req, res) {
 
 module.exports = {
   getMyMaintenance,
+  getMaintenanceDetail,
   createMaintenance,
+  addTenantMaintenanceReply,
+  markMaintenanceRead,
+  confirmMaintenanceResolved,
   updateMaintenance,
   cancelMaintenance,
   reopenMaintenance,

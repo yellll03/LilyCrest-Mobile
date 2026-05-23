@@ -74,6 +74,13 @@ function oncePerRequest(middleware, flag) {
   };
 }
 
+function noStorePrivateApiResponses(_req, res, next) {
+  res.set('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  res.set('Pragma', 'no-cache');
+  res.set('Expires', '0');
+  return next();
+}
+
 // Middleware - CORS Configuration
 app.use(cors({
   origin: (origin, callback) => {
@@ -122,13 +129,23 @@ const chatbotLimiterOnce = oncePerRequest(chatbotLimiter, '__chatbotLimiterAppli
 app.use('/api/chatbot', chatbotLimiterOnce);
 app.use('/api/m/chatbot', chatbotLimiterOnce);
 
-// ETag cache for frequently read endpoints (60s TTL)
-app.use('/api/announcements', cacheMiddleware(120));
-app.use('/api/dashboard', cacheMiddleware(60));
+// Never cache authenticated tenant/private API responses before auth has run.
+app.use([
+  '/api/dashboard',
+  '/api/m/dashboard',
+  '/api/billing',
+  '/api/m/billing',
+  '/api/documents',
+  '/api/m/documents',
+  '/api/maintenance',
+  '/api/m/maintenance',
+  '/api/announcements',
+  '/api/m/announcements',
+], noStorePrivateApiResponses);
+
+// ETag cache for public/frequently read endpoints.
 app.use('/api/faqs', cacheMiddleware(300));
 app.use('/api/rooms', cacheMiddleware(120));
-app.use('/api/m/announcements', cacheMiddleware(120));
-app.use('/api/m/dashboard', cacheMiddleware(60));
 app.use('/api/m/faqs', cacheMiddleware(300));
 app.use('/api/m/rooms', cacheMiddleware(120));
 
@@ -295,6 +312,8 @@ async function startServer() {
       await maintenance.createIndex({ request_id: 1 }, { sparse: true, name: `${collectionName}_request_id` });
       await maintenance.createIndex({ user_id: 1, status: 1, created_at: -1 }, { name: `${collectionName}_user_status_created_at` });
       await maintenance.createIndex({ userId: 1, status: 1, createdAt: -1 }, { name: `${collectionName}_userId_status_createdAt` });
+      await maintenance.createIndex({ user_id: 1, lastActivityAt: -1 }, { name: `${collectionName}_user_last_activity` });
+      await maintenance.createIndex({ userId: 1, lastActivityAt: -1 }, { name: `${collectionName}_userId_last_activity` });
     }
 
     // TTL index: auto-expire OTP records after expires_at
