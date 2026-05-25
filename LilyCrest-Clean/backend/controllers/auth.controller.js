@@ -965,7 +965,7 @@ async function forgotPassword(req, res) {
         createdAt: new Date(),
       });
 
-      const backendUrl = (process.env.BACKEND_URL || 'https://lilycrest-mobile.onrender.com').replace(/\/+$/, '');
+      const backendUrl = (process.env.BACKEND_URL || 'https://api.lilycrest.space').replace(/\/+$/, '');
       const resetLink = `${backendUrl}/api/auth/reset-password?token=${rawToken}`;
       const userName = tenantData.name || dbUser?.name || 'Tenant';
 

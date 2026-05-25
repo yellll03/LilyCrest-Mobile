@@ -12,7 +12,7 @@ const { notifyPaymentConfirmed } = require('../services/pushService');
 const { sendPaymentReceiptEmail } = require('../services/emailService');
 
 const PAYMONGO_BASE = 'https://api.paymongo.com/v1';
-const DEFAULT_BACKEND_URL = 'https://lilycrest-mobile.onrender.com';
+const DEFAULT_BACKEND_URL = 'https://api.lilycrest.space';
 
 function normalizeBaseUrl(value) {
   return String(value || '').trim().replace(/\/+$/, '');
@@ -750,7 +750,7 @@ async function registerWebhook() {
   const backendUrl = normalizeBaseUrl(process.env.BACKEND_URL) || DEFAULT_BACKEND_URL;
   if (!backendUrl) {
     console.log('[PayMongo] BACKEND_URL not set — webhook registration skipped.');
-    console.log('[PayMongo] Set BACKEND_URL to https://lilycrest-mobile.onrender.com to auto-register.');
+    console.log('[PayMongo] Set BACKEND_URL to https://api.lilycrest.space to auto-register.');
     return;
   }
 
