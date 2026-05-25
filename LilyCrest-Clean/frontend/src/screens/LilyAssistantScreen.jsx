@@ -18,7 +18,7 @@ import MessageBubble from '../components/assistant/MessageBubble';
 import { useAuth } from '../context/AuthContext';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
 import { useAssistantChat } from '../hooks/useAssistantChat';
-import { apiService } from '../services/api';
+import { apiService, getApiErrorMessage } from '../services/api';
 import {
   DEFAULT_UPLOAD_MIME_TYPES,
   ensureFirebaseStorageAttachments,
@@ -508,7 +508,7 @@ export default function LilyAssistantScreen() {
       const message =
         error?.response?.data?.detail ||
         error?.response?.data?.error ||
-        'Unable to refresh support data right now.';
+        getApiErrorMessage(error, 'Unable to refresh support data right now.');
       setNetworkError(message);
     } finally {
       setRefreshingSupport(false);
@@ -560,8 +560,7 @@ export default function LilyAssistantScreen() {
       const detail =
         error?.response?.data?.detail ||
         error?.response?.data?.error ||
-        error?.message ||
-        'Admin support could not be started right now.';
+        getApiErrorMessage(error, error?.message || 'Admin support could not be started right now.');
       setChatMode(CHAT_MODE.UNAVAILABLE);
       setNetworkError(detail);
       setMessages((prev) => [
@@ -673,7 +672,7 @@ export default function LilyAssistantScreen() {
       setNetworkError(
         error?.response?.data?.detail ||
         error?.response?.data?.error ||
-        'Failed to send your message to admin support.'
+        getApiErrorMessage(error, 'Failed to send your message to admin support.')
       );
     } finally {
       setIsSending(false);
@@ -876,7 +875,7 @@ export default function LilyAssistantScreen() {
       if (attachments.length) {
         setAttachmentUploadStatus('Upload failed, please retry');
       }
-      setNetworkError(error?.message || 'Unable to send your message. Please try again.');
+      setNetworkError(getApiErrorMessage(error, error?.message || 'Unable to send your message. Please try again.'));
     } finally {
       setIsSending(false);
       sendGuardRef.current = false;

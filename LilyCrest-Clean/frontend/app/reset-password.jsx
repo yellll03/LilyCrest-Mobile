@@ -15,7 +15,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
 import { useToast } from '../src/context/ToastContext';
-import { api } from '../src/services/api';
+import { api, getApiErrorMessage } from '../src/services/api';
 import {
   blockPasswordWhitespaceInput,
   getStrongPasswordChecks,
@@ -122,11 +122,12 @@ export default function ResetPasswordScreen() {
       });
     } catch (err) {
       const detail = err.response?.data?.detail || err.response?.data?.message;
-      setRequestError(detail || 'Failed to reset password. Please try again.');
+      const message = detail || getApiErrorMessage(err, 'Failed to reset password. Please try again.');
+      setRequestError(message);
       showToast({
         type: 'error',
         title: 'Reset Failed',
-        message: detail || 'Please request a new reset link and try again.',
+        message,
       });
     } finally {
       setIsLoading(false);

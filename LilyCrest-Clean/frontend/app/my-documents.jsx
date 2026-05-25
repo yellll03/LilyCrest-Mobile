@@ -11,7 +11,7 @@ import { useAlert } from '../src/context/AlertContext';
 import { useAuth } from '../src/context/AuthContext';
 import { useTheme } from '../src/context/ThemeContext';
 import { useToast } from '../src/context/ToastContext';
-import { apiService } from '../src/services/api';
+import { apiService, getApiErrorMessage } from '../src/services/api';
 import {
   ensureFirebaseStorageAttachments,
   getAttachmentDownloadUrl,
@@ -348,7 +348,7 @@ export default function MyDocumentsScreen() {
       }
     } catch (error) {
       console.error('Download error:', error);
-      showToast({ type: 'error', title: 'Download Failed', message: 'Failed to download document. Please try again.' });
+      showToast({ type: 'error', title: 'Download Failed', message: getApiErrorMessage(error, 'Failed to download document. Please try again.') });
     } finally {
       setDownloading(null);
     }
@@ -418,7 +418,7 @@ export default function MyDocumentsScreen() {
       showToast({
         type: 'error',
         title: 'Upload Failed',
-        message: error?.response?.data?.detail || error?.message || 'Please try again.',
+        message: getApiErrorMessage(error, error?.message || 'Please try again.'),
       });
     } finally {
       setUploading(false);
@@ -444,7 +444,7 @@ export default function MyDocumentsScreen() {
       showToast({
         type: 'error',
         title: 'Delete Failed',
-        message: 'Failed to delete document. Please try again.',
+        message: getApiErrorMessage(error, 'Failed to delete document. Please try again.'),
       });
     } finally {
       setDeletingDocId(null);
@@ -483,7 +483,7 @@ export default function MyDocumentsScreen() {
       }
     } catch (error) {
       console.error('View doc error:', error);
-      showAlert({ title: 'Error', message: 'Failed to load document.', type: 'error' });
+      showAlert({ title: 'Error', message: getApiErrorMessage(error, 'Failed to load document.'), type: 'error' });
     }
   };
 

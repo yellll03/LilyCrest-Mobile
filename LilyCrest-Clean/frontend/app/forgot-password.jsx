@@ -5,7 +5,7 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleShe
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
 import { useToast } from '../src/context/ToastContext';
-import { api } from '../src/services/api';
+import { api, getApiErrorMessage } from '../src/services/api';
 
 const validateEmail = (value) => {
   const normalized = (value || '').trim().toLowerCase();
@@ -58,7 +58,7 @@ export default function ForgotPasswordScreen() {
       showToast({
         type: 'error',
         title: 'Unable to Send Reset Link',
-        message: detail || 'Please try again in a moment.',
+        message: detail || getApiErrorMessage(err, 'Please try again in a moment.'),
       });
     } finally {
       setIsLoading(false);

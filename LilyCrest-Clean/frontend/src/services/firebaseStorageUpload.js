@@ -68,7 +68,11 @@ export function getAttachmentDownloadUrl(attachment = {}) {
   if (typeof attachment === 'string') return attachment.trim();
   return String(
     attachment?.downloadUrl
+    || attachment?.download_url
+    || attachment?.fileUrl
     || attachment?.file_url
+    || attachment?.signedUrl
+    || attachment?.secure_url
     || attachment?.url
     || attachment?.uri
     || ''
@@ -105,7 +109,7 @@ function inferMimeTypeFromName(name = '') {
 }
 
 export function getAttachmentMimeType(attachment = {}, index = 0) {
-  const explicit = String(attachment?.mimeType || attachment?.type || '').trim().toLowerCase();
+  const explicit = String(attachment?.mimeType || attachment?.contentType || attachment?.type || '').trim().toLowerCase();
   if (explicit && explicit !== 'image' && explicit !== 'application/octet-stream') {
     return explicit;
   }

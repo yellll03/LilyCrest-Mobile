@@ -14,6 +14,28 @@ const LEGACY_COLLECTION = 'maintenancerequests';
 
 // Read from both so old records still appear while new records land in primary.
 const COLLECTIONS = [...new Set([PRIMARY_COLLECTION, LEGACY_COLLECTION])];
+const PUBLIC_REPLY_TYPES = new Set([
+  'admin_reply',
+  'admin_update',
+  'tenant_reply',
+  'tenant_summary',
+  'summary',
+]);
+const INTERNAL_WORKFLOW_TYPES = new Set([
+  'status_change',
+  'status_changed',
+  'status_visible',
+  'internal_note',
+  'internal_log',
+  'viewed',
+  'processing',
+  'workflow',
+  'draft_saved',
+  'tenant_submitted',
+  'tenant_cancelled',
+  'tenant_reopened',
+  'tenant_confirmed_resolved',
+]);
 
 const ACTIVE_RESERVATION_STATUSES = ['moveIn', 'active', 'completed', 'confirmed'];
 const VALID_URGENCIES = ['low', 'normal', 'high'];
@@ -134,30 +156,44 @@ function attachmentUrlFromEntry(entry = {}) {
   if (typeof entry === 'string') return entry.trim();
   return typeof entry?.downloadUrl === 'string' && entry.downloadUrl.trim()
     ? entry.downloadUrl.trim()
-    : typeof entry?.file_url === 'string' && entry.file_url.trim()
-      ? entry.file_url.trim()
-      : typeof entry?.url === 'string' && entry.url.trim()
-        ? entry.url.trim()
-        : typeof entry?.uri === 'string'
-          ? entry.uri.trim()
-          : '';
+    : typeof entry?.download_url === 'string' && entry.download_url.trim()
+      ? entry.download_url.trim()
+      : typeof entry?.fileUrl === 'string' && entry.fileUrl.trim()
+        ? entry.fileUrl.trim()
+        : typeof entry?.file_url === 'string' && entry.file_url.trim()
+          ? entry.file_url.trim()
+          : typeof entry?.signedUrl === 'string' && entry.signedUrl.trim()
+            ? entry.signedUrl.trim()
+            : typeof entry?.secure_url === 'string' && entry.secure_url.trim()
+              ? entry.secure_url.trim()
+              : typeof entry?.url === 'string' && entry.url.trim()
+                ? entry.url.trim()
+                : typeof entry?.uri === 'string'
+                  ? entry.uri.trim()
+                  : '';
 }
 
 function attachmentNameFromEntry(entry = {}, fallback = 'attachment') {
   const name = typeof entry?.originalName === 'string' && entry.originalName.trim()
     ? entry.originalName.trim()
-    : typeof entry?.name === 'string' && entry.name.trim()
-      ? entry.name.trim()
-      : fallback;
+    : typeof entry?.fileName === 'string' && entry.fileName.trim()
+      ? entry.fileName.trim()
+      : typeof entry?.filename === 'string' && entry.filename.trim()
+        ? entry.filename.trim()
+        : typeof entry?.name === 'string' && entry.name.trim()
+          ? entry.name.trim()
+          : fallback;
   return name.replace(/[<>]/g, '').slice(0, 180);
 }
 
 function attachmentMimeTypeFromEntry(entry = {}, fallback = 'application/octet-stream') {
   const type = typeof entry?.mimeType === 'string' && entry.mimeType.trim()
     ? entry.mimeType.trim()
-    : typeof entry?.type === 'string' && entry.type.trim()
-      ? entry.type.trim()
-      : fallback;
+    : typeof entry?.contentType === 'string' && entry.contentType.trim()
+      ? entry.contentType.trim()
+      : typeof entry?.type === 'string' && entry.type.trim()
+        ? entry.type.trim()
+        : fallback;
   return type.slice(0, 120);
 }
 
@@ -209,7 +245,7 @@ function sanitizeAttachmentForTenant(attachment = {}, index = 0) {
   };
 }
 
-function normalizeProgressAttachments(rawAttachments) {
+function normalizeProgressAttachments(rawAttachments, { allowDataAttachments = true } = {}) {
   if (!Array.isArray(rawAttachments)) return { attachments: [], error: null };
   if (rawAttachments.length > MAX_PROGRESS_ATTACHMENTS) {
     return { attachments: [], error: `You can attach up to ${MAX_PROGRESS_ATTACHMENTS} files per update.` };
@@ -221,7 +257,10 @@ function normalizeProgressAttachments(rawAttachments) {
       const uri = attachmentUrlFromEntry(entry);
       const name = attachmentNameFromEntry(entry, `maintenance-file-${index + 1}`);
       const type = attachmentMimeTypeFromEntry(entry, 'application/octet-stream');
-      const uriCheck = validateAttachmentUri(uri, { allowDataAttachment: true, allowDataImage: true });
+      const uriCheck = validateAttachmentUri(uri, {
+        allowDataAttachment: allowDataAttachments,
+        allowDataImage: allowDataAttachments,
+      });
 
       if (!uriCheck.ok) {
         return { error: uriCheck.error };
@@ -326,6 +365,51 @@ function isTenantVisibleEntry(entry = {}) {
   if (entry.isTenantVisible === false || entry.visibleToTenant === false) return false;
   if (entry.internal === true || entry.adminOnly === true || entry.isInternal === true) return false;
   return true;
+}
+
+function getEntryType(entry = {}) {
+  return String(entry.type || entry.kind || entry.event || '').trim().toLowerCase();
+}
+
+function getEntryMessage(entry = {}) {
+  return String(entry.message || entry.note || entry.content || '').trim();
+}
+
+function normalizePublicReplyType(entry = {}) {
+  const type = getEntryType(entry);
+  if (type === 'tenant_summary' || type === 'summary') return 'tenant_summary';
+  if (type === 'tenant_reply') return 'tenant_reply';
+  if (type === 'admin_reply') return 'admin_reply';
+  return 'admin_update';
+}
+
+function entryHasTenantFacingContent(entry = {}) {
+  const message = getEntryMessage(entry);
+  const attachments = Array.isArray(entry.attachments) ? entry.attachments.filter(Boolean) : [];
+  const summary = sanitizeTenantSummary(entry.summary || entry.tenantSummary);
+  return Boolean(message || attachments.length || summary);
+}
+
+function isPublicMaintenanceReplyEntry(entry = {}) {
+  if (!isTenantVisibleEntry(entry)) return false;
+  const type = getEntryType(entry);
+  if (INTERNAL_WORKFLOW_TYPES.has(type)) return false;
+  if (type && !PUBLIC_REPLY_TYPES.has(type)) return false;
+  if (normalizeSenderRole(entry.sender_role || entry.senderRole || entry.actor_role || entry.role) === 'system') {
+    return false;
+  }
+  return entryHasTenantFacingContent(entry);
+}
+
+function dedupeEntries(entries = []) {
+  const seen = new Set();
+  return entries.filter((entry, index) => {
+    if (!entry) return false;
+    const key = entry.update_id || entry.log_id || entry.id || `${getEntryType(entry) || 'entry'}:${getEntryTimestamp(entry) || index}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 function normalizeSenderRole(value, fallback = 'admin') {
@@ -538,33 +622,27 @@ function buildUpdateEntry({
 }
 
 function mapLegacyStatusHistoryEntry(entry = {}, index = 0) {
-  if (!isTenantVisibleEntry(entry)) return null;
+  if (!isPublicMaintenanceReplyEntry(entry)) return null;
   const role = normalizeSenderRole(entry.actor_role || entry.sender_role || (entry.event === 'submitted' ? 'tenant' : 'admin'));
   const timestamp = getEntryTimestamp(entry);
   const attachments = Array.isArray(entry.attachments)
     ? entry.attachments.map(sanitizeAttachmentForTenant).filter((item) => item.uri)
     : [];
+  const summary = sanitizeTenantSummary(entry.summary || entry.tenantSummary);
 
   return {
     update_id: entry.update_id || `legacy_${entry.event || 'status'}_${timestamp || index}`,
-    type: entry.event === 'submitted'
-      ? 'tenant_submitted'
-      : entry.event === 'reopened'
-        ? 'tenant_reopened'
-        : entry.event === 'cancelled'
-          ? 'tenant_cancelled'
-          : 'status_change',
-    kind: entry.event || 'status_change',
-    title: updateTitleFromEntry(entry),
+    type: normalizePublicReplyType(entry),
+    kind: normalizePublicReplyType(entry),
+    title: updateTitleFromEntry({ ...entry, type: normalizePublicReplyType(entry) }),
     senderName: senderLabelFromRole(role, entry.actor_name),
     senderRole: role,
     actor_name: entry.actor_name || senderLabelFromRole(role),
     actor_role: role,
-    message: String(entry.note || '').trim() || (entry.status ? friendlyStatusCopy(entry.status) : ''),
-    status: entry.status || null,
-    status_from: entry.previous_status || null,
-    status_to: entry.status || null,
+    message: getEntryMessage(entry),
     attachments,
+    summary,
+    tenantSummary: summary,
     readByTenant: entry.readByTenant === true,
     visibleToTenant: true,
     visibility: 'tenant',
@@ -574,27 +652,25 @@ function mapLegacyStatusHistoryEntry(entry = {}, index = 0) {
 }
 
 function mapUpdateForTenant(entry = {}, index = 0) {
-  if (!isTenantVisibleEntry(entry)) return null;
+  if (!isPublicMaintenanceReplyEntry(entry)) return null;
   const role = normalizeSenderRole(entry.sender_role || entry.actor_role || entry.role, entry.type?.startsWith?.('tenant') ? 'tenant' : 'admin');
   const attachments = Array.isArray(entry.attachments)
     ? entry.attachments.map(sanitizeAttachmentForTenant).filter((item) => item.uri)
     : [];
   const summary = sanitizeTenantSummary(entry.summary || entry.tenantSummary);
   const timestamp = getEntryTimestamp(entry);
+  const type = normalizePublicReplyType(entry);
 
   return {
     update_id: entry.update_id || entry.id || `update_${timestamp || index}`,
-    type: entry.type || entry.kind || 'maintenance_update',
-    kind: entry.kind || entry.type || 'maintenance_update',
-    title: updateTitleFromEntry(entry),
+    type,
+    kind: type,
+    title: updateTitleFromEntry({ ...entry, type }),
     senderName: entry.sender_name || entry.senderName || senderLabelFromRole(role, entry.actor_name),
     senderRole: role,
     actor_name: entry.actor_name || entry.sender_name || senderLabelFromRole(role),
     actor_role: role,
-    message: String(entry.message || entry.note || entry.content || '').trim(),
-    status: entry.status_to || entry.status || null,
-    status_from: entry.status_from || null,
-    status_to: entry.status_to || entry.status || null,
+    message: getEntryMessage(entry),
     attachments,
     summary,
     tenantSummary: summary,
@@ -607,50 +683,58 @@ function mapUpdateForTenant(entry = {}, index = 0) {
 }
 
 function buildTenantThread(request = {}) {
-  const updates = Array.isArray(request.updates) ? request.updates : [];
-  const mappedUpdates = updates
+  const explicitPublicReplies = Array.isArray(request.publicReplies)
+    ? request.publicReplies
+    : Array.isArray(request.tenantReplies)
+      ? request.tenantReplies
+      : [];
+  const mappedPublicReplies = explicitPublicReplies
     .map(mapUpdateForTenant)
     .filter(Boolean);
-  const updateIds = new Set(mappedUpdates.map((entry) => entry.update_id).filter(Boolean));
-  const hasMappedSubmitted = mappedUpdates.some((entry) => entry.type === 'tenant_submitted');
+  const updateIds = new Set(mappedPublicReplies.map((entry) => entry.update_id).filter(Boolean));
 
-  const legacyEntries = (Array.isArray(request.statusHistory) ? request.statusHistory : [])
+  const legacyUpdates = (Array.isArray(request.updates) ? request.updates : [])
+    .map(mapUpdateForTenant)
+    .filter((entry) => entry && !updateIds.has(entry.update_id));
+  legacyUpdates.forEach((entry) => {
+    if (entry.update_id) updateIds.add(entry.update_id);
+  });
+
+  const legacyHistoryReplies = (Array.isArray(request.statusHistory) ? request.statusHistory : [])
     .map(mapLegacyStatusHistoryEntry)
-    .filter((entry) => entry && !updateIds.has(entry.update_id) && !(hasMappedSubmitted && entry.type === 'tenant_submitted'));
+    .filter((entry) => entry && !updateIds.has(entry.update_id));
 
-  const hasSubmitted = [...mappedUpdates, ...legacyEntries].some((entry) => entry.type === 'tenant_submitted');
-  const submittedEntry = hasSubmitted
-    ? null
-    : {
-        update_id: `submitted_${request.request_id || request._id || 'request'}`,
-        type: 'tenant_submitted',
-        kind: 'tenant_submitted',
-        title: 'Request Submitted',
-        senderName: 'You',
-        senderRole: 'tenant',
-        actor_name: 'You',
-        actor_role: 'tenant',
-        message: 'Your request was submitted successfully.',
-        status: request.status || 'pending',
-        status_from: null,
-        status_to: request.status || 'pending',
-        attachments: Array.isArray(request.attachments)
-          ? request.attachments.map(sanitizeAttachmentForTenant).filter((item) => item.uri)
-          : [],
-        summary: null,
-        tenantSummary: null,
-        readByTenant: true,
+  const summary = sanitizeTenantSummary(request.tenant_summary || request.tenantSummary);
+  const hasSummaryReply = [...mappedPublicReplies, ...legacyUpdates, ...legacyHistoryReplies]
+    .some((entry) => entry.type === 'tenant_summary');
+  const summaryEntry = summary && !hasSummaryReply
+    ? {
+        update_id: `summary_${request.request_id || request._id || 'request'}_${summary.created_at || request.updated_at || request.updatedAt || ''}`,
+        type: 'tenant_summary',
+        kind: 'tenant_summary',
+        title: 'Maintenance Summary',
+        senderName: 'Maintenance Team',
+        senderRole: 'admin',
+        actor_name: 'Maintenance Team',
+        actor_role: 'admin',
+        message: summaryToMessage(summary),
+        attachments: summary.attachments || [],
+        summary,
+        tenantSummary: summary,
+        readByTenant: false,
         visibleToTenant: true,
         visibility: 'tenant',
-        created_at: request.created_at || request.createdAt || null,
-        createdAt: request.created_at || request.createdAt || null,
-      };
+        created_at: summary.created_at || request.updated_at || request.updatedAt || null,
+        createdAt: summary.created_at || request.updated_at || request.updatedAt || null,
+      }
+    : null;
 
-  return [
-    ...(submittedEntry ? [submittedEntry] : []),
-    ...legacyEntries,
-    ...mappedUpdates,
-  ].sort((left, right) => getEntryTimeValue(left) - getEntryTimeValue(right));
+  return dedupeEntries([
+    ...(summaryEntry ? [summaryEntry] : []),
+    ...legacyHistoryReplies,
+    ...legacyUpdates,
+    ...mappedPublicReplies,
+  ]).sort((left, right) => getEntryTimeValue(left) - getEntryTimeValue(right));
 }
 
 function isUnreadForTenant(entry = {}, lastTenantSeenAt = null) {
@@ -717,22 +801,62 @@ function buildTenantRequestResponse(request = {}, { includeThread = false } = {}
 
   if (includeThread) {
     response.thread = thread;
-    response.statusHistory = thread
-      .filter((entry) => entry.status)
-      .map((entry) => ({
-        event: entry.kind || entry.type,
-        status: entry.status,
-        actor_name: entry.actor_name,
-        actor_role: entry.actor_role,
-        note: entry.message,
-        attachments: entry.attachments,
-        timestamp: entry.created_at,
-        visibleToTenant: true,
-        visibility: 'tenant',
-      }));
+    response.publicReplies = thread;
   }
 
   return response;
+}
+
+function normalizePublicRepliesForStorage(request = {}) {
+  const sources = [
+    ...(Array.isArray(request.publicReplies) ? request.publicReplies : []),
+    ...(Array.isArray(request.tenantReplies) ? request.tenantReplies : []),
+    ...(Array.isArray(request.updates) ? request.updates : []),
+    ...(Array.isArray(request.statusHistory) ? request.statusHistory : []),
+  ];
+
+  return dedupeEntries(sources.map(mapUpdateForTenant).filter(Boolean));
+}
+
+function normalizeInternalLogForStorage(entry = {}, index = 0) {
+  const timestamp = getEntryTimestamp(entry) || new Date();
+  const type = getEntryType(entry) || 'internal_log';
+  const role = normalizeSenderRole(entry.sender_role || entry.actor_role || entry.role, 'admin');
+
+  return {
+    log_id: entry.log_id || entry.update_id || entry.id || `log_${type}_${timestamp || index}`,
+    update_id: entry.update_id || entry.id || null,
+    type: type === 'internal_note' || type === 'internal_log' ? type : 'workflow_action',
+    event: entry.event || entry.kind || entry.type || 'workflow_action',
+    visibility: 'internal',
+    visibleToTenant: false,
+    isTenantVisible: false,
+    actor_id: entry.actor_id || entry.actorId || null,
+    actor_name: entry.actor_name || entry.sender_name || senderLabelFromRole(role),
+    actor_role: role,
+    message: getEntryMessage(entry),
+    status: entry.status_to || entry.status || null,
+    status_from: entry.status_from || entry.previous_status || null,
+    status_to: entry.status_to || entry.status || null,
+    attachments: Array.isArray(entry.attachments)
+      ? entry.attachments.map(sanitizeAttachmentForTenant).filter((item) => item.uri)
+      : [],
+    created_at: timestamp,
+    createdAt: timestamp,
+  };
+}
+
+function normalizeInternalLogsForStorage(request = {}) {
+  const existingLogs = Array.isArray(request.internalLogs) ? request.internalLogs : [];
+  const legacyInternalUpdates = (Array.isArray(request.updates) ? request.updates : [])
+    .filter((entry) => !isPublicMaintenanceReplyEntry(entry));
+  const statusHistory = Array.isArray(request.statusHistory) ? request.statusHistory : [];
+
+  return dedupeEntries([
+    ...existingLogs,
+    ...legacyInternalUpdates,
+    ...statusHistory,
+  ].map(normalizeInternalLogForStorage));
 }
 
 function stripInternalRequestFields(request) {
@@ -767,6 +891,9 @@ function normalizeRequestForPrimary(request, user = {}) {
 
   normalized.attachments = Array.isArray(normalized.attachments) ? normalized.attachments : [];
   normalized.updates = Array.isArray(normalized.updates) ? normalized.updates : [];
+  normalized.publicReplies = normalizePublicRepliesForStorage(normalized);
+  normalized.tenantReplies = normalized.publicReplies;
+  normalized.internalLogs = normalizeInternalLogsForStorage(normalized);
   normalized.reopen_history = Array.isArray(normalized.reopen_history) ? normalized.reopen_history : [];
   normalized.statusHistory = Array.isArray(normalized.statusHistory) ? normalized.statusHistory : [];
   normalized.tenant_summary = sanitizeTenantSummary(normalized.tenant_summary || normalized.tenantSummary) || null;
@@ -1027,12 +1154,21 @@ async function markMaintenanceRead(req, res) {
             : entry
         ))
       : [];
+    const publicReplies = Array.isArray(located.request.publicReplies)
+      ? located.request.publicReplies.map((entry) => (
+          isPublicMaintenanceReplyEntry(entry)
+            ? { ...entry, readByTenant: true, read_by_tenant: true, readByTenantAt: now }
+            : entry
+        ))
+      : [];
 
     await db.collection(located.collectionName).updateOne(
       { request_id: requestId },
       {
         $set: {
           updates,
+          publicReplies,
+          tenantReplies: publicReplies,
           lastTenantSeenAt: now,
           last_tenant_seen_at: now,
           updatedAt: located.request.updatedAt || located.request.updated_at || now,
@@ -1116,12 +1252,17 @@ async function addTenantMaintenanceReply(req, res) {
     const updates = Array.isArray(located.request.updates)
       ? [...located.request.updates, update]
       : [update];
+    const publicReplies = Array.isArray(located.request.publicReplies)
+      ? [...located.request.publicReplies, update]
+      : [update];
 
     await db.collection(located.collectionName).updateOne(
       { request_id: requestId },
       {
         $set: {
           updates,
+          publicReplies,
+          tenantReplies: publicReplies,
           statusHistory,
           tenant_confirmed_resolved: false,
           lastActivityAt: now,
@@ -1570,7 +1711,8 @@ async function adminUpdateStatus(req, res) {
     const { attachments: progressAttachments, error: progressAttachmentError } = normalizeProgressAttachments(
       req.body?.progress_attachments !== undefined
         ? req.body.progress_attachments
-        : req.body?.attachments
+        : req.body?.attachments,
+      { allowDataAttachments: visibility === 'internal' }
     );
     if (progressAttachmentError) {
       return res.status(400).json({ detail: progressAttachmentError });
@@ -1594,12 +1736,39 @@ async function adminUpdateStatus(req, res) {
       name: actorNameFromUser(req.user),
       role: normalizeSenderRole(sender_role || req.user?.role || 'admin'),
     };
-    const adminUpdate = buildUpdateEntry({
-      type: isTenantVisible ? 'admin_update' : 'internal_note',
-      visibility,
+    const hasPublicReplyContent = isTenantVisible && (noteText || progressAttachments.length);
+    const publicAdminReply = hasPublicReplyContent
+      ? buildUpdateEntry({
+          type: 'admin_reply',
+          visibility: 'tenant',
+          actor,
+          message: noteText,
+          attachments: progressAttachments,
+          status: normalizedStatus,
+          statusFrom: previousStatus,
+          statusTo: normalizedStatus,
+          senderRole: sender_role || req.user?.role || 'admin',
+          senderLabel: typeof sender_label === 'string' && sender_label.trim()
+            ? sender_label.trim()
+            : null,
+          readByTenant: false,
+          extra: {
+            assigned_to: typeof assigned_to === 'string' ? assigned_to.trim() : located.request.assigned_to || '',
+            scheduled_for: typeof scheduled_for === 'string' ? scheduled_for.trim() : located.request.scheduled_for || '',
+            next_step: typeof next_step === 'string' ? next_step.trim() : '',
+            completion_note: typeof completion_note === 'string' ? completion_note.trim() : '',
+            created_at: now,
+            createdAt: now,
+          },
+        })
+      : null;
+
+    const internalLog = buildUpdateEntry({
+      type: visibility === 'internal' ? 'internal_note' : 'internal_log',
+      visibility: 'internal',
       actor,
-      message: noteText,
-      attachments: progressAttachments,
+      message: noteText || friendlyStatusCopy(normalizedStatus),
+      attachments: visibility === 'internal' ? progressAttachments : [],
       status: normalizedStatus,
       statusFrom: previousStatus,
       statusTo: normalizedStatus,
@@ -1613,26 +1782,11 @@ async function adminUpdateStatus(req, res) {
         scheduled_for: typeof scheduled_for === 'string' ? scheduled_for.trim() : located.request.scheduled_for || '',
         next_step: typeof next_step === 'string' ? next_step.trim() : '',
         completion_note: typeof completion_note === 'string' ? completion_note.trim() : '',
+        public_update_id: publicAdminReply?.update_id || null,
         created_at: now,
         createdAt: now,
       },
     });
-
-    const tenantStatusUpdate = (!isTenantVisible && statusChanged)
-      ? buildUpdateEntry({
-          type: 'status_change',
-          visibility: 'tenant',
-          actor: { role: 'system', name: 'Maintenance Team' },
-          message: friendlyStatusCopy(normalizedStatus),
-          attachments: [],
-          status: normalizedStatus,
-          statusFrom: previousStatus,
-          statusTo: normalizedStatus,
-          senderRole: 'system',
-          readByTenant: false,
-          extra: { created_at: now, createdAt: now },
-        })
-      : null;
 
     const summary = shouldSendSummary && isTenantVisible
       ? buildTenantSummary(located.request, {
@@ -1669,10 +1823,19 @@ async function adminUpdateStatus(req, res) {
     const nextUpdates = Array.isArray(located.request.updates)
       ? [...located.request.updates]
       : [];
-    const hasAdminUpdateContent = noteText || progressAttachments.length || statusChanged || assigned_to !== undefined || scheduled_for !== undefined;
-    if (hasAdminUpdateContent) nextUpdates.push(adminUpdate);
-    if (tenantStatusUpdate) nextUpdates.push(tenantStatusUpdate);
+    nextUpdates.push(internalLog);
+    if (publicAdminReply) nextUpdates.push(publicAdminReply);
     if (summaryUpdate) nextUpdates.push(summaryUpdate);
+
+    const publicReplies = Array.isArray(located.request.publicReplies)
+      ? [...located.request.publicReplies]
+      : [];
+    if (publicAdminReply) publicReplies.push(publicAdminReply);
+    if (summaryUpdate) publicReplies.push(summaryUpdate);
+
+    const internalLogs = Array.isArray(located.request.internalLogs)
+      ? [...located.request.internalLogs, normalizeInternalLogForStorage(internalLog)]
+      : [normalizeInternalLogForStorage(internalLog)];
 
     const statusHistory = Array.isArray(located.request.statusHistory)
       ? [...located.request.statusHistory]
@@ -1686,29 +1849,13 @@ async function adminUpdateStatus(req, res) {
       actor_role: actor.role,
       note: noteText || null,
       attachments: progressAttachments,
-      update_id: adminUpdate.update_id,
-      visibility,
-      visibleToTenant: isTenantVisible,
-      isTenantVisible,
+      update_id: internalLog.update_id,
+      public_update_id: publicAdminReply?.update_id || summaryUpdate?.update_id || null,
+      visibility: 'internal',
+      visibleToTenant: false,
+      isTenantVisible: false,
       timestamp: now,
     });
-    if (tenantStatusUpdate) {
-      statusHistory.push({
-        event: 'status_visible',
-        status: normalizedStatus,
-        previous_status: previousStatus,
-        actor_id: null,
-        actor_name: 'Maintenance Team',
-        actor_role: 'system',
-        note: tenantStatusUpdate.message,
-        attachments: [],
-        update_id: tenantStatusUpdate.update_id,
-        visibility: 'tenant',
-        visibleToTenant: true,
-        isTenantVisible: true,
-        timestamp: now,
-      });
-    }
     if (summaryUpdate) {
       statusHistory.push({
         event: 'tenant_summary',
@@ -1720,20 +1867,23 @@ async function adminUpdateStatus(req, res) {
         note: summaryUpdate.message,
         attachments: summaryUpdate.attachments,
         update_id: summaryUpdate.update_id,
-        visibility: 'tenant',
-        visibleToTenant: true,
-        isTenantVisible: true,
+        visibility: 'internal',
+        visibleToTenant: false,
+        isTenantVisible: false,
         timestamp: now,
       });
     }
 
-    const tenantVisibleUpdateSent = [adminUpdate, tenantStatusUpdate, summaryUpdate]
+    const tenantVisibleUpdateSent = [publicAdminReply, summaryUpdate]
       .filter(Boolean)
       .some((entry) => isTenantVisibleEntry(entry) && normalizeSenderRole(entry.actor_role) !== 'tenant');
 
     const updates = {
       status: normalizedStatus,
       updates: nextUpdates,
+      publicReplies,
+      tenantReplies: publicReplies,
+      internalLogs,
       statusHistory,
       lastActivityAt: now,
       last_activity_at: now,
@@ -1777,7 +1927,7 @@ async function adminUpdateStatus(req, res) {
 
     const tenantUserId = updated?.user_id || located.request.user_id;
     if (tenantVisibleUpdateSent) {
-      const notifyEntry = summaryUpdate || (isTenantVisible ? adminUpdate : tenantStatusUpdate);
+      const notifyEntry = summaryUpdate || publicAdminReply;
       notifyMaintenanceTenantUpdate(tenantUserId, updated || located.request, notifyEntry)
         .catch(() => {});
     } else if (statusChanged) {

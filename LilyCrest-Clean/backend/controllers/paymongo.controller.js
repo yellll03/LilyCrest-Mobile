@@ -12,23 +12,15 @@ const { notifyPaymentConfirmed } = require('../services/pushService');
 const { sendPaymentReceiptEmail } = require('../services/emailService');
 
 const PAYMONGO_BASE = 'https://api.paymongo.com/v1';
+const DEFAULT_BACKEND_URL = 'https://lilycrest-mobile.onrender.com';
 
 function normalizeBaseUrl(value) {
   return String(value || '').trim().replace(/\/+$/, '');
 }
 
-function isLocalhostUrl(value) {
-  try {
-    const parsed = new URL(value);
-    return ['localhost', '127.0.0.1', '::1'].includes(parsed.hostname);
-  } catch (_) {
-    return false;
-  }
-}
-
 function resolveRedirectBaseUrl(req) {
   const configured = normalizeBaseUrl(process.env.BACKEND_URL);
-  if (configured && !isLocalhostUrl(configured)) {
+  if (configured) {
     return configured;
   }
 
@@ -42,7 +34,7 @@ function resolveRedirectBaseUrl(req) {
     return `${protocol}://${host}`;
   }
 
-  return configured || 'http://localhost:8001';
+  return DEFAULT_BACKEND_URL;
 }
 
 function getSecretKey() {
@@ -579,8 +571,7 @@ async function createCheckoutSession(req, res) {
     const description = bill.description || `Bill ${billingId}`;
     const referenceNumber = `LC-${billingId}-${Date.now()}`;
 
-    // Build redirect URLs from a device-reachable origin in development.
-    // If BACKEND_URL points to localhost, use the incoming request host instead.
+    // Build redirect URLs from the permanent mobile backend origin.
     const backendUrl = resolveRedirectBaseUrl(req);
 
     // Build the PayMongo Checkout Session payload
@@ -607,8 +598,8 @@ async function createCheckoutSession(req, res) {
           ],
           reference_number: referenceNumber,
           // Redirect to backend endpoints that bounce the user back to the app via deep link
-          success_url: `${backendUrl}/api/paymongo/redirect/success?billing_id=${billingId}`,
-          cancel_url: `${backendUrl}/api/paymongo/redirect/cancel?billing_id=${billingId}`,
+          success_url: `${backendUrl}/api/m/paymongo/redirect/success?billing_id=${billingId}`,
+          cancel_url: `${backendUrl}/api/m/paymongo/redirect/cancel?billing_id=${billingId}`,
           metadata: {
             billing_id: billingId,
             user_id: req.user.user_id,
@@ -756,10 +747,10 @@ async function registerWebhook() {
     return;
   }
 
-  const backendUrl = process.env.BACKEND_URL;
+  const backendUrl = normalizeBaseUrl(process.env.BACKEND_URL) || DEFAULT_BACKEND_URL;
   if (!backendUrl) {
     console.log('[PayMongo] BACKEND_URL not set — webhook registration skipped.');
-    console.log('[PayMongo] Set BACKEND_URL to your public URL (e.g. https://your-domain.com or ngrok URL) to auto-register.');
+    console.log('[PayMongo] Set BACKEND_URL to https://lilycrest-mobile.onrender.com to auto-register.');
     return;
   }
 

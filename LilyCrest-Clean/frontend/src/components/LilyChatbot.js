@@ -103,11 +103,7 @@ export default function LilyChatbot() {
     }
   };
 
-  // Placeholder: wire this to your backend endpoint
-  const callBackendAI = async ({ sessionId: sid, userText, intent }) => {
-    // Example fetch
-    // const resp = await fetch(`${API_URL}/chat`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ sessionId: sid, text: userText, intent }) });
-    // return resp.json();
+  const callBackendAI = async () => {
     return { text: null };
   };
 

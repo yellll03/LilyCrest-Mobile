@@ -8,7 +8,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../src/context/ThemeContext';
 import { useAlert } from '../src/context/AlertContext';
-import { apiService } from '../src/services/api';
+import { apiService, getApiErrorMessage } from '../src/services/api';
 
 const documents = [
   { title: 'House Rules', icon: 'home', color: '#F59E0B', description: 'General dormitory guidelines', category: 'Policy' },
@@ -75,7 +75,7 @@ export default function DocumentsScreen() {
       } catch (error) {
         console.error('Contract download error:', error);
 
-        showAlert({ title: 'Download Failed', message: 'There was a problem downloading the document. Please try again.', type: 'error' });
+        showAlert({ title: 'Download Failed', message: getApiErrorMessage(error, 'There was a problem downloading the document. Please try again.'), type: 'error' });
       }
     }
   };

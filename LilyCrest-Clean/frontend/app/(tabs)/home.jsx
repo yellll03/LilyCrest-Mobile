@@ -22,7 +22,7 @@ import StyledModal from '../../src/components/StyledModal';
 import LilyFlowerIcon from '../../src/components/assistant/LilyFlowerIcon';
 import { useAuth } from '../../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
-import { apiService } from '../../src/services/api';
+import { apiService, getApiErrorMessage } from '../../src/services/api';
 import { subscribeBillingRefresh } from '../../src/services/billingState';
 import { getBillingInsightPanel } from '../../src/utils/billingInsights';
 
@@ -514,7 +514,7 @@ export default function HomeScreen() {
     } catch (error) {
       console.error('Dashboard fetch error:', error);
       if (latestDashboardRequestRef.current !== requestId) return;
-      setLoadError('Unable to load dashboard. Pull to retry.');
+      setLoadError(getApiErrorMessage(error, 'Unable to load dashboard. Pull to retry.'));
     } finally {
       isFetchingRef.current = false;
       if (latestDashboardRequestRef.current !== requestId) return;

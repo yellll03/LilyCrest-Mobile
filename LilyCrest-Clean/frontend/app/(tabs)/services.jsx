@@ -22,7 +22,7 @@ import LilyFlowerIcon from '../../src/components/assistant/LilyFlowerIcon';
 import { useAuth } from '../../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
 import { useToast } from '../../src/context/ToastContext';
-import { apiService } from '../../src/services/api';
+import { apiService, getApiErrorMessage } from '../../src/services/api';
 import {
   ensureFirebaseStorageAttachments,
   DEFAULT_UPLOAD_MIME_TYPES,
@@ -82,26 +82,109 @@ function isOpenableAttachment(attachment = {}) {
   return /^https?:\/\//i.test(url) || /^data:image\//i.test(url);
 }
 
+const TENANT_CONVERSATION_TYPES = new Set([
+  'admin_reply',
+  'admin_update',
+  'tenant_reply',
+  'tenant_summary',
+  'summary',
+]);
+
+const INTERNAL_THREAD_TYPES = new Set([
+  'status_change',
+  'status_changed',
+  'status_visible',
+  'internal_note',
+  'internal_log',
+  'workflow_action',
+  'viewed',
+  'processing',
+  'draft_saved',
+  'tenant_submitted',
+  'tenant_cancelled',
+  'tenant_reopened',
+  'tenant_confirmed_resolved',
+]);
+
+function getSenderRoleLabel(role = '', fallback = '') {
+  const normalized = String(role || '').trim().toLowerCase().replace(/\s+/g, '_');
+  if (normalized === 'tenant') return 'You';
+  if (normalized === 'owner' || normalized === 'property_owner') return 'Owner';
+  if (normalized === 'branch_admin' || normalized === 'branch') return 'Branch Admin';
+  if (normalized === 'service_provider' || normalized === 'provider' || normalized === 'technician') return 'Service Provider';
+  if (normalized === 'admin') return fallback && !/admin/i.test(fallback) ? fallback : 'Branch Admin';
+  return fallback || 'Branch Admin';
+}
+
+function summaryToConversationText(summary = {}) {
+  return [
+    summary.action_taken ? `Action taken: ${summary.action_taken}` : '',
+    summary.assigned_provider ? `Assigned provider: ${summary.assigned_provider}` : '',
+    summary.schedule ? `Schedule: ${summary.schedule}` : '',
+    summary.next_step ? `Next step: ${summary.next_step}` : '',
+    summary.completion_note ? `Completion note: ${summary.completion_note}` : '',
+  ].filter(Boolean).join('\n');
+}
+
+function hasConversationContent(entry = {}) {
+  const message = typeof entry?.message === 'string'
+    ? entry.message.trim()
+    : typeof entry?.note === 'string'
+      ? entry.note.trim()
+      : '';
+  const summary = entry?.summary || entry?.tenantSummary || null;
+  const attachments = Array.isArray(entry?.attachments) ? entry.attachments.filter(Boolean) : [];
+  return Boolean(message || summary || attachments.length);
+}
+
+function isTenantConversationEntry(entry = {}) {
+  const type = String(entry?.type || entry?.kind || entry?.event || '').toLowerCase();
+  const visibility = String(entry?.visibility || (entry?.visibleToTenant === false ? 'internal' : 'tenant')).toLowerCase();
+  const role = String(entry?.senderRole || entry?.sender_role || entry?.actor_role || '').toLowerCase();
+
+  if (visibility === 'internal' || entry?.visibleToTenant === false || entry?.isTenantVisible === false) return false;
+  if (entry?.internal === true || entry?.adminOnly === true || entry?.isInternal === true) return false;
+  if (INTERNAL_THREAD_TYPES.has(type)) return false;
+  if (type && !TENANT_CONVERSATION_TYPES.has(type)) return false;
+  if (role === 'system') return false;
+  return hasConversationContent(entry);
+}
+
 function buildRequestProgress(request) {
   if (!request) return [];
 
-  if (Array.isArray(request.thread) && request.thread.length > 0) {
-    return request.thread
+  const publicEntries = Array.isArray(request.publicReplies)
+    ? request.publicReplies
+    : Array.isArray(request.tenantReplies)
+      ? request.tenantReplies
+      : Array.isArray(request.thread)
+        ? request.thread
+        : [];
+  const progress = publicEntries
+    .filter(isTenantConversationEntry)
       .map((entry, index) => {
         const timestamp = entry?.created_at || entry?.createdAt || entry?.timestamp || null;
+        const role = entry?.senderRole || entry?.sender_role || entry?.actor_role || null;
+        const summary = entry?.summary || entry?.tenantSummary || null;
+        const message = typeof entry?.message === 'string'
+          ? entry.message.trim()
+          : typeof entry?.note === 'string'
+            ? entry.note.trim()
+            : summaryToConversationText(summary);
+        const entryAttachments = Array.isArray(entry?.attachments) ? entry.attachments.filter(Boolean) : [];
+        const summaryAttachments = Array.isArray(summary?.attachments) ? summary.attachments.filter(Boolean) : [];
         return {
           id: entry?.update_id || `${entry?.type || 'update'}_${timestamp || index}`,
-          title: entry?.title || getProgressTitle(entry),
+          title: entry?.type === 'tenant_summary' ? 'Maintenance Summary' : entry?.title || getProgressTitle(entry),
           type: entry?.type || entry?.kind || 'maintenance_update',
-          message: typeof entry?.message === 'string' ? entry.message.trim() : '',
+          message,
           timestamp,
-          status: entry?.status || entry?.status_to || null,
-          statusFrom: entry?.status_from || null,
-          statusTo: entry?.status_to || entry?.status || null,
-          attachments: Array.isArray(entry?.attachments) ? entry.attachments.filter(Boolean) : [],
-          actorLabel: entry?.senderName || entry?.actor_name || entry?.actorLabel || null,
-          actorRole: entry?.senderRole || entry?.actor_role || null,
-          summary: entry?.summary || entry?.tenantSummary || null,
+          attachments: entryAttachments.length ? entryAttachments : summaryAttachments,
+          actorLabel: getSenderRoleLabel(role, entry?.senderName || entry?.sender_name || entry?.actor_name || entry?.actorLabel || ''),
+          actorRole: role,
+          isTenant: String(role || '').toLowerCase() === 'tenant',
+          isSummary: entry?.type === 'tenant_summary' || entry?.kind === 'tenant_summary' || Boolean(summary),
+          summary,
         };
       })
       .sort((left, right) => {
@@ -109,49 +192,25 @@ function buildRequestProgress(request) {
         const rightTime = new Date(right.timestamp || 0).getTime();
         return leftTime - rightTime;
       });
-  }
-
-  const history = Array.isArray(request.statusHistory) ? request.statusHistory : [];
-  const progress = history
-    .map((entry, index) => {
-      const note = typeof entry?.note === 'string' && entry.note.trim()
-        ? entry.note.trim()
-        : null;
-      const timestamp = entry?.timestamp || entry?.created_at || entry?.createdAt || null;
-      const actorRole = String(entry?.actor_role || '').toLowerCase();
-
-      return {
-        id: `${entry?.event || 'progress'}_${entry?.status || 'update'}_${timestamp || index}`,
-        title: getProgressTitle(entry),
-        message: note,
-        timestamp,
-        attachments: Array.isArray(entry?.attachments) ? entry.attachments.filter(Boolean) : [],
-        actorLabel: actorRole === 'admin'
-          ? 'Admin'
-          : actorRole === 'tenant'
-            ? 'You'
-            : entry?.actor_name || null,
-      };
-    })
-    .filter((entry) => entry.title || entry.message)
-    .sort((left, right) => {
-      const leftTime = new Date(left.timestamp || 0).getTime();
-      const rightTime = new Date(right.timestamp || 0).getTime();
-      return rightTime - leftTime;
-    });
 
   if (progress.length > 0) {
     return progress;
   }
 
-  if (request.notes) {
+  const summary = request.tenant_summary || request.tenantSummary || null;
+  if (summary) {
     return [{
-      id: `legacy_${request.request_id || 'reply'}`,
-      title: formatStatusLabel(request.status),
-      message: request.notes,
-      timestamp: request.updated_at || request.updatedAt || request.created_at || request.createdAt || null,
-      attachments: [],
-      actorLabel: 'Admin',
+      id: `summary_${request.request_id || 'maintenance'}`,
+      title: 'Maintenance Summary',
+      type: 'tenant_summary',
+      message: summaryToConversationText(summary) || 'A maintenance summary is available.',
+      timestamp: summary.created_at || request.updated_at || request.updatedAt || request.created_at || request.createdAt || null,
+      attachments: Array.isArray(summary.attachments) ? summary.attachments.filter(Boolean) : [],
+      actorLabel: 'Branch Admin',
+      actorRole: 'admin',
+      isTenant: false,
+      isSummary: true,
+      summary,
     }];
   }
 
@@ -531,7 +590,7 @@ export default function ServicesScreen() {
       setAttachmentUploadStatus(attachments.length ? 'Upload failed, please retry' : '');
       const message = error?.message === 'Upload failed, please retry'
         ? 'Upload failed, please retry'
-        : error?.response?.data?.detail || 'Failed to submit request. Please try again.';
+        : getApiErrorMessage(error, 'Failed to submit request. Please try again.');
       showBannerMessage('error', message);
     } finally {
       setSubmitting(false);
@@ -626,7 +685,7 @@ export default function ServicesScreen() {
       }
       fetchRequests();
     } catch (error) {
-      showBannerMessage('error', error?.response?.data?.detail || 'Failed to load maintenance details.');
+      showBannerMessage('error', getApiErrorMessage(error, 'Failed to load maintenance details.'));
     } finally {
       setDetailLoading(false);
     }
@@ -657,7 +716,7 @@ export default function ServicesScreen() {
       setShowDetailModal(false);
       fetchRequests();
     } catch (e) {
-      showBannerMessage('error', e?.response?.data?.detail || 'Failed to update request.');
+      showBannerMessage('error', getApiErrorMessage(e, 'Failed to update request.'));
     } finally {
       setSaving(false);
     }
@@ -672,7 +731,7 @@ export default function ServicesScreen() {
       setShowDetailModal(false);
       fetchRequests();
     } catch (e) {
-      showBannerMessage('error', e?.response?.data?.detail || 'Failed to cancel request. Please try again.');
+      showBannerMessage('error', getApiErrorMessage(e, 'Failed to cancel request. Please try again.'));
     } finally {
       setSaving(false);
     }
@@ -688,7 +747,7 @@ export default function ServicesScreen() {
       setReopenNote('');
       fetchRequests();
     } catch (e) {
-      showBannerMessage('error', e?.response?.data?.detail || 'Failed to reopen request. Please try again.');
+      showBannerMessage('error', getApiErrorMessage(e, 'Failed to reopen request. Please try again.'));
     } finally {
       setSaving(false);
     }
@@ -703,7 +762,7 @@ export default function ServicesScreen() {
       showBannerMessage('success', 'Resolution confirmed.');
       fetchRequests();
     } catch (e) {
-      showBannerMessage('error', e?.response?.data?.detail || 'Failed to confirm resolution.');
+      showBannerMessage('error', getApiErrorMessage(e, 'Failed to confirm resolution.'));
     } finally {
       setSaving(false);
     }
@@ -768,7 +827,7 @@ export default function ServicesScreen() {
       fetchRequests();
     } catch (error) {
       setReplyUploadStatus(replyAttachments.length ? 'Upload failed, please retry' : '');
-      showBannerMessage('error', error?.response?.data?.detail || error?.message || 'Failed to send follow-up.');
+      showBannerMessage('error', getApiErrorMessage(error, error?.message || 'Failed to send follow-up.'));
     } finally {
       setSendingReply(false);
     }
@@ -819,6 +878,7 @@ export default function ServicesScreen() {
   const cancelledRequests = useMemo(() => filterBySearch(requests.filter((request) => (request.status || '').toLowerCase() === 'cancelled')), [filterBySearch, requests]);
   const detailProgressEntries = useMemo(() => buildRequestProgress(detailRequest), [detailRequest]);
   const detailTenantSummary = useMemo(() => detailRequest?.tenant_summary || detailRequest?.tenantSummary || null, [detailRequest]);
+  const hasConversationSummary = useMemo(() => detailProgressEntries.some((entry) => entry.isSummary), [detailProgressEntries]);
   const currentList = useMemo(() => {
     if (activeTab === 'resolved') return resolvedRequests;
     if (activeTab === 'cancelled') return cancelledRequests;
@@ -956,7 +1016,7 @@ export default function ServicesScreen() {
                 <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, backgroundColor: unreadCount > 0 ? '#EFF6FF' : colors.surfaceSecondary, borderRadius: 9, paddingVertical: 7, paddingHorizontal: 9 }}>
                   <Ionicons name={hasNewAttachment ? 'attach' : 'chatbubble-ellipses-outline'} size={13} color={unreadCount > 0 ? '#2563EB' : colors.textMuted} />
                   <Text style={{ flex: 1, fontSize: 11, color: unreadCount > 0 ? '#1D4ED8' : colors.textMuted, fontWeight: unreadCount > 0 ? '700' : '500' }} numberOfLines={1}>
-                    {unreadCount > 0 ? (hasNewAttachment ? 'New attachment available' : latestUpdate.senderRole === 'admin' ? 'Admin replied' : 'New update available') : latestUpdate.preview}
+                    {unreadCount > 0 ? (hasNewAttachment ? 'New attachment available' : latestUpdate.senderRole === 'tenant' ? 'New update available' : 'Admin replied') : latestUpdate.preview}
                   </Text>
                 </View>
               ) : null}
@@ -1246,7 +1306,7 @@ export default function ServicesScreen() {
                     </View>
                   )}
 
-                  {!editMode && detailTenantSummary && (
+                  {!editMode && detailTenantSummary && !hasConversationSummary && (
                     <View style={{ backgroundColor: '#FFF7ED', borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#FED7AA' }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
                         <Ionicons name="reader-outline" size={18} color="#C2410C" />
@@ -1278,18 +1338,18 @@ export default function ServicesScreen() {
                     </View>
                   )}
 
-                  {/* Progress Updates */}
+                  {/* Conversation */}
                   {!editMode && detailProgressEntries.length > 0 && (
                     <View style={{ marginBottom: 14 }}>
-                      <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text, marginBottom: 8 }}>Maintenance Thread</Text>
-                      <View style={{ gap: 10 }}>
+                      <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text, marginBottom: 8 }}>Conversation</Text>
+                      <View style={{ gap: 12 }}>
                         {detailProgressEntries.map((entry) => (
-                          <View key={entry.id} style={{ backgroundColor: entry.actorRole === 'tenant' ? '#ECFDF5' : colors.surfaceSecondary, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: entry.actorRole === 'tenant' ? '#BBF7D0' : '#E5E7EB' }}>
+                          <View key={entry.id} style={{ alignSelf: entry.isTenant ? 'flex-end' : 'flex-start', maxWidth: '92%', backgroundColor: entry.isTenant ? '#DCFCE7' : colors.surfaceSecondary, borderRadius: 14, borderTopRightRadius: entry.isTenant ? 4 : 14, borderTopLeftRadius: entry.isTenant ? 14 : 4, padding: 12, borderWidth: 1, borderColor: entry.isTenant ? '#BBF7D0' : colors.border }}>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 10, marginBottom: entry.message ? 6 : 0 }}>
                               <View style={{ flex: 1 }}>
-                                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>{entry.title}</Text>
-                                {entry.actorLabel ? (
-                                  <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>{entry.actorLabel}</Text>
+                                <Text style={{ fontSize: 12, fontWeight: '800', color: entry.isTenant ? '#166534' : colors.text }}>{entry.actorLabel || (entry.isTenant ? 'You' : 'Branch Admin')}</Text>
+                                {entry.isSummary ? (
+                                  <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>Maintenance Summary</Text>
                                 ) : null}
                               </View>
                               {entry.timestamp ? (
@@ -1301,26 +1361,18 @@ export default function ServicesScreen() {
                             {entry.message ? (
                               <Text style={{ fontSize: 14, color: colors.text, lineHeight: 20 }}>{entry.message}</Text>
                             ) : null}
-                            {entry.statusTo ? (
-                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: entry.message ? 8 : 2 }}>
-                                <Ionicons name="git-branch-outline" size={13} color={colors.textMuted} />
-                                <Text style={{ fontSize: 11, color: colors.textMuted }}>
-                                  Status {entry.statusFrom ? `${formatStatusLabel(entry.statusFrom)} to ` : ''}{formatStatusLabel(entry.statusTo)}
-                                </Text>
-                              </View>
-                            ) : null}
                             {entry.attachments?.length > 0 ? (
                               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
                                 <View style={{ flexDirection: 'row' }}>
                                   {entry.attachments.map((att, idx) => (
                                     <TouchableOpacity
                                       key={`${getAttachmentDownloadUrl(att) || 'attachment'}_${idx}`}
-                                      style={{ width: 96, height: 96, borderRadius: 12, backgroundColor: colors.surface, marginRight: 10, overflow: 'hidden', borderWidth: 1, borderColor: '#D1D5DB', justifyContent: 'center', alignItems: 'center' }}
+                                      style={{ width: isImageAttachment(att) ? 180 : 132, height: isImageAttachment(att) ? 128 : 96, borderRadius: 12, backgroundColor: colors.surface, marginRight: 10, overflow: 'hidden', borderWidth: 1, borderColor: '#D1D5DB', justifyContent: 'center', alignItems: 'center' }}
                                       activeOpacity={0.85}
                                       onPress={() => openAttachment(att)}
                                     >
                                       {getAttachmentDownloadUrl(att) && isImageAttachment(att) ? (
-                                        <Image source={{ uri: getAttachmentDownloadUrl(att) }} style={{ width: 96, height: 96 }} resizeMode="cover" onError={() => showBannerMessage('error', 'Attachment preview could not be loaded.')} />
+                                        <Image source={{ uri: getAttachmentDownloadUrl(att) }} style={{ width: 180, height: 128 }} resizeMode="cover" onError={() => showBannerMessage('error', 'Attachment preview could not be loaded.')} />
                                       ) : (
                                         <View style={{ paddingHorizontal: 8, alignItems: 'center', gap: 6 }}>
                                           <Ionicons name={isOpenableAttachment(att) ? 'document-text-outline' : 'alert-circle-outline'} size={24} color={colors.textMuted} />
@@ -1337,6 +1389,11 @@ export default function ServicesScreen() {
                           </View>
                         ))}
                       </View>
+                    </View>
+                  )}
+                  {!editMode && detailProgressEntries.length === 0 && (
+                    <View style={{ backgroundColor: colors.surfaceSecondary, borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: colors.border }}>
+                      <Text style={{ color: colors.textMuted, fontSize: 13, lineHeight: 19 }}>No admin replies yet. Messages and attachments from the maintenance team will appear here.</Text>
                     </View>
                   )}
 
@@ -1358,17 +1415,6 @@ export default function ServicesScreen() {
                           </TouchableOpacity>
                         ))}
                       </ScrollView>
-                    </View>
-                  )}
-
-                  {/* Reopen note if exists */}
-                  {!editMode && detailRequest.reopen_note && (
-                    <View style={{ backgroundColor: '#EFF6FF', borderRadius: 12, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#BFDBFE' }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                        <Ionicons name="refresh" size={14} color="#2563EB" />
-                        <Text style={{ fontSize: 12, fontWeight: '600', color: '#2563EB' }}>Reopened</Text>
-                      </View>
-                      <Text style={{ fontSize: 13, color: '#1E40AF' }}>{detailRequest.reopen_note}</Text>
                     </View>
                   )}
 

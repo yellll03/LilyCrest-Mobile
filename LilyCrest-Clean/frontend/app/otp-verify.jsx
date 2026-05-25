@@ -19,7 +19,7 @@ import { useAlert } from '../src/context/AlertContext';
 import { useAuth } from '../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
 import { useToast } from '../src/context/ToastContext';
-import { apiService } from '../src/services/api';
+import { apiService, getApiErrorMessage } from '../src/services/api';
 import {
   clearPendingLogin,
   enableBiometricSession,
@@ -233,7 +233,7 @@ export default function OtpVerifyScreen() {
       if (detail?.includes('expired') || detail?.includes('Session')) {
         setError('Your session has expired. Please log in again.');
       } else {
-        setError('Failed to resend code. Please try again.');
+        setError(getApiErrorMessage(err, 'Failed to resend code. Please try again.'));
       }
     } finally {
       setIsResending(false);

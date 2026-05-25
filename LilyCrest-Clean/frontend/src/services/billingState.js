@@ -1,3 +1,5 @@
+import { getApiErrorMessage } from './api';
+
 export const BILL_UNAVAILABLE_MESSAGE = 'This billing record is no longer available.';
 
 const listeners = new Set();
@@ -27,7 +29,7 @@ export function getBillingApiMessage(error, fallbackMessage) {
     : '';
 
   if (detail) return detail;
-  return fallbackMessage;
+  return getApiErrorMessage(error, fallbackMessage);
 }
 
 export function isBillingUnavailableMessage(message) {

@@ -7,7 +7,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
 import { useTheme } from '../../src/context/ThemeContext';
 import { useAlert } from '../../src/context/AlertContext';
-import { apiService } from '../../src/services/api';
+import { apiService, getApiErrorMessage } from '../../src/services/api';
 
 const NAME_MAX = 60;
 const USERNAME_MAX = 30;
@@ -108,7 +108,7 @@ export default function ProfileScreen() {
       if (status === 401) {
         try { await checkAuth?.(); } catch (_) {}
       }
-      setProfileError('Unable to load profile. Pull to refresh and try again.');
+      setProfileError(getApiErrorMessage(error, 'Unable to load profile. Pull to refresh and try again.'));
     } finally {
       setRefreshing(false);
     }
@@ -215,7 +215,7 @@ export default function ProfileScreen() {
         }));
         setProfileBanner({ type: 'error', text: error.response.data.detail || 'Validation failed.' });
       } else {
-        setProfileBanner({ type: 'error', text: 'Failed to update profile. Please try again.' });
+        setProfileBanner({ type: 'error', text: getApiErrorMessage(error, 'Failed to update profile. Please try again.') });
       }
     } finally {
       setIsLoading(false);
@@ -242,7 +242,7 @@ export default function ProfileScreen() {
         updateUser(response.data);
         setProfileBanner({ type: 'success', text: 'Profile picture updated.' });
       } catch (error) {
-        setProfileBanner({ type: 'error', text: error?.response?.data?.errors?.picture || 'Failed to update profile picture.' });
+        setProfileBanner({ type: 'error', text: error?.response?.data?.errors?.picture || getApiErrorMessage(error, 'Failed to update profile picture.') });
       } finally {
         setIsLoading(false);
       }

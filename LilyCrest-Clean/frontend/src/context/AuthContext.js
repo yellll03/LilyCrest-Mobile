@@ -3,7 +3,7 @@ import { useRouter } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
 import { Animated, Platform, Pressable, StatusBar as RNStatusBar, StyleSheet, Text, View } from 'react-native';
 import { auth, getFreshIdToken, subscribeToAuthState } from '../config/firebase';
-import { api } from '../services/api';
+import { api, getApiErrorMessage } from '../services/api';
 import { validateStrongPassword } from '../utils/passwordValidation';
 import {
   arePushNotificationsEnabled,
@@ -454,9 +454,9 @@ export function AuthProvider({ children }) {
         return { success: false, status, error: 'A server error occurred. Please try again in a moment.' };
       }
       if (status === 503) {
-        return { success: false, status, error: detail || 'Unable to send a verification code right now. Please try again.' };
+        return { success: false, status, error: getApiErrorMessage(error, 'Unable to send a verification code right now. Please try again.') };
       }
-      return { success: false, status: 0, error: 'Unable to connect. Please check your internet connection.' };
+      return { success: false, status: 0, error: getApiErrorMessage(error, 'Unable to connect. Please check your internet connection.') };
     }
   };
 
@@ -487,7 +487,7 @@ export function AuthProvider({ children }) {
       const status = error.response?.status;
       const detail = error.response?.data?.detail;
       const attemptsRemaining = error.response?.data?.attempts_remaining;
-      return { success: false, status, error: detail || 'Invalid code. Please try again.', attemptsRemaining };
+      return { success: false, status, error: detail || getApiErrorMessage(error, 'Invalid code. Please try again.'), attemptsRemaining };
     }
   };
 
@@ -520,7 +520,7 @@ export function AuthProvider({ children }) {
       if (status === 400) {
         return { success: false, error: detail || 'Invalid registration data.' };
       }
-      return { success: false, error: detail || 'Unable to create account. Please try again later.' };
+      return { success: false, error: detail || getApiErrorMessage(error, 'Unable to create account. Please try again later.') };
     }
   };
 
@@ -556,7 +556,7 @@ export function AuthProvider({ children }) {
       if (status === 401) {
         return { success: false, error: detail || 'Invalid authentication. Please try again.' };
       }
-      return { success: false, error: 'Unable to sign in with Google. Please try again.' };
+      return { success: false, error: getApiErrorMessage(error, 'Unable to sign in with Google. Please try again.') };
     }
   };
 

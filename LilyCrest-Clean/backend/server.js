@@ -43,26 +43,25 @@ if (trustProxySetting !== null) {
   app.set('trust proxy', trustProxySetting);
 }
 
-// NOTE: For production, add your actual frontend domain(s) here or to FRONTEND_URL env var.
-const defaultOrigins = [
-  process.env.FRONTEND_URL,
-  process.env.BACKEND_URL,
-  'http://localhost:8081',
-  'http://localhost:8083',
-  'http://localhost:3000',
-  'http://localhost:19006',
-].filter(Boolean);
-
 const isProduction = process.env.NODE_ENV === 'production';
+const allowedOrigins = [
+  ...(process.env.CORS_ORIGINS
+    ? process.env.CORS_ORIGINS.split(',').map((origin) => origin.trim())
+    : []),
+  process.env.FRONTEND_URL,
+  process.env.WEB_BASE_URL,
+  process.env.MOBILE_APP_URL,
+  process.env.BACKEND_URL,
+].filter(Boolean);
+const uniqueAllowedOrigins = [...new Set(allowedOrigins)];
+const allowLocalCors = !isProduction || /^(1|true|yes)$/i.test(String(process.env.ALLOW_LOCAL_CORS || '').trim());
 const privateNetworkOriginPattern = /^https?:\/\/(10\.|127\.|192\.168\.|172\.(1[6-9]|2\d|3[0-1])\.)\d+\.\d+(?::\d+)?$/;
+const localHostnameOriginPattern = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/;
 
 function isAllowedOrigin(origin) {
   if (!origin) return true;
-  if (defaultOrigins.includes(origin)) return true;
-  if (!isProduction && privateNetworkOriginPattern.test(origin)) return true;
-  // Allow same-server origin (browser pages served by this server making fetch calls back)
-  const serverPort = process.env.PORT || 8001;
-  if (origin === `http://localhost:${serverPort}` || origin === `https://localhost:${serverPort}`) return true;
+  if (uniqueAllowedOrigins.includes(origin)) return true;
+  if (allowLocalCors && (privateNetworkOriginPattern.test(origin) || localHostnameOriginPattern.test(origin))) return true;
   return false;
 }
 
@@ -90,7 +89,7 @@ app.use(cors({
     return callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
+  methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'If-None-Match'],
   exposedHeaders: ['Content-Range', 'X-Content-Range', 'ETag', 'X-Cache'],
   maxAge: 86400

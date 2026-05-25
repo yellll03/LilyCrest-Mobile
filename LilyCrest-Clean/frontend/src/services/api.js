@@ -1,112 +1,61 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios, { create as createAxios } from 'axios';
-import Constants from 'expo-constants';
-import { Platform } from 'react-native';
+import { API_BASE_URL, MOBILE_API_BASE_URL, MOBILE_HEALTH_URL } from '../config/api';
 import { getFreshIdToken } from '../config/firebase';
 
-const DEFAULT_PORT = process.env.EXPO_PUBLIC_BACKEND_PORT || '8001';
-const EXPLICIT_BACKEND_URL = process.env.EXPO_PUBLIC_BACKEND_URL || '';
-const DEV_FALLBACK_HOST = process.env.EXPO_PUBLIC_DEV_HOST || null;
-const IS_NATIVE_RELEASE_BUILD = !__DEV__ && Platform.OS !== 'web';
+const IS_DEV = typeof __DEV__ !== 'undefined' && __DEV__;
+export const SERVER_STARTING_MESSAGE = 'The server is starting. Please try again in a few seconds.';
+const GENERIC_API_MESSAGE = 'Unable to reach the server. Please try again in a few seconds.';
 
-function normalizeUrl(value) {
-  return String(value || '').trim().replace(/\/+$/, '');
+if (IS_DEV) {
+  console.log('API base URL:', API_BASE_URL);
 }
 
-function ensureHttpBase(value) {
-  const normalized = normalizeUrl(value);
-  if (!normalized) return normalized;
-  if (/^https?:\/\//i.test(normalized)) return normalized;
-  return `http://${normalized}`;
+export function isNetworkOrColdStartError(error) {
+  const status = error?.response?.status;
+  const messageLooksNetworked = /network error|timeout|failed to fetch/i.test(String(error?.message || ''));
+  return (!error?.response && Boolean(error?.request))
+    || error?.code === 'ECONNABORTED'
+    || messageLooksNetworked
+    || [502, 503, 504].includes(status);
 }
 
-function resolveDevHost() {
-  const explicit = ensureHttpBase(EXPLICIT_BACKEND_URL);
-  if (explicit) {
-    console.log('Backend URL resolved from EXPO_PUBLIC_BACKEND_URL:', explicit);
-    return explicit;
-  }
+export function getApiErrorMessage(error, fallback = GENERIC_API_MESSAGE) {
+  const detail = typeof error?.response?.data?.detail === 'string'
+    ? error.response.data.detail.trim()
+    : typeof error?.response?.data?.message === 'string'
+      ? error.response.data.message.trim()
+      : '';
 
-  const hostUri = Constants.expoConfig?.hostUri || Constants.manifest2?.extra?.expoGo?.hostUri;
-  if (hostUri) {
-    const host = hostUri.split(':')[0];
-    const backendUrl = `http://${host}:${DEFAULT_PORT}`;
-    console.log('Backend URL resolved from Expo host:', backendUrl);
-    return backendUrl;
-  }
-
-  const fallbackBase = ensureHttpBase(DEV_FALLBACK_HOST);
-  if (fallbackBase) {
-    const fallbackUrl = `${fallbackBase}:${DEFAULT_PORT}`;
-    console.log('Backend URL using EXPO_PUBLIC_DEV_HOST:', fallbackUrl);
-    return fallbackUrl;
-  }
-
-  throw new Error('Unable to resolve a development backend URL. Set EXPO_PUBLIC_BACKEND_URL or EXPO_PUBLIC_DEV_HOST.');
+  if (detail) return detail;
+  if (error?.userMessage) return error.userMessage;
+  if (isNetworkOrColdStartError(error)) return SERVER_STARTING_MESSAGE;
+  return fallback;
 }
-
-function requireReleaseBackendUrl() {
-  const explicit = ensureHttpBase(EXPLICIT_BACKEND_URL);
-  if (explicit) {
-    console.log('Backend URL resolved for release build:', explicit);
-    return explicit;
-  }
-
-  throw new Error('EXPO_PUBLIC_BACKEND_URL must be set for native release/test builds.');
-}
-
-function resolveWebBackendUrl() {
-  const explicit = ensureHttpBase(EXPLICIT_BACKEND_URL);
-  if (explicit) return explicit;
-
-  if (typeof window !== 'undefined' && window.location?.hostname) {
-    const protocol = window.location.protocol === 'https:' ? 'https:' : 'http:';
-    return `${protocol}//${window.location.hostname}:${DEFAULT_PORT}`;
-  }
-
-  throw new Error('Unable to resolve a web backend URL. Set EXPO_PUBLIC_BACKEND_URL for web builds.');
-}
-
-let BACKEND_URL;
-const explicitBackend = ensureHttpBase(EXPLICIT_BACKEND_URL);
-if (IS_NATIVE_RELEASE_BUILD) {
-  BACKEND_URL = requireReleaseBackendUrl();
-} else if (explicitBackend) {
-  BACKEND_URL = explicitBackend;
-} else if (Platform.OS === 'android') {
-  // Prefer Expo hostUri (works for both emulator and physical device); fall back to emulator loopback.
-  BACKEND_URL = resolveDevHost();
-} else if (Platform.OS === 'web') {
-  BACKEND_URL = resolveWebBackendUrl();
-} else {
-  BACKEND_URL = resolveDevHost();
-}
-
-console.log('Final Backend URL:', BACKEND_URL);
 
 // --- Connectivity check for debugging ---
 export async function checkBackendConnection() {
   try {
-    const response = await fetch(`${BACKEND_URL}/api/m/health`);
-    if (response.ok) {
-      console.log('Backend connectivity: SUCCESS');
-    } else {
-      console.warn('Backend connectivity: FAIL', response.status);
+    const response = await fetch(MOBILE_HEALTH_URL);
+    if (IS_DEV) {
+      console.log('Backend connectivity:', response.ok ? 'SUCCESS' : `FAIL ${response.status}`);
     }
+    return { ok: response.ok, status: response.status, url: MOBILE_HEALTH_URL };
   } catch (err) {
-    console.error('Backend connectivity: ERROR', err.message);
+    if (IS_DEV) {
+      console.log('Backend connectivity: ERROR', err?.message);
+      console.log('API base URL:', API_BASE_URL);
+    }
+    return { ok: false, error: getApiErrorMessage(err), url: MOBILE_HEALTH_URL };
   }
 }
 
 
-const AUTH_REFRESH_URL = `${BACKEND_URL}/api/auth/google`;
+const AUTH_REFRESH_URL = `${MOBILE_API_BASE_URL}/auth/google`;
 let refreshSessionPromise = null;
 
-// Export base URL for non-axios downloads (e.g., Linking openURL)
-export const BASE_BACKEND_URL = BACKEND_URL;
-
 export const api = createAxios({
-  baseURL: `${BACKEND_URL}/api/m`,
+  baseURL: MOBILE_API_BASE_URL,
   headers: {
     'Content-Type': 'application/json',
   },
@@ -180,14 +129,11 @@ api.interceptors.response.use(
       } catch (_) {}
     }
     
-    // Log network errors for debugging
-    if (!error.response && error.request) {
-      console.error('Network Error:', {
-        url: error.config?.url,
-        baseURL: error.config?.baseURL,
-        method: error.config?.method,
-        message: error.message,
-      });
+    error.userMessage = getApiErrorMessage(error);
+
+    if (IS_DEV) {
+      console.log('API error:', error?.message);
+      console.log('API base URL:', API_BASE_URL);
     }
     
     return Promise.reject(error);
@@ -216,7 +162,7 @@ export const apiService = {
   getPaymongoCheckoutStatus: (checkoutId) => api.get(`/paymongo/checkout/${checkoutId}/status`),
 
   // Documents
-  downloadDocumentUrl: (docId = 'contract') => `${BASE_BACKEND_URL}/api/m/documents/${docId}`,
+  downloadDocumentUrl: (docId = 'contract') => `${MOBILE_API_BASE_URL}/documents/${docId}`,
   
   // Maintenance
   getMyMaintenance: (status) => api.get('/maintenance/me', { params: { status } }),

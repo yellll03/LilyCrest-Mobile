@@ -6,7 +6,7 @@ import { ActivityIndicator, Modal, Platform, RefreshControl, ScrollView, StyleSh
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
-import { apiService } from '../../src/services/api';
+import { apiService, getApiErrorMessage } from '../../src/services/api';
 
 function safeFormat(dateStr, fmt) {
   try {
@@ -275,7 +275,7 @@ export default function AnnouncementsScreen() {
       setFetchError(null);
     } catch (error) {
       console.error('Fetch announcements error:', error);
-      if (!silent) setFetchError('Unable to load notifications. Pull down to refresh.');
+      if (!silent) setFetchError(getApiErrorMessage(error, 'Unable to load notifications. Pull down to refresh.'));
     } finally {
       setIsLoading(false);
       setRefreshing(false);

@@ -2,12 +2,12 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { Alert } from 'react-native';
-import { BASE_BACKEND_URL } from '../services/api';
+import { MOBILE_API_BASE_URL } from '../config/api';
+import { getApiErrorMessage } from '../services/api';
 
 const buildBillPdfUrl = (billId) => {
   if (!billId) return null;
-  const base = (BASE_BACKEND_URL || '').replace(/\/$/, '');
-  return `${base}/api/billing/${encodeURIComponent(billId)}/pdf`;
+  return `${MOBILE_API_BASE_URL}/billing/${encodeURIComponent(billId)}/pdf`;
 };
 
 export async function downloadBillPdf(billId, setBusy) {
@@ -78,11 +78,13 @@ export async function downloadBillPdf(billId, setBusy) {
 
     return true;
   } catch (error) {
-    console.error('[PDF] download error:', error?.message);
+    if (typeof __DEV__ !== 'undefined' && __DEV__) {
+      console.log('[PDF] download error:', error?.message);
+    }
 
     Alert.alert(
       'Download failed',
-      'Unable to download the billing PDF. Make sure you are connected and logged in.'
+      getApiErrorMessage(error, 'Unable to download the billing PDF. Make sure you are connected and logged in.')
     );
     return false;
   } finally {

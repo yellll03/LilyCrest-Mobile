@@ -3,6 +3,7 @@ import { useAssistantChat } from '../hooks/useAssistantChat';
 import { apiService } from '../services/api';
 
 jest.mock('../services/api', () => ({
+  getApiErrorMessage: (error, fallback = 'Request failed') => error?.response?.data?.detail || error?.message || fallback,
   apiService: {
     sendChatMessage: jest.fn(),
     resetChatSession: jest.fn(),
