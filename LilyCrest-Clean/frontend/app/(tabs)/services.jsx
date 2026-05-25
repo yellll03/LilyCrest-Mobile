@@ -230,12 +230,33 @@ function unwrapMaintenanceRequests(response) {
   return [];
 }
 
+function isMaintenanceRequestPayload(value) {
+  return Boolean(
+    value
+    && typeof value === 'object'
+    && !Array.isArray(value)
+    && (
+      value.request_id
+      || value.requestId
+      || value._id
+      || value.status
+      || value.request_type
+      || value.thread
+      || value.publicReplies
+      || value.tenantReplies
+    )
+  );
+}
+
 function unwrapMaintenanceRequest(response, fallback = null) {
   const payload = response?.data ?? response;
-  if (payload?.data?.request) return payload.data.request;
-  if (payload?.request) return payload.request;
-  if (payload?.data && !Array.isArray(payload.data)) return payload.data;
-  return payload || fallback;
+  const candidates = [
+    payload?.data?.request,
+    payload?.request,
+    payload?.data,
+    payload,
+  ];
+  return candidates.find(isMaintenanceRequestPayload) || fallback;
 }
 
 const REQUEST_TYPES = [
