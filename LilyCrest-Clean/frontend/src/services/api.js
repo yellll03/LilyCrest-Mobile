@@ -132,7 +132,17 @@ api.interceptors.response.use(
     error.userMessage = getApiErrorMessage(error);
 
     if (IS_DEV) {
-      console.log('API error:', error?.message);
+      const requestUrl = originalRequest?.baseURL && originalRequest?.url
+        ? `${String(originalRequest.baseURL).replace(/\/$/, '')}/${String(originalRequest.url).replace(/^\//, '')}`
+        : originalRequest?.url;
+      console.log('API error:', {
+        message: error?.message,
+        status: error?.response?.status,
+        method: originalRequest?.method,
+        url: requestUrl,
+        code: error?.response?.data?.code,
+        detail: error?.response?.data?.detail || error?.response?.data?.message || error?.response?.data?.error,
+      });
       console.log('API base URL:', API_BASE_URL);
     }
     
