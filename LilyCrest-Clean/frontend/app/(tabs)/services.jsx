@@ -159,7 +159,11 @@ function buildRequestProgress(request) {
       ? request.tenantReplies
       : Array.isArray(request.thread)
         ? request.thread
-        : [];
+        : Array.isArray(request.conversation)
+          ? request.conversation
+          : Array.isArray(request.updates)
+            ? request.updates
+            : [];
   const progress = publicEntries
     .filter(isTenantConversationEntry)
       .map((entry, index) => {
@@ -215,6 +219,23 @@ function buildRequestProgress(request) {
   }
 
   return [];
+}
+
+function unwrapMaintenanceRequests(response) {
+  const payload = response?.data;
+  if (Array.isArray(payload)) return payload;
+  if (Array.isArray(payload?.data?.requests)) return payload.data.requests;
+  if (Array.isArray(payload?.requests)) return payload.requests;
+  if (Array.isArray(payload?.data)) return payload.data;
+  return [];
+}
+
+function unwrapMaintenanceRequest(response, fallback = null) {
+  const payload = response?.data ?? response;
+  if (payload?.data?.request) return payload.data.request;
+  if (payload?.request) return payload.request;
+  if (payload?.data && !Array.isArray(payload.data)) return payload.data;
+  return payload || fallback;
 }
 
 const REQUEST_TYPES = [
@@ -517,7 +538,7 @@ export default function ServicesScreen() {
     try {
       const response = await apiService.getMyMaintenance();
       // Force new array to trigger rerender even if values are identical
-      const nextRequests = [...(response.data || [])].sort((a, b) => {
+      const nextRequests = [...unwrapMaintenanceRequests(response)].sort((a, b) => {
         const aTime = new Date(a.latestActivityAt || a.lastActivityAt || a.updated_at || a.created_at || 0).getTime();
         const bTime = new Date(b.latestActivityAt || b.lastActivityAt || b.updated_at || b.created_at || 0).getTime();
         return bTime - aTime;
@@ -677,11 +698,20 @@ export default function ServicesScreen() {
     setDetailLoading(true);
     try {
       const response = await apiService.getMaintenance(request.request_id);
-      const detail = response?.data || request;
+      const detail = unwrapMaintenanceRequest(response, request);
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        const thread = buildRequestProgress(detail);
+        console.log('[Maintenance detail]', {
+          requestId: detail?.request_id,
+          threadCount: thread.length,
+          replyAttachmentCount: thread.reduce((count, entry) => count + (Array.isArray(entry.attachments) ? entry.attachments.length : 0), 0),
+        });
+      }
       setDetailRequest(detail);
       const readResponse = await apiService.markMaintenanceRead(request.request_id).catch(() => null);
-      if (readResponse?.data) {
-        setDetailRequest(readResponse.data);
+      const readDetail = unwrapMaintenanceRequest(readResponse, null);
+      if (readDetail) {
+        setDetailRequest(readDetail);
       }
       fetchRequests();
     } catch (error) {
@@ -758,7 +788,7 @@ export default function ServicesScreen() {
     setSaving(true);
     try {
       const response = await apiService.confirmMaintenanceResolved(detailRequest.request_id);
-      setDetailRequest(response?.data || detailRequest);
+      setDetailRequest(unwrapMaintenanceRequest(response, detailRequest));
       showBannerMessage('success', 'Resolution confirmed.');
       fetchRequests();
     } catch (e) {
@@ -819,7 +849,7 @@ export default function ServicesScreen() {
         message: replyMessage.trim(),
         attachments: uploadedAttachments.map(toStoredAttachmentMetadata),
       });
-      setDetailRequest(response?.data || detailRequest);
+      setDetailRequest(unwrapMaintenanceRequest(response, detailRequest));
       setReplyMessage('');
       setReplyAttachments([]);
       setReplyUploadStatus('');
