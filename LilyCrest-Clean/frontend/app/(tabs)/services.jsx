@@ -22,6 +22,7 @@ import LilyFlowerIcon from '../../src/components/assistant/LilyFlowerIcon';
 import { useAuth } from '../../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
 import { useToast } from '../../src/context/ToastContext';
+import { MOBILE_API_BASE_URL } from '../../src/config/api';
 import { apiService, getApiErrorMessage } from '../../src/services/api';
 import {
   ensureFirebaseStorageAttachments,
@@ -723,8 +724,15 @@ export default function ServicesScreen() {
       if (typeof __DEV__ !== 'undefined' && __DEV__) {
         const thread = buildRequestProgress(detail);
         console.log('[Maintenance detail]', {
+          endpoint: `${MOBILE_API_BASE_URL}/maintenance/${request.request_id}`,
           requestId: detail?.request_id,
+          responseKeys: Object.keys(response?.data || {}),
           threadCount: thread.length,
+          replyAttachmentCounts: thread.map((entry) => ({
+            id: entry.id,
+            type: entry.type,
+            attachmentCount: Array.isArray(entry.attachments) ? entry.attachments.length : 0,
+          })),
           replyAttachmentCount: thread.reduce((count, entry) => count + (Array.isArray(entry.attachments) ? entry.attachments.length : 0), 0),
         });
       }

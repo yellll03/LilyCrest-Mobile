@@ -1,6 +1,6 @@
 const RAW_BACKEND_URL =
   process.env.EXPO_PUBLIC_BACKEND_URL ||
-  'https://lilycrest-mobile.onrender.com';
+  'https://api.lilycrest.space';
 
 export const API_BASE_URL = RAW_BACKEND_URL.replace(/\/$/, '');
 

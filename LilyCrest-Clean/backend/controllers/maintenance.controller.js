@@ -429,7 +429,7 @@ function senderLabelFromRole(role, fallbackName = '') {
   if (normalized === 'branch_admin') return 'Branch Admin';
   if (normalized === 'owner') return 'Owner';
   if (normalized === 'system') return 'Maintenance Team';
-  return fallbackName || 'Dormitory Admin';
+  return fallbackName || 'Admin';
 }
 
 function friendlyStatusCopy(status = '') {

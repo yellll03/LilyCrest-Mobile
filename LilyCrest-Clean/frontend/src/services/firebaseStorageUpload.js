@@ -1,4 +1,5 @@
 import * as FileSystem from 'expo-file-system/legacy';
+import { API_BASE_URL } from '../config/api';
 import { api } from './api';
 
 const LOCAL_ONLY_URI_PATTERN = /^(?:file|content|ph|assets-library|blob|ms-appdata):\/\/|^\/data\/user\/|^\/storage\/|^\/private\/var\/|^\/var\/mobile\/|(?:^|[\\/])cache(?:[\\/]|$)/i;
@@ -52,6 +53,20 @@ const EXTENSION_MIME_TYPE_MAP = Object.entries(MIME_TYPE_EXTENSION_MAP).reduce((
   return acc;
 }, {});
 
+function normalizeAttachmentRemoteUrl(value = '') {
+  const normalized = String(value || '').trim();
+  if (!normalized) return '';
+  if (/^(?:https?:|file:|content:|ph:|assets-library:|blob:|data:)/i.test(normalized)) {
+    return normalized;
+  }
+  if (normalized.startsWith('//')) return `https:${normalized}`;
+  if (normalized.startsWith('/')) return `${API_BASE_URL}${normalized}`;
+  if (/^(?:uploads|api\/attachments|attachments)\//i.test(normalized)) {
+    return `${API_BASE_URL}/${normalized.replace(/^\/+/, '')}`;
+  }
+  return normalized;
+}
+
 export function isLocalOnlyAttachmentUri(value = '') {
   const normalized = String(value || '').trim();
   if (!normalized || /^https?:\/\//i.test(normalized)) {
@@ -65,8 +80,8 @@ export function isUploadedHttpsAttachmentUri(value = '') {
 }
 
 export function getAttachmentDownloadUrl(attachment = {}) {
-  if (typeof attachment === 'string') return attachment.trim();
-  return String(
+  if (typeof attachment === 'string') return normalizeAttachmentRemoteUrl(attachment);
+  return normalizeAttachmentRemoteUrl(
     attachment?.downloadUrl
     || attachment?.download_url
     || attachment?.fileUrl
