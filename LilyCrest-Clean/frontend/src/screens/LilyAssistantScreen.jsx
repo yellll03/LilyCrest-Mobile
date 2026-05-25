@@ -162,15 +162,39 @@ const SUGGESTED_QUESTIONS = [
 ];
 
 const ADMIN_KEYWORDS = [
+  'connect me to admin',
+  'connect me to the admin',
   'connect me to an admin',
+  'i want to talk to admin',
   'talk to admin',
+  'talk to the admin',
   'contact admin',
+  'notify admin',
+  'notify the admin',
+  'message admin',
+  'ask admin',
+  'branch admin',
+  'owner',
   'speak to admin',
   'escalate',
+  'complain',
+  'reklamo',
+  'noisy neighbor',
+  'maingay',
   'complaint to admin',
   'file a complaint',
+  'report to admin',
   'submit inquiry',
+  'someone assist',
+  'can someone assist me',
   'human help',
+  'human agent',
+  'real person',
+  'kausapin admin',
+  'ipaalam sa admin',
+  'sabihin sa admin',
+  'ireport sa admin',
+  'i-report sa admin',
 ];
 
 const MAX_CHAT_INPUT_CHARS = 800;
@@ -224,11 +248,11 @@ const getTypingLabel = (intent = 'general') => {
 
 const normalizeSupportCategory = (text = '', intent = '') => {
   const source = `${text} ${intent}`.toLowerCase();
-  if (/complaint|unsafe|harass|legal|danger|urgent|emergency|threat|abuse/.test(source)) return 'urgent_issue';
-  if (/billing|late fee|overdue|payment|paymongo|invoice|bill/.test(source)) return 'billing_concern';
-  if (/maintenance|repair|leak|electrical|no power|no water|plumbing/.test(source)) return 'maintenance_concern';
+  if (/complaint|complain|reklamo|noisy|maingay|unsafe|harass|legal|danger|urgent|emergency|threat|abuse|violation/.test(source)) return 'urgent_issue';
+  if (/billing|late fee|overdue|payment|paymongo|invoice|bill|balance|bayarin|bayad|rent|due date|paid already|already paid/.test(source)) return 'billing_concern';
+  if (/maintenance|repair|leak|electrical|no power|no water|plumbing|sira|fix|admin reply|repair request/.test(source)) return 'maintenance_concern';
   if (/reservation|move in|move-in|room slot|bed slot|booking/.test(source)) return 'reservation_concern';
-  if (/gcash|maya|bank transfer|payment proof/.test(source)) return 'payment_concern';
+  if (/gcash|maya|bank transfer|payment proof|proof of payment/.test(source)) return 'payment_concern';
   return 'general_inquiry';
 };
 

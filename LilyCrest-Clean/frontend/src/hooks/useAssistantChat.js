@@ -7,8 +7,8 @@ const RATE_LIMIT_MS = 900; // debounce to prevent spam submits
 
 function detectTypingIntent(text = '') {
   const lower = String(text || '').toLowerCase();
-  if (/\b(bill|unpaid|bayarin|due|payment)\b/.test(lower)) return 'billing';
-  if (/\b(maintenance|repair|sira|request|fix)\b/.test(lower)) return 'maintenance';
+  if (/\b(bill|balance|unpaid|bayarin|bayad|rent|due|payment|paymongo|paid already|already paid)\b/.test(lower)) return 'billing';
+  if (/\b(maintenance|repair|sira|request|fix|admin reply|may reply|repair status|status ng maintenance)\b/.test(lower)) return 'maintenance';
   if (/\b(account|profile|info|details)\b/.test(lower)) return 'profile';
   return 'general';
 }

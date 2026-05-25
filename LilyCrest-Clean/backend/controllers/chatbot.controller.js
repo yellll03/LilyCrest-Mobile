@@ -53,9 +53,18 @@ const LEGACY_MAINTENANCE_COLLECTION = 'maintenancerequests';
 const SUPPORTED_INTENTS = {
   BILLING: 'billing',
   MAINTENANCE: 'maintenance',
+  ADMIN_SUPPORT: 'admin_support',
   PROFILE: 'profile',
   GENERAL: 'general',
 };
+const ADMIN_ESCALATION_PATTERNS = [
+  /\b(connect|contact|notify|message|ask|talk|speak|escalate|report)\s+(me\s+to\s+)?(to\s+)?(the\s+|an\s+)?(admin|branch admin|owner|staff|real person|human)\b/i,
+  /\b(i\s+want|i\s+need|i'd\s+like|can\s+i|could\s+i|please)\s+(to\s+)?(talk|speak|chat|message|contact)\s+(to\s+|with\s+)?(the\s+|an\s+)?(admin|branch admin|owner|staff)\b/i,
+  /\b(help|assistance)\s+from\s+(the\s+)?(admin|branch admin|owner|staff)\b/i,
+  /\b(can someone assist|someone assist|human help|real person|human agent|talk to a person)\b/i,
+  /\b(kausapin|ipaalam|sabihin|i-report|ireport)\s+(mo\s+)?(sa\s+)?(admin|branch admin|owner)\b/i,
+  /\b(already paid|paid already|bayad na|nagbayad).{0,80}\b(report|notify|admin|pending|not reflected|not updated)\b/i,
+];
 const COURTESY_PATTERNS = [
   /^(thanks|thank you|thankyou|salamat|ok(?:ay)?|noted|got it|sige|bye|goodbye|see you|ingat)\b/i,
 ];
@@ -70,14 +79,24 @@ const DORM_SCOPE_PATTERNS = [
   /\bannouncements?\b/i,
   /\b(my|latest|current|unpaid)\s+(bill|billing|balance|payment|payments)\b/i,
   /\bhow much do i owe\b/i,
+  /\b(magkano|how much)\s+(ang\s+)?(balance|bill|bayarin|rent)\b/i,
+  /\b(may\s+)?(unpaid|unsettled|pending)\s+(bill|balance|bayarin)\b/i,
+  /\b(kailan|when).{0,40}\b(due date|due|rent|bayad|bayarin)\b/i,
   /\b(show|check)\s+my\s+(bill|billing|balance|payments?)\b/i,
   /^(how can i pay|how do i pay|where do i pay|payment methods?)\??$/i,
   /\b(due date|late fee|rent|proof of payment|billing history|paymongo)\b/i,
+  /\b(already paid|paid already|nagbayad|bayad na|payment proof|proof of payment)\b/i,
   /\bmaintenance\b/i,
   /\b(service|repair)\s+request\b/i,
+  /\b(status ng maintenance|maintenance status|repair status|request status|admin reply|may reply|reply sa repair|repair request)\b/i,
   /\b(water leak|plumbing|electrical|no power|no water|flood(?:ing)?|gas smell)\b/i,
   /\b(my\s+)?(room|bathroom|toilet|sink|shower|faucet|door|window|light|aircon|ceiling)\s+(is\s+)?(broken|damaged|not working)\b/i,
   /\b(issue|problem)\s+(in|with)\s+my\s+(room|bathroom|toilet|sink|shower|door|window|light|aircon)\b/i,
+  /\b(connect|contact|notify|message|ask|talk|speak|escalate|report)\s+(me\s+to\s+)?(to\s+)?(the\s+|an\s+)?(admin|branch admin|owner|staff|real person|human)\b/i,
+  /\b(can someone assist|someone assist|admin help|human help|real person|branch admin|owner)\b/i,
+  /\b(kausapin|ipaalam|sabihin|i-report|ireport)\s+(mo\s+)?(sa\s+)?(admin|branch admin|owner)\b/i,
+  /\b(complaint|complain|report|reklamo|maingay|noisy neighbor|noise complaint|violation|harassment|unsafe)\b/i,
+  /\b(payment history|billing history|saan.*makikita|where.*see|app feature|how do i use)\b/i,
   /\b(house rules?|visitor policy|visitors?|guests?|curfew|quiet hours|gate)\b/i,
   /\b(lease|contract|documents?|pdf|passport|student id|company id|government id|valid id)\b/i,
   /\b(move in|move-in|move out|move-out|security deposit)\b/i,
@@ -96,13 +115,14 @@ const OUT_OF_SCOPE_PATTERNS = [
   /\b(nba|basketball|football|soccer|baseball|tennis)\b/i,
   /\b(bitcoin|crypto|stock market|stocks|forex)\b/i,
   /\b(movie|movies|tv show|series|anime|celebrity|song|music|album|band)\b/i,
-  /\b(recipe|cook|cooking|restaurant)\b/i,
+  /\b(recipe|cook|cooking|restaurant|ulam|masarap ulamin|food suggestion|ano masarap)\b/i,
   /\b(code|coding|programming|javascript|python|java|react)\b/i,
   /\b(homework|assignment|exam|essay|thesis)\b/i,
   /\b(politics|president|senator|election)\b/i,
   /\b(travel itinerary|flight|hotel|vacation)\b/i,
   /\b(joke|poem|horoscope|zodiac|love advice)\b/i,
   /\b(capital of|translate|meaning of life)\b/i,
+  /^\s*\d+\s*[+\-*/]\s*\d+\s*\??\s*$/i,
 ];
 const OUT_OF_SCOPE_RESPONSE = 'I can only help with LilyCrest dormitory and tenant app concerns, such as billing, maintenance, announcements, documents, house rules, room details, facilities, and account support.';
 
@@ -144,8 +164,12 @@ function isCourtesyMessage(message = '') {
   return COURTESY_PATTERNS.some((pattern) => pattern.test(message.trim()));
 }
 
+function isAdminEscalationRequest(message = '') {
+  return ADMIN_ESCALATION_PATTERNS.some((pattern) => pattern.test(String(message || '').trim()));
+}
+
 function hasDormitoryScopeSignal(message = '') {
-  return DORM_SCOPE_PATTERNS.some((pattern) => pattern.test(message.trim()));
+  return isAdminEscalationRequest(message) || DORM_SCOPE_PATTERNS.some((pattern) => pattern.test(message.trim()));
 }
 
 function hasHighSignalOutOfScopeTopic(message = '') {
@@ -185,10 +209,13 @@ function replyWithScopeGuard(res, sessionId, session, userMessage) {
 
 function detectSystemIntent(message = '') {
   const lower = String(message || '').toLowerCase();
-  if (/\b(bills?|billing|balance|unpaid|bayarin|bayad|due|overdue|payment|payments?|owe|rent|charges?)\b/.test(lower)) {
+  if (isAdminEscalationRequest(message) || /\b(complaint|complain|reklamo|noisy neighbor|maingay|unsafe|harassment)\b/.test(lower)) {
+    return SUPPORTED_INTENTS.ADMIN_SUPPORT;
+  }
+  if (/\b(bills?|billing|balance|unpaid|bayarin|bayad|due|due date|overdue|payment|payments?|owe|rent|charges?|magkano|paid already|already paid)\b/.test(lower)) {
     return SUPPORTED_INTENTS.BILLING;
   }
-  if (/\b(maintenance|repair|sira|request|fix)\b/.test(lower)) {
+  if (/\b(maintenance|repair|sira|request|fix|admin reply|may reply|status ng maintenance|repair request)\b/.test(lower)) {
     return SUPPORTED_INTENTS.MAINTENANCE;
   }
   if (
@@ -204,6 +231,9 @@ function detectSystemIntent(message = '') {
 
 function normalizeAssistantIntent(intent = '') {
   const lower = String(intent || '').toLowerCase();
+  if (lower.includes('admin') || lower.includes('escalation') || lower.includes('support') || lower.includes('complaint')) {
+    return SUPPORTED_INTENTS.ADMIN_SUPPORT;
+  }
   if (lower.includes('billing') || lower.includes('payment') || lower.includes('bill')) {
     return SUPPORTED_INTENTS.BILLING;
   }
@@ -263,6 +293,238 @@ function requestStatusValue(request = {}) {
   return String(request.status || '').toLowerCase();
 }
 
+function firstNonEmptyString(...values) {
+  for (const value of values) {
+    if (typeof value === 'string' && value.trim()) return value.trim();
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value);
+  }
+  return '';
+}
+
+function displayName(user = {}, fallback = 'Tenant') {
+  return firstNonEmptyString(
+    user.name,
+    user.fullName,
+    [user.firstName, user.lastName].filter(Boolean).join(' '),
+    user.email,
+    user.user_id,
+    fallback
+  );
+}
+
+function formatBranchValue(value) {
+  if (!value) return '';
+  if (typeof value === 'object') {
+    return firstNonEmptyString(value.name, value.branchName, value.label, value.id, value._id);
+  }
+  return firstNonEmptyString(value);
+}
+
+function formatStatusLabel(value = '') {
+  const normalized = String(value || '').replace(/_/g, ' ').trim();
+  return normalized || 'unknown';
+}
+
+function dateTimeValue(value) {
+  if (!value) return 0;
+  const parsed = new Date(value).getTime();
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function formatBillStatus(bill = {}) {
+  return formatStatusLabel(bill.status || bill.payment_status || bill.paymentStatus || 'posted');
+}
+
+function summarizeBillForContext(bill = {}) {
+  const amount = formatPesoCompact(getBillAmountValue(bill));
+  const type = normalizeBillTypeLabel(bill);
+  const status = formatBillStatus(bill);
+  const dueDate = formatShortDate(bill.due_date || bill.dueDate);
+  return `${type}: ${amount}, ${status}${dueDate ? `, due ${dueDate}` : ''}`;
+}
+
+function maintenanceEntryTimestamp(entry = {}) {
+  return entry.created_at || entry.createdAt || entry.timestamp || entry.updated_at || entry.updatedAt || null;
+}
+
+function maintenanceEntryMessage(entry = {}) {
+  return firstNonEmptyString(entry.message, entry.note, entry.content, entry.text);
+}
+
+function maintenanceEntryType(entry = {}) {
+  return String(entry.type || entry.kind || entry.event || '').trim().toLowerCase();
+}
+
+function maintenanceSenderRole(entry = {}) {
+  return String(entry.sender_role || entry.senderRole || entry.actor_role || entry.actorRole || entry.role || '').trim().toLowerCase();
+}
+
+function maintenanceAttachmentCount(entry = {}) {
+  return Array.isArray(entry.attachments) ? entry.attachments.filter(Boolean).length : 0;
+}
+
+function hasTenantFacingMaintenanceContent(entry = {}) {
+  return Boolean(
+    maintenanceEntryMessage(entry)
+    || maintenanceAttachmentCount(entry) > 0
+    || entry.summary
+    || entry.tenantSummary
+  );
+}
+
+function isTenantVisibleMaintenanceEntry(entry = {}) {
+  const visibility = String(entry.visibility || entry.audience || entry.scope || '').trim().toLowerCase();
+  if (['internal', 'admin', 'admin_only', 'private'].includes(visibility)) return false;
+  if (entry.internal === true || entry.adminOnly === true || entry.isInternal === true) return false;
+  if (entry.visibleToTenant === false || entry.isTenantVisible === false) return false;
+
+  const type = maintenanceEntryType(entry);
+  const role = maintenanceSenderRole(entry);
+  const publicTypes = new Set(['admin_reply', 'tenant_reply', 'tenant_summary', 'summary', 'public_reply', 'admin_update']);
+  const internalTypes = new Set(['viewed', 'viewed_history', 'status_change', 'workflow', 'processing_log', 'draft_saved', 'internal_note', 'admin_note']);
+
+  if (internalTypes.has(type)) return false;
+  if (type && !publicTypes.has(type)) return false;
+  if (role === 'system') return false;
+  return hasTenantFacingMaintenanceContent(entry);
+}
+
+function getTenantVisibleMaintenanceThread(request = {}) {
+  const sources = [];
+  const publicThread = Array.isArray(request.publicReplies)
+    ? request.publicReplies
+    : Array.isArray(request.tenantReplies)
+      ? request.tenantReplies
+      : [];
+  sources.push(...publicThread);
+  if (Array.isArray(request.thread)) sources.push(...request.thread);
+  if (Array.isArray(request.conversation)) sources.push(...request.conversation);
+  if (Array.isArray(request.updates)) sources.push(...request.updates);
+  if (Array.isArray(request.statusHistory)) {
+    sources.push(...request.statusHistory.filter((entry) => {
+      const type = maintenanceEntryType(entry);
+      return type === 'admin_reply' || type === 'tenant_summary' || type === 'summary';
+    }));
+  }
+
+  const seen = new Set();
+  return sources
+    .filter(isTenantVisibleMaintenanceEntry)
+    .filter((entry, index) => {
+      const key = entry.update_id || entry.id || `${maintenanceEntryType(entry)}:${maintenanceEntryTimestamp(entry) || index}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .sort((left, right) => dateTimeValue(maintenanceEntryTimestamp(left)) - dateTimeValue(maintenanceEntryTimestamp(right)));
+}
+
+function getLatestAdminVisibleMaintenanceEntry(thread = []) {
+  return [...thread].reverse().find((entry) => {
+    const type = maintenanceEntryType(entry);
+    const role = maintenanceSenderRole(entry);
+    return type === 'admin_reply'
+      || type === 'tenant_summary'
+      || type === 'summary'
+      || ['admin', 'branch_admin', 'owner', 'superadmin'].includes(role);
+  }) || null;
+}
+
+function summarizeMaintenanceEntry(entry = {}) {
+  if (!entry) return '';
+  const role = maintenanceSenderRole(entry);
+  const sender = firstNonEmptyString(entry.sender_name, entry.senderName, entry.actor_name, entry.actorName)
+    || (role === 'owner' ? 'Owner' : role === 'branch_admin' ? 'Branch Admin' : 'Admin');
+  const message = maintenanceEntryMessage(entry);
+  const attachments = maintenanceAttachmentCount(entry);
+  const sentAt = formatShortDate(maintenanceEntryTimestamp(entry));
+  const summary = entry.summary || entry.tenantSummary || {};
+  const summaryText = firstNonEmptyString(
+    summary.next_step,
+    summary.action_taken,
+    summary.completion_note,
+    summary.current_status
+  );
+  const content = message || summaryText || (attachments ? `${attachments} attachment${attachments > 1 ? 's' : ''}` : 'an update');
+  return `${sender}${sentAt ? ` on ${sentAt}` : ''}: ${content}${attachments ? ` (${attachments} attachment${attachments > 1 ? 's' : ''})` : ''}`;
+}
+
+function summarizeMaintenanceForContext(request = {}) {
+  const title = firstNonEmptyString(request.request_type, request.title, request.category, 'maintenance request')
+    .replace(/_/g, ' ');
+  const status = formatStatusLabel(request.status || 'pending');
+  const submitted = formatShortDate(request.created_at || request.createdAt);
+  const thread = getTenantVisibleMaintenanceThread(request);
+  const latestReply = getLatestAdminVisibleMaintenanceEntry(thread);
+  return `${title}: ${status}${submitted ? `, submitted ${submitted}` : ''}${latestReply ? `, latest tenant-visible update - ${summarizeMaintenanceEntry(latestReply)}` : ''}`;
+}
+
+async function resolveTenantAccountContext(db, user = {}) {
+  const userObjectId = asObjectId(user._id);
+  const userId = user.user_id;
+  const context = {
+    tenantName: displayName(user),
+    tenantId: firstNonEmptyString(userId, user._id ? String(user._id) : ''),
+    role: firstNonEmptyString(user.role, 'tenant'),
+    branch: formatBranchValue(user.branch || user.branchId),
+    roomNumber: '',
+    roomBed: '',
+    occupancyStatus: '',
+    leaseStatus: '',
+  };
+
+  const reservationOr = [
+    ...(userObjectId ? [{ userId: userObjectId }, { tenantId: userObjectId }] : []),
+    ...(userId ? [{ user_id: userId }, { tenantUserId: userId }] : []),
+  ];
+
+  if (reservationOr.length) {
+    const reservation = await db.collection('reservations').findOne(
+      { $or: reservationOr },
+      { sort: { updatedAt: -1, createdAt: -1 } }
+    ).catch(() => null);
+
+    if (reservation) {
+      context.branch = formatBranchValue(reservation.branch || reservation.branchId) || context.branch;
+      context.occupancyStatus = firstNonEmptyString(reservation.status, reservation.occupancyStatus);
+      context.leaseStatus = firstNonEmptyString(reservation.leaseStatus, reservation.contractStatus);
+      context.roomNumber = firstNonEmptyString(reservation.roomNumber, reservation.roomName, reservation.room?.roomNumber);
+      context.roomBed = firstNonEmptyString(
+        reservation.selectedBed?.position,
+        reservation.selectedBed?.label,
+        reservation.selectedBed?.id,
+        reservation.bedNumber,
+        reservation.bedId
+      );
+
+      const roomId = reservation.roomId || reservation.room_id;
+      if (roomId && !context.roomNumber) {
+        const room = await db.collection('rooms').findOne({ _id: asObjectId(roomId) || roomId }).catch(() => null);
+        context.roomNumber = firstNonEmptyString(room?.roomNumber, room?.name);
+      }
+    }
+  }
+
+  if (userObjectId && (!context.roomNumber || !context.roomBed || !context.branch)) {
+    const bedHistory = await db.collection('bedhistories').findOne(
+      { userId: userObjectId },
+      { sort: { moveInDate: -1, createdAt: -1 } }
+    ).catch(() => null);
+
+    if (bedHistory) {
+      context.branch = formatBranchValue(bedHistory.branch || bedHistory.branchId) || context.branch;
+      context.occupancyStatus = context.occupancyStatus || firstNonEmptyString(bedHistory.status, 'active');
+      context.roomBed = context.roomBed || firstNonEmptyString(bedHistory.bedPosition, bedHistory.bedLabel, bedHistory.bedId);
+      const room = bedHistory.roomId
+        ? await db.collection('rooms').findOne({ _id: asObjectId(bedHistory.roomId) || bedHistory.roomId }).catch(() => null)
+        : null;
+      context.roomNumber = context.roomNumber || firstNonEmptyString(room?.roomNumber, room?.name);
+    }
+  }
+
+  return context;
+}
+
 async function fetchMaintenanceRequestsForUser(db, user = {}) {
   const userId = user.user_id;
   const mongoId = asObjectId(user._id);
@@ -300,9 +562,25 @@ async function buildBillingResponse(db, user) {
   const bills = await fetchUserBills(db, user, { limit: 20 });
   const unpaidBills = bills.filter(isBillUnpaid);
 
-  if (!unpaidBills.length) {
+  if (!bills.length) {
     return {
-      message: 'You currently have no unpaid bills.',
+      message: "I can't see any billing records on your account right now. You may have no posted bills yet, or the record may not be available to Lily. I can connect you to admin if you want this checked.",
+      intent: SUPPORTED_INTENTS.BILLING,
+      suggestions: [
+        { label: 'Contact admin', prompt: 'Can you ask admin about my bill?' },
+        { label: 'Payment history', prompt: 'Where can I see my payment history?' },
+      ],
+    };
+  }
+
+  if (!unpaidBills.length) {
+    const latestBill = [...bills].sort((left, right) => (
+      dateTimeValue(right.due_date || right.dueDate || right.created_at || right.createdAt)
+      - dateTimeValue(left.due_date || left.dueDate || left.created_at || left.createdAt)
+    ))[0];
+    const latestText = latestBill ? ` Your latest posted ${summarizeBillForContext(latestBill)}.` : '';
+    return {
+      message: `I don't see any unpaid bills on your account right now.${latestText}`,
       intent: SUPPORTED_INTENTS.BILLING,
       suggestions: [
         { label: 'Payment history', prompt: 'Show my recent payments.' },
@@ -321,9 +599,12 @@ async function buildBillingResponse(db, user) {
   const dueDate = formatShortDate(nextDueBill?.due_date || nextDueBill?.dueDate);
   const billType = normalizeBillTypeLabel(nextDueBill);
   const dueText = dueDate ? ` due on ${dueDate}` : '';
+  const nextAmount = formatPesoCompact(getBillAmountValue(nextDueBill));
+  const billCount = unpaidBills.length;
+  const countText = billCount === 1 ? '1 unpaid bill' : `${billCount} unpaid bills`;
 
   return {
-    message: `You currently have ${formatPesoCompact(totalOutstanding)} unpaid for ${billType}${dueText}.`,
+    message: `You currently have ${countText} totaling ${formatPesoCompact(totalOutstanding)}. The next one I can see is ${billType} for ${nextAmount}${dueText}, marked ${formatBillStatus(nextDueBill)}.`,
     intent: SUPPORTED_INTENTS.BILLING,
     suggestions: [
       { label: 'Latest bill', prompt: 'Show my latest billing summary.' },
@@ -332,22 +613,24 @@ async function buildBillingResponse(db, user) {
   };
 }
 
-async function buildMaintenanceResponse(db, user) {
+async function buildMaintenanceResponse(db, user, message = '') {
   const requests = await fetchMaintenanceRequestsForUser(db, user);
   const activeStatuses = new Set(['pending', 'viewed', 'in_progress', 'open']);
   const activeRequests = requests.filter((request) => activeStatuses.has(requestStatusValue(request)));
+  const latestRequest = activeRequests[0] || requests[0];
+  const asksAboutReply = /\b(reply|replied|admin reply|may reply|sagot|update)\b/i.test(message);
 
-  if (!activeRequests.length) {
+  if (!latestRequest) {
     return {
-      message: 'You currently have no active maintenance requests.',
+      message: 'I cannot see any maintenance requests on your account right now. If you need a repair, you can file one in Services, or I can help connect you to admin.',
       intent: SUPPORTED_INTENTS.MAINTENANCE,
       suggestions: [
         { label: 'Report an issue', prompt: 'I need help with a maintenance issue.' },
+        { label: 'Talk to admin', prompt: 'Connect me to the admin.' },
       ],
     };
   }
 
-  const latestRequest = activeRequests[0];
   const requestType = String(latestRequest.request_type || latestRequest.title || 'maintenance issue')
     .replace(/_/g, ' ')
     .trim()
@@ -355,9 +638,27 @@ async function buildMaintenanceResponse(db, user) {
   const status = requestStatusValue(latestRequest).replace(/_/g, ' ');
   const submittedDate = formatShortDate(latestRequest.created_at || latestRequest.createdAt);
   const dateText = submittedDate ? ` It was submitted on ${submittedDate}.` : '';
+  const thread = getTenantVisibleMaintenanceThread(latestRequest);
+  const latestAdminReply = getLatestAdminVisibleMaintenanceEntry(thread);
+
+  if (asksAboutReply) {
+    const replyText = latestAdminReply
+      ? `Yes. The latest tenant-visible admin update I can see is: ${summarizeMaintenanceEntry(latestAdminReply)}. You can open the request in Services to view the full reply and attachments.`
+      : "I don't see a tenant-visible admin reply on your latest maintenance request yet. You can still open Services to check the request details, or I can notify admin if you need a follow-up.";
+    return {
+      message: replyText,
+      intent: SUPPORTED_INTENTS.MAINTENANCE,
+      suggestions: [
+        { label: 'Notify admin', prompt: 'Can you notify admin about my repair request?' },
+        { label: 'Create request', prompt: 'I need to report a new maintenance issue.' },
+      ],
+    };
+  }
+
+  const adminUpdateText = latestAdminReply ? ` Latest admin update: ${summarizeMaintenanceEntry(latestAdminReply)}.` : '';
 
   return {
-    message: `Your latest maintenance request for ${requestType} is still ${status}.${dateText}`.replace('..', '.'),
+    message: `Your latest maintenance request for ${requestType} is ${status}.${dateText}${adminUpdateText}`.replace('..', '.'),
     intent: SUPPORTED_INTENTS.MAINTENANCE,
     suggestions: [
       { label: 'Latest request', prompt: 'Show my latest maintenance request.' },
@@ -366,11 +667,18 @@ async function buildMaintenanceResponse(db, user) {
   };
 }
 
-function buildProfileResponse(user = {}) {
+function buildProfileResponse(user = {}, accountContext = {}) {
   const name = user.name || 'your account';
   const email = user.email || 'no email on file';
+  const roomText = accountContext.roomNumber
+    ? ` Room: ${accountContext.roomNumber}${accountContext.roomBed ? `, bed ${accountContext.roomBed}` : ''}.`
+    : '';
+  const branchText = accountContext.branch ? ` Branch: ${accountContext.branch}.` : '';
+  const leaseText = accountContext.leaseStatus || accountContext.occupancyStatus
+    ? ` Status: ${formatStatusLabel(accountContext.leaseStatus || accountContext.occupancyStatus)}.`
+    : '';
   return {
-    message: `Your account is registered under ${name} (${email}).`,
+    message: `Your account is registered under ${name} (${email}).${branchText}${roomText}${leaseText}`,
     intent: SUPPORTED_INTENTS.PROFILE,
     suggestions: [
       { label: 'Update profile', prompt: 'How do I update my profile?' },
@@ -397,6 +705,8 @@ function getIdentitySafeFallback(intent) {
       return 'I already have your account open. Ask me what part of your billing you want to check, like your unpaid total or due date.';
     case SUPPORTED_INTENTS.MAINTENANCE:
       return 'I already have your account details. Ask me if you want your latest maintenance status or active requests.';
+    case SUPPORTED_INTENTS.ADMIN_SUPPORT:
+      return 'I already have your account details and can help escalate this to admin. Please describe the concern briefly.';
     case SUPPORTED_INTENTS.PROFILE:
       return 'I already have your account details open. Tell me what profile information you want to review.';
     default:
@@ -415,6 +725,9 @@ function findRelevantKnowledge(message) {
 }
 
 function findKnowledgeByIntent(intent) {
+  if (intent === SUPPORTED_INTENTS.ADMIN_SUPPORT) {
+    return KNOWLEDGE_BASE.admin_handoff || null;
+  }
   return KNOWLEDGE_LIST.find((entry) => entry.intent === intent) || null;
 }
 
@@ -426,8 +739,8 @@ function inferIntentFromKnowledge(knowledgeEntries, message) {
   if (isGreeting(message) && lower.trim().split(/\s+/).length <= 4) {
     return { intent: 'greeting', confidence: 1 };
   }
-  if (/complaint|connect me to an admin|talk to admin|speak to admin|contact admin|escalate/.test(lower)) {
-    return { intent: 'admin_escalation', confidence: 0.9 };
+  if (isAdminEscalationRequest(message) || /complaint|reklamo|noisy neighbor|maingay|speak to admin|contact admin|escalate/.test(lower)) {
+    return { intent: SUPPORTED_INTENTS.ADMIN_SUPPORT, confidence: 0.9 };
   }
   return { intent: 'general', confidence: null };
 }
@@ -435,10 +748,16 @@ function inferIntentFromKnowledge(knowledgeEntries, message) {
 function shouldEscalate(knowledgeEntries, message) {
   const lower = message.toLowerCase();
   const hitGlobalKeyword = ESCALATION_KEYWORDS.some((word) => lower.includes(word));
+  const hitAdminSupportIntent = knowledgeEntries.some((entry) =>
+    entry.category === 'admin_support'
+    || entry.intent === 'admin_escalation'
+    || entry.intent === 'complaint_report'
+  );
   const hitEntryKeyword = knowledgeEntries.some((entry) =>
     (entry.escalation_if || []).some((word) => lower.includes(word))
   );
-  return hitGlobalKeyword || hitEntryKeyword;
+  const hitSensitiveDormConcern = /\b(complaint|complain|reklamo|noisy neighbor|maingay|unsafe|harassment|violation)\b/.test(lower);
+  return isAdminEscalationRequest(message) || hitGlobalKeyword || hitAdminSupportIntent || hitEntryKeyword || hitSensitiveDormConcern;
 }
 
 /**
@@ -564,7 +883,8 @@ async function sendMessage(req, res) {
     const scopedFollowUp = isDormitoryFollowUp(userMessage, existingSession);
     const outOfScopeTopic = hasHighSignalOutOfScopeTopic(userMessage);
     const routedIntent = detectSystemIntent(userMessage);
-    const forceEscalation = ESCALATION_KEYWORDS.some((keyword) => lowerUserMessage.includes(keyword));
+    const forceEscalation = isAdminEscalationRequest(userMessage)
+      || ESCALATION_KEYWORDS.some((keyword) => lowerUserMessage.includes(keyword));
 
     if (!forceEscalation && !greetingMessage && !courtesyMessage && !scopedMessage && outOfScopeTopic) {
       return replyWithScopeGuard(res, sessionId, existingSession, userMessage);
@@ -572,15 +892,18 @@ async function sendMessage(req, res) {
 
     // Pull tenant context for grounded responses
     const db = getDb();
-    const [announcements, pendingBills, activeSupportConversations] = await Promise.all([
+    const [announcements, bills, activeSupportConversations, tenantAccount, recentMaintenanceRequests] = await Promise.all([
       db.collection('announcements').find({ is_active: true }).sort({ created_at: -1 }).limit(3).toArray(),
-      fetchUserBills(db, req.user, { limit: 3 }).then((bills) => bills.filter(isBillUnpaid).slice(0, 3)),
+      fetchUserBills(db, req.user, { limit: 5 }),
       db.collection('chat_conversations')
         .find({ tenantUserId: userId, status: { $in: ['open', 'in_review', 'waiting_tenant', 'resolved'] } })
         .sort({ updatedAt: -1 })
         .limit(3)
         .toArray(),
+      resolveTenantAccountContext(db, req.user),
+      fetchMaintenanceRequestsForUser(db, req.user).then((requests) => requests.slice(0, 3)),
     ]);
+    const pendingBills = bills.filter(isBillUnpaid).slice(0, 3);
 
     // Check if this is an active live chat (admin is responding)
     const liveChat = liveChatQueue.get(sessionId);
@@ -591,17 +914,37 @@ async function sendMessage(req, res) {
 
     // Build tenant context lines
     const contextLines = [];
-    contextLines.push(`Tenant: ${userName || 'Resident'} (${userEmail || 'unknown'})`);
+    contextLines.push(`Tenant: ${tenantAccount.tenantName || userName || 'Resident'} (${userEmail || 'unknown'})`);
+    contextLines.push(`Tenant ID: ${tenantAccount.tenantId || userId || 'unknown'}`);
+    contextLines.push(`Role: ${tenantAccount.role || req.user.role || 'tenant'}`);
+    if (tenantAccount.branch) contextLines.push(`Branch/dorm: ${tenantAccount.branch}`);
+    if (tenantAccount.roomNumber || tenantAccount.roomBed) {
+      contextLines.push(`Room/bed: ${tenantAccount.roomNumber || 'unknown room'}${tenantAccount.roomBed ? `, bed ${tenantAccount.roomBed}` : ''}`);
+    }
+    if (tenantAccount.occupancyStatus || tenantAccount.leaseStatus) {
+      contextLines.push(`Lease/occupancy status: ${formatStatusLabel(tenantAccount.leaseStatus || tenantAccount.occupancyStatus)}`);
+    }
     contextLines.push('Authentication: This tenant is already signed in. Never ask for their full name, room number, or identity confirmation.');
 
+    if (bills.length > 0) {
+      const billSummary = bills.slice(0, 5).map((bill) => `- ${summarizeBillForContext(bill)}`).join('\n');
+      contextLines.push(`Billing records visible to Lily:\n${billSummary}`);
+    } else {
+      contextLines.push('Billing records visible to Lily: none');
+    }
+
     if (pendingBills.length > 0) {
-      const billsSummary = pendingBills.map((b) => {
-        const amount = typeof b.amount === 'number' ? b.amount.toFixed(2) : b.amount;
-        return `- ${b.description || b.billing_type || 'Bill'}: ₱${amount}, due ${new Date(b.due_date).toLocaleDateString('en-PH')}`;
-      }).join('\n');
-      contextLines.push(`Pending bills:\n${billsSummary}`);
+      const billsSummary = pendingBills.map((bill) => `- ${summarizeBillForContext(bill)}`).join('\n');
+      contextLines.push(`Unpaid bills:\n${billsSummary}`);
     } else {
       contextLines.push('Pending bills: none');
+    }
+
+    if (recentMaintenanceRequests.length > 0) {
+      const maintenanceSummary = recentMaintenanceRequests.map((request) => `- ${summarizeMaintenanceForContext(request)}`).join('\n');
+      contextLines.push(`Recent maintenance requests:\n${maintenanceSummary}`);
+    } else {
+      contextLines.push('Recent maintenance requests: none');
     }
 
     if (activeSupportConversations.length > 0) {
@@ -640,7 +983,7 @@ async function sendMessage(req, res) {
     }
 
     if (!forceEscalation && (scopedMessage || scopedFollowUp) && routedIntent === SUPPORTED_INTENTS.MAINTENANCE) {
-      const maintenanceResult = await buildMaintenanceResponse(db, req.user);
+      const maintenanceResult = await buildMaintenanceResponse(db, req.user, userMessage);
       const maintenanceSess = chatSessions.get(sessionId) || { history: [] };
       maintenanceSess.history.push({ role: 'user', content: userMessage });
       maintenanceSess.history.push({ role: 'assistant', content: maintenanceResult.message });
@@ -660,7 +1003,7 @@ async function sendMessage(req, res) {
     }
 
     if (!forceEscalation && (scopedMessage || scopedFollowUp) && routedIntent === SUPPORTED_INTENTS.PROFILE) {
-      const profileResult = buildProfileResponse(req.user);
+      const profileResult = buildProfileResponse(req.user, tenantAccount);
       const profileSess = chatSessions.get(sessionId) || { history: [] };
       profileSess.history.push({ role: 'user', content: userMessage });
       profileSess.history.push({ role: 'assistant', content: profileResult.message });
@@ -690,8 +1033,12 @@ async function sendMessage(req, res) {
     const inferredIntent = inferIntentFromKnowledge(knowledgeHints, userMessage);
     meta.intent = inferredIntent.intent || 'general';
     meta.confidence = inferredIntent.confidence ?? null;
+    if (forceEscalation) {
+      meta.intent = SUPPORTED_INTENTS.ADMIN_SUPPORT;
+      meta.confidence = 1;
+    }
 
-    if (meta.intent === 'general' && knowledgeHints.length === 0 && !greetingMessage) {
+    if (!forceEscalation && meta.intent === 'general' && knowledgeHints.length === 0 && !greetingMessage) {
       try {
         const intentResult = await classifyIntent(userMessage);
         meta.intent = intentResult.intent || 'general';
@@ -709,7 +1056,7 @@ async function sendMessage(req, res) {
     followups = pickFollowups(knowledgeHints, meta.intent);
 
     // Check for escalation
-    const escalate = shouldEscalate(knowledgeHints, userMessage);
+    const escalate = forceEscalation || shouldEscalate(knowledgeHints, userMessage);
 
     // Get conversation history for continuity
     const session = chatSessions.get(sessionId) || { history: [] };
@@ -767,7 +1114,9 @@ async function sendMessage(req, res) {
     } catch (modelError) {
       if (isQuotaError(modelError)) {
         console.warn('[Chatbot] Gemini quota/rate-limit exceeded — returning friendly fallback. Not exposing error to client.');
-        aiResponse = GEMINI_QUOTA_FALLBACK;
+        aiResponse = needsAdmin
+          ? "I've flagged this for admin support po. Please keep the conversation open so the branch admin can follow up."
+          : GEMINI_QUOTA_FALLBACK;
       } else {
         console.error('Chatbot AI error:', modelError);
         aiResponse = "I'm having a bit of trouble right now po. Please try again in a moment, or you can reach the admin office directly at +63 912 345 6789.";

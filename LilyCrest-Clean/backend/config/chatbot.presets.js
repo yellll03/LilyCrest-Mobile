@@ -23,7 +23,12 @@ PERSONALITY:
 - Always use provided tenant context first before asking any follow-up
 - Only ask follow-up questions when the request itself is unclear, never to verify identity
 - You may only answer questions about LilyCrest, the dormitory stay, the tenant mobile app, account support, billing, maintenance, announcements, documents, facilities, rules, and admin assistance
+- LilyCrest scope includes admin handoff, branch admin/owner escalation, billing questions, payment concerns, account-specific tenant information, maintenance status/replies, complaints/reports, announcements, policies, lease/occupancy, and guidance through app features
+- "Connect me to admin", "notify admin", "talk to branch admin", billing concerns, payment proof concerns, maintenance concerns, and tenant account questions are always IN SCOPE
+- For account-specific answers, use only the authenticated tenant context provided to you. Never expose another tenant's information and never invent bill amounts, due dates, room details, admin replies, or request statuses
+- If account data is unavailable, say what you cannot see and offer to connect the tenant to admin
 - If the tenant asks about anything outside the LilyCrest dormitory system, politely refuse and redirect them to supported dormitory topics only
+- Do not answer unrelated general-purpose requests such as weather, math trivia, food suggestions, essays/homework, jokes, movies, entertainment, random personal advice, coding, politics, or travel
 
 DORMITORY INFORMATION:
 - Name: LilyCrest Dormitory
@@ -112,6 +117,8 @@ EMERGENCY PROCEDURES:
 ESCALATION:
 - If the issue is complex, sensitive, involves a complaint, safety concern, or requires human judgment, include "[NEEDS_ADMIN]" at the START of your response
 - If the tenant explicitly asks to talk to an admin or a real person, include "[NEEDS_ADMIN]"
+- If the tenant asks you to notify, contact, message, connect, escalate, or report something to admin/branch admin/owner, include "[NEEDS_ADMIN]" and treat it as in-scope
+- For payment disputes, paid-but-still-pending concerns, noisy-neighbor complaints, harassment/safety concerns, and account corrections that need staff action, include "[NEEDS_ADMIN]"
 - For safety emergencies (fire, gas, injury), ALWAYS include "[NEEDS_ADMIN]"`;
 
 // ───────────────────────────────────────────────────
@@ -150,6 +157,17 @@ const KNOWLEDGE_BASE = {
       { label: 'Talk to admin', prompt: 'I need to discuss my billing with admin.' },
     ],
   },
+  admin_handoff: {
+    intent: 'admin_escalation',
+    triggers: ['connect me to admin', 'connect me to the admin', 'talk to admin', 'notify admin', 'branch admin', 'owner', 'real person', 'human help', 'someone assist', 'kausapin admin', 'ipaalam sa admin'],
+    category: 'admin_support',
+    priority: 'high',
+    knowledge: 'Admin handoff is in scope. Start or suggest admin support for tenant concerns that need human staff, branch admin, owner, billing review, complaints, or manual account action.',
+    followups: [
+      { label: 'Start admin support', prompt: 'Connect me to the admin.' },
+      { label: 'Billing concern', prompt: 'Can you ask admin about my bill?' },
+    ],
+  },
   maintenance_request: {
     intent: 'maintenance_request',
     triggers: ['maintenance', 'fix', 'repair', 'leak', 'broken', 'issue', 'not working', 'damaged', 'plumbing', 'electric'],
@@ -159,6 +177,16 @@ const KNOWLEDGE_BASE = {
     followups: [
       { label: 'My open requests', prompt: 'Show me my maintenance tickets.' },
       { label: 'Emergency issue', prompt: 'I have an urgent maintenance problem.' },
+    ],
+  },
+  maintenance_status: {
+    intent: 'maintenance_status',
+    triggers: ['maintenance status', 'request status', 'repair status', 'admin reply', 'reply sa repair', 'may reply', 'status ng maintenance', 'status ng repair'],
+    category: 'maintenance',
+    knowledge: 'Tenants can check maintenance status, admin replies, summaries, and attachments in the Services/Maintenance detail screen.',
+    followups: [
+      { label: 'Open Services', prompt: 'Where do I see maintenance replies?' },
+      { label: 'Talk to admin', prompt: 'Can you notify admin about my repair?' },
     ],
   },
   house_rules: {
@@ -189,6 +217,27 @@ const KNOWLEDGE_BASE = {
     followups: [
       { label: 'Update my info', prompt: 'I want to update my phone number.' },
       { label: 'Talk to admin', prompt: 'I need admin help with my account.' },
+    ],
+  },
+  complaints_reports: {
+    intent: 'complaint_report',
+    triggers: ['complaint', 'complain', 'report', 'noisy neighbor', 'noise complaint', 'harassment', 'unsafe', 'violation', 'neighbor', 'reklamo', 'maingay'],
+    category: 'admin_support',
+    priority: 'high',
+    knowledge: 'Complaints and reports are in scope. Lily should gather the concern briefly and offer/admin handoff, especially for noisy neighbors, safety, harassment, or rule violations.',
+    followups: [
+      { label: 'Contact admin', prompt: 'Please notify admin about my complaint.' },
+      { label: 'House rules', prompt: 'What are the quiet hours?' },
+    ],
+  },
+  app_navigation: {
+    intent: 'app_navigation',
+    triggers: ['where can i see', 'saan makikita', 'payment history', 'billing history', 'maintenance replies', 'app feature', 'how do i use', 'where is', 'navigate'],
+    category: 'account',
+    knowledge: 'Lily can guide tenants through app features: Billing for bills/payment history, Services for maintenance requests/replies, Announcements for notices, Documents for lease and policies, and Lily Assistant/Admin Support for human help.',
+    followups: [
+      { label: 'Billing history', prompt: 'Saan ko makikita payment history ko?' },
+      { label: 'Maintenance replies', prompt: 'Where can I see admin replies?' },
     ],
   },
   move_in_requirements: {
@@ -243,6 +292,10 @@ const ESCALATION_KEYWORDS = [
   'smoke', 'fire', 'emergency', 'eviction', 'kick out', 'refund',
   'threatening', 'assault', 'theft', 'stolen',
   'connect me to admin', 'talk to admin', 'speak to admin',
+  'connect me to the admin', 'connect me to an admin', 'notify admin',
+  'notify the admin', 'message admin', 'contact admin', 'branch admin',
+  'owner', 'ask admin', 'admin help', 'someone assist', 'human help',
+  'kausapin admin', 'ipaalam sa admin', 'i-report sa admin',
   'real person', 'human agent', 'talk to a person',
 ];
 
