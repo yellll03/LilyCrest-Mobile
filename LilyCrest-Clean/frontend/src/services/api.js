@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios, { create as createAxios } from 'axios';
-import { API_BASE_URL, MOBILE_API_BASE_URL, MOBILE_HEALTH_URL } from '../config/api';
+import { API_BASE_URL, MOBILE_API_BASE_URL, MOBILE_API_FALLBACK_BASE_URL, MOBILE_HEALTH_URL } from '../config/api';
 import { getFreshIdToken } from '../config/firebase';
 
 const IS_DEV = typeof __DEV__ !== 'undefined' && __DEV__;
@@ -31,6 +31,41 @@ export function getApiErrorMessage(error, fallback = GENERIC_API_MESSAGE) {
   if (error?.userMessage) return error.userMessage;
   if (isNetworkOrColdStartError(error)) return SERVER_STARTING_MESSAGE;
   return fallback;
+}
+
+function isSafeRetryMethod(method = 'get') {
+  return ['get', 'head', 'options'].includes(String(method || 'get').toLowerCase());
+}
+
+function isMobileFallbackAllowed(config = {}) {
+  if (isSafeRetryMethod(config.method)) return true;
+
+  const method = String(config.method || '').toLowerCase();
+  const url = String(config.url || '');
+  if (method !== 'post') return false;
+
+  return url === '/chatbot/message'
+    || url === '/chat/start'
+    || url === '/users/push-token';
+}
+
+function isKnownMobileRouteMiss(error, config = {}) {
+  if (error?.response?.status !== 404 || !isSafeRetryMethod(config.method)) {
+    return false;
+  }
+
+  const path = String(config.url || '').split('?')[0];
+  return path === '/billing/history/paid'
+    || path === '/notifications';
+}
+
+function isKnownMobileReadFailure(error, config = {}) {
+  if (error?.response?.status !== 500 || !isSafeRetryMethod(config.method)) {
+    return false;
+  }
+
+  const path = String(config.url || '').split('?')[0];
+  return path === '/chat/me' || /^\/chat\/[^/]+\/messages$/.test(path);
 }
 
 // --- Connectivity check for debugging ---
@@ -127,6 +162,26 @@ api.interceptors.response.use(
       try {
         await AsyncStorage.multiRemove(['session_token', 'session_user']);
       } catch (_) {}
+    }
+
+    if (
+      MOBILE_API_FALLBACK_BASE_URL
+      && originalRequest
+      && !originalRequest._fallbackRetry
+      && isMobileFallbackAllowed(originalRequest)
+      && (
+        isNetworkOrColdStartError(error)
+        || isKnownMobileRouteMiss(error, originalRequest)
+        || isKnownMobileReadFailure(error, originalRequest)
+      )
+      && String(originalRequest.baseURL || '').replace(/\/$/, '') === MOBILE_API_BASE_URL
+    ) {
+      originalRequest._fallbackRetry = true;
+      originalRequest.baseURL = MOBILE_API_FALLBACK_BASE_URL;
+      if (IS_DEV) {
+        console.log('Retrying API request on fallback base URL:', MOBILE_API_FALLBACK_BASE_URL);
+      }
+      return api(originalRequest);
     }
     
     error.userMessage = getApiErrorMessage(error);

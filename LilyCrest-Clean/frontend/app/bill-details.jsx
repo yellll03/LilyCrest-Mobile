@@ -14,6 +14,7 @@ import {
   isBillingUnavailableMessage,
 } from '../src/services/billingState';
 import { downloadBillPdf } from '../src/utils/downloadBillPdf';
+import { safeBack } from '../src/utils/navigation';
 
 const getBillId = (bill) => bill?.billing_id || bill?.id || bill?._id || bill?.billingId || bill?.billId || bill?.reference_id;
 
@@ -42,6 +43,7 @@ function shortDate(value) {
 
 const STATUS_CONFIG = {
   paid: { bg: '#ecfdf3', text: '#15803d', icon: 'checkmark-circle', label: 'Paid' },
+  settled: { bg: '#ecfdf3', text: '#15803d', icon: 'checkmark-circle', label: 'Paid' },
   pending: { bg: '#FDF6EC', text: '#92400e', icon: 'time', label: 'Pending' },
   overdue: { bg: '#fef2f2', text: '#b91c1c', icon: 'alert-circle', label: 'Overdue' },
   verification: { bg: '#eff6ff', text: '#1d4ed8', icon: 'hourglass', label: 'Verifying' },
@@ -50,6 +52,10 @@ const STATUS_CONFIG = {
 function isBillOutstanding(bill) {
   const status = String(bill?.status || '').toLowerCase();
   return status !== 'paid' && status !== 'settled';
+}
+
+function getBillPaymentDate(bill) {
+  return bill?.payment_date || bill?.paymentDate || bill?.paidAt || bill?.paid_at || null;
 }
 
 function hasUsableElectricityBreakdown(bill) {
@@ -198,7 +204,7 @@ export default function BillDetailsScreen() {
         )}
       >
         <Text style={styles.errorText}>{error || BILL_UNAVAILABLE_MESSAGE}</Text>
-        <Pressable onPress={() => router.back()} style={styles.backBtn}><Text style={styles.backBtnText}>Go Back</Text></Pressable>
+        <Pressable onPress={() => safeBack(router, '/(tabs)/billing')} style={styles.backBtn}><Text style={styles.backBtnText}>Go Back</Text></Pressable>
       </ScrollView>
     );
   }
@@ -254,7 +260,7 @@ export default function BillDetailsScreen() {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.headerBack}>
+        <Pressable onPress={() => safeBack(router, '/(tabs)/billing')} style={styles.headerBack}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </Pressable>
         <Text style={styles.headerTitle}>Bill Details</Text>
@@ -533,10 +539,10 @@ export default function BillDetailsScreen() {
                 <Ionicons name="checkmark-circle" size={20} color="#22C55E" />
                 <Text style={styles.paidBadgeText}>Payment Complete</Text>
               </View>
-              {bill.payment_date && (
+              {getBillPaymentDate(bill) && (
                 <View style={styles.paymentInfoRow}>
                   <Text style={styles.paymentInfoLabel}>Payment Date</Text>
-                  <Text style={styles.paymentInfoValue}>{safeDate(bill.payment_date)}</Text>
+                  <Text style={styles.paymentInfoValue}>{safeDate(getBillPaymentDate(bill))}</Text>
                 </View>
               )}
               {bill.paymongo_reference && (

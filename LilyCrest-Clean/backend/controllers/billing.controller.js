@@ -418,7 +418,12 @@ function isPayableBill(bill = {}) {
 }
 
 function normalizeLegacyBill(bill = {}) {
-  const normalized = { ...bill, _id: undefined };
+  const fallbackId = normalizeBillId(bill) || (bill._id ? String(bill._id) : '');
+  const normalized = { ...bill };
+  if (!normalized.billing_id && fallbackId) normalized.billing_id = fallbackId;
+  if (!normalized.bill_id && bill._id) normalized.bill_id = String(bill._id);
+  if (!normalized.legacy_billing_id && fallbackId) normalized.legacy_billing_id = fallbackId;
+  normalized._id = undefined;
   const effectiveStatus = getEffectiveBillStatus(normalized);
 
   normalized.status = effectiveStatus || normalized.status;
@@ -539,10 +544,53 @@ function normalizeUtilityType(value) {
 function toObjectIdIfValid(value) {
   if (!value) return null;
   try {
-    return new ObjectId(String(value));
+    const candidate = typeof value?.toHexString === 'function'
+      ? value.toHexString()
+      : String(value);
+    return ObjectId.isValid(candidate) ? new ObjectId(candidate) : null;
   } catch (_error) {
     return null;
   }
+}
+
+function pushUniqueFilter(filters, filter) {
+  if (!filter || typeof filter !== 'object') return;
+  const key = JSON.stringify(filter, (_name, value) => (
+    value instanceof ObjectId ? value.toHexString() : value
+  ));
+  if (filters.some((existing) => JSON.stringify(existing, (_name, value) => (
+    value instanceof ObjectId ? value.toHexString() : value
+  )) === key)) {
+    return;
+  }
+  filters.push(filter);
+}
+
+function buildBillingOwnerFilters(user = {}) {
+  const filters = [];
+  const userId = typeof user.user_id === 'string' ? user.user_id.trim() : '';
+  const mongoId = toObjectIdIfValid(user._id);
+  const mongoIdString = mongoId ? mongoId.toHexString() : '';
+
+  if (userId) {
+    pushUniqueFilter(filters, { user_id: userId });
+    pushUniqueFilter(filters, { tenantUserId: userId });
+    pushUniqueFilter(filters, { tenant_user_id: userId });
+  }
+
+  if (mongoId) {
+    pushUniqueFilter(filters, { userId: mongoId });
+    pushUniqueFilter(filters, { tenantId: mongoId });
+    pushUniqueFilter(filters, { user_id: mongoId });
+  }
+
+  if (mongoIdString) {
+    pushUniqueFilter(filters, { userId: mongoIdString });
+    pushUniqueFilter(filters, { tenantId: mongoIdString });
+    pushUniqueFilter(filters, { user_id: mongoIdString });
+  }
+
+  return filters;
 }
 
 function humanizeUtilityLabel(value) {
@@ -806,18 +854,20 @@ async function fetchUserBills(db, user, {
   limit = 100,
 } = {}) {
   const userId = user.user_id;
-  const mongoId = user._id;
+  const ownerFilters = buildBillingOwnerFilters(user);
+
+  if (!ownerFilters.length) {
+    return [];
+  }
 
   const [legacyBills, rawRealBills] = await Promise.all([
     db.collection('billing')
-      .find({ user_id: userId })
+      .find({ $or: ownerFilters })
       .toArray()
       .then((docs) => docs.map((bill) => ({ ...normalizeLegacyBill(bill), __source: 'legacy' }))),
-    mongoId
-      ? db.collection('bills')
-        .find({ userId: mongoId })
-        .toArray()
-      : Promise.resolve([]),
+    db.collection('bills')
+      .find({ $or: ownerFilters })
+      .toArray(),
   ]);
 
   const enrichedRealBills = await enrichRealBillsWithUtilityBreakdowns(db, rawRealBills);
@@ -1147,7 +1197,7 @@ async function downloadBillPdf(req, res) {
     infoRows.push({ label: 'Due Date', value: formatDate(bill.due_date) });
 
     // Payment info (only for paid bills)
-    if (bill.status === 'paid') {
+    if (isPaidBill(bill)) {
       if (bill.payment_method) {
         infoRows.push({ label: 'Payment Method', value: bill.payment_method === 'paymongo' ? 'PayMongo' : normalizeLine(bill.payment_method) });
       }

@@ -55,12 +55,17 @@ const allowedOrigins = [
 ].filter(Boolean);
 const uniqueAllowedOrigins = [...new Set(allowedOrigins)];
 const allowLocalCors = !isProduction || /^(1|true|yes)$/i.test(String(process.env.ALLOW_LOCAL_CORS || '').trim());
+const allowMobileDevCors = !/^(0|false|no)$/i.test(String(process.env.ALLOW_MOBILE_DEV_CORS || 'true').trim());
 const privateNetworkOriginPattern = /^https?:\/\/(10\.|127\.|192\.168\.|172\.(1[6-9]|2\d|3[0-1])\.)\d+\.\d+(?::\d+)?$/;
 const localHostnameOriginPattern = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/;
+const expoOriginPattern = /^exps?:\/\/(localhost|127\.0\.0\.1|\[::1\]|(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[0-1])\.)\d+\.\d+)(?::\d+)?$/;
+const mobileSchemeOriginPattern = /^(frontend|lilycrest):\/\/(?:localhost)?$/;
 
 function isAllowedOrigin(origin) {
   if (!origin) return true;
   if (uniqueAllowedOrigins.includes(origin)) return true;
+  if (expoOriginPattern.test(origin) || mobileSchemeOriginPattern.test(origin)) return true;
+  if (allowMobileDevCors && (privateNetworkOriginPattern.test(origin) || localHostnameOriginPattern.test(origin))) return true;
   if (allowLocalCors && (privateNetworkOriginPattern.test(origin) || localHostnameOriginPattern.test(origin))) return true;
   return false;
 }
@@ -86,7 +91,7 @@ app.use(cors({
     if (isAllowedOrigin(origin)) {
       return callback(null, true);
     }
-    return callback(new Error('Not allowed by CORS'));
+    return callback(null, false);
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],

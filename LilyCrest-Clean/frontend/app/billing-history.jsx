@@ -10,6 +10,7 @@ import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
 import { apiService } from '../src/services/api';
 import { subscribeBillingRefresh } from '../src/services/billingState';
 import { downloadBillPdf } from '../src/utils/downloadBillPdf';
+import { safeBack } from '../src/utils/navigation';
 
 // Helpers
 function safeCurrency(amount) {
@@ -42,6 +43,7 @@ function relativeDate(value) {
 
 const STATUS_CONFIG = {
   paid: { bg: '#ecfdf3', text: '#15803d', icon: 'checkmark-circle', label: 'Paid' },
+  settled: { bg: '#ecfdf3', text: '#15803d', icon: 'checkmark-circle', label: 'Paid' },
   pending: { bg: '#FDF6EC', text: '#92400e', icon: 'time', label: 'Pending' },
   overdue: { bg: '#fef2f2', text: '#b91c1c', icon: 'alert-circle', label: 'Overdue' },
   verification: { bg: '#eff6ff', text: '#1d4ed8', icon: 'hourglass', label: 'Verifying' },
@@ -83,11 +85,14 @@ const normalizeBreakdown = (bill) => {
 
 const getBillId = (bill) => bill?.billing_id || bill?.id || bill?.billingId || bill?.billId || bill?.reference_id || bill?._id;
 const getBillStatus = (bill) => String(bill?.status || '').toLowerCase();
+const PAID_STATUSES = new Set(['paid', 'settled']);
 const NON_PAYABLE_STATUSES = new Set([
   'paid', 'settled', 'cancelled', 'rejected', 'void',
   'refunded', 'duplicate', 'archived', 'verification',
 ]);
+const isPaidBillStatus = (status) => PAID_STATUSES.has(String(status || '').toLowerCase());
 const isBillOutstanding = (bill) => !NON_PAYABLE_STATUSES.has(getBillStatus(bill));
+const getBillPaymentDate = (bill) => bill?.payment_date || bill?.paymentDate || bill?.paidAt || bill?.paid_at || null;
 const getBillOwedAmount = (bill) => {
   const candidates = [bill?.remaining_amount, bill?.total, bill?.amount];
   for (const value of candidates) {
@@ -96,6 +101,29 @@ const getBillOwedAmount = (bill) => {
   }
   return 0;
 };
+
+function mergeBillingLists(...lists) {
+  const mergedById = new Map();
+
+  lists.flat().forEach((bill) => {
+    if (!bill) return;
+    const id = String(getBillId(bill) || '').trim();
+    const key = id || JSON.stringify([
+      bill.billing_period || '',
+      bill.description || '',
+      bill.due_date || bill.dueDate || '',
+      bill.total || bill.amount || '',
+    ]);
+    const existing = mergedById.get(key);
+    mergedById.set(key, { ...(existing || {}), ...bill });
+  });
+
+  return Array.from(mergedById.values()).sort((left, right) => {
+    const leftDate = new Date(left.due_date || left.dueDate || left.payment_date || left.paymentDate || left.created_at || 0).getTime();
+    const rightDate = new Date(right.due_date || right.dueDate || right.payment_date || right.paymentDate || right.created_at || 0).getTime();
+    return (Number.isFinite(rightDate) ? rightDate : 0) - (Number.isFinite(leftDate) ? leftDate : 0);
+  });
+}
 
 export default function BillingScreen() {
   const router = useRouter();
@@ -120,21 +148,25 @@ export default function BillingScreen() {
     setError(null);
     setLatestBillingDegraded(false);
     try {
-      const [latestBillingResult, historyResp] = await Promise.allSettled([
+      const [latestBillingResult, historyResp, paymentHistoryResp] = await Promise.allSettled([
         apiService.getLatestBilling?.(),
         apiService.getBillingHistory?.(),
+        apiService.getPaymentHistory?.(),
       ]);
       if (latestBillingResult.status === 'rejected') {
         const status = latestBillingResult.reason?.response?.status;
         if (status === 401) { try { await checkAuth?.(); } catch (_) {} }
         setLatestBillingDegraded(true);
       }
-      if (historyResp.status !== 'fulfilled') {
-        throw historyResp.reason;
+      const hasHistory = historyResp.status === 'fulfilled' && Array.isArray(historyResp.value?.data);
+      const hasPaymentHistory = paymentHistoryResp.status === 'fulfilled' && Array.isArray(paymentHistoryResp.value?.data);
+      if (!hasHistory && !hasPaymentHistory) {
+        throw historyResp.reason || paymentHistoryResp.reason;
       }
-      const historyList = historyResp.value?.data || [];
+      const historyList = hasHistory ? historyResp.value.data : [];
+      const paymentHistoryList = hasPaymentHistory ? paymentHistoryResp.value.data : [];
       if (latestBillingRequestRef.current !== requestId) return;
-      setHistory(historyList);
+      setHistory(mergeBillingLists(historyList, paymentHistoryList));
     } catch (err) {
       const status = err?.response?.status;
       if (status === 401) { try { await checkAuth?.(); } catch (_) {} }
@@ -181,19 +213,22 @@ export default function BillingScreen() {
     const counts = { all: history.length, pending: 0, overdue: 0, paid: 0 };
     history.forEach(b => {
       const s = (b.status || 'pending').toLowerCase();
-      if (counts[s] !== undefined) counts[s]++;
+      const countKey = isPaidBillStatus(s) ? 'paid' : s;
+      if (counts[countKey] !== undefined) counts[countKey]++;
     });
     return counts;
   }, [history]);
 
   const filteredBills = useMemo(() => {
     return history.filter(b => {
-      if (activeStatus !== 'all' && (b.status || 'pending').toLowerCase() !== activeStatus) return false;
+      const status = getBillStatus(b) || 'pending';
+      if (activeStatus === 'paid') return isPaidBillStatus(status);
+      if (activeStatus !== 'all' && status !== activeStatus) return false;
       return true;
     });
   }, [history, activeStatus]);
 
-  const isPaid = (bill) => (bill?.status || '').toLowerCase() === 'paid';
+  const isPaid = (bill) => isPaidBillStatus(bill?.status);
   const getStatusConfig = (status) => STATUS_CONFIG[(status || 'pending').toLowerCase()] || STATUS_CONFIG.pending;
 
   // Outstanding Hero Card
@@ -346,10 +381,10 @@ export default function BillingScreen() {
             <Ionicons name="download-outline" size={14} color={colors.text} />
             <Text style={styles.outlineBtnText}>{downloadingId === billId ? 'Preparing...' : 'PDF'}</Text>
           </Pressable>
-          {paid && bill.payment_date && (
+          {paid && getBillPaymentDate(bill) && (
             <View style={styles.paidMeta}>
               <Ionicons name="checkmark" size={12} color="#15803d" />
-              <Text style={styles.paidMetaText}>Paid {relativeDate(bill.payment_date)}</Text>
+              <Text style={styles.paidMetaText}>Paid {relativeDate(getBillPaymentDate(bill))}</Text>
             </View>
           )}
         </View>
@@ -387,7 +422,7 @@ export default function BillingScreen() {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
         <View style={styles.topBar}>
-          <Pressable onPress={() => router.back()} style={styles.backBtn}>
+          <Pressable onPress={() => safeBack(router, '/(tabs)/billing')} style={styles.backBtn}>
             <Ionicons name="chevron-back" size={22} color={colors.text} />
           </Pressable>
           <Text style={styles.topTitle}>Billing</Text>
@@ -406,7 +441,7 @@ export default function BillingScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.topBar}>
-        <Pressable onPress={() => router.back()} style={styles.backBtn}>
+        <Pressable onPress={() => safeBack(router, '/(tabs)/billing')} style={styles.backBtn}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </Pressable>
         <Text style={styles.topTitle}>Billing</Text>

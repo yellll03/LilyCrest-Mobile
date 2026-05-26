@@ -10,7 +10,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://api.lilycrest.space"
+        "EXPO_PUBLIC_BACKEND_URL": "https://mobile-api.lilycrest.space"
       }
     },
     "release": {
@@ -18,7 +18,7 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://api.lilycrest.space"
+        "EXPO_PUBLIC_BACKEND_URL": "https://mobile-api.lilycrest.space"
       }
     },
     "preview": {
@@ -26,12 +26,12 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://api.lilycrest.space"
+        "EXPO_PUBLIC_BACKEND_URL": "https://mobile-api.lilycrest.space"
       }
     },
     "production": {
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://api.lilycrest.space"
+        "EXPO_PUBLIC_BACKEND_URL": "https://mobile-api.lilycrest.space"
       }
     }
   },

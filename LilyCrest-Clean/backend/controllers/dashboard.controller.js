@@ -38,39 +38,55 @@ function parseLeaseDurationMonths(value) {
   return null;
 }
 
-function deriveReservationContractEnd(reservation) {
-  if (!reservation || typeof reservation !== 'object') return null;
+function deriveAssignmentMoveIn(record) {
+  if (!record || typeof record !== 'object') return null;
+
+  return normalizeDateCandidate(
+    record.moveInDate,
+    record.move_in_date,
+    record.checkInDate,
+    record.checkinDate,
+    record.targetMoveInDate,
+    record.startDate,
+    record.start_date,
+    record.effectiveStartDate,
+    record.effective_start_date,
+  );
+}
+
+function deriveAssignmentContractEnd(record) {
+  if (!record || typeof record !== 'object') return null;
 
   const explicitMoveOut = normalizeDateCandidate(
-    reservation.moveOutDate,
-    reservation.move_out_date,
-    reservation.contractEnd,
-    reservation.contractEndDate,
-    reservation.contract_end_date,
-    reservation.endDate,
-    reservation.end_date,
-    reservation.checkOutDate,
-    reservation.checkoutDate,
-    reservation.targetMoveOutDate,
+    record.moveOutDate,
+    record.move_out_date,
+    record.contractEnd,
+    record.contractEndDate,
+    record.contract_end_date,
+    record.leaseEndDate,
+    record.lease_end_date,
+    record.endDate,
+    record.end_date,
+    record.checkOutDate,
+    record.checkoutDate,
+    record.targetMoveOutDate,
+    record.effectiveEndDate,
+    record.effective_end_date,
   );
   if (explicitMoveOut) {
     return explicitMoveOut;
   }
 
-  const moveIn = normalizeDateCandidate(
-    reservation.moveInDate,
-    reservation.move_in_date,
-    reservation.checkInDate,
-    reservation.checkinDate,
-    reservation.targetMoveInDate,
-    reservation.startDate,
-    reservation.start_date,
-  );
+  const moveIn = deriveAssignmentMoveIn(record);
   const leaseDurationMonths = parseLeaseDurationMonths(
-    reservation.leaseDuration
-      ?? reservation.lease_duration
-      ?? reservation.durationMonths
-      ?? reservation.duration_months
+    record.leaseDuration
+      ?? record.lease_duration
+      ?? record.durationMonths
+      ?? record.duration_months
+      ?? record.contractDurationMonths
+      ?? record.contract_duration_months
+      ?? record.stayDurationMonths
+      ?? record.stay_duration_months
   );
 
   if (!moveIn || !leaseDurationMonths) return null;
@@ -102,14 +118,17 @@ async function getDashboard(req, res) {
       if (occupancy) {
         const roomDoc = await db.collection('rooms').findOne({ _id: occupancy.roomId });
         const bed = roomDoc?.beds?.find((b) => b.id === occupancy.bedId);
+        const occupancyMoveIn = deriveAssignmentMoveIn(occupancy);
+        const occupancyContractEnd = deriveAssignmentContractEnd(occupancy);
 
         assignment = {
           assignment_id: occupancy._id?.toString(),
           user_id: userId,
           room_id: occupancy.roomId?.toString(),
           status: 'active',
-          move_in_date: occupancy.moveInDate || null,
-          move_out_date: occupancy.moveOutDate || null,
+          move_in_date: occupancyMoveIn,
+          move_out_date: occupancyContractEnd,
+          contract_end_date: occupancyContractEnd,
           bed_id: occupancy.bedId,
           branch: occupancy.branchId,
         };
@@ -149,14 +168,17 @@ async function getDashboard(req, res) {
             : bedHistory.roomId;
           const roomDoc = await db.collection('rooms').findOne({ _id: roomOid });
           const bed = roomDoc?.beds?.find((b) => b.id === bedHistory.bedId);
+          const bedMoveIn = deriveAssignmentMoveIn(bedHistory);
+          const bedContractEnd = deriveAssignmentContractEnd(bedHistory);
 
           assignment = {
             assignment_id: bedHistory._id?.toString(),
             user_id: userId,
             room_id: bedHistory.roomId?.toString(),
             status: 'active',
-            move_in_date: bedHistory.moveInDate || bedHistory.effectiveStartDate || null,
-            move_out_date: bedHistory.moveOutDate || bedHistory.effectiveEndDate || null,
+            move_in_date: bedMoveIn,
+            move_out_date: bedContractEnd,
+            contract_end_date: bedContractEnd,
             bed_id: bedHistory.bedId,
             branch: bedHistory.branch,
           };
@@ -197,16 +219,8 @@ async function getDashboard(req, res) {
         const roomDoc = await db.collection('rooms').findOne({ _id: roomOid });
         const selectedBed = reservation.selectedBed || {};
         const bed = roomDoc?.beds?.find((b) => b.id === selectedBed.id);
-        const reservationMoveIn = normalizeDateCandidate(
-          reservation.moveInDate,
-          reservation.move_in_date,
-          reservation.checkInDate,
-          reservation.checkinDate,
-          reservation.targetMoveInDate,
-          reservation.startDate,
-          reservation.start_date,
-        );
-        const reservationMoveOut = deriveReservationContractEnd(reservation);
+        const reservationMoveIn = deriveAssignmentMoveIn(reservation);
+        const reservationMoveOut = deriveAssignmentContractEnd(reservation);
 
         if (!assignment) {
           assignment = {
@@ -216,6 +230,7 @@ async function getDashboard(req, res) {
             status: 'active',
             move_in_date: reservationMoveIn,
             move_out_date: reservationMoveOut,
+            contract_end_date: reservationMoveOut,
             bed_id: selectedBed.id || null,
             branch: reservation.branch,
           };
@@ -228,6 +243,12 @@ async function getDashboard(req, res) {
             assignment.move_out_date,
             reservationMoveOut,
           );
+          assignment.contract_end_date = normalizeDateCandidate(
+            assignment.contract_end_date,
+            assignment.move_out_date,
+            reservationMoveOut,
+          );
+          assignment.move_out_date = assignment.contract_end_date;
           if (!assignment.bed_id && selectedBed.id) assignment.bed_id = selectedBed.id;
           if (!assignment.branch && reservation.branch) assignment.branch = reservation.branch;
         }

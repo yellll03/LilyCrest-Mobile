@@ -1,6 +1,7 @@
 import { Stack } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
+import axios from 'axios';
 import React, { useEffect } from 'react';
 import { Platform, Text, TextInput, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -10,6 +11,72 @@ import { ThemeProvider, useTheme } from '../src/context/ThemeContext';
 import { ToastProvider } from '../src/context/ToastContext';
 
 SplashScreen.preventAutoHideAsync();
+
+const MOBILE_HEALTH_SMOKE_URL = 'https://mobile-api.lilycrest.space/api/m/health';
+const RENDER_HEALTH_SMOKE_URL = 'https://lilycrest-mobile.onrender.com/api/m/health';
+
+async function runNetworkSmokeTest(label, url) {
+  console.log(`[NetworkSmoke][${label}][fetch] start`, {
+    url,
+    platform: Platform.OS,
+  });
+
+  try {
+    const response = await fetch(url);
+    const text = await response.text();
+    console.log(`[NetworkSmoke][${label}][fetch] result`, {
+      status: response.status,
+      text,
+      platform: Platform.OS,
+    });
+  } catch (error) {
+    console.log(`[NetworkSmoke][${label}][fetch] error`, {
+      name: error?.name,
+      message: error?.message,
+      platform: Platform.OS,
+    });
+  }
+
+  console.log(`[NetworkSmoke][${label}][axios] start`, {
+    url,
+    platform: Platform.OS,
+  });
+
+  try {
+    const response = await axios.get(url, { timeout: 10000 });
+    console.log(`[NetworkSmoke][${label}][axios] result`, {
+      status: response.status,
+      data: response.data,
+      platform: Platform.OS,
+    });
+  } catch (error) {
+    console.log(`[NetworkSmoke][${label}][axios] error`, {
+      message: error?.message,
+      code: error?.code,
+      hasResponse: Boolean(error?.response),
+      hasRequest: Boolean(error?.request),
+      status: error?.response?.status,
+      data: error?.response?.data,
+      platform: Platform.OS,
+    });
+  }
+}
+
+function runStartupNetworkSmokeTests() {
+  if (typeof __DEV__ !== 'undefined' && !__DEV__) return;
+  if (globalThis.__lilycrestNetworkSmokeRan) return;
+  globalThis.__lilycrestNetworkSmokeRan = true;
+
+  runNetworkSmokeTest('mobile-api-custom-domain', MOBILE_HEALTH_SMOKE_URL)
+    .then(() => runNetworkSmokeTest('direct-render', RENDER_HEALTH_SMOKE_URL))
+    .catch((error) => {
+      console.log('[NetworkSmoke] unexpected error', {
+        name: error?.name,
+        message: error?.message,
+        platform: Platform.OS,
+      });
+    });
+}
 
 // ── Global font defaults ──
 // Sets a formal, clean font and slightly bigger base size across the entire app
@@ -111,6 +178,10 @@ class ErrorBoundary extends React.Component {
 }
 
 export default function RootLayout() {
+  useEffect(() => {
+    runStartupNetworkSmokeTests();
+  }, []);
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <ErrorBoundary>

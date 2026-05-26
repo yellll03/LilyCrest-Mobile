@@ -158,7 +158,13 @@ async function resolveBillWithSource(db, billingId, user) {
     return { bill: null, source: null };
   }
 
-  const realBill = await findRealBillByBillingId(db, billingId, user?._id, { projection: { _id: 1 } });
+  const realBill = await findRealBillByBillingId(
+    db,
+    billingId,
+    user?._id,
+    { projection: { _id: 1 } },
+    user?.user_id,
+  );
   const source = realBill ? 'real' : 'legacy';
 
   return { bill, source };
@@ -166,7 +172,7 @@ async function resolveBillWithSource(db, billingId, user) {
 
 // ── Save checkout reference to the correct collection ────────────────────────
 async function saveCheckoutRef(db, billingId, userId, mongoId, checkoutId, referenceNumber) {
-  const realFilter = buildRealBillLookupFilter(billingId, mongoId);
+  const realFilter = buildRealBillLookupFilter(billingId, mongoId, {}, userId);
   if (realFilter) {
     const realResult = await db.collection('bills').updateOne(
       realFilter,
@@ -197,14 +203,67 @@ async function saveCheckoutRef(db, billingId, userId, mongoId, checkoutId, refer
 }
 
 function isPaidStatus(status) {
-  return String(status || '').toLowerCase() === 'paid';
+  return ['paid', 'settled'].includes(String(status || '').toLowerCase());
 }
 
 function unwrapMongoDocument(result) {
   return result?.value ?? result ?? null;
 }
 
-function buildRealBillLookupFilter(billingId, mongoId, extraFilter = {}) {
+function toObjectIdIfValid(value) {
+  if (!value) return null;
+  try {
+    const candidate = typeof value?.toHexString === 'function'
+      ? value.toHexString()
+      : String(value);
+    return ObjectId.isValid(candidate) ? new ObjectId(candidate) : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function pushUniqueMatch(matches, match) {
+  if (!match || typeof match !== 'object') return;
+  const key = JSON.stringify(match, (_name, value) => (
+    value instanceof ObjectId ? value.toHexString() : value
+  ));
+  if (matches.some((existing) => JSON.stringify(existing, (_name, value) => (
+    value instanceof ObjectId ? value.toHexString() : value
+  )) === key)) {
+    return;
+  }
+  matches.push(match);
+}
+
+function buildRealBillOwnerMatches(userId, mongoId) {
+  const matches = [];
+  const tenantUserId = typeof userId === 'string' ? userId.trim() : '';
+  const ownerObjectId = toObjectIdIfValid(mongoId);
+  const ownerObjectIdString = ownerObjectId ? ownerObjectId.toHexString() : '';
+
+  if (ownerObjectId) {
+    pushUniqueMatch(matches, { userId: ownerObjectId });
+    pushUniqueMatch(matches, { tenantId: ownerObjectId });
+    pushUniqueMatch(matches, { user_id: ownerObjectId });
+  }
+
+  if (ownerObjectIdString) {
+    pushUniqueMatch(matches, { userId: ownerObjectIdString });
+    pushUniqueMatch(matches, { tenantId: ownerObjectIdString });
+    pushUniqueMatch(matches, { user_id: ownerObjectIdString });
+  }
+
+  if (tenantUserId) {
+    pushUniqueMatch(matches, { user_id: tenantUserId });
+    pushUniqueMatch(matches, { tenantUserId });
+    pushUniqueMatch(matches, { tenant_user_id: tenantUserId });
+    pushUniqueMatch(matches, { userId: tenantUserId });
+  }
+
+  return matches;
+}
+
+function buildRealBillLookupFilter(billingId, mongoId, extraFilter = {}, userId = '') {
   const id = String(billingId || '').trim();
   if (!id) return null;
 
@@ -217,15 +276,21 @@ function buildRealBillLookupFilter(billingId, mongoId, extraFilter = {}) {
     matches.unshift({ _id: new ObjectId(id) });
   }
 
-  return {
-    ...extraFilter,
-    ...(mongoId ? { userId: mongoId } : {}),
-    $or: matches,
-  };
+  const filterParts = [{ $or: matches }];
+  const ownerMatches = buildRealBillOwnerMatches(userId, mongoId);
+
+  if (ownerMatches.length) {
+    filterParts.push({ $or: ownerMatches });
+  }
+  if (extraFilter && Object.keys(extraFilter).length > 0) {
+    filterParts.unshift(extraFilter);
+  }
+
+  return filterParts.length === 1 ? filterParts[0] : { $and: filterParts };
 }
 
-async function findRealBillByBillingId(db, billingId, mongoId, options = {}) {
-  const filter = buildRealBillLookupFilter(billingId, mongoId);
+async function findRealBillByBillingId(db, billingId, mongoId, options = {}, userId = '') {
+  const filter = buildRealBillLookupFilter(billingId, mongoId, {}, userId);
   if (!filter) return null;
   return db.collection('bills').findOne(filter, options);
 }
@@ -239,7 +304,7 @@ async function markLegacyBillPaidAtomic(db, filter, {
 } = {}) {
   const resolvedPaymentDate = paymentDate instanceof Date ? paymentDate : new Date();
   const updated = unwrapMongoDocument(await db.collection('billing').findOneAndUpdate(
-    { ...filter, status: { $ne: 'paid' } },
+    { ...filter, status: { $nin: ['paid', 'settled'] } },
     {
       $set: {
         status: 'paid',
@@ -277,7 +342,7 @@ async function markRealBillPaidAtomic(db, filter, userId, {
 } = {}) {
   const resolvedPaymentDate = paymentDate instanceof Date ? paymentDate : new Date();
   const updated = unwrapMongoDocument(await db.collection('bills').findOneAndUpdate(
-    { ...filter, status: { $ne: 'paid' } },
+    { ...filter, status: { $nin: ['paid', 'settled'] } },
     {
       $set: {
         status: 'paid',
@@ -308,6 +373,27 @@ async function markRealBillPaidAtomic(db, filter, userId, {
 }
 
 // ── Mark a bill as paid in the correct collection ────────────────────────────
+async function resolveRealBillOwnerUserId(db, bill = {}, fallbackUserId = '') {
+  const directUserId = String(
+    bill.user_id
+      || bill.tenantUserId
+      || bill.tenant_user_id
+      || '',
+  ).trim();
+  if (directUserId) return directUserId;
+
+  const ownerObjectId = toObjectIdIfValid(bill.userId || bill.tenantId);
+  if (ownerObjectId) {
+    const owner = await db.collection('users').findOne(
+      { _id: ownerObjectId },
+      { projection: { _id: 0, user_id: 1 } },
+    );
+    if (owner?.user_id) return owner.user_id;
+  }
+
+  return String(fallbackUserId || '').trim();
+}
+
 // Returns the bill document (pre-update) for push notification context.
 // checkoutId is an optional fallback key used when billing_id/user_id matching
 // fails (e.g. metadata mismatch or presentation-mode bills that were upgraded).
@@ -317,21 +403,21 @@ async function markBillPaid(db, billingId, userId, options = {}) {
   try {
     const user = await db.collection('users').findOne({ user_id: userId });
     const mongoId = user?._id;
-    if (mongoId) {
-      const realFilter = buildRealBillLookupFilter(billingId, mongoId);
-      if (realFilter) {
-        const realResult = await markRealBillPaidAtomic(
-          db,
-          realFilter,
-          userId,
-          options
-        );
-        if (realResult.matched) {
-          console.log(`[markBillPaid] Bill ${billingId} resolved in bills collection`);
-          return realResult;
-        }
+    const realFilter = buildRealBillLookupFilter(billingId, mongoId, {}, userId);
+    if (realFilter) {
+      const realResult = await markRealBillPaidAtomic(
+        db,
+        realFilter,
+        userId,
+        options
+      );
+      if (realResult.matched) {
+        console.log(`[markBillPaid] Bill ${billingId} resolved in bills collection`);
+        return realResult;
       }
-    } else {
+    }
+
+    if (!mongoId) {
       console.warn(`[markBillPaid] User not found for user_id=${userId}`);
     }
   } catch (err) {
@@ -354,17 +440,13 @@ async function markBillPaid(db, billingId, userId, options = {}) {
     try {
       const bySession = await db.collection('bills').findOne(
         { paymongoSessionId: checkoutId },
-        { projection: { _id: 0, userId: 1 } }
+        { projection: { userId: 1, tenantId: 1, user_id: 1, tenantUserId: 1, tenant_user_id: 1 } }
       );
-      if (bySession?.userId) {
-        const owner = await db.collection('users').findOne(
-          { _id: bySession.userId },
-          { projection: { _id: 0, user_id: 1 } }
-        );
-        const resolvedUserId = owner?.user_id || userId;
+      if (bySession) {
+        const resolvedUserId = await resolveRealBillOwnerUserId(db, bySession, userId);
         const realCheckoutResult = await markRealBillPaidAtomic(
           db,
-          { paymongoSessionId: checkoutId, userId: bySession.userId },
+          { paymongoSessionId: checkoutId },
           resolvedUserId,
           options
         );

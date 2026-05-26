@@ -44,6 +44,31 @@ function safeCurrency(amount) {
   return `₱${n.toLocaleString()}`;
 }
 
+function getAssignmentMoveInDate(assignment) {
+  return assignment?.move_in_date
+    || assignment?.moveInDate
+    || assignment?.effectiveStartDate
+    || assignment?.effective_start_date
+    || assignment?.startDate
+    || assignment?.start_date
+    || null;
+}
+
+function getAssignmentContractEndDate(assignment) {
+  return assignment?.contract_end_date
+    || assignment?.contractEndDate
+    || assignment?.contractEnd
+    || assignment?.move_out_date
+    || assignment?.moveOutDate
+    || assignment?.effectiveEndDate
+    || assignment?.effective_end_date
+    || assignment?.leaseEndDate
+    || assignment?.lease_end_date
+    || assignment?.endDate
+    || assignment?.end_date
+    || null;
+}
+
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
 }
@@ -466,27 +491,32 @@ export default function HomeScreen() {
     latestDashboardRequestRef.current = requestId;
     try {
       setLoadError(null);
-      const [dashboardRes, announcementsRes, billingHistoryRes] = await Promise.all([
+      const [dashboardRes, notificationsRes, billingHistoryRes] = await Promise.all([
         apiService.getDashboard(),
-        (apiService.getNotifications
-          ? apiService.getNotifications()
-          : apiService.getAnnouncements()
-        ).catch(() => ({ data: [] })),
-        apiService.getBillingHistory ? apiService.getBillingHistory().catch(() => ({ data: [] })) : Promise.resolve({ data: [] }),
+        apiService.getNotifications
+          ? apiService.getNotifications().catch(() => apiService.getAnnouncements().catch(() => ({ data: [] })))
+          : apiService.getAnnouncements().catch(() => ({ data: [] })),
+        apiService.getBillingHistory
+          ? apiService.getBillingHistory()
+            .then((response) => ({ ...response, ok: true }))
+            .catch(() => ({ data: null, ok: false }))
+          : Promise.resolve({ data: null, ok: false }),
       ]);
 
       const dashboard = dashboardRes?.data;
       if (!isPlainObject(dashboard)) {
         throw new Error('Invalid dashboard response shape');
       }
-      const announcements = Array.isArray(announcementsRes?.data) ? announcementsRes.data : [];
-      const billingHistoryItems = Array.isArray(billingHistoryRes?.data) ? billingHistoryRes.data : [];
+      const notificationsOrAnnouncements = Array.isArray(notificationsRes?.data) ? notificationsRes.data : [];
+      const hasBillingHistoryResponse = billingHistoryRes?.ok && Array.isArray(billingHistoryRes?.data);
+      const billingHistoryItems = hasBillingHistoryResponse ? billingHistoryRes.data : [];
 
-      const billingItems = Array.isArray(dashboard?.billing?.items)
+      const dashboardBillingItems = Array.isArray(dashboard?.billing?.items)
         ? dashboard.billing.items
         : Array.isArray(dashboard?.billing)
           ? dashboard.billing
           : dashboard?.latest_bill ? [dashboard.latest_bill] : [];
+      const billingItems = hasBillingHistoryResponse ? billingHistoryItems : dashboardBillingItems;
 
       const mItems = Array.isArray(dashboard?.maintenance?.items)
         ? dashboard.maintenance.items
@@ -500,7 +530,7 @@ export default function HomeScreen() {
         ? dashboard.notifications.items
         : Array.isArray(dashboard?.notifications)
           ? dashboard.notifications
-          : announcements.map((item) => ({
+          : notificationsOrAnnouncements.map((item) => ({
             title: item.title,
             body: item.content || item.description,
             type: item.category || 'announcement',
@@ -510,7 +540,7 @@ export default function HomeScreen() {
 
       if (latestDashboardRequestRef.current !== requestId) return;
       setDashboardData({ ...dashboard, billing: billingItems, maintenance: mItems, notifications: notifItems });
-      setBillingHistory(billingHistoryItems);
+      setBillingHistory(billingItems);
     } catch (error) {
       console.error('Dashboard fetch error:', error);
       if (latestDashboardRequestRef.current !== requestId) return;
@@ -780,7 +810,7 @@ export default function HomeScreen() {
             <TouchableOpacity
               style={styles.dateItem}
               onPress={() => {
-                const moveIn = tenancyAssignment?.move_in_date;
+                const moveIn = getAssignmentMoveInDate(tenancyAssignment);
                 if (!moveIn || moveIn === 'Not assigned') {
                   setModalData({ visible: true, title: 'Move-in Date', message: 'No move-in date assigned yet.', type: 'info' });
                   return;
@@ -809,9 +839,9 @@ export default function HomeScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.dateLabel}>Move-in</Text>
-                <Text style={styles.dateValue}>{safeFormatDate(tenancyAssignment?.move_in_date)}</Text>
+                <Text style={styles.dateValue}>{safeFormatDate(getAssignmentMoveInDate(tenancyAssignment))}</Text>
                 {(() => {
-                  const moveIn = tenancyAssignment?.move_in_date;
+                  const moveIn = getAssignmentMoveInDate(tenancyAssignment);
                   if (!moveIn) return null;
                   try {
                     const totalDays = Math.floor((Date.now() - new Date(moveIn).getTime()) / 86400000);
@@ -830,7 +860,7 @@ export default function HomeScreen() {
             <TouchableOpacity
               style={styles.dateItem}
               onPress={() => {
-                const moveOut = tenancyAssignment?.move_out_date;
+                const moveOut = getAssignmentContractEndDate(tenancyAssignment);
                 if (!moveOut || moveOut === 'Not assigned') {
                   setModalData({ visible: true, title: 'Contract End', message: 'No contract end date assigned yet.', type: 'info' });
                   return;
@@ -861,9 +891,9 @@ export default function HomeScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.dateLabel}>Contract End</Text>
-                <Text style={styles.dateValue}>{safeFormatDate(tenancyAssignment?.move_out_date)}</Text>
+                <Text style={styles.dateValue}>{safeFormatDate(getAssignmentContractEndDate(tenancyAssignment))}</Text>
                 {(() => {
-                  const moveOut = tenancyAssignment?.move_out_date;
+                  const moveOut = getAssignmentContractEndDate(tenancyAssignment);
                   if (!moveOut) return null;
                   try {
                     const daysLeft = Math.floor((new Date(moveOut).getTime() - Date.now()) / 86400000);
