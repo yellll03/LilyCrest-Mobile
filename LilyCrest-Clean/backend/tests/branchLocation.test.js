@@ -28,6 +28,11 @@ function fakeDb({ stays = [], occupancies = [], assignments = [], rooms = [], re
               String(Object.values(entry)[0]) === String(room._id || room.roomId)
             ))) || null;
           }
+          if (name === 'reservations') {
+            return reservations.find((reservation) => query.$or.some((entry) => (
+              String(Object.values(entry)[0]) === String(reservation._id || reservation.reservationId)
+            ))) || null;
+          }
           if (name !== 'branches') return null;
           const values = query.$or.map((entry) => String(Object.values(entry)[0]));
           return branches.find((branch) => values.includes(String(branch.branchId))
@@ -103,6 +108,25 @@ test('production occupancy branch name resolves before room and reservation', as
       branchName: 'LilyCrest Residences – Gil Puyat',
     }],
     reservations: [{ branch: 'guadalupe', status: 'approved' }],
+  }), { _id: 'tenant-a', user_id: 'user-a' });
+  assert.equal(result.source, 'active_room_assignment');
+  assert.equal(result.branch.branchCode, 'gil-puyat');
+});
+
+test('production occupancy follows its linked reservation branch', async () => {
+  const result = await resolveTenantBranch(fakeDb({
+    occupancies: [{
+      tenantId: 'tenant-a',
+      stayStatus: 'active',
+      roomId: 'room-gp-205',
+      reservationId: 'reservation-1',
+    }],
+    reservations: [{
+      _id: 'reservation-1',
+      userId: 'tenant-a',
+      status: 'moveIn',
+      branch: 'gil-puyat',
+    }],
   }), { _id: 'tenant-a', user_id: 'user-a' });
   assert.equal(result.source, 'active_room_assignment');
   assert.equal(result.branch.branchCode, 'gil-puyat');

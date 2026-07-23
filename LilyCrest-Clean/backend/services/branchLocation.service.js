@@ -4,7 +4,7 @@ const { ObjectId } = require('mongodb');
 const { BRANCH_LOCATION_RECORDS } = require('../config/branchLocationRecords');
 
 const ACTIVE_STAY = /^(active|current|occupied|checked_in)$/i;
-const APPROVED = /^(approved|confirmed|active|completed|executed|signed)$/i;
+const APPROVED = /^(approved|confirmed|active|completed|executed|signed|movein)$/i;
 
 function objectId(value) {
   try { return value && ObjectId.isValid(String(value)) ? new ObjectId(String(value)) : null; } catch (_) { return null; }
@@ -68,6 +68,20 @@ async function findTierRecords(db, user, tier) {
           if (branchReference(record)) {
             results.push(record);
             continue;
+          }
+          const reservationId = record.reservationId || record.reservation_id;
+          if (reservationId) {
+            const reservation = await db.collection('reservations').findOne({
+              $or: [
+                { _id: objectId(reservationId) || reservationId },
+                { reservationId },
+                { reservation_id: reservationId },
+              ],
+            });
+            if (reservation && branchReference(reservation)) {
+              results.push(reservation);
+              continue;
+            }
           }
           const roomId = record.roomId || record.room_id;
           if (!roomId) continue;
