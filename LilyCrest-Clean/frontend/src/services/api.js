@@ -1,7 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios, { create as createAxios } from 'axios';
-import { API_BASE_URL, MOBILE_API_BASE_URL, MOBILE_API_FALLBACK_BASE_URL, MOBILE_HEALTH_URL } from '../config/api';
+import { API_BASE_URL, MOBILE_API_BASE_URL, MOBILE_HEALTH_URL } from '../config/api';
 import { getFreshIdToken } from '../config/firebase';
+import { getSessionToken, removeSessionToken, setSessionToken } from './secureCredentials';
 
 const IS_DEV = typeof __DEV__ !== 'undefined' && __DEV__;
 export const SERVER_STARTING_MESSAGE = 'The server is starting. Please try again in a few seconds.';
@@ -13,59 +14,93 @@ if (IS_DEV) {
 
 export function isNetworkOrColdStartError(error) {
   const status = error?.response?.status;
-  const messageLooksNetworked = /network error|timeout|failed to fetch/i.test(String(error?.message || ''));
+  const messageLooksNetworked = /network error|timeout|timed out|failed to fetch/i.test(String(error?.message || ''));
   return (!error?.response && Boolean(error?.request))
     || error?.code === 'ECONNABORTED'
+    || error?.code === 'MOBILE_API_HEALTH_TIMEOUT'
     || messageLooksNetworked
     || [502, 503, 504].includes(status);
 }
 
-export function getApiErrorMessage(error, fallback = GENERIC_API_MESSAGE) {
-  const detail = typeof error?.response?.data?.detail === 'string'
+function getErrorDetail(error) {
+  return typeof error?.response?.data?.detail === 'string'
     ? error.response.data.detail.trim()
     : typeof error?.response?.data?.message === 'string'
       ? error.response.data.message.trim()
-      : '';
+      : typeof error?.response?.data?.error === 'string'
+        ? error.response.data.error.trim()
+        : '';
+}
+
+export function normalizeApiError(error, fallback = GENERIC_API_MESSAGE) {
+  const status = error?.response?.status ?? null;
+  const detail = getErrorDetail(error);
+  const method = String(error?.config?.method || '').toUpperCase() || undefined;
+  const baseURL = error?.config?.baseURL ? String(error.config.baseURL).replace(/\/$/, '') : '';
+  const requestPath = error?.config?.url ? String(error.config.url).replace(/^\//, '') : '';
+  const url = baseURL && requestPath ? `${baseURL}/${requestPath}` : error?.config?.url;
+
+  if (status === 401) {
+    return {
+      type: 'auth',
+      status,
+      message: detail || 'Session expired',
+      method,
+      url,
+    };
+  }
+
+  if (status === 404) {
+    return {
+      type: 'route',
+      status,
+      message: detail || 'API route not found',
+      method,
+      url,
+    };
+  }
+
+  if (status >= 500) {
+    return {
+      type: 'server',
+      status,
+      message: detail || (status === 503 ? SERVER_STARTING_MESSAGE : 'Server error'),
+      method,
+      url,
+    };
+  }
+
+  if (!error?.response && (error?.request || /network error|timeout|failed to fetch/i.test(String(error?.message || '')))) {
+    return {
+      type: 'network',
+      status: null,
+      message: 'Network connection issue',
+      method,
+      url,
+    };
+  }
+
+  return {
+    type: status ? 'api' : 'unknown',
+    status,
+    message: detail || error?.userMessage || fallback,
+    method,
+    url,
+  };
+}
+
+export function getApiErrorMessage(error, fallback = GENERIC_API_MESSAGE) {
+  const detail = getErrorDetail(error);
 
   if (detail) return detail;
+  if (error?.normalized?.message) return error.normalized.message;
   if (error?.userMessage) return error.userMessage;
+  const normalized = normalizeApiError(error, fallback);
+  if (normalized.type === 'network' || normalized.type === 'auth' || normalized.type === 'route' || normalized.type === 'server') {
+    return normalized.message;
+  }
   if (isNetworkOrColdStartError(error)) return SERVER_STARTING_MESSAGE;
   return fallback;
-}
-
-function isSafeRetryMethod(method = 'get') {
-  return ['get', 'head', 'options'].includes(String(method || 'get').toLowerCase());
-}
-
-function isMobileFallbackAllowed(config = {}) {
-  if (isSafeRetryMethod(config.method)) return true;
-
-  const method = String(config.method || '').toLowerCase();
-  const url = String(config.url || '');
-  if (method !== 'post') return false;
-
-  return url === '/chatbot/message'
-    || url === '/chat/start'
-    || url === '/users/push-token';
-}
-
-function isKnownMobileRouteMiss(error, config = {}) {
-  if (error?.response?.status !== 404 || !isSafeRetryMethod(config.method)) {
-    return false;
-  }
-
-  const path = String(config.url || '').split('?')[0];
-  return path === '/billing/history/paid'
-    || path === '/notifications';
-}
-
-function isKnownMobileReadFailure(error, config = {}) {
-  if (error?.response?.status !== 500 || !isSafeRetryMethod(config.method)) {
-    return false;
-  }
-
-  const path = String(config.url || '').split('?')[0];
-  return path === '/chat/me' || /^\/chat\/[^/]+\/messages$/.test(path);
 }
 
 // --- Connectivity check for debugging ---
@@ -94,7 +129,7 @@ export const api = createAxios({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 30000, // 30 second timeout
+  timeout: 15000,
 });
 
 async function refreshGoogleSession() {
@@ -107,7 +142,7 @@ async function refreshGoogleSession() {
       const sessionToken = response?.data?.session_token || null;
 
       if (sessionToken) {
-        await AsyncStorage.setItem('session_token', sessionToken);
+        await setSessionToken(sessionToken);
       }
 
       return sessionToken;
@@ -122,8 +157,8 @@ async function refreshGoogleSession() {
 // Request interceptor - attach session token to every request
 api.interceptors.request.use(
   async (config) => {
-    const token = await AsyncStorage.getItem('session_token');
-    if (token) {
+    const token = await getSessionToken();
+    if (token && !config.headers?.Authorization) {
       config.headers.Authorization = `Bearer ${token}`;
     }
     return config;
@@ -160,30 +195,12 @@ api.interceptors.response.use(
 
       // Refresh failed or no Firebase user - clear session
       try {
-        await AsyncStorage.multiRemove(['session_token', 'session_user']);
+        await removeSessionToken();
+        await AsyncStorage.removeItem('session_user');
       } catch (_) {}
     }
 
-    if (
-      MOBILE_API_FALLBACK_BASE_URL
-      && originalRequest
-      && !originalRequest._fallbackRetry
-      && isMobileFallbackAllowed(originalRequest)
-      && (
-        isNetworkOrColdStartError(error)
-        || isKnownMobileRouteMiss(error, originalRequest)
-        || isKnownMobileReadFailure(error, originalRequest)
-      )
-      && String(originalRequest.baseURL || '').replace(/\/$/, '') === MOBILE_API_BASE_URL
-    ) {
-      originalRequest._fallbackRetry = true;
-      originalRequest.baseURL = MOBILE_API_FALLBACK_BASE_URL;
-      if (IS_DEV) {
-        console.log('Retrying API request on fallback base URL:', MOBILE_API_FALLBACK_BASE_URL);
-      }
-      return api(originalRequest);
-    }
-    
+    error.normalized = normalizeApiError(error);
     error.userMessage = getApiErrorMessage(error);
 
     if (IS_DEV) {
@@ -195,6 +212,7 @@ api.interceptors.response.use(
         status: error?.response?.status,
         method: originalRequest?.method,
         url: requestUrl,
+        type: error.normalized?.type,
         code: error?.response?.data?.code,
         detail: error?.response?.data?.detail || error?.response?.data?.message || error?.response?.data?.error,
       });
@@ -220,6 +238,7 @@ export const apiService = {
   getPaymentHistory: () => api.get('/billing/history/paid'),
   getLatestBilling: () => api.get('/billing/me/latest'),
   getBillingById: (billingId) => api.get(`/billing/${billingId}`),
+  submitPaymentProof: (billingId, proof) => api.post(`/billing/${billingId}/payment-proof`, { proof }),
   updateBilling: (billingId, data) => api.put(`/billing/${billingId}`, data),
 
   // PayMongo
@@ -243,6 +262,8 @@ export const apiService = {
   // Announcements
   getAnnouncements: () => api.get('/announcements'),
   getNotifications: () => api.get('/notifications'),
+  markNotificationRead: (notificationId) => api.patch(`/notifications/${encodeURIComponent(notificationId)}/read`),
+  markAllNotificationsRead: () => api.patch('/notifications/read-all'),
   
   // User Profile
   getProfile: () => api.get('/users/me'),
@@ -253,14 +274,21 @@ export const apiService = {
   getUserDocuments: () => api.get('/users/documents'),
   getUserDocumentFile: (docId) => api.get(`/users/documents/${docId}`),
   deleteUserDocument: (docId) => api.delete(`/users/documents/${docId}`),
+
+  // Tenant surveys
+  getMySurveys: () => api.get('/surveys/me'),
+  getMySurvey: (surveyId) => api.get(`/surveys/${encodeURIComponent(surveyId)}/me`),
+  saveSurveyDraft: (surveyId, answers) => api.put(`/surveys/${encodeURIComponent(surveyId)}/draft`, { answers }),
+  submitSurvey: (surveyId, answers) => api.post(`/surveys/${encodeURIComponent(surveyId)}/submit`, { answers }),
+  getMySurveyResponse: (surveyId) => api.get(`/surveys/${encodeURIComponent(surveyId)}/response/me`),
   
   // FAQs (Chatbot)
   getFAQs: (category) => api.get('/faqs', { params: { category } }),
   getFAQCategories: () => api.get('/faqs/categories'),
   
   // AI Chatbot
-  sendChatMessage: (message, sessionId) => 
-    api.post('/chatbot/message', { message, session_id: sessionId }),
+  sendChatMessage: (message, sessionId, attachments = []) =>
+    api.post('/chatbot/message', { message, session_id: sessionId, attachments }),
   resetChatSession: (sessionId) =>
     api.post('/chatbot/reset', { session_id: sessionId }),
   requestAdminChat: (sessionId, reason) =>

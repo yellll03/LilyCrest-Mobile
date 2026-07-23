@@ -7,16 +7,15 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import LilyFlowerIcon from '../src/components/assistant/LilyFlowerIcon';
 import { useAuth } from '../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
-import { apiService } from '../src/services/api';
+import { apiService, getApiErrorMessage } from '../src/services/api';
 import { subscribeBillingRefresh } from '../src/services/billingState';
-import { downloadBillPdf } from '../src/utils/downloadBillPdf';
 import { safeBack } from '../src/utils/navigation';
 
 // Helpers
 function safeCurrency(amount) {
   const n = Number(amount);
-  if (!Number.isFinite(n) || n === 0) return '\u20b10.00';
-  return `\u20b1${n.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+  if (!Number.isFinite(n) || n <= 0) return '\u20b10.00';
+  return `\u20b1${n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
 function safeDate(value) {
@@ -44,9 +43,14 @@ function relativeDate(value) {
 const STATUS_CONFIG = {
   paid: { bg: '#ecfdf3', text: '#15803d', icon: 'checkmark-circle', label: 'Paid' },
   settled: { bg: '#ecfdf3', text: '#15803d', icon: 'checkmark-circle', label: 'Paid' },
-  pending: { bg: '#FDF6EC', text: '#92400e', icon: 'time', label: 'Pending' },
+  unpaid: { bg: '#FDF6EC', text: '#92400e', icon: 'time', label: 'Unpaid' },
+  pending: { bg: '#FDF6EC', text: '#92400e', icon: 'time', label: 'Unpaid' },
   overdue: { bg: '#fef2f2', text: '#b91c1c', icon: 'alert-circle', label: 'Overdue' },
-  verification: { bg: '#eff6ff', text: '#1d4ed8', icon: 'hourglass', label: 'Verifying' },
+  pending_verification: { bg: '#eff6ff', text: '#1d4ed8', icon: 'hourglass', label: 'Payment Under Review' },
+  verification: { bg: '#eff6ff', text: '#1d4ed8', icon: 'hourglass', label: 'Payment Under Review' },
+  partially_paid: { bg: '#fff7ed', text: '#c2410c', icon: 'pie-chart', label: 'Partially Paid' },
+  rejected: { bg: '#fef2f2', text: '#b91c1c', icon: 'close-circle', label: 'Payment Rejected' },
+  cancelled: { bg: '#f3f4f6', text: '#6b7280', icon: 'close-circle', label: 'Cancelled' },
 };
 
 const TYPE_ICONS = {
@@ -60,7 +64,7 @@ const TYPE_ICONS = {
 // Filter Definitions
 const STATUS_FILTERS = [
   { id: 'all', label: 'All', icon: 'list-outline' },
-  { id: 'pending', label: 'Pending', icon: 'time-outline', dotColor: '#F59E0B' },
+  { id: 'unpaid', label: 'Unpaid', icon: 'time-outline', dotColor: '#F59E0B' },
   { id: 'overdue', label: 'Overdue', icon: 'alert-circle-outline', dotColor: '#EF4444' },
   { id: 'paid', label: 'Paid', icon: 'checkmark-circle-outline', dotColor: '#22C55E' },
 ];
@@ -127,7 +131,7 @@ function mergeBillingLists(...lists) {
 
 export default function BillingScreen() {
   const router = useRouter();
-  const { isLoading: authLoading, checkAuth } = useAuth();
+  const { user, authReady, authStatus, isLoading: authLoading, checkAuth } = useAuth();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
@@ -137,11 +141,21 @@ export default function BillingScreen() {
   const [error, setError] = useState(null);
   const [activeStatus, setActiveStatus] = useState('all');
   // Type filter removed - consolidated bills contain all charge types
-  const [downloadingId, setDownloadingId] = useState(null);
   const latestBillingRequestRef = useRef(0);
   const [latestBillingDegraded, setLatestBillingDegraded] = useState(false);
+  const [currentSummary, setCurrentSummary] = useState({ bill: null, timing: null, previous_balance: 0, previous_bill_id: '' });
+  const userId = user?.user_id || null;
 
   const loadData = useCallback(async ({ silent = false } = {}) => {
+    if (!authReady || authLoading) return;
+    if (authStatus !== 'authenticated' || !userId) {
+      setHistory([]);
+      setLoading(false);
+      setRefreshing(false);
+      setError('Please sign in to view billing history.');
+      return;
+    }
+
     const requestId = latestBillingRequestRef.current + 1;
     latestBillingRequestRef.current = requestId;
     if (!silent) setLoading(true);
@@ -157,6 +171,14 @@ export default function BillingScreen() {
         const status = latestBillingResult.reason?.response?.status;
         if (status === 401) { try { await checkAuth?.(); } catch (_) {} }
         setLatestBillingDegraded(true);
+      } else {
+        const payload = latestBillingResult.value?.data || {};
+        setCurrentSummary({
+          bill: payload.bill || null,
+          timing: payload.timing || null,
+          previous_balance: Number(payload.previous_balance || 0),
+          previous_bill_id: payload.previous_bill_id || '',
+        });
       }
       const hasHistory = historyResp.status === 'fulfilled' && Array.isArray(historyResp.value?.data);
       const hasPaymentHistory = paymentHistoryResp.status === 'fulfilled' && Array.isArray(paymentHistoryResp.value?.data);
@@ -171,22 +193,22 @@ export default function BillingScreen() {
       const status = err?.response?.status;
       if (status === 401) { try { await checkAuth?.(); } catch (_) {} }
       if (latestBillingRequestRef.current !== requestId) return;
-      setError('Unable to load billing data. Pull to retry.');
+      setError(getApiErrorMessage(err, 'Unable to load billing data. Pull to retry.'));
     } finally {
       if (latestBillingRequestRef.current !== requestId) return;
       setLoading(false);
       setRefreshing(false);
     }
-  }, [checkAuth]);
+  }, [authLoading, authReady, authStatus, checkAuth, userId]);
 
-  useEffect(() => { if (!authLoading) loadData(); }, [authLoading, loadData]);
-  useFocusEffect(useCallback(() => { if (!authLoading) loadData(); return undefined; }, [authLoading, loadData]));
+  useEffect(() => { if (authReady && !authLoading) loadData(); }, [authLoading, authReady, loadData]);
+  useFocusEffect(useCallback(() => { if (authReady && !authLoading) loadData(); return undefined; }, [authLoading, authReady, loadData]));
   useEffect(() => {
-    if (authLoading) return undefined;
+    if (authLoading || !authReady || authStatus !== 'authenticated' || !userId) return undefined;
     return subscribeBillingRefresh(() => {
       loadData({ silent: true });
     });
-  }, [authLoading, loadData]);
+  }, [authLoading, authReady, authStatus, loadData, userId]);
 
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
@@ -210,9 +232,10 @@ export default function BillingScreen() {
   }, [history]);
 
   const statusCounts = useMemo(() => {
-    const counts = { all: history.length, pending: 0, overdue: 0, paid: 0 };
+    const counts = { all: history.length, unpaid: 0, overdue: 0, paid: 0 };
     history.forEach(b => {
-      const s = (b.status || 'pending').toLowerCase();
+      const raw = (b.status || 'unpaid').toLowerCase();
+      const s = raw === 'pending' ? 'unpaid' : raw;
       const countKey = isPaidBillStatus(s) ? 'paid' : s;
       if (counts[countKey] !== undefined) counts[countKey]++;
     });
@@ -221,7 +244,8 @@ export default function BillingScreen() {
 
   const filteredBills = useMemo(() => {
     return history.filter(b => {
-      const status = getBillStatus(b) || 'pending';
+      const rawStatus = getBillStatus(b) || 'unpaid';
+      const status = rawStatus === 'pending' ? 'unpaid' : rawStatus;
       if (activeStatus === 'paid') return isPaidBillStatus(status);
       if (activeStatus !== 'all' && status !== activeStatus) return false;
       return true;
@@ -229,7 +253,7 @@ export default function BillingScreen() {
   }, [history, activeStatus]);
 
   const isPaid = (bill) => isPaidBillStatus(bill?.status);
-  const getStatusConfig = (status) => STATUS_CONFIG[(status || 'pending').toLowerCase()] || STATUS_CONFIG.pending;
+  const getStatusConfig = (status) => STATUS_CONFIG[(status || 'unpaid').toLowerCase()] || STATUS_CONFIG.unpaid;
 
   // Outstanding Hero Card
   const renderHero = () => {
@@ -280,6 +304,55 @@ export default function BillingScreen() {
           )}
         </View>
       </View>
+    );
+  };
+
+  const renderCurrentBill = () => {
+    const bill = currentSummary.bill;
+    if (!bill) {
+      return (
+        <View style={styles.currentCard}>
+          <View style={styles.currentTitleRow}>
+            <Ionicons name="calendar-outline" size={20} color={colors.primary} />
+            <Text style={styles.currentTitle}>This Month</Text>
+          </View>
+          <Text style={styles.emptyCurrentTitle}>Your bill for this month has not been generated yet.</Text>
+          {currentSummary.previous_balance > 0 && (
+            <Pressable
+              style={styles.previousBalanceRow}
+              onPress={() => currentSummary.previous_bill_id && router.push({ pathname: '/bill-details', params: { billId: currentSummary.previous_bill_id } })}
+            >
+              <Text style={styles.previousBalanceLabel}>Previous unpaid balance</Text>
+              <Text style={styles.previousBalanceAmount}>{safeCurrency(currentSummary.previous_balance)}</Text>
+            </Pressable>
+          )}
+        </View>
+      );
+    }
+    const status = getStatusConfig(bill.status);
+    const breakdown = normalizeBreakdown(bill);
+    const paidAmount = Math.max(0, Number(bill.paid_amount || 0));
+    const outstanding = Math.max(0, Number(bill.remaining_amount ?? bill.total ?? bill.amount ?? 0));
+    const penalty = Math.max(0, Number(bill.penalties || 0));
+    const billId = getBillId(bill);
+    return (
+      <Pressable style={styles.currentCard} onPress={() => billId && router.push({ pathname: '/bill-details', params: { billId: String(billId) } })}>
+        <View style={styles.currentTitleRow}>
+          <View><Text style={styles.currentTitle}>This Month</Text><Text style={styles.currentPeriod}>{bill.billing_period || 'Current billing period'}</Text></View>
+          <View style={[styles.statusBadge, { backgroundColor: status.bg }]}><Text style={[styles.statusText, { color: status.text }]}>{status.label}</Text></View>
+        </View>
+        <Text style={styles.currentAmount}>{safeCurrency(outstanding)}</Text>
+        <Text style={styles.currentAmountLabel}>Total amount due</Text>
+        <View style={styles.currentMetaRow}><Text style={styles.currentMetaLabel}>Due date</Text><Text style={styles.currentMetaValue}>{safeDate(bill.due_date)}</Text></View>
+        <View style={styles.currentMetaRow}><Text style={styles.currentMetaLabel}>Due status</Text><Text style={styles.currentMetaValue}>{currentSummary.timing?.label || 'Not available'}</Text></View>
+        <View style={styles.currentMetaRow}><Text style={styles.currentMetaLabel}>Paid amount</Text><Text style={styles.currentMetaValue}>{safeCurrency(paidAmount)}</Text></View>
+        <View style={styles.currentMetaRow}><Text style={styles.currentMetaLabel}>Late penalty</Text><Text style={[styles.currentMetaValue, penalty > 0 && { color: '#b91c1c' }]}>{penalty > 0 ? safeCurrency(penalty) : 'No late penalty'}</Text></View>
+        <Text style={styles.breakdownHeading}>Breakdown</Text>
+        {breakdown.length ? breakdown.map((item) => (
+          <View key={`${item.type}-${item.label}`} style={styles.currentMetaRow}><Text style={styles.currentMetaLabel}>{item.label}</Text><Text style={styles.currentMetaValue}>{safeCurrency(item.amount)}</Text></View>
+        )) : <Text style={styles.breakdownUnavailable}>Itemized charges are unavailable. Open the bill for details.</Text>}
+        {currentSummary.previous_balance > 0 && <View style={styles.previousBalanceRow}><Text style={styles.previousBalanceLabel}>Previous unpaid balance</Text><Text style={styles.previousBalanceAmount}>{safeCurrency(currentSummary.previous_balance)}</Text></View>}
+      </Pressable>
     );
   };
 
@@ -371,15 +444,15 @@ export default function BillingScreen() {
             </Pressable>
           )}
           <Pressable
-            style={[styles.outlineBtn, (downloadingId === billId || !billId) && styles.btnDisabled]}
-            disabled={downloadingId === billId || !billId}
+            style={[styles.outlineBtn, !billId && styles.btnDisabled]}
+            disabled={!billId}
             onPress={() => {
               if (!billId) return;
-              downloadBillPdf(billId, (busy) => setDownloadingId(busy ? billId : null));
+              router.push({ pathname: '/document-viewer', params: { kind: 'bill', id: String(billId), title: paid ? 'Payment Receipt' : 'Billing Statement' } });
             }}
           >
             <Ionicons name="download-outline" size={14} color={colors.text} />
-            <Text style={styles.outlineBtnText}>{downloadingId === billId ? 'Preparing...' : 'PDF'}</Text>
+            <Text style={styles.outlineBtnText}>View PDF</Text>
           </Pressable>
           {paid && getBillPaymentDate(bill) && (
             <View style={styles.paidMeta}>
@@ -395,6 +468,7 @@ export default function BillingScreen() {
   // List Header
   const renderListHeader = () => (
     <View style={styles.listHeader}>
+      {renderCurrentBill()}
       {renderHero()}
       {error && (
         <View style={styles.errorBanner}>
@@ -412,7 +486,7 @@ export default function BillingScreen() {
       )}
       {renderFilters()}
       <Text style={styles.sectionLabel}>
-        {activeStatus === 'all' ? 'All Bills' : `${STATUS_FILTERS.find(t => t.id === activeStatus)?.label || ''} Bills`}
+        {activeStatus === 'all' ? 'Billing History' : `${STATUS_FILTERS.find(t => t.id === activeStatus)?.label || ''} Bills`}
         {' '}({filteredBills.length})
       </Text>
     </View>
@@ -471,7 +545,7 @@ export default function BillingScreen() {
             <Text style={styles.emptyHint}>
               {activeStatus !== 'all'
                 ? 'No bills match your filter. Try a different one.'
-                : 'Your billing history will appear here.'}
+                : 'No previous bills are available.'}
             </Text>
           </View>
         }
@@ -498,6 +572,21 @@ function createStyles(c, isDarkMode) {
 
     listContent: { padding: 14, paddingBottom: 100, gap: 10 },
     listHeader: { gap: 12, marginBottom: 4 },
+    currentCard: { backgroundColor: c.surface, borderRadius: 18, padding: 18, gap: 9, borderWidth: 1, borderColor: c.border, ...Platform.select({ android: { elevation: 3 } }) },
+    currentTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
+    currentTitle: { fontSize: 18, fontWeight: '800', color: c.text },
+    currentPeriod: { fontSize: 12, color: c.textMuted, marginTop: 2 },
+    currentAmount: { fontSize: 32, fontWeight: '800', color: c.text, marginTop: 4 },
+    currentAmountLabel: { fontSize: 12, color: c.textMuted, marginTop: -6 },
+    currentMetaRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, paddingVertical: 3 },
+    currentMetaLabel: { flex: 1, fontSize: 13, color: c.textSecondary },
+    currentMetaValue: { flex: 1, fontSize: 13, color: c.text, fontWeight: '700', textAlign: 'right' },
+    breakdownHeading: { fontSize: 14, color: c.text, fontWeight: '800', marginTop: 7, paddingTop: 10, borderTopWidth: 1, borderTopColor: c.border },
+    breakdownUnavailable: { fontSize: 12, lineHeight: 18, color: c.textMuted },
+    emptyCurrentTitle: { fontSize: 14, lineHeight: 21, color: c.textSecondary },
+    previousBalanceRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, marginTop: 7, paddingTop: 10, borderTopWidth: 1, borderTopColor: c.border },
+    previousBalanceLabel: { flex: 1, color: c.textSecondary, fontSize: 13, fontWeight: '600' },
+    previousBalanceAmount: { color: '#b91c1c', fontSize: 14, fontWeight: '800' },
 
     // Hero
     heroCard: {

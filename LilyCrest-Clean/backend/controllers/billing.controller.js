@@ -3,11 +3,25 @@ const { ObjectId } = require('mongodb');
 const { getDb } = require('../config/database');
 const { buildBrandedPdf, esc } = require('../utils/pdfBuilder');
 const { notifyBillCreated } = require('../services/pushService');
+const { calculateLatePenalty } = require('../domain/billing/billingPolicy');
+
+const MAX_BILL_AMOUNT = 500000;
+const ALLOWED_BILL_STATUSES = new Set([
+  'unpaid', 'overdue', 'pending_verification', 'partially_paid', 'paid', 'rejected', 'cancelled',
+]);
+const LEGACY_BILL_STATUS_MAP = {
+  pending: 'unpaid',
+  pending_payment: 'unpaid',
+  processing: 'pending_verification',
+  verification: 'pending_verification',
+  settled: 'paid',
+  canceled: 'cancelled',
+};
 
 // ── Presentation-mode mock bills ─────────────────────────────────────────────
 // Used as PDF fallback when a bill ID is not found in the database.
 // These match the mock data already shown in the mobile billing screens.
-const PRESENTATION_BILLS = {
+const DEMO_BILLS = process.env.ENABLE_DEMO_DATA === 'true' ? {
   'BILL-2026-004': {
     billing_id: 'BILL-2026-004',
     description: 'April 2026 Billing Statement',
@@ -70,7 +84,7 @@ const PRESENTATION_BILLS = {
       { occupants: 3, reading_date_from: '2025-12-15', reading_date_to: '2026-01-15', reading_from: 905.98, reading_to: 946.61, consumption: 40.63, rate: 16, segment_total: 650.08, share_per_tenant: 195.50 },
     ],
   },
-};
+} : {};
 
 const BILL_UNAVAILABLE_MESSAGE = 'This billing record is no longer available.';
 const NON_VISIBLE_BILL_STATUSES = new Set([
@@ -132,7 +146,41 @@ function getBillLookupIds(bill = {}) {
 }
 
 function normalizeBillStatus(status) {
-  return String(status || '').trim().toLowerCase();
+  const normalized = String(status || '').trim().toLowerCase();
+  return LEGACY_BILL_STATUS_MAP[normalized] || normalized;
+}
+
+function parseMoney(value, field, { optional = true } = {}) {
+  if ((value === undefined || value === null || value === '') && optional) return { value: 0, supplied: false };
+  const amount = typeof value === 'number' ? value : Number(value);
+  if (!Number.isFinite(amount) || amount < 0 || amount > MAX_BILL_AMOUNT) {
+    return { error: `${field} must be a finite amount between 0 and ${MAX_BILL_AMOUNT}.` };
+  }
+  return { value: Math.round(amount * 100) / 100, supplied: true };
+}
+
+function parseDateField(value, field, { required = false } = {}) {
+  if (value === undefined || value === null || value === '') {
+    return required ? { error: `${field} is required.` } : { value: null, supplied: false };
+  }
+  const parsed = new Date(value);
+  if (Number.isNaN(parsed.getTime())) return { error: `${field} must be a valid date.` };
+  return { value: parsed, supplied: true };
+}
+
+function validateLineItems(rawItems) {
+  if (rawItems === undefined) return { value: [], supplied: false };
+  if (!Array.isArray(rawItems) || rawItems.length > 50) return { error: 'items must be an array with at most 50 entries.' };
+  const value = [];
+  for (let index = 0; index < rawItems.length; index += 1) {
+    const item = rawItems[index];
+    const label = typeof item?.label === 'string' ? item.label.trim() : '';
+    if (!label || label.length > 120) return { error: `items[${index}].label is required and must be 120 characters or fewer.` };
+    const amount = parseMoney(item.amount, `items[${index}].amount`, { optional: false });
+    if (amount.error) return amount;
+    value.push({ ...item, label, amount: amount.value });
+  }
+  return { value, supplied: true };
 }
 
 function getBillPaymentDate(bill = {}) {
@@ -553,6 +601,47 @@ function toObjectIdIfValid(value) {
   }
 }
 
+function billingMonthKey(value) {
+  if (!value) return '';
+  const text = String(value).trim();
+  const namedPeriod = /^(?:january|february|march|april|may|june|july|august|september|october|november|december)\s+\d{4}$/i.test(text);
+  const parsed = namedPeriod ? new Date(`1 ${text} UTC`) : new Date(value);
+  if (Number.isNaN(parsed.getTime())) return '';
+  return `${parsed.getUTCFullYear()}-${String(parsed.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+function billPeriodKey(bill = {}) {
+  return billingMonthKey(bill.billing_period)
+    || billingMonthKey(bill.billingMonth)
+    || billingMonthKey(bill.due_date || bill.dueDate);
+}
+
+function resolveCurrentBill(bills = [], asOf = new Date()) {
+  const currentKey = billingMonthKey(asOf);
+  if (!currentKey) return null;
+  const matches = bills.filter((bill) => billPeriodKey(bill) === currentKey);
+  if (!matches.length) return null;
+  return matches.sort((left, right) => {
+    const consolidated = (bill) => String(bill.billing_type || '').toLowerCase() === 'consolidated' ? 1 : 0;
+    const typeDifference = consolidated(right) - consolidated(left);
+    return typeDifference || getBillPreferenceScore(right) - getBillPreferenceScore(left)
+      || getBillFreshnessTimestamp(right) - getBillFreshnessTimestamp(left);
+  })[0];
+}
+
+function currentBillTiming(bill, asOf = new Date()) {
+  const dueDate = bill?.due_date || bill?.dueDate;
+  if (!dueDate) return { state: 'unknown', days: 0, label: 'Due date unavailable' };
+  const late = calculateLatePenalty(dueDate, asOf);
+  if (late.daysAfterDue === 0) {
+    const milliseconds = new Date(dueDate).getTime() - new Date(asOf).getTime();
+    const days = Math.max(0, Math.ceil(milliseconds / 86400000));
+    return { state: days === 0 ? 'due_today' : 'due', days, label: days === 0 ? 'Due today' : `Due in ${days} day${days === 1 ? '' : 's'}` };
+  }
+  if (late.daysAfterDue === 1) return { state: 'grace', days: 1, label: 'Grace period ends today' };
+  return { state: 'overdue', days: late.penaltyDays, label: `Overdue by ${late.penaltyDays} day${late.penaltyDays === 1 ? '' : 's'}` };
+}
+
 function pushUniqueFilter(filters, filter) {
   if (!filter || typeof filter !== 'object') return;
   const key = JSON.stringify(filter, (_name, value) => (
@@ -817,6 +906,8 @@ function mapRealBill(b, userId) {
     paymongo_reference: b.paymongoReference,
     paymongo_checkout_id: b.paymongoSessionId,
     paymongo_payment_id: b.paymongoPaymentId,
+    proof_status: b.paymentProof?.status,
+    rejection_reason: b.rejectionReason,
     additional_charges: b.additionalCharges,
     electricity_breakdown: electricityBreakdown,
     water_breakdown: waterBreakdown,
@@ -881,11 +972,20 @@ async function fetchUserBills(db, user, {
 async function getLatestBilling(req, res) {
   try {
     const db = getDb();
-    const bills = await fetchUserBills(db, req.user, { limit: 1 });
-    if (!bills.length) {
-      return res.status(404).json({ detail: 'No billing found' });
-    }
-    res.json(bills[0]);
+    const serverTime = new Date();
+    const bills = await fetchUserBills(db, req.user);
+    const bill = resolveCurrentBill(bills, serverTime);
+    const previousBills = bills.filter((entry) => entry !== bill && billPeriodKey(entry) < billingMonthKey(serverTime));
+    const previousOutstanding = previousBills
+      .filter(isPayableBill)
+      .reduce((sum, entry) => sum + Math.max(0, getComparableBillAmount(entry)), 0);
+    res.json({
+      bill,
+      server_time: serverTime.toISOString(),
+      timing: bill ? currentBillTiming(bill, serverTime) : null,
+      previous_balance: Math.round(previousOutstanding * 100) / 100,
+      previous_bill_id: normalizeBillId(previousBills.find(isPayableBill) || {}),
+    });
   } catch (error) {
     console.error('Get latest billing error:', error);
     res.status(500).json({ detail: 'Failed to fetch latest billing' });
@@ -943,11 +1043,59 @@ async function getBillingById(req, res) {
   }
 }
 
+async function submitPaymentProof(req, res) {
+  try {
+    const billingId = String(req.params.billingId || '').trim();
+    const proof = req.body?.proof || {};
+    const storagePath = String(proof.storagePath || '').trim();
+    const downloadUrl = String(proof.downloadUrl || '').trim();
+    const mimeType = String(proof.mimeType || '').toLowerCase();
+    const size = Number(proof.size || 0);
+    const tenantPrefix = `payment-proofs/${req.user.user_id}/`;
+    if (!billingId) return res.status(400).json({ detail: 'A valid bill is required.' });
+    if (!storagePath.startsWith(tenantPrefix)
+      || !/^https:\/\/firebasestorage(?:\.googleapis\.com|\.app)\//i.test(downloadUrl)
+      || !['image/jpeg', 'image/png', 'image/webp', 'application/pdf'].includes(mimeType)
+      || !Number.isFinite(size) || size <= 0 || size > 5 * 1024 * 1024) {
+      return res.status(400).json({ detail: 'Payment proof is invalid.' });
+    }
+    const db = getDb();
+    const ownedBill = (await fetchUserBills(db, req.user, { billingId, limit: 1 }))[0];
+    if (!ownedBill) return res.status(404).json({ detail: BILL_UNAVAILABLE_MESSAGE });
+    if (isPaidBill(ownedBill)) return res.status(409).json({ detail: 'This bill is already paid.' });
+    if (normalizeBillStatus(ownedBill.status) === 'pending_verification') {
+      return res.status(409).json({ detail: 'A payment proof is already under review.' });
+    }
+    const submittedProof = {
+      downloadUrl, storagePath, mimeType, size,
+      originalName: String(proof.originalName || 'Payment proof').slice(0, 120),
+      submittedAt: new Date(),
+      status: 'under_review',
+    };
+    const legacyResult = await db.collection('billing').updateOne(
+      { billing_id: billingId, $or: buildBillingOwnerFilters(req.user) },
+      { $set: { proof: submittedProof, status: 'pending_verification', updated_at: new Date() }, $unset: { rejection_reason: '' } },
+    );
+    if (!legacyResult.matchedCount) {
+      const objectId = ObjectId.isValid(billingId) ? new ObjectId(billingId) : null;
+      const result = objectId ? await db.collection('bills').updateOne(
+        { _id: objectId, $or: buildBillingOwnerFilters(req.user) },
+        { $set: { paymentProof: submittedProof, status: 'pending_verification', updatedAt: new Date() }, $unset: { rejectionReason: '' } },
+      ) : { matchedCount: 0 };
+      if (!result.matchedCount) return res.status(404).json({ detail: BILL_UNAVAILABLE_MESSAGE });
+    }
+    return res.status(201).json({ status: 'pending_verification', proof_status: 'under_review' });
+  } catch (error) {
+    console.error('Submit payment proof error:', error);
+    return res.status(500).json({ detail: 'Unable to submit payment proof.' });
+  }
+}
+
 // Create billing (supports both simple and consolidated/itemized bills)
 async function createBilling(req, res) {
   try {
     const {
-      amount, description, billing_type, due_date,
+      tenant_id, description, billing_type, due_date,
       billing_period, release_date,
       rent, electricity, water, penalties,
       items,                    // [{label, amount, type}]
@@ -955,31 +1103,63 @@ async function createBilling(req, res) {
       water_breakdown,          // {reading_from, reading_to, consumption, rate, total, sharing_policy}
     } = req.body;
 
-    // Auto-compute total from itemized fields if not given
-    const computedTotal = (Number(rent) || 0) + (Number(electricity) || 0)
-      + (Number(water) || 0) + (Number(penalties) || 0)
-      + (Array.isArray(items) ? items.reduce((s, i) => s + (Number(i.amount) || 0), 0) : 0);
-    const total = Number(amount) || computedTotal || 0;
+    const targetTenantId = String(tenant_id || '').trim();
+    if (!targetTenantId) return res.status(400).json({ detail: 'tenant_id is required.' });
+
+    const db = getDb();
+    const tenantObjectId = ObjectId.isValid(targetTenantId) ? new ObjectId(targetTenantId) : null;
+    const tenant = await db.collection('users').findOne({
+      $and: [
+        { $or: [{ user_id: targetTenantId }, ...(tenantObjectId ? [{ _id: tenantObjectId }] : [])] },
+        { role: { $in: ['tenant', 'resident'] } },
+      ],
+    });
+    if (!tenant) return res.status(400).json({ detail: 'A valid tenant_id is required.' });
+
+    const parsedMoney = {};
+    for (const [field, raw] of Object.entries({ rent, electricity, water, penalties })) {
+      const parsed = parseMoney(raw, field);
+      if (parsed.error) return res.status(400).json({ detail: parsed.error, errors: { [field]: parsed.error } });
+      parsedMoney[field] = parsed.value;
+    }
+    const parsedItems = validateLineItems(items);
+    if (parsedItems.error) return res.status(400).json({ detail: parsedItems.error, errors: { items: parsedItems.error } });
+    const dueDate = parseDateField(due_date, 'due_date', { required: true });
+    const releaseDate = parseDateField(release_date, 'release_date');
+    if (dueDate.error || releaseDate.error) return res.status(400).json({ detail: dueDate.error || releaseDate.error });
+
+    const total = Object.values(parsedMoney).reduce((sum, value) => sum + value, 0)
+      + parsedItems.value.reduce((sum, item) => sum + item.amount, 0);
 
     if (total <= 0) {
       return res.status(400).json({ detail: 'Bill total must be greater than zero.' });
     }
-    if (total > 500000) {
+    if (total > MAX_BILL_AMOUNT) {
       return res.status(400).json({ detail: 'Bill total exceeds the maximum allowed amount (₱500,000).' });
     }
-    if (!due_date || isNaN(new Date(due_date).getTime())) {
-      return res.status(400).json({ detail: 'A valid due_date is required.' });
+    const normalizedType = String(billing_type || (parsedMoney.rent ? 'consolidated' : 'rent')).trim().toLowerCase();
+    const normalizedPeriod = String(billing_period || '').trim();
+    if (normalizedPeriod) {
+      const duplicate = await db.collection('billing').findOne({
+        user_id: tenant.user_id,
+        billing_period: normalizedPeriod,
+        billing_type: normalizedType,
+        status: { $nin: ['cancelled', 'canceled', 'deleted', 'void', 'voided'] },
+      });
+      if (duplicate) return res.status(409).json({ detail: 'A bill already exists for this tenant, billing period, and bill type.' });
     }
 
     const newBill = {
       billing_id: `bill_${uuidv4().replace(/-/g, '').substring(0, 12)}`,
-      user_id: req.user.user_id,
+      user_id: tenant.user_id,
+      userId: tenant._id,
+      created_by: req.user.user_id,
       amount: total,
       total,
       description,
-      billing_type: billing_type || (rent ? 'consolidated' : 'rent'),
-      due_date: new Date(due_date),
-      status: 'pending',
+      billing_type: normalizedType,
+      due_date: dueDate.value,
+      status: 'unpaid',
       payment_method: null,
       payment_date: null,
       proof: null,
@@ -987,17 +1167,13 @@ async function createBilling(req, res) {
     };
 
     // Optional consolidated fields
-    if (billing_period) newBill.billing_period = billing_period;
-    if (release_date) newBill.release_date = new Date(release_date);
-    if (rent != null) newBill.rent = Number(rent);
-    if (electricity != null) newBill.electricity = Number(electricity);
-    if (water != null) newBill.water = Number(water);
-    if (penalties != null) newBill.penalties = Number(penalties);
-    if (Array.isArray(items) && items.length) newBill.items = items;
+    if (normalizedPeriod) newBill.billing_period = normalizedPeriod;
+    if (releaseDate.supplied) newBill.release_date = releaseDate.value;
+    Object.assign(newBill, parsedMoney);
+    if (parsedItems.value.length) newBill.items = parsedItems.value;
     if (Array.isArray(electricity_breakdown) && electricity_breakdown.length) newBill.electricity_breakdown = electricity_breakdown;
     if (water_breakdown && typeof water_breakdown === 'object') newBill.water_breakdown = water_breakdown;
 
-    const db = getDb();
     await db.collection('billing').insertOne(newBill);
 
     // Push notification (non-blocking)
@@ -1030,32 +1206,52 @@ async function updateBilling(req, res) {
       billing_period, release_date, description,
       rent, electricity, water, penalties,
       items, electricity_breakdown, water_breakdown,
-      amount, total,
+      amount, total, paid_amount, remaining_amount,
     } = req.body || {};
 
     const isAdmin = ['admin', 'superadmin'].includes(req.user?.role);
     const db = getDb();
 
     const updates = {};
-    if (status) updates.status = status;
+    if (status !== undefined) {
+      const normalizedStatus = normalizeBillStatus(status);
+      if (!ALLOWED_BILL_STATUSES.has(normalizedStatus)) {
+        return res.status(400).json({ detail: `status must be one of: ${Array.from(ALLOWED_BILL_STATUSES).join(', ')}` });
+      }
+      updates.status = normalizedStatus;
+    }
     if (payment_method) updates.payment_method = payment_method;
-    if (payment_date) updates.payment_date = new Date(payment_date);
+    if (payment_date !== undefined) {
+      const parsed = parseDateField(payment_date, 'payment_date');
+      if (parsed.error) return res.status(400).json({ detail: parsed.error });
+      updates.payment_date = parsed.value;
+    }
     if (notes) updates.notes = notes;
     if (description) updates.description = description;
     if (billing_period) updates.billing_period = billing_period;
-    if (release_date) updates.release_date = new Date(release_date);
+    if (release_date !== undefined) {
+      const parsed = parseDateField(release_date, 'release_date');
+      if (parsed.error) return res.status(400).json({ detail: parsed.error });
+      updates.release_date = parsed.value;
+    }
 
     // Itemized charges
-    if (rent != null) updates.rent = Number(rent);
-    if (electricity != null) updates.electricity = Number(electricity);
-    if (water != null) updates.water = Number(water);
-    if (penalties != null) updates.penalties = Number(penalties);
-    if (Array.isArray(items)) updates.items = items;
+    for (const [field, raw] of Object.entries({ rent, electricity, water, penalties })) {
+      if (raw === undefined) continue;
+      const parsed = parseMoney(raw, field, { optional: false });
+      if (parsed.error) return res.status(400).json({ detail: parsed.error, errors: { [field]: parsed.error } });
+      updates[field] = parsed.value;
+    }
+    if (items !== undefined) {
+      const parsedItems = validateLineItems(items);
+      if (parsedItems.error) return res.status(400).json({ detail: parsedItems.error, errors: { items: parsedItems.error } });
+      updates.items = parsedItems.value;
+    }
     if (Array.isArray(electricity_breakdown)) updates.electricity_breakdown = electricity_breakdown;
     if (water_breakdown && typeof water_breakdown === 'object') updates.water_breakdown = water_breakdown;
 
     // Recompute total if itemized fields were updated
-    if (rent != null || electricity != null || water != null || penalties != null) {
+    if (rent !== undefined || electricity !== undefined || water !== undefined || penalties !== undefined || items !== undefined) {
       const legacyFilter = isAdmin
         ? { billing_id: billingId }
         : { billing_id: billingId, user_id: req.user.user_id };
@@ -1070,9 +1266,23 @@ async function updateBilling(req, res) {
       const computed = Number(r) + Number(e) + Number(w) + Number(p) + itemsTotal;
       updates.total = computed;
       updates.amount = computed;
-    } else if (amount != null || total != null) {
-      if (total != null) { updates.total = Number(total); updates.amount = Number(total); }
-      else if (amount != null) { updates.amount = Number(amount); updates.total = Number(amount); }
+      if (!Number.isFinite(computed) || computed <= 0 || computed > MAX_BILL_AMOUNT) {
+        return res.status(400).json({ detail: `Computed total must be between 0.01 and ${MAX_BILL_AMOUNT}.` });
+      }
+    } else if (amount !== undefined || total !== undefined) {
+      return res.status(400).json({ detail: 'total and amount are calculated by the server and cannot be set directly.' });
+    }
+
+    if (paid_amount !== undefined || remaining_amount !== undefined) {
+      const paid = parseMoney(paid_amount ?? 0, 'paid_amount', { optional: false });
+      const remaining = parseMoney(remaining_amount ?? 0, 'remaining_amount', { optional: false });
+      if (paid.error || remaining.error) return res.status(400).json({ detail: paid.error || remaining.error });
+      const expectedTotal = updates.total;
+      if (expectedTotal !== undefined && Math.abs((paid.value + remaining.value) - expectedTotal) > 0.01) {
+        return res.status(400).json({ detail: 'paid_amount plus remaining_amount must equal the total.' });
+      }
+      updates.paid_amount = paid.value;
+      updates.remaining_amount = remaining.value;
     }
 
     updates.updated_at = new Date();
@@ -1086,8 +1296,8 @@ async function updateBilling(req, res) {
     if (existingLegacy && updates.status) {
       const existingLegacyBill = normalizeLegacyBill(existingLegacy);
       const requestedStatus = normalizeBillStatus(updates.status);
-      if (!PAID_BILL_STATUSES.has(requestedStatus) && isPaidBill(existingLegacyBill)) {
-        delete updates.status;
+      if (requestedStatus !== 'paid' && isPaidBill(existingLegacyBill)) {
+        return res.status(409).json({ detail: 'A paid bill cannot be changed without an authorized reversal workflow.' });
       }
     }
 
@@ -1121,8 +1331,8 @@ async function updateBilling(req, res) {
     const existingRealBill = mapRealBill(existingReal, existingReal.userId?.toString() || '');
     if (updates.status) {
       const requestedStatus = normalizeBillStatus(updates.status);
-      if (!PAID_BILL_STATUSES.has(requestedStatus) && isPaidBill(existingRealBill)) {
-        delete updates.status;
+      if (requestedStatus !== 'paid' && isPaidBill(existingRealBill)) {
+        return res.status(409).json({ detail: 'A paid bill cannot be changed without an authorized reversal workflow.' });
       }
     }
 
@@ -1320,6 +1530,7 @@ module.exports = {
   getMyBilling,
   getBillingHistory,
   getBillingById,
+  submitPaymentProof,
   getPaymentHistory,
   createBilling,
   updateBilling,
@@ -1337,6 +1548,9 @@ module.exports = {
   getBillFreshnessTimestamp,
   getBillPreferenceScore,
   buildBillVisibilitySignature,
-  PRESENTATION_BILLS,
+  DEMO_BILLS,
   mapRealBill,
+  resolveCurrentBill,
+  currentBillTiming,
+  billPeriodKey,
 };

@@ -9,6 +9,7 @@ router.get('/history/paid', authMiddleware, billingController.getPaymentHistory)
 router.get('/history', authMiddleware, billingController.getBillingHistory);
 router.get('/:billingId', authMiddleware, billingController.getBillingById);
 router.get('/:billingId/pdf', authMiddleware, billingController.downloadBillPdf);
+router.post('/:billingId/payment-proof', authMiddleware, billingController.submitPaymentProof);
 router.post('/', authMiddleware, adminMiddleware, billingController.createBilling);
 router.put('/:billingId', authMiddleware, adminMiddleware, billingController.updateBilling);
 

@@ -2,9 +2,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
+import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAlert } from '../src/context/AlertContext';
+import { useAuth } from '../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
 import { apiService } from '../src/services/api';
 import {
@@ -13,8 +15,8 @@ import {
   getBillingApiMessage,
   isBillingUnavailableMessage,
 } from '../src/services/billingState';
-import { downloadBillPdf } from '../src/utils/downloadBillPdf';
 import { safeBack } from '../src/utils/navigation';
+import { ensureFirebaseStorageAttachments, IMAGE_UPLOAD_MIME_TYPES, MAX_IMAGE_UPLOAD_BYTES } from '../src/services/firebaseStorageUpload';
 
 const getBillId = (bill) => bill?.billing_id || bill?.id || bill?._id || bill?.billingId || bill?.billId || bill?.reference_id;
 
@@ -44,9 +46,13 @@ function shortDate(value) {
 const STATUS_CONFIG = {
   paid: { bg: '#ecfdf3', text: '#15803d', icon: 'checkmark-circle', label: 'Paid' },
   settled: { bg: '#ecfdf3', text: '#15803d', icon: 'checkmark-circle', label: 'Paid' },
-  pending: { bg: '#FDF6EC', text: '#92400e', icon: 'time', label: 'Pending' },
+  unpaid: { bg: '#FDF6EC', text: '#92400e', icon: 'time', label: 'Unpaid' },
+  pending: { bg: '#FDF6EC', text: '#92400e', icon: 'time', label: 'Unpaid' },
   overdue: { bg: '#fef2f2', text: '#b91c1c', icon: 'alert-circle', label: 'Overdue' },
-  verification: { bg: '#eff6ff', text: '#1d4ed8', icon: 'hourglass', label: 'Verifying' },
+  pending_verification: { bg: '#eff6ff', text: '#1d4ed8', icon: 'hourglass', label: 'Payment Under Review' },
+  verification: { bg: '#eff6ff', text: '#1d4ed8', icon: 'hourglass', label: 'Payment Under Review' },
+  partially_paid: { bg: '#fff7ed', text: '#c2410c', icon: 'pie-chart', label: 'Partially Paid' },
+  cancelled: { bg: '#f3f4f6', text: '#6b7280', icon: 'close-circle', label: 'Cancelled' },
 };
 
 function isBillOutstanding(bill) {
@@ -81,14 +87,15 @@ export default function BillDetailsScreen() {
   const billId = Array.isArray(billIdParam) ? billIdParam[0] : billIdParam;
   const { colors, isDarkMode } = useTheme();
   const { showAlert } = useAlert();
+  const { user } = useAuth();
   const styles = useThemedStyles((c) => createStyles(c, isDarkMode));
 
   const [bill, setBill] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [downloading, setDownloading] = useState(false);
   const [creatingCheckout, setCreatingCheckout] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
+  const [uploadingProof, setUploadingProof] = useState(false);
 
   const loadBill = useCallback(async ({ showLoader = true } = {}) => {
     if (showLoader) setLoading(true);
@@ -181,6 +188,45 @@ export default function BillDetailsScreen() {
     }
   };
 
+  const handleUploadProof = async () => {
+    if (uploadingProof || !billId) return;
+    if (String(bill?.status || '').toLowerCase() === 'pending_verification') {
+      showAlert({ title: 'Under Review', message: 'Your payment proof is already under review.', type: 'info' });
+      return;
+    }
+    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+    if (!permission.granted) {
+      showAlert({ title: 'Permission Required', message: 'Photo access is required to select payment proof.', type: 'warning' });
+      return;
+    }
+    const selected = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
+    if (selected.canceled || !selected.assets?.[0]) return;
+    const asset = selected.assets[0];
+    setUploadingProof(true);
+    try {
+      const [proof] = await ensureFirebaseStorageAttachments([{
+        uri: asset.uri,
+        name: asset.fileName || `payment-proof-${Date.now()}.jpg`,
+        mimeType: asset.mimeType || 'image/jpeg',
+        size: asset.fileSize,
+      }], {
+        allowedMimeTypes: IMAGE_UPLOAD_MIME_TYPES,
+        entityId: String(billId),
+        folder: 'payment-proofs',
+        maxBytes: MAX_IMAGE_UPLOAD_BYTES,
+        tenantId: user?.user_id,
+      });
+      await apiService.submitPaymentProof(String(billId), proof);
+      showAlert({ title: 'Proof Uploaded', message: 'Your payment proof is under review. This bill is not marked paid until verification is complete.', type: 'success' });
+      await loadBill({ showLoader: false });
+      emitBillingRefresh('proof_uploaded');
+    } catch (error) {
+      showAlert({ title: 'Upload Failed', message: getBillingApiMessage(error, 'Unable to upload payment proof. Please try again.'), type: 'error' });
+    } finally {
+      setUploadingProof(false);
+    }
+  };
+
   if (loading) {
     return (
       <View style={styles.center}>
@@ -211,7 +257,7 @@ export default function BillDetailsScreen() {
 
   const billIdentifier = getBillId(bill);
   const statusKey = (bill.status || 'pending').toLowerCase();
-  const statusCfg = STATUS_CONFIG[statusKey] || STATUS_CONFIG.pending;
+  const statusCfg = STATUS_CONFIG[statusKey] || STATUS_CONFIG.unpaid;
   const isOutstanding = isBillOutstanding(bill);
   const totalAmount = bill.total || bill.amount || 0;
   const expectsElectricityBreakdown =
@@ -575,6 +621,15 @@ export default function BillDetailsScreen() {
                   </>
                 )}
               </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.proofBtn, (uploadingProof || statusKey === 'pending_verification') && styles.btnDisabled]}
+                disabled={uploadingProof || statusKey === 'pending_verification'}
+                onPress={handleUploadProof}
+              >
+                {uploadingProof ? <ActivityIndicator color={colors.primary} /> : <Ionicons name="cloud-upload-outline" size={18} color={colors.primary} />}
+                <Text style={styles.proofBtnText}>{statusKey === 'pending_verification' ? 'Payment Proof Under Review' : statusKey === 'rejected' ? 'Retry Payment Proof' : 'Upload Payment Proof'}</Text>
+              </TouchableOpacity>
+              {statusKey === 'rejected' && <Text style={styles.rejectionText}>{bill.rejection_reason || bill.rejectionReason || 'Payment proof was rejected. Please submit a clearer or corrected image.'}</Text>}
               <View style={styles.secureNote}>
                 <Ionicons name="lock-closed" size={11} color={colors.textMuted} />
                 <Text style={styles.secureNoteText}>Secure payment via GCash, Maya, Card, or Online Banking</Text>
@@ -585,18 +640,18 @@ export default function BillDetailsScreen() {
 
         {/* ── Download PDF ── */}
         <Pressable
-          style={[styles.downloadBtn, (downloading || !billIdentifier) && styles.btnDisabled]}
-          disabled={downloading || !billIdentifier}
+          style={[styles.downloadBtn, !billIdentifier && styles.btnDisabled]}
+          disabled={!billIdentifier}
           onPress={() => {
             if (!billIdentifier) {
               showAlert({ title: 'Download Unavailable', message: 'No downloadable receipt for this bill.', type: 'warning' });
               return;
             }
-            downloadBillPdf(billIdentifier, setDownloading);
+            router.push({ pathname: '/document-viewer', params: { kind: 'bill', id: String(billIdentifier), title: isBillOutstanding(bill) ? 'Billing Statement' : 'Payment Receipt' } });
           }}
         >
           <Ionicons name="document-text-outline" size={18} color="#ffffff" />
-          <Text style={styles.downloadText}>{downloading ? 'Preparing PDF...' : 'Download Official Receipt'}</Text>
+          <Text style={styles.downloadText}>View PDF Document</Text>
         </Pressable>
 
         <View style={{ height: 40 }} />
@@ -755,6 +810,9 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
     backgroundColor: c.primary, paddingVertical: 16, borderRadius: 14,
   },
   paymongoBtnText: { color: '#ffffff', fontWeight: '700', fontSize: 16 },
+  proofBtn: { minHeight: 48, borderWidth: 1.5, borderColor: c.primary, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
+  proofBtnText: { color: c.primary, fontSize: 14, fontWeight: '700' },
+  rejectionText: { color: '#b91c1c', fontSize: 12, lineHeight: 18, textAlign: 'center' },
   secureNote: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
   secureNoteText: { fontSize: 11, color: c.textMuted },
 

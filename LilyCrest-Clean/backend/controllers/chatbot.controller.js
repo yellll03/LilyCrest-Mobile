@@ -22,7 +22,7 @@ const {
   notifyAdminChatAccepted,
   notifyChatbotReply,
 } = require('../services/pushService');
-const { fetchUserBills } = require('./billing.controller');
+const { fetchUserBills, resolveCurrentBill, currentBillTiming } = require('./billing.controller');
 const { normalizeUser } = require('../utils/normalizeUser');
 const { loadAttachmentParts } = require('../services/assistantAttachment.service');
 const { resolveTenantBranch } = require('../services/branchLocation.service');
@@ -613,10 +613,10 @@ async function fetchMaintenanceRequestsForUser(db, user = {}) {
 
 async function buildBillingResponse(db, user, message = '') {
   const bills = await fetchUserBills(db, user, { limit: 20 });
-  const unpaidBills = bills.filter(isBillUnpaid);
   const language = detectLanguageStyle(message);
+  const currentBill = resolveCurrentBill(bills, new Date());
 
-  if (!bills.length) {
+  if (!currentBill) {
     return {
       message: language === 'tagalog'
         ? 'Wala pa akong makitang billing record sa account mo. Maaaring hindi pa nagagawa ang bill mo ngayong buwan.'
@@ -631,6 +631,26 @@ async function buildBillingResponse(db, user, message = '') {
     };
   }
 
+  const currentAmount = getBillAmountValue(currentBill);
+  const currentDueDate = formatShortDate(currentBill.due_date || currentBill.dueDate);
+  const timing = currentBillTiming(currentBill, new Date());
+  const penalty = Number(currentBill.penalties || 0);
+  const penaltyText = penalty > 0 ? ` Late penalty: ${formatPesoCompact(penalty)}.` : ' No late penalty.';
+  const statusText = formatBillStatus(currentBill);
+  return {
+    message: language === 'tagalog'
+      ? `Ang bill mo ngayong buwan ay ${formatPesoCompact(currentAmount)}${currentDueDate ? `, due sa ${currentDueDate}` : ''}. Status: ${statusText}. ${timing.label}.${penaltyText}`
+      : language === 'taglish'
+        ? `Your bill this month is ${formatPesoCompact(currentAmount)}${currentDueDate ? `, due on ${currentDueDate}` : ''}. Status: ${statusText}. ${timing.label}.${penaltyText}`
+        : `Your bill for this month is ${formatPesoCompact(currentAmount)}${currentDueDate ? `, due on ${currentDueDate}` : ''}. Status: ${statusText}. ${timing.label}.${penaltyText}`,
+    intent: SUPPORTED_INTENTS.BILLING,
+    suggestions: [
+      { label: 'Open billing', prompt: 'Where can I see my bill details?' },
+      { label: 'Payment methods', prompt: 'How can I pay my bill?' },
+    ],
+  };
+
+  /*
   if (!unpaidBills.length) {
     const latestBill = [...bills].sort((left, right) => (
       dateTimeValue(right.due_date || right.dueDate || right.created_at || right.createdAt)
@@ -677,6 +697,7 @@ async function buildBillingResponse(db, user, message = '') {
       { label: 'Payment methods', prompt: 'How can I pay my bill?' },
     ],
   };
+  */
 }
 
 async function buildMaintenanceResponse(db, user, message = '') {
