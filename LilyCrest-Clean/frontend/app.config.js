@@ -4,13 +4,14 @@ module.exports = {
   expo: {
     name: 'LilyCrest',
     slug: 'frontend',
-    version: '1.0.0',
-    orientation: 'portrait',
+    version: '1.1.1',
+    orientation: 'default',
     icon: './assets/images/icon.png',
     scheme: 'frontend',
     userInterfaceStyle: 'automatic',
     newArchEnabled: true,
     ios: {
+      bundleIdentifier: 'com.lilycrest.lilycrestdorm',
       supportsTablet: true,
       config: {
         googleMapsApiKey: GOOGLE_MAPS_API_KEY,
@@ -18,6 +19,7 @@ module.exports = {
     },
     android: {
       package: 'com.lilycrest.lilycrestdorm',
+      versionCode: 3,
       googleServicesFile: './google-services.json',
       config: {
         googleSignIn: {
@@ -49,7 +51,12 @@ module.exports = {
     },
     plugins: [
       'expo-router',
-      'expo-dev-client',
+      [
+        'expo-dev-client',
+        {
+          launchMode: 'launcher',
+        },
+      ],
       [
         'expo-notifications',
         {

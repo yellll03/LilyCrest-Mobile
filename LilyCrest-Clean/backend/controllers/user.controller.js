@@ -2,6 +2,116 @@ const { getDb } = require('../config/database');
 const { ObjectId } = require('mongodb');
 const { v4: uuidv4 } = require('uuid');
 const { normalizeUser } = require('../utils/normalizeUser');
+const { admin, resolveStorageBucket } = require('../config/firebase');
+const { resolveTenantBranch } = require('../services/branchLocation.service');
+
+const firstValue = (...values) => values.find((value) => value !== undefined && value !== null && String(value).trim() !== '');
+const approvedReservationFilter = {
+  $or: [
+    { status: { $regex: /^(approved|confirmed|active|completed|checked_in)$/i } },
+    { applicationStatus: { $regex: /^(approved|confirmed|active|completed|checked_in)$/i } },
+    { approvalStatus: { $regex: /^(approved|confirmed|active|completed|checked_in)$/i } },
+    { isApproved: true },
+  ],
+};
+
+function addressParts(source = {}) {
+  const candidates = [
+    source.address,
+    source.completeAddress,
+    source.fullAddress,
+    source.homeAddress,
+    source.currentAddress,
+    source.applicantDetails?.address,
+    source.applicantDetails?.completeAddress,
+    source.applicantDetails?.homeAddress,
+    source.applicantDetails?.currentAddress,
+    source.applicant_details?.address,
+  ];
+  for (const candidate of candidates) {
+    if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) continue;
+    const parts = [
+      candidate.addressLine1, candidate.address_line_1, candidate.street, candidate.streetAddress,
+      candidate.addressLine2, candidate.address_line_2,
+      candidate.barangay, candidate.city, candidate.municipality,
+      candidate.province, candidate.state, candidate.postalCode, candidate.postal_code,
+      candidate.country,
+    ].filter((value) => typeof value === 'string' && value.trim())
+      .map((value) => value.trim());
+    if (parts.length) return parts;
+  }
+  return [];
+}
+
+function completeAddress(source = {}) {
+  const structured = addressParts(source);
+  if (structured.length) return [...new Set(structured)].join(', ');
+  const direct = firstValue(
+    source.completeAddress, source.fullAddress, source.address,
+    source.homeAddress, source.currentAddress,
+    source.applicantDetails?.completeAddress, source.applicantDetails?.address,
+    source.applicantDetails?.homeAddress, source.applicantDetails?.currentAddress,
+  );
+  if (typeof direct === 'string') return direct.trim();
+  return [
+    source.addressLine1, source.addressLine2, source.street, source.barangay,
+    source.city, source.province, source.postalCode, source.country,
+  ].filter(Boolean).map(String).map((part) => part.trim()).filter(Boolean).join(', ');
+}
+
+async function buildTenantProfile(db, user) {
+  const identityFilters = [
+    { user_id: user.user_id },
+    { userId: user.user_id },
+    { tenant_id: user.user_id },
+    { tenantId: user.user_id },
+  ];
+  if (user._id) {
+    identityFilters.push(
+      { userId: user._id }, { tenantId: user._id },
+      { user_id: String(user._id) }, { tenant_id: String(user._id) },
+    );
+  }
+  const reservation = await db.collection('reservations').findOne(
+    { $and: [{ $or: identityFilters }, approvedReservationFilter] },
+    { sort: { approvedAt: -1, updatedAt: -1, createdAt: -1 } },
+  );
+
+  const normalized = normalizeUser(user);
+  // An approved reservation is authoritative; never fall back to an editable profile address.
+  normalized.address = reservation ? completeAddress(reservation) : '';
+  normalized.addressSource = reservation && normalized.address ? 'approved_application' : null;
+  const lastUsernameChangedAt = user.lastUsernameChangedAt ? new Date(user.lastUsernameChangedAt) : null;
+  normalized.usernameNextAllowedAt = lastUsernameChangedAt && !Number.isNaN(lastUsernameChangedAt.getTime())
+    ? new Date(lastUsernameChangedAt.getTime() + USERNAME_COOLDOWN_MS).toISOString()
+    : null;
+  normalized.serverTime = new Date().toISOString();
+
+  let branch = null;
+  try {
+    const resolved = await resolveTenantBranch(db, user);
+    branch = resolved.branch;
+  } catch (branchError) {
+    if (branchError?.code === 'BRANCH_ASSIGNMENT_CONFLICT') throw branchError;
+  }
+
+  const contractFileUrl = firstValue(reservation?.contractFileUrl, reservation?.contractUrl);
+  const contractStartDate = firstValue(reservation?.contractStartDate, reservation?.contractStart, reservation?.moveInDate);
+  const contractEndDate = firstValue(reservation?.contractEndDate, reservation?.contractEnd, reservation?.moveOutDate);
+  const hasContract = Boolean(contractFileUrl || contractStartDate || contractEndDate);
+  normalized.branch = branch;
+  normalized.contract = hasContract ? {
+    status: String(firstValue(reservation?.contractStatus, reservation?.status) || 'Available'),
+    startDate: contractStartDate || null,
+    endDate: contractEndDate || null,
+    roomNumber: firstValue(reservation?.roomNumber, reservation?.roomName, reservation?.room?.roomNumber) || null,
+    property: branch?.branchName || null,
+    branch: branch || null,
+    fileUrl: contractFileUrl || null,
+  } : null;
+  normalized.survey = null;
+  return normalized;
+}
 
 // Get current user profile
 async function getMe(req, res) {
@@ -16,9 +126,12 @@ async function getMe(req, res) {
       return res.status(404).json({ detail: 'User not found' });
     }
 
-    res.json(normalizeUser(user));
+    res.json(await buildTenantProfile(db, user));
   } catch (error) {
     console.error('getMe error:', error);
+    if (error?.code === 'BRANCH_ASSIGNMENT_CONFLICT') {
+      return res.status(409).json({ detail: 'Multiple branch assignments were found. Please contact the admin office.' });
+    }
     res.status(500).json({ detail: 'Failed to load profile' });
   }
 }
@@ -26,7 +139,8 @@ async function getMe(req, res) {
 // ── Field-level validators ──
 const USERNAME_MIN = 3;
 const USERNAME_MAX = 30;
-const USERNAME_REGEX = /^[a-zA-Z0-9_]+$/;
+const USERNAME_REGEX = /^[a-zA-Z0-9_.]+$/;
+const USERNAME_COOLDOWN_MS = 7 * 24 * 60 * 60 * 1000;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const EMAIL_MAX = 254;
 const PHONE_REGEX = /^\+63\d{10}$/;
@@ -46,6 +160,15 @@ const ALLOWED_DOCUMENT_MIME_TYPES = new Set([
   'application/pdf',
 ]);
 
+function usernameCooldownState(lastUsernameChangedAt, now = new Date()) {
+  const lastChanged = lastUsernameChangedAt ? new Date(lastUsernameChangedAt) : null;
+  if (!lastChanged || Number.isNaN(lastChanged.getTime())) {
+    return { active: false, nextAllowedAt: null };
+  }
+  const nextAllowedAt = new Date(lastChanged.getTime() + USERNAME_COOLDOWN_MS);
+  return { active: now < nextAllowedAt, nextAllowedAt };
+}
+
 function sanitize(str) {
   if (typeof str !== 'string') return '';
   return str.replace(/[<>]/g, '').trim();
@@ -61,6 +184,19 @@ function getDecodedBase64Bytes(value = '') {
 function isLocalOnlyStoredUrl(value = '') {
   const normalized = String(value || '').trim();
   return Boolean(normalized) && LOCAL_ONLY_URI_PATTERN.test(normalized);
+}
+
+function isApprovedProfileImageUrl(value = '') {
+  try {
+    const url = new URL(value);
+    if (url.protocol !== 'https:') return false;
+    const configuredHosts = String(process.env.PROFILE_IMAGE_CDN_HOSTS || '')
+      .split(',').map((host) => host.trim().toLowerCase()).filter(Boolean);
+    return /(^|\.)firebasestorage\.googleapis\.com$|(^|\.)firebasestorage\.app$/i.test(url.hostname)
+      || configuredHosts.includes(url.hostname.toLowerCase());
+  } catch (_) {
+    return false;
+  }
 }
 
 function normalizeUploadedDocumentMetadata(body = {}) {
@@ -114,7 +250,7 @@ function validateField(field, value) {
       if (!clean) return { ok: false, error: 'Username is required.' };
       if (clean.length < USERNAME_MIN) return { ok: false, error: `Username must be at least ${USERNAME_MIN} characters.` };
       if (clean.length > USERNAME_MAX) return { ok: false, error: `Username must be at most ${USERNAME_MAX} characters.` };
-      if (!USERNAME_REGEX.test(clean)) return { ok: false, error: 'Username can only contain letters, numbers, and underscores.' };
+      if (!USERNAME_REGEX.test(clean)) return { ok: false, error: 'Username can only contain letters, numbers, underscores, and periods.' };
       return { ok: true, value: clean };
     }
     case 'email': {
@@ -137,7 +273,7 @@ function validateField(field, value) {
     }
     case 'picture': {
       if (typeof value !== 'string') return { ok: false, error: 'Picture must be a string.' };
-      if (!value.startsWith('data:image/') && !value.startsWith('http')) {
+      if (!value.startsWith('data:image/') && !isApprovedProfileImageUrl(value)) {
         return { ok: false, error: 'Invalid image format.' };
       }
       if (getDecodedBase64Bytes(value) > PICTURE_MAX_BYTES) {
@@ -158,12 +294,18 @@ async function updateMe(req, res) {
       return res.status(400).json({ detail: 'Request body is required.' });
     }
 
-    const allowedFields = ['username', 'email', 'phone', 'address', 'picture'];
+    const allowedFields = ['username', 'phone', 'picture'];
     const updateData = {};
     const fieldErrors = {};
 
     if (updates.name !== undefined) {
       fieldErrors.name = 'Full name is managed from the tenant application. Please contact admin to request a change.';
+    }
+    if (updates.email !== undefined) {
+      fieldErrors.email = 'Email is managed by the administrator to keep your sign-in account synchronized.';
+    }
+    if (updates.address !== undefined) {
+      fieldErrors.address = 'Address is managed from the approved tenant application. Please contact the administrator to request a change.';
     }
 
     // Only validate fields that were actually sent
@@ -175,6 +317,7 @@ async function updateMe(req, res) {
         fieldErrors[field] = result.error;
       } else {
         updateData[field] = result.value;
+        if (field === 'username') updateData.username_normalized = result.value;
       }
     }
 
@@ -188,45 +331,80 @@ async function updateMe(req, res) {
 
     const db = getDb();
     const userId = req.user.user_id;
+    const currentUser = await db.collection('users').findOne({ user_id: userId });
+    if (!currentUser) {
+      return res.status(404).json({ detail: 'User not found.' });
+    }
 
-    // Uniqueness checks for username and email
+    // Username is case-insensitively unique and may only change once every 7 days.
+    let changesUsername = Boolean(updateData.username);
+    if (changesUsername) {
+      const currentUsername = String(currentUser.username || '').trim().toLowerCase();
+      if (updateData.username === currentUsername) {
+        delete updateData.username;
+        delete updateData.username_normalized;
+        changesUsername = false;
+      } else {
+        const cooldown = usernameCooldownState(currentUser.lastUsernameChangedAt);
+        if (cooldown.active) {
+          return res.status(429).json({
+            detail: `You can change your username again on ${cooldown.nextAllowedAt.toISOString()}.`,
+            code: 'USERNAME_COOLDOWN',
+            nextAllowedAt: cooldown.nextAllowedAt.toISOString(),
+            nextUsernameChangeAt: cooldown.nextAllowedAt.toISOString(),
+            serverTime: new Date().toISOString(),
+            errors: { username: 'Username changes are limited to once every 7 days.' },
+          });
+        }
+      }
+    }
+
     if (updateData.username) {
       const usernameRegex = new RegExp(`^${updateData.username.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
       const existingUsername = await db.collection('users').findOne({
-        username: usernameRegex,
+        $or: [
+          { username_normalized: updateData.username },
+          { username: usernameRegex },
+        ],
         user_id: { $ne: userId },
       });
       if (existingUsername) {
         return res.status(400).json({ detail: 'Validation failed.', errors: { username: 'This username is already taken.' } });
       }
-    }
-
-    if (updateData.email) {
-      const emailRegex = new RegExp(`^${updateData.email.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i');
-      const existingEmail = await db.collection('users').findOne({
-        email: emailRegex,
-        user_id: { $ne: userId },
-      });
-      if (existingEmail) {
-        return res.status(400).json({ detail: 'Validation failed.', errors: { email: 'This email is already in use.' } });
-      }
+      updateData.lastUsernameChangedAt = new Date();
     }
 
     updateData.updated_at = new Date();
 
-    await db.collection('users').updateOne(
-      { user_id: userId },
+    const updateFilter = { user_id: userId };
+    if (changesUsername) {
+      updateFilter.$or = currentUser.lastUsernameChangedAt == null
+        ? [{ lastUsernameChangedAt: { $exists: false } }, { lastUsernameChangedAt: null }]
+        : [{ lastUsernameChangedAt: currentUser.lastUsernameChangedAt }];
+    }
+    const updateResult = await db.collection('users').updateOne(
+      updateFilter,
       { $set: updateData }
     );
+    if (changesUsername && updateResult.modifiedCount !== 1) {
+      return res.status(409).json({
+        detail: 'Your profile changed while this request was processing. Please reload and try again.',
+        code: 'PROFILE_UPDATE_CONFLICT',
+      });
+    }
 
     const updatedUser = await db.collection('users').findOne(
       { user_id: userId },
       { projection: { _id: 0 } }
     );
 
-    res.json(normalizeUser(updatedUser));
+    res.json(await buildTenantProfile(db, updatedUser));
   } catch (error) {
     console.error('Update user error:', error);
+    if (error?.code === 11000) {
+      const field = error?.keyPattern?.username_normalized ? 'username' : 'email';
+      return res.status(409).json({ detail: 'Validation failed.', errors: { [field]: `This ${field} is already in use.` } });
+    }
     res.status(500).json({ detail: 'Failed to update user' });
   }
 }
@@ -506,13 +684,43 @@ async function deleteDocument(req, res) {
     const { docId } = req.params;
     const db = getDb();
 
+    const owner = await db.collection('users').findOne(
+      { user_id: req.user.user_id, 'uploaded_documents.doc_id': docId },
+      { projection: { uploaded_documents: 1 } },
+    );
+    const document = owner?.uploaded_documents?.find((entry) => entry.doc_id === docId);
+    if (!document) return res.status(404).json({ detail: 'Document not found.' });
+
+    const marked = await db.collection('users').updateOne(
+      { user_id: req.user.user_id, uploaded_documents: { $elemMatch: { doc_id: docId, deletion_pending: { $ne: true } } } },
+      { $set: { 'uploaded_documents.$.deletion_pending': true, 'uploaded_documents.$.deletion_requested_at': new Date() } },
+    );
+    if (marked.matchedCount === 0 && document.deletion_pending !== true) {
+      return res.status(409).json({ detail: 'Document changed before deletion could start. Please try again.' });
+    }
+
+    if (document.storagePath) {
+      const bucketName = resolveStorageBucket();
+      if (!bucketName) return res.status(503).json({ detail: 'Document storage is not configured.' });
+      try {
+        await admin.storage().bucket(bucketName).file(document.storagePath).delete({ ignoreNotFound: true });
+      } catch (storageError) {
+        console.error('Delete document storage error:', storageError);
+        await db.collection('users').updateOne(
+          { user_id: req.user.user_id, 'uploaded_documents.doc_id': docId },
+          { $unset: { 'uploaded_documents.$.deletion_pending': '', 'uploaded_documents.$.deletion_requested_at': '' } },
+        ).catch(() => {});
+        return res.status(503).json({ detail: 'Document file could not be deleted. Please try again.' });
+      }
+    }
+
     const result = await db.collection('users').updateOne(
-      { user_id: req.user.user_id },
+      { user_id: req.user.user_id, 'uploaded_documents.doc_id': docId },
       { $pull: { uploaded_documents: { doc_id: docId } } }
     );
 
     if (result.modifiedCount === 0) {
-      return res.status(404).json({ detail: 'Document not found.' });
+      return res.status(503).json({ detail: 'Document file was deleted, but its record could not be finalized. Retrying is safe.' });
     }
 
     res.json({ status: 'deleted', doc_id: docId });
@@ -660,4 +868,5 @@ module.exports = {
   getDocumentFile,
   deleteDocument,
   adminGetAllUsers,
+  __test: { completeAddress, usernameCooldownState, approvedReservationFilter },
 };

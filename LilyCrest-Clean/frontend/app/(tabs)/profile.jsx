@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Image, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Linking, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
 import { useTheme } from '../../src/context/ThemeContext';
@@ -11,8 +11,6 @@ import { apiService, getApiErrorMessage } from '../../src/services/api';
 
 const NAME_MAX = 60;
 const USERNAME_MAX = 30;
-const EMAIL_MAX = 254;
-const ADDRESS_MAX = 200;
 const IMAGE_MAX_BYTES = 2 * 1024 * 1024; // ~2 MB base64
 
 const validatePhone = (phone) => {
@@ -37,21 +35,14 @@ const validateUsername = (username) => {
   if (!username.trim()) return { valid: false, error: 'Username is required' };
   if (username.trim().length < 3) return { valid: false, error: 'Username must be at least 3 characters' };
   if (username.trim().length > USERNAME_MAX) return { valid: false, error: `Username must be at most ${USERNAME_MAX} characters` };
-  if (!/^[a-zA-Z0-9_]+$/.test(username.trim())) return { valid: false, error: 'Only letters, numbers, and underscores allowed' };
+  if (!/^[a-zA-Z0-9_.]+$/.test(username.trim())) return { valid: false, error: 'Only letters, numbers, underscores, and periods are allowed' };
   return { valid: true, error: '' };
 };
 
-const validateEmail = (email) => {
-  if (!email.trim()) return { valid: false, error: 'Email is required' };
-  if (email.trim().length > EMAIL_MAX) return { valid: false, error: 'Email is too long' };
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) return { valid: false, error: 'Please enter a valid email address' };
-  return { valid: true, error: '' };
-};
-
-const validateAddress = (address) => {
-  if (!address || !address.trim()) return { valid: true, error: '' }; // optional
-  if (address.trim().length > ADDRESS_MAX) return { valid: false, error: `Address must be at most ${ADDRESS_MAX} characters` };
-  return { valid: true, error: '' };
+const formatDate = (value) => {
+  if (!value) return 'Not available';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? 'Not available' : date.toLocaleDateString(undefined, { year: 'numeric', month: 'long', day: 'numeric' });
 };
 
 const isProfilePayload = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value) && typeof value.user_id === 'string' && value.user_id.trim().length > 0;
@@ -63,7 +54,7 @@ const getDecodedBase64Bytes = (value = '') => {
 };
 
 export default function ProfileScreen() {
-  const { user, logout, updateUser, checkAuth, isLoading: authLoading } = useAuth();
+  const { user, authReady, authStatus, logout, updateUser, checkAuth, isLoading: authLoading } = useAuth();
   const router = useRouter();
   const { colors, isDarkMode } = useTheme();
   const { showAlert } = useAlert();
@@ -76,7 +67,7 @@ export default function ProfileScreen() {
     phone: user?.phone || '+63',
     address: user?.address || '',
   });
-  const [errors, setErrors] = useState({ username: '', email: '', phone: '', address: '' });
+  const [errors, setErrors] = useState({ username: '', email: '', phone: '' });
   const [discardModalVisible, setDiscardModalVisible] = useState(false);
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
   const [profileError, setProfileError] = useState('');
@@ -95,6 +86,13 @@ export default function ProfileScreen() {
   }, [user?.name, user?.username, user?.email, user?.phone, user?.address]);
 
   const fetchProfile = useCallback(async () => {
+    if (!authReady || authLoading) return;
+    if (authStatus !== 'authenticated' || !userId) {
+      setProfileError('Please sign in to view your profile.');
+      setRefreshing(false);
+      return;
+    }
+
     setProfileError('');
     try {
       const response = await apiService.getProfile();
@@ -112,7 +110,7 @@ export default function ProfileScreen() {
     } finally {
       setRefreshing(false);
     }
-  }, [checkAuth, updateUser]);
+  }, [authLoading, authReady, authStatus, checkAuth, updateUser, userId]);
 
   const handleRefresh = useCallback(() => {
     if (isEditing) return;
@@ -122,23 +120,20 @@ export default function ProfileScreen() {
 
   useFocusEffect(
     useCallback(() => {
-      if (!authLoading && userId) {
+      if (authReady && !authLoading && authStatus === 'authenticated' && userId) {
         fetchProfile();
       }
-    }, [authLoading, fetchProfile, userId])
+    }, [authLoading, authReady, authStatus, fetchProfile, userId])
   );
 
   useEffect(() => {
     if (isEditing) {
       const usernameValidation = validateUsername(formData.username);
-      const emailValidation = validateEmail(formData.email);
       const phoneValidation = validatePhone(formData.phone);
-      const addressValidation = validateAddress(formData.address);
       setErrors({
         username: usernameValidation.error,
-        email: emailValidation.error,
+        email: '',
         phone: phoneValidation.error,
-        address: addressValidation.error,
       });
     }
   }, [formData, isEditing]);
@@ -160,18 +155,14 @@ export default function ProfileScreen() {
   const hasChanges = () => {
     return (
       formData.username.trim() !== (user?.username || '').trim() ||
-      formData.email.trim().toLowerCase() !== (user?.email || '').trim().toLowerCase() ||
-      (formData.phone || '').trim() !== (user?.phone || '+63').trim() ||
-      (formData.address || '').trim() !== (user?.address || '').trim()
+      (formData.phone || '').trim() !== (user?.phone || '+63').trim()
     );
   };
 
   const handleSave = async () => {
     const usernameValidation = validateUsername(formData.username);
-    const emailValidation = validateEmail(formData.email);
     const phoneValidation = validatePhone(formData.phone);
-    const addressValidation = validateAddress(formData.address);
-    if (!usernameValidation.valid || !emailValidation.valid || !phoneValidation.valid || !addressValidation.valid) {
+    if (!usernameValidation.valid || !phoneValidation.valid) {
       setProfileBanner({ type: 'error', text: 'Please fix the highlighted fields.' });
       return;
     }
@@ -184,9 +175,7 @@ export default function ProfileScreen() {
     try {
       const payload = {
         username: formData.username.trim().toLowerCase(),
-        email: formData.email.trim().toLowerCase(),
         phone: formData.phone.trim() === '+63' ? '' : formData.phone.trim(),
-        address: formData.address.trim(),
       };
       const response = await apiService.updateProfile(payload);
       if (!isProfilePayload(response?.data)) {
@@ -211,9 +200,16 @@ export default function ProfileScreen() {
           username: backendErrors.username || prev.username,
           email: backendErrors.email || prev.email,
           phone: backendErrors.phone || prev.phone,
-          address: backendErrors.address || prev.address,
         }));
         setProfileBanner({ type: 'error', text: error.response.data.detail || 'Validation failed.' });
+      } else if (status === 429 && error?.response?.data?.code === 'USERNAME_COOLDOWN') {
+        setErrors((prev) => ({ ...prev, username: error.response.data.errors?.username || 'Username change is still under cooldown.' }));
+        updateUser({
+          ...user,
+          usernameNextAllowedAt: error.response.data.nextAllowedAt,
+          serverTime: error.response.data.serverTime,
+        });
+        setProfileBanner({ type: 'error', text: error.response.data.detail });
       } else {
         setProfileBanner({ type: 'error', text: getApiErrorMessage(error, 'Failed to update profile. Please try again.') });
       }
@@ -274,7 +270,20 @@ export default function ProfileScreen() {
     },
   ];
 
-  const isFormValid = !errors.username && !errors.email && !errors.phone && !errors.address && formData.username.trim().length > 0 && formData.email.trim().length > 0 && hasChanges();
+  const nextUsernameChangeAt = user?.usernameNextAllowedAt
+    ? new Date(user.usernameNextAllowedAt)
+    : null;
+  const profileServerTime = user?.serverTime ? new Date(user.serverTime) : null;
+  const usernameCooldownActive = Boolean(
+    nextUsernameChangeAt
+    && !Number.isNaN(nextUsernameChangeAt.getTime())
+    && profileServerTime
+    && !Number.isNaN(profileServerTime.getTime())
+    && nextUsernameChangeAt > profileServerTime
+  );
+  const usernameChanged = formData.username.trim().toLowerCase() !== (user?.username || '').trim().toLowerCase();
+  const usernameOnCooldown = usernameChanged && usernameCooldownActive;
+  const isFormValid = !errors.username && !errors.email && !errors.phone && !usernameOnCooldown && formData.username.trim().length > 0 && formData.email.trim().length > 0 && hasChanges();
 
   const handleDiscardEdit = () => {
     if (hasChanges()) {
@@ -301,7 +310,7 @@ export default function ProfileScreen() {
       phone: user?.phone || '+63',
       address: user?.address || '',
     });
-    setErrors({ username: '', email: '', phone: '', address: '' });
+    setErrors({ username: '', email: '', phone: '' });
   };
 
   const styles = createStyles(colors, isDarkMode);
@@ -416,34 +425,40 @@ export default function ProfileScreen() {
                 <TextInput
                   style={styles.inputInner}
                   value={formData.username}
-                  onChangeText={(text) => setFormData({ ...formData, username: text.replace(/\s/g, '').slice(0, USERNAME_MAX) })}
-                  placeholder="your_username"
+                  onChangeText={(text) => setFormData({ ...formData, username: text.slice(0, USERNAME_MAX) })}
+                  placeholder="aya.argueza"
                   placeholderTextColor={colors.textMuted}
                   maxLength={USERNAME_MAX}
                   autoCapitalize="none"
                   autoCorrect={false}
+                  editable={!usernameCooldownActive}
                 />
               </View>
               <View style={styles.fieldFooter}>
                 {errors.username ? <View style={styles.errorContainer}><Ionicons name="alert-circle" size={14} color="#EF4444" /><Text style={styles.fieldErrorText}>{errors.username}</Text></View> : <View />}
                 <Text style={styles.charCount}>{formData.username.length}/{USERNAME_MAX}</Text>
               </View>
+              {usernameCooldownActive ? (
+                <Text style={styles.cooldownText}>You can change your username again on {formatDate(nextUsernameChangeAt)}.</Text>
+              ) : (
+                <Text style={styles.helperText}>3–30 characters. Use letters, numbers, underscores, or periods.</Text>
+              )}
             </View>
 
             <View style={styles.inputContainer}>
-              <Text style={styles.inputLabel}>Email Address *</Text>
+              <Text style={styles.inputLabel}>Email Address</Text>
               <TextInput
-                style={[styles.input, errors.email ? styles.inputError : null]}
+                style={[styles.input, styles.readOnlyInput]}
                 value={formData.email}
-                onChangeText={(text) => setFormData({ ...formData, email: text.replace(/\s/g, '').slice(0, EMAIL_MAX) })}
+                editable={false}
+                selectTextOnFocus={false}
                 placeholder="you@example.com"
                 placeholderTextColor={colors.textMuted}
-                maxLength={EMAIL_MAX}
                 keyboardType="email-address"
                 autoCapitalize="none"
                 autoCorrect={false}
               />
-              {errors.email ? <View style={styles.errorContainer}><Ionicons name="alert-circle" size={14} color="#EF4444" /><Text style={styles.fieldErrorText}>{errors.email}</Text></View> : null}
+              <Text style={styles.helperText}>Contact admin to change the email linked to your sign-in account.</Text>
             </View>
 
             <View style={styles.inputContainer}>
@@ -466,10 +481,16 @@ export default function ProfileScreen() {
 
             <View style={styles.inputContainer}>
               <Text style={styles.inputLabel}>Address</Text>
-              <TextInput style={[styles.input, styles.textArea, errors.address ? styles.inputError : null]} value={formData.address} onChangeText={(text) => setFormData({ ...formData, address: text.slice(0, ADDRESS_MAX) })} placeholder="Enter your address (optional)" placeholderTextColor={colors.textMuted} multiline numberOfLines={3} maxLength={ADDRESS_MAX} />
-              <View style={styles.fieldFooter}>
-                {errors.address ? <View style={styles.errorContainer}><Ionicons name="alert-circle" size={14} color="#EF4444" /><Text style={styles.fieldErrorText}>{errors.address}</Text></View> : <View />}
-                <Text style={styles.charCount}>{(formData.address || '').length}/{ADDRESS_MAX}</Text>
+              <TextInput
+                style={[styles.input, styles.textArea, styles.readOnlyInput]}
+                value={formData.address || 'No address available.'}
+                editable={false}
+                selectTextOnFocus={false}
+                multiline
+              />
+              <View style={styles.helperRow}>
+                <Ionicons name="information-circle-outline" size={14} color={colors.textMuted} />
+                <Text style={styles.helperText}>Address comes from your approved tenant application.</Text>
               </View>
             </View>
 
@@ -478,6 +499,74 @@ export default function ProfileScreen() {
             </TouchableOpacity>
           </View>
         ) : (
+          <>
+          <View style={styles.infoSection}>
+            <Text style={styles.menuGroupLabel}>BRANCH INFORMATION</Text>
+            <View style={styles.infoCard}>
+              {user?.branch ? (
+                <>
+                  <InfoRow icon="business-outline" label="Branch Name" value={user.branch.branchName || 'Not available'} colors={colors} styles={styles} />
+                  <InfoRow icon="location-outline" label="Complete Address" value={user.branch.branchAddress || 'No address available.'} colors={colors} styles={styles} />
+                  <TouchableOpacity
+                    style={styles.outlineButton}
+                    onPress={async () => {
+                      const destination = user.branch.googleMapsUrl;
+                      try {
+                        if (!/^https:\/\//i.test(destination || '')) throw new Error('MAPS_URL_MISSING');
+                        const supported = await Linking.canOpenURL(destination);
+                        if (!supported) throw new Error('MAPS_OPEN_FAILED');
+                        await Linking.openURL(destination);
+                      } catch (_) {
+                        showAlert({
+                          title: 'Map unavailable',
+                          message: 'Unable to open the branch location. Please try again.',
+                          type: 'error',
+                        });
+                      }
+                    }}
+                    disabled={!user.branch.isActive || !/^https:\/\//i.test(user.branch.googleMapsUrl || '')}
+                  >
+                    <Ionicons name="map-outline" size={18} color={colors.accent} />
+                    <Text style={styles.outlineButtonText}>Open in Google Maps</Text>
+                  </TouchableOpacity>
+                </>
+              ) : <Text style={styles.emptyText}>Branch location is not available yet.</Text>}
+            </View>
+          </View>
+
+          <View style={styles.infoSection}>
+            <Text style={styles.menuGroupLabel}>CONTRACT</Text>
+            <View style={styles.infoCard}>
+              {user?.contract ? (
+                <>
+                  <InfoRow icon="shield-checkmark-outline" label="Contract Status" value={user.contract.status || 'Not available'} colors={colors} styles={styles} />
+                  <InfoRow icon="calendar-outline" label="Contract Start Date" value={formatDate(user.contract.startDate)} colors={colors} styles={styles} />
+                  <InfoRow icon="calendar-outline" label="Contract End Date" value={formatDate(user.contract.endDate)} colors={colors} styles={styles} />
+                  <InfoRow icon="bed-outline" label="Room Number" value={user.contract.roomNumber || 'Not available'} colors={colors} styles={styles} />
+                  <InfoRow icon="business-outline" label="Property" value={user.contract.property || 'Not available'} colors={colors} styles={styles} />
+                  <TouchableOpacity style={styles.outlineButton} onPress={() => router.push('/my-documents')}>
+                    <Ionicons name="document-text-outline" size={18} color={colors.accent} />
+                    <Text style={styles.outlineButtonText}>View Contract</Text>
+                  </TouchableOpacity>
+                </>
+              ) : <Text style={styles.emptyText}>No contract available.</Text>}
+            </View>
+          </View>
+
+          <View style={styles.infoSection}>
+            <Text style={styles.menuGroupLabel}>FEEDBACK &amp; SURVEY</Text>
+            <View style={styles.infoCard}>
+              <View style={styles.surveyHeader}>
+                <Ionicons name="chatbox-ellipses-outline" size={22} color={colors.accent} />
+                <Text style={styles.surveyTitle}>{user?.survey?.type === 'quarterly' ? 'Quarterly Survey Available' : user?.survey?.type === 'move-out' ? 'Move-out Survey Available' : 'No survey available'}</Text>
+              </View>
+              <Text style={styles.helperText}>View active surveys, save a draft, or review your submitted feedback.</Text>
+              <TouchableOpacity style={styles.outlineButton} onPress={() => router.push('/surveys')}>
+                <Text style={styles.outlineButtonText}>Open Survey Dashboard</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+
           <View style={styles.menuContainer}>
             {menuGroups.map((group) => (
               <View key={group.label} style={styles.menuGroupWrapper}>
@@ -503,6 +592,7 @@ export default function ProfileScreen() {
               </View>
             ))}
           </View>
+          </>
         )}
 
         {!isEditing && (
@@ -546,10 +636,35 @@ export default function ProfileScreen() {
   );
 }
 
+function InfoRow({ icon, label, value, colors, styles }) {
+  return (
+    <View style={styles.infoRow}>
+      <View style={styles.infoRowIcon}><Ionicons name={icon} size={18} color={colors.accent} /></View>
+      <View style={styles.infoRowText}>
+        <Text style={styles.infoLabel}>{label}</Text>
+        <Text style={styles.infoValue}>{value}</Text>
+      </View>
+    </View>
+  );
+}
+
 const createStyles = (colors, isDarkMode) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
   scrollView: { flex: 1 },
   scrollContent: { paddingBottom: 16 },
+  infoSection: { paddingHorizontal: 20, marginBottom: 20 },
+  infoCard: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 16, padding: 16, gap: 14 },
+  infoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
+  infoRowIcon: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: isDarkMode ? `${colors.accent}25` : `${colors.accent}12` },
+  infoRowText: { flex: 1, minWidth: 0 },
+  infoLabel: { color: colors.textMuted, fontSize: 12, marginBottom: 3 },
+  infoValue: { color: colors.text, fontSize: 15, fontWeight: '600', lineHeight: 21 },
+  emptyText: { color: colors.textSecondary, fontSize: 14, lineHeight: 21 },
+  outlineButton: { minHeight: 44, borderWidth: 1, borderColor: colors.accent, borderRadius: 12, flexDirection: 'row', gap: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 14 },
+  outlineButtonText: { color: colors.accent, fontSize: 14, fontWeight: '700' },
+  surveyHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  surveyTitle: { flex: 1, color: colors.text, fontSize: 15, fontWeight: '700' },
+  cooldownText: { color: '#D97706', fontSize: 12, lineHeight: 18, marginTop: 6 },
 
   header: {
     backgroundColor: colors.headerBg,
