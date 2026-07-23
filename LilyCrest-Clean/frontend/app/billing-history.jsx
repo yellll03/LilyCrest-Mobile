@@ -3,7 +3,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { Link, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { FlatList, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import LilyFlowerIcon from '../src/components/assistant/LilyFlowerIcon';
 import { useAuth } from '../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
@@ -40,6 +40,14 @@ function relativeDate(value) {
   } catch (_e) { return ''; }
 }
 
+function nextBillingPeriod(value) {
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return '';
+  date.setDate(1);
+  date.setMonth(date.getMonth() + 1);
+  return date.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+}
+
 const STATUS_CONFIG = {
   paid: { bg: '#ecfdf3', text: '#15803d', icon: 'checkmark-circle', label: 'Paid' },
   settled: { bg: '#ecfdf3', text: '#15803d', icon: 'checkmark-circle', label: 'Paid' },
@@ -53,14 +61,6 @@ const STATUS_CONFIG = {
   cancelled: { bg: '#f3f4f6', text: '#6b7280', icon: 'close-circle', label: 'Cancelled' },
 };
 
-const TYPE_ICONS = {
-  rent: { icon: 'home', color: '#1d4ed8' },
-  water: { icon: 'water', color: '#0284c7' },
-  electricity: { icon: 'flash', color: '#b45309' },
-  penalty: { icon: 'warning', color: '#b91c1c' },
-  other: { icon: 'receipt', color: '#6B7280' },
-};
-
 // Filter Definitions
 const STATUS_FILTERS = [
   { id: 'all', label: 'All', icon: 'list-outline' },
@@ -71,32 +71,17 @@ const STATUS_FILTERS = [
 
 // Type filters removed - consolidated bills contain all charge types
 
-const normalizeBreakdown = (bill) => {
-  const parts = [];
-  if (bill?.rent) parts.push({ label: 'Rent', amount: bill.rent, type: 'rent' });
-  if (bill?.water) parts.push({ label: 'Water', amount: bill.water, type: 'water' });
-  if (bill?.electricity) parts.push({ label: 'Electricity', amount: bill.electricity, type: 'electricity' });
-  if (bill?.penalties) parts.push({ label: 'Penalties', amount: bill.penalties, type: 'penalty' });
-  if (bill?.items?.length) {
-    bill.items.forEach((item) => {
-      if (!parts.find(p => p.label === (item.label || item.description))) {
-        parts.push({ label: item.label || item.description || 'Charge', amount: item.amount || 0, type: item.type || 'other' });
-      }
-    });
-  }
-  return parts;
-};
-
 const getBillId = (bill) => bill?.billing_id || bill?.id || bill?.billingId || bill?.billId || bill?.reference_id || bill?._id;
 const getBillStatus = (bill) => String(bill?.status || '').toLowerCase();
 const PAID_STATUSES = new Set(['paid', 'settled']);
 const NON_PAYABLE_STATUSES = new Set([
   'paid', 'settled', 'cancelled', 'rejected', 'void',
-  'refunded', 'duplicate', 'archived', 'verification',
+  'refunded', 'duplicate', 'archived',
 ]);
 const isPaidBillStatus = (status) => PAID_STATUSES.has(String(status || '').toLowerCase());
 const isBillOutstanding = (bill) => !NON_PAYABLE_STATUSES.has(getBillStatus(bill));
 const getBillPaymentDate = (bill) => bill?.payment_date || bill?.paymentDate || bill?.paidAt || bill?.paid_at || null;
+const getBillReleaseDate = (bill) => bill?.release_date || bill?.releaseDate || bill?.created_at || bill?.createdAt || null;
 const getBillOwedAmount = (bill) => {
   const candidates = [bill?.remaining_amount, bill?.total, bill?.amount];
   for (const value of candidates) {
@@ -131,6 +116,7 @@ function mergeBillingLists(...lists) {
 
 export default function BillingScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { user, authReady, authStatus, isLoading: authLoading, checkAuth } = useAuth();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -143,7 +129,13 @@ export default function BillingScreen() {
   // Type filter removed - consolidated bills contain all charge types
   const latestBillingRequestRef = useRef(0);
   const [latestBillingDegraded, setLatestBillingDegraded] = useState(false);
-  const [currentSummary, setCurrentSummary] = useState({ bill: null, timing: null, previous_balance: 0, previous_bill_id: '' });
+  const [currentSummary, setCurrentSummary] = useState({
+    bill: null,
+    timing: null,
+    previous_balance: 0,
+    previous_bill_id: '',
+    server_time: '',
+  });
   const userId = user?.user_id || null;
 
   const loadData = useCallback(async ({ silent = false } = {}) => {
@@ -178,6 +170,7 @@ export default function BillingScreen() {
           timing: payload.timing || null,
           previous_balance: Number(payload.previous_balance || 0),
           previous_bill_id: payload.previous_bill_id || '',
+          server_time: payload.server_time || '',
         });
       }
       const hasHistory = historyResp.status === 'fulfilled' && Array.isArray(historyResp.value?.data);
@@ -227,10 +220,6 @@ export default function BillingScreen() {
       }, 0);
   }, [history]);
 
-  const unpaidCount = useMemo(() => {
-    return history.filter(b => isBillOutstanding(b) && getBillOwedAmount(b) > 0).length;
-  }, [history]);
-
   const statusCounts = useMemo(() => {
     const counts = { all: history.length, unpaid: 0, overdue: 0, paid: 0 };
     history.forEach(b => {
@@ -255,104 +244,104 @@ export default function BillingScreen() {
   const isPaid = (bill) => isPaidBillStatus(bill?.status);
   const getStatusConfig = (status) => STATUS_CONFIG[(status || 'unpaid').toLowerCase()] || STATUS_CONFIG.unpaid;
 
-  // Outstanding Hero Card
+  const outstandingBills = useMemo(
+    () => history.filter(bill => isBillOutstanding(bill) && getBillOwedAmount(bill) > 0),
+    [history],
+  );
+
+  // The hero only presents backend billing values; it does not recalculate billing rules.
   const renderHero = () => {
-    const hasOverdue = history.some(b => (b.status || '').toLowerCase() === 'overdue');
-    const accountStatus = hasOverdue
-      ? { label: 'Overdue', color: '#EF4444', bg: 'rgba(239,68,68,0.18)', icon: 'alert-circle' }
-      : unpaidCount > 0
-      ? { label: 'Bills Pending', color: '#ff9000', bg: 'rgba(255,144,0,0.18)', icon: 'time' }
-      : { label: 'Good Standing', color: '#22C55E', bg: 'rgba(34,197,94,0.18)', icon: 'checkmark-circle' };
+    const underReviewStatuses = new Set(['pending_verification', 'verification']);
+    const allUnderReview = outstandingBills.length > 0
+      && outstandingBills.every(bill => underReviewStatuses.has(getBillStatus(bill)));
+    const overdueBill = outstandingBills.find(bill => getBillStatus(bill) === 'overdue');
+    const summaryBill = overdueBill || outstandingBills[0] || currentSummary.bill || history[0] || null;
+    const summaryStatus = getBillStatus(summaryBill);
+    const latestIsPaid = totalOutstanding <= 0 && isPaidBillStatus(summaryStatus);
+    const penalty = outstandingBills.reduce((sum, bill) => {
+      const value = Number(bill.penalties ?? bill.penalty ?? bill.late_penalty ?? bill.latePenalty ?? 0);
+      return sum + (Number.isFinite(value) && value > 0 ? value : 0);
+    }, 0);
+    const dueDate = summaryBill?.due_date || summaryBill?.dueDate;
+    const summaryId = getBillId(summaryBill);
+    const timingApplies = summaryId && String(summaryId) === String(getBillId(currentSummary.bill) || '');
+    const daysOverdue = timingApplies
+      ? Number(currentSummary.timing?.days_overdue ?? currentSummary.timing?.daysOverdue ?? 0)
+      : 0;
+
+    if (latestIsPaid) {
+      return (
+        <View style={styles.heroCard}>
+          <Text style={styles.heroStateTitle}>Bill Paid</Text>
+          <Text style={styles.heroStateLead}>Thank you.</Text>
+          <Text style={styles.heroStateText}>Your latest billing period has been settled.</Text>
+        </View>
+      );
+    }
+
+    if (totalOutstanding <= 0) {
+      const upcomingPeriod = nextBillingPeriod(currentSummary.server_time);
+      return (
+        <View style={styles.heroCard}>
+          <Text style={styles.heroStateTitle}>No Outstanding Balance</Text>
+          <Text style={styles.heroStateLead}>You have no unpaid bills.</Text>
+          {!!upcomingPeriod && (
+            <Text style={styles.heroStateText}>Next billing period: {upcomingPeriod}</Text>
+          )}
+        </View>
+      );
+    }
+
+    const status = overdueBill
+      ? { label: 'Overdue', color: '#FCA5A5', bg: 'rgba(239,68,68,0.2)', icon: 'alert-circle' }
+      : allUnderReview
+        ? { label: 'Payment Under Review', color: '#BFDBFE', bg: 'rgba(59,130,246,0.2)', icon: 'hourglass' }
+        : { label: 'Unpaid', color: '#FCD34D', bg: 'rgba(245,158,11,0.2)', icon: 'time' };
 
     return (
       <View style={styles.heroCard}>
-        {/* Row 1: label + unpaid count badge */}
         <View style={styles.heroTop}>
-          <Text style={styles.heroLabel}>Total Outstanding</Text>
-          <View style={styles.heroBadge}>
-            <Ionicons name="receipt-outline" size={13} color="rgba(255,255,255,0.7)" />
-            <Text style={styles.heroBadgeText}>{unpaidCount} unpaid</Text>
+          <Text style={styles.heroLabel}>Outstanding Balance</Text>
+          <View style={[styles.accountStatus, { backgroundColor: status.bg }]}>
+            <Ionicons name={status.icon} size={13} color={status.color} />
+            <Text style={[styles.accountStatusText, { color: status.color }]}>{status.label}</Text>
           </View>
         </View>
-
-        {/* Row 2: amount */}
         <Text style={styles.heroAmount}>{safeCurrency(totalOutstanding)}</Text>
-
-        {/* Divider */}
         <View style={styles.heroDivider} />
-
-        {/* Row 3: account status + pay button */}
-        <View style={styles.heroBottom}>
-          <View style={[styles.accountStatus, { backgroundColor: accountStatus.bg }]}>
-            <Ionicons name={accountStatus.icon} size={13} color={accountStatus.color} />
-            <Text style={[styles.accountStatusText, { color: accountStatus.color }]}>
-              {accountStatus.label}
-            </Text>
+        {allUnderReview ? (
+          <View style={styles.heroMessage}>
+            <Text style={styles.heroMessageLead}>Your payment proof has been submitted.</Text>
+            <Text style={styles.heroMessageText}>Waiting for admin verification.</Text>
           </View>
-          {totalOutstanding > 0 && (
+        ) : (
+          <>
+            <View style={styles.heroMetadata}>
+              <View style={styles.heroMetadataItem}>
+                <Text style={styles.heroMetadataLabel}>Due Date</Text>
+                <Text style={styles.heroMetadataValue}>{safeDate(dueDate)}</Text>
+              </View>
+              <View style={styles.heroMetadataItem}>
+                <Text style={styles.heroMetadataLabel}>Late Penalty</Text>
+                <Text style={styles.heroMetadataValue}>{penalty > 0 ? safeCurrency(penalty) : 'None'}</Text>
+              </View>
+            </View>
+            {overdueBill && daysOverdue > 0 && (
+              <Text style={styles.heroOverdueText}>Overdue by {daysOverdue} {daysOverdue === 1 ? 'day' : 'days'}</Text>
+            )}
             <Pressable
               style={styles.heroPayBtn}
               onPress={() => {
-                const firstUnpaid = history.find(isBillOutstanding);
-                const id = getBillId(firstUnpaid);
-                router.push({ pathname: '/payment', params: { billId: id ? String(id) : undefined, mode: 'now' } });
+                const id = getBillId(overdueBill || outstandingBills[0]);
+                if (id) router.push({ pathname: '/bill-details', params: { billId: String(id) } });
               }}
             >
               <Ionicons name="card-outline" size={15} color="#ffffff" />
               <Text style={styles.heroPayText}>Pay Now</Text>
             </Pressable>
-          )}
-        </View>
+          </>
+        )}
       </View>
-    );
-  };
-
-  const renderCurrentBill = () => {
-    const bill = currentSummary.bill;
-    if (!bill) {
-      return (
-        <View style={styles.currentCard}>
-          <View style={styles.currentTitleRow}>
-            <Ionicons name="calendar-outline" size={20} color={colors.primary} />
-            <Text style={styles.currentTitle}>This Month</Text>
-          </View>
-          <Text style={styles.emptyCurrentTitle}>Your bill for this month has not been generated yet.</Text>
-          {currentSummary.previous_balance > 0 && (
-            <Pressable
-              style={styles.previousBalanceRow}
-              onPress={() => currentSummary.previous_bill_id && router.push({ pathname: '/bill-details', params: { billId: currentSummary.previous_bill_id } })}
-            >
-              <Text style={styles.previousBalanceLabel}>Previous unpaid balance</Text>
-              <Text style={styles.previousBalanceAmount}>{safeCurrency(currentSummary.previous_balance)}</Text>
-            </Pressable>
-          )}
-        </View>
-      );
-    }
-    const status = getStatusConfig(bill.status);
-    const breakdown = normalizeBreakdown(bill);
-    const paidAmount = Math.max(0, Number(bill.paid_amount || 0));
-    const outstanding = Math.max(0, Number(bill.remaining_amount ?? bill.total ?? bill.amount ?? 0));
-    const penalty = Math.max(0, Number(bill.penalties || 0));
-    const billId = getBillId(bill);
-    return (
-      <Pressable style={styles.currentCard} onPress={() => billId && router.push({ pathname: '/bill-details', params: { billId: String(billId) } })}>
-        <View style={styles.currentTitleRow}>
-          <View><Text style={styles.currentTitle}>This Month</Text><Text style={styles.currentPeriod}>{bill.billing_period || 'Current billing period'}</Text></View>
-          <View style={[styles.statusBadge, { backgroundColor: status.bg }]}><Text style={[styles.statusText, { color: status.text }]}>{status.label}</Text></View>
-        </View>
-        <Text style={styles.currentAmount}>{safeCurrency(outstanding)}</Text>
-        <Text style={styles.currentAmountLabel}>Total amount due</Text>
-        <View style={styles.currentMetaRow}><Text style={styles.currentMetaLabel}>Due date</Text><Text style={styles.currentMetaValue}>{safeDate(bill.due_date)}</Text></View>
-        <View style={styles.currentMetaRow}><Text style={styles.currentMetaLabel}>Due status</Text><Text style={styles.currentMetaValue}>{currentSummary.timing?.label || 'Not available'}</Text></View>
-        <View style={styles.currentMetaRow}><Text style={styles.currentMetaLabel}>Paid amount</Text><Text style={styles.currentMetaValue}>{safeCurrency(paidAmount)}</Text></View>
-        <View style={styles.currentMetaRow}><Text style={styles.currentMetaLabel}>Late penalty</Text><Text style={[styles.currentMetaValue, penalty > 0 && { color: '#b91c1c' }]}>{penalty > 0 ? safeCurrency(penalty) : 'No late penalty'}</Text></View>
-        <Text style={styles.breakdownHeading}>Breakdown</Text>
-        {breakdown.length ? breakdown.map((item) => (
-          <View key={`${item.type}-${item.label}`} style={styles.currentMetaRow}><Text style={styles.currentMetaLabel}>{item.label}</Text><Text style={styles.currentMetaValue}>{safeCurrency(item.amount)}</Text></View>
-        )) : <Text style={styles.breakdownUnavailable}>Itemized charges are unavailable. Open the bill for details.</Text>}
-        {currentSummary.previous_balance > 0 && <View style={styles.previousBalanceRow}><Text style={styles.previousBalanceLabel}>Previous unpaid balance</Text><Text style={styles.previousBalanceAmount}>{safeCurrency(currentSummary.previous_balance)}</Text></View>}
-      </Pressable>
     );
   };
 
@@ -389,7 +378,7 @@ export default function BillingScreen() {
     const billId = getBillId(bill);
     const paid = isPaid(bill);
     const statusCfg = getStatusConfig(bill?.status);
-    const breakdown = normalizeBreakdown(bill);
+    const releaseDate = getBillReleaseDate(bill);
 
     return (
       <Pressable
@@ -404,7 +393,7 @@ export default function BillingScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.billTitle} numberOfLines={1}>{bill.billing_period || bill.description || 'Billing Statement'}</Text>
             <Text style={styles.billDue}>
-              {bill.release_date ? `Released ${safeDate(bill.release_date)} - ` : ''}Due {safeDate(bill.due_date)}
+              Released {safeDate(releaseDate)} · Due {safeDate(bill.due_date || bill.dueDate)}
             </Text>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: statusCfg.bg }]}>
@@ -416,33 +405,15 @@ export default function BillingScreen() {
         {/* Amount */}
         <Text style={styles.billAmount}>{safeCurrency(bill.total || bill.amount)}</Text>
 
-        {/* Breakdown chips */}
-        {breakdown.length > 0 && (
-          <View style={styles.breakdownRow}>
-            {breakdown.map((item, idx) => {
-              const typeCfg = TYPE_ICONS[item.type] || TYPE_ICONS.other;
-              return (
-                <View key={idx} style={styles.breakdownChip}>
-                  <Ionicons name={typeCfg.icon} size={12} color={typeCfg.color} />
-                  <Text style={styles.breakdownLabel}>{item.label}</Text>
-                  <Text style={styles.breakdownAmount}>{safeCurrency(item.amount)}</Text>
-                </View>
-              );
-            })}
-          </View>
-        )}
-
         {/* Actions */}
         <View style={styles.billActions}>
-          {!paid && (
-            <Pressable
-              style={styles.payBtn}
-              onPress={() => router.push({ pathname: '/payment', params: { billId: billId ? String(billId) : undefined, mode: 'now' } })}
-            >
-              <Ionicons name="card-outline" size={14} color="#ffffff" />
-              <Text style={styles.payBtnText}>Pay</Text>
-            </Pressable>
-          )}
+          <Pressable
+            style={[styles.detailsBtn, !billId && styles.btnDisabled]}
+            disabled={!billId}
+            onPress={() => billId && router.push({ pathname: '/bill-details', params: { billId: String(billId) } })}
+          >
+            <Text style={styles.detailsBtnText}>View Details</Text>
+          </Pressable>
           <Pressable
             style={[styles.outlineBtn, !billId && styles.btnDisabled]}
             disabled={!billId}
@@ -468,8 +439,7 @@ export default function BillingScreen() {
   // List Header
   const renderListHeader = () => (
     <View style={styles.listHeader}>
-      {renderCurrentBill()}
-      {renderHero()}
+      {!error && renderHero()}
       {error && (
         <View style={styles.errorBanner}>
           <Ionicons name="warning" size={14} color="#b91c1c" />
@@ -484,11 +454,11 @@ export default function BillingScreen() {
           <Pressable onPress={loadData}><Text style={styles.retryText}>Retry</Text></Pressable>
         </View>
       )}
-      {renderFilters()}
       <Text style={styles.sectionLabel}>
         {activeStatus === 'all' ? 'Billing History' : `${STATUS_FILTERS.find(t => t.id === activeStatus)?.label || ''} Bills`}
         {' '}({filteredBills.length})
       </Text>
+      {history.length > 0 && renderFilters()}
     </View>
   );
 
@@ -524,7 +494,7 @@ export default function BillingScreen() {
 
       <FlatList
         data={filteredBills}
-        keyExtractor={(item) => `${getBillId(item) || Math.random()}`}
+        keyExtractor={(item, index) => `${getBillId(item) || `billing-row-${index}`}`}
         renderItem={renderBillCard}
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}
@@ -541,18 +511,22 @@ export default function BillingScreen() {
         ListEmptyComponent={
           <View style={styles.emptyState}>
             <Ionicons name="receipt-outline" size={48} color={colors.textMuted} />
-            <Text style={styles.emptyTitle}>No bills found</Text>
+            <Text style={styles.emptyTitle}>{activeStatus === 'all' ? 'No bills available.' : 'No bills found'}</Text>
             <Text style={styles.emptyHint}>
               {activeStatus !== 'all'
                 ? 'No bills match your filter. Try a different one.'
-                : 'No previous bills are available.'}
+                : 'Your future bills will appear here once generated.'}
             </Text>
           </View>
         }
       />
 
       <Link href="/(tabs)/chatbot" prefetch asChild>
-        <TouchableOpacity style={styles.chatbotFab}>
+        <TouchableOpacity
+          style={[styles.chatbotFab, { bottom: Math.max(insets.bottom + 76, 92) }]}
+          accessibilityRole="button"
+          accessibilityLabel="Open AI Assistant"
+        >
           <LilyFlowerIcon size={26} />
         </TouchableOpacity>
       </Link>
@@ -570,23 +544,8 @@ function createStyles(c, isDarkMode) {
     loadingContainer: { flex: 1, padding: 16, gap: 12 },
     skeleton: { height: 100, backgroundColor: c.surface, borderRadius: 16, opacity: 0.6 },
 
-    listContent: { padding: 14, paddingBottom: 100, gap: 10 },
+    listContent: { padding: 14, paddingBottom: 176, gap: 10 },
     listHeader: { gap: 12, marginBottom: 4 },
-    currentCard: { backgroundColor: c.surface, borderRadius: 18, padding: 18, gap: 9, borderWidth: 1, borderColor: c.border, ...Platform.select({ android: { elevation: 3 } }) },
-    currentTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10 },
-    currentTitle: { fontSize: 18, fontWeight: '800', color: c.text },
-    currentPeriod: { fontSize: 12, color: c.textMuted, marginTop: 2 },
-    currentAmount: { fontSize: 32, fontWeight: '800', color: c.text, marginTop: 4 },
-    currentAmountLabel: { fontSize: 12, color: c.textMuted, marginTop: -6 },
-    currentMetaRow: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 16, paddingVertical: 3 },
-    currentMetaLabel: { flex: 1, fontSize: 13, color: c.textSecondary },
-    currentMetaValue: { flex: 1, fontSize: 13, color: c.text, fontWeight: '700', textAlign: 'right' },
-    breakdownHeading: { fontSize: 14, color: c.text, fontWeight: '800', marginTop: 7, paddingTop: 10, borderTopWidth: 1, borderTopColor: c.border },
-    breakdownUnavailable: { fontSize: 12, lineHeight: 18, color: c.textMuted },
-    emptyCurrentTitle: { fontSize: 14, lineHeight: 21, color: c.textSecondary },
-    previousBalanceRow: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, marginTop: 7, paddingTop: 10, borderTopWidth: 1, borderTopColor: c.border },
-    previousBalanceLabel: { flex: 1, color: c.textSecondary, fontSize: 13, fontWeight: '600' },
-    previousBalanceAmount: { color: '#b91c1c', fontSize: 14, fontWeight: '800' },
 
     // Hero
     heroCard: {
@@ -600,13 +559,21 @@ function createStyles(c, isDarkMode) {
     heroTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
     heroLabel: { fontSize: 13, color: 'rgba(255,255,255,0.6)', fontWeight: '600' },
     heroAmount: { fontSize: 34, fontWeight: '800', color: '#ffffff', marginBottom: 16 },
+    heroStateTitle: { fontSize: 22, fontWeight: '800', color: '#ffffff', marginBottom: 14 },
+    heroStateLead: { fontSize: 16, fontWeight: '700', color: '#ffffff', marginBottom: 5 },
+    heroStateText: { fontSize: 13, lineHeight: 19, color: 'rgba(255,255,255,0.75)' },
     heroDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.12)', marginBottom: 14 },
-    heroBottom: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+    heroMetadata: { flexDirection: 'row', gap: 24, marginBottom: 15 },
+    heroMetadataItem: { flex: 1, gap: 4 },
+    heroMetadataLabel: { fontSize: 11, fontWeight: '600', color: 'rgba(255,255,255,0.6)', textTransform: 'uppercase' },
+    heroMetadataValue: { fontSize: 14, fontWeight: '700', color: '#ffffff' },
+    heroMessage: { gap: 4 },
+    heroMessageLead: { fontSize: 14, fontWeight: '700', color: '#ffffff' },
+    heroMessageText: { fontSize: 13, color: 'rgba(255,255,255,0.7)' },
+    heroOverdueText: { fontSize: 12, fontWeight: '700', color: '#FCA5A5', marginBottom: 12 },
     accountStatus: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 5, paddingHorizontal: 10, borderRadius: 20 },
     accountStatusText: { fontSize: 12, fontWeight: '700' },
-    heroBadge: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: 'rgba(255,255,255,0.12)', paddingVertical: 4, paddingHorizontal: 10, borderRadius: 20 },
-    heroBadgeText: { fontSize: 12, fontWeight: '700', color: 'rgba(255,255,255,0.85)' },
-    heroPayBtn: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.accent, paddingVertical: 9, paddingHorizontal: 16, borderRadius: 20 },
+    heroPayBtn: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.accent, paddingVertical: 10, paddingHorizontal: 18, borderRadius: 20 },
     heroPayText: { color: '#ffffff', fontWeight: '700', fontSize: 14 },
 
     insightCard: {
@@ -731,14 +698,9 @@ function createStyles(c, isDarkMode) {
     statusBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingVertical: 4, paddingHorizontal: 10, borderRadius: 12 },
     statusText: { fontSize: 11, fontWeight: '700' },
 
-    breakdownRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
-    breakdownChip: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: c.surfaceSecondary || c.inputBg, paddingVertical: 5, paddingHorizontal: 8, borderRadius: 8 },
-    breakdownLabel: { fontSize: 11, fontWeight: '600', color: c.textSecondary },
-    breakdownAmount: { fontSize: 11, fontWeight: '700', color: c.text },
-
-    billActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-    payBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: c.primary, paddingVertical: 9, paddingHorizontal: 16, borderRadius: 10 },
-    payBtnText: { color: '#ffffff', fontWeight: '700', fontSize: 13 },
+    billActions: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 8 },
+    detailsBtn: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, backgroundColor: c.primary },
+    detailsBtnText: { color: '#ffffff', fontWeight: '700', fontSize: 13 },
     outlineBtn: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 9, paddingHorizontal: 14, borderRadius: 10, borderWidth: 1.5, borderColor: c.border },
     outlineBtnText: { color: c.text, fontWeight: '600', fontSize: 13 },
     btnDisabled: { opacity: 0.5 },
@@ -757,7 +719,7 @@ function createStyles(c, isDarkMode) {
 
     // Lily AI FAB
     chatbotFab: {
-      position: 'absolute', bottom: Platform.OS === 'ios' ? 110 : 90, right: 20,
+      position: 'absolute', right: 20,
       width: 60, height: 60, borderRadius: 30, backgroundColor: c.headerBg,
       justifyContent: 'center', alignItems: 'center',
       ...Platform.select({
