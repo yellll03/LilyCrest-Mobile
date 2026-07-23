@@ -23,6 +23,7 @@ const {
   notifyChatbotReply,
 } = require('../services/pushService');
 const { fetchUserBills, resolveCurrentBill, currentBillTiming } = require('./billing.controller');
+const { extractMoveInFinancials } = require('../domain/billing/moveInFinancials');
 const { normalizeUser } = require('../utils/normalizeUser');
 const { loadAttachmentParts } = require('../services/assistantAttachment.service');
 const { resolveTenantBranch } = require('../services/branchLocation.service');
@@ -58,6 +59,8 @@ const SUPPORTED_INTENTS = {
   ADMIN_SUPPORT: 'admin_support',
   PROFILE: 'profile',
   BRANCH: 'branch',
+  CONTRACT: 'contract',
+  DOCUMENTS: 'documents',
   GENERAL: 'general',
 };
 const ADMIN_ESCALATION_PATTERNS = [
@@ -237,6 +240,12 @@ function detectSystemIntent(message = '') {
   if (/\b(bills?|billing|balance|unpaid|bayarin|bayad|babayaran|due|due date|overdue|pay|payment|payments?|owe|rent|charges?|penalt(?:y|ies)|electricity|magkano|paid already|already paid)\b/.test(lower)) {
     return SUPPORTED_INTENTS.BILLING;
   }
+  if (/\b(contract|lease)\b/.test(lower)) {
+    return SUPPORTED_INTENTS.CONTRACT;
+  }
+  if (/\b(documents?|pdf|valid id|government id|company id|nbi clearance)\b/.test(lower)) {
+    return SUPPORTED_INTENTS.DOCUMENTS;
+  }
   if (/\b(maintenance|repair|sira|fix|service request|repair request|maintenance request|admin reply|may reply|status ng maintenance|repair status|request status)\b/.test(lower)) {
     return SUPPORTED_INTENTS.MAINTENANCE;
   }
@@ -281,6 +290,12 @@ function normalizeAssistantIntent(intent = '') {
   }
   if (lower.includes('branch') || lower.includes('location') || lower.includes('directions')) {
     return SUPPORTED_INTENTS.BRANCH;
+  }
+  if (lower.includes('contract') || lower.includes('lease')) {
+    return SUPPORTED_INTENTS.CONTRACT;
+  }
+  if (lower.includes('document') || lower.includes('pdf')) {
+    return SUPPORTED_INTENTS.DOCUMENTS;
   }
   return SUPPORTED_INTENTS.GENERAL;
 }
@@ -514,6 +529,9 @@ async function resolveTenantAccountContext(db, user = {}) {
     leaseType: firstNonEmptyString(user.contract?.leaseType, user.lease_type),
     monthlyRent: Number(user.contract?.monthlyRent || user.monthly_rent) || null,
     securityDeposit: Number(user.contract?.securityDeposit || user.security_deposit) || null,
+    moveInFinancials: extractMoveInFinancials(user.contract || user) || null,
+    contractFileAvailable: Boolean(user.contract?.fileAvailable && user.contract?.documentId),
+    contractDocumentId: firstNonEmptyString(user.contract?.documentId),
   };
   try {
     const resolvedBranch = await resolveTenantBranch(db, user);
@@ -542,6 +560,11 @@ async function resolveTenantAccountContext(db, user = {}) {
       context.leaseType = context.leaseType || firstNonEmptyString(reservation.leaseType, reservation.lease_type);
       context.monthlyRent = context.monthlyRent || Number(reservation.monthlyRent || reservation.monthly_rent) || null;
       context.securityDeposit = context.securityDeposit || Number(reservation.securityDeposit || reservation.security_deposit) || null;
+      context.moveInFinancials = extractMoveInFinancials(reservation) || context.moveInFinancials;
+      const reservationContractUrl = firstNonEmptyString(reservation.contractFileUrl, reservation.contractUrl);
+      context.contractFileAvailable = context.contractFileAvailable || Boolean(reservationContractUrl);
+      context.contractDocumentId = context.contractDocumentId
+        || (reservationContractUrl ? `res_${reservation._id}_contract` : '');
       context.roomNumber = firstNonEmptyString(reservation.roomNumber, reservation.roomName, reservation.room?.roomNumber);
       context.roomBed = firstNonEmptyString(
         reservation.selectedBed?.position,
@@ -793,6 +816,47 @@ function buildBranchResponse(accountContext = {}, message = '') {
     message: messageText,
     intent: SUPPORTED_INTENTS.BRANCH,
     suggestions: [{ label: 'Open Profile', prompt: 'Where can I find my branch in the app?' }],
+  };
+}
+
+function buildContractResponse(accountContext = {}, message = '') {
+  const language = detectLanguageStyle(message);
+  if (!accountContext.contractFileAvailable) {
+    const knownStart = formatShortDate(accountContext.contractStart);
+    const detail = knownStart
+      ? ` I can see a move-in date of ${knownStart}, but there is no approved contract end date or tenant-visible final PDF yet.`
+      : '';
+    return {
+      message: language === 'english'
+        ? `No approved lease contract is available yet.${detail}`
+        : `Wala pang approved lease contract na available sa account mo.${detail}`,
+      intent: SUPPORTED_INTENTS.CONTRACT,
+      suggestions: [{ label: 'Open Documents', prompt: 'Where can I view my documents?' }],
+    };
+  }
+  const start = formatShortDate(accountContext.contractStart);
+  const end = formatShortDate(accountContext.contractEnd);
+  const leaseType = firstNonEmptyString(accountContext.leaseType);
+  const details = [
+    leaseType ? `Type: ${formatStatusLabel(leaseType)}.` : '',
+    start ? `Move-in: ${start}.` : '',
+    end ? `Move-out: ${end}.` : '',
+  ].filter(Boolean).join(' ');
+  return {
+    message: `Your approved lease contract is available in Documents.${details ? ` ${details}` : ''}`,
+    intent: SUPPORTED_INTENTS.CONTRACT,
+    suggestions: [{ label: 'Open Documents', prompt: 'Where can I view my contract PDF?' }],
+  };
+}
+
+function buildDocumentsResponse(accountContext = {}) {
+  const contractText = accountContext.contractFileAvailable
+    ? 'Your approved lease contract is also available there.'
+    : 'No approved lease contract is available yet.';
+  return {
+    message: `Open Profile, then Documents, to view your submitted IDs and available PDFs. ${contractText}`,
+    intent: SUPPORTED_INTENTS.DOCUMENTS,
+    suggestions: [{ label: 'Contract status', prompt: 'Is my lease contract available?' }],
   };
 }
 
@@ -1063,6 +1127,16 @@ async function sendMessage(req, res) {
     if (tenantAccount.leaseType) contextLines.push(`Lease type: ${tenantAccount.leaseType}`);
     if (tenantAccount.monthlyRent != null) contextLines.push(`Contract monthly rent: ${formatPesoCompact(tenantAccount.monthlyRent)}`);
     if (tenantAccount.securityDeposit != null) contextLines.push(`Contract security deposit: ${formatPesoCompact(tenantAccount.securityDeposit)}`);
+    if (tenantAccount.moveInFinancials) {
+      const financials = tenantAccount.moveInFinancials;
+      contextLines.push(
+        `Official Section 4 move-in computation: advance rent ${formatPesoCompact(financials.advanceRent)}`
+        + ` + security deposit ${formatPesoCompact(financials.securityDeposit)}`
+        + ` = total due before move-in ${formatPesoCompact(financials.totalDueBeforeMoveIn)};`
+        + ` reservation fee already paid ${formatPesoCompact(financials.reservationFeeAlreadyPaid)}`
+        + ` is a partial payment toward that combined amount; remaining balance ${formatPesoCompact(financials.remainingBalance)}.`
+      );
+    }
     contextLines.push('Authentication: This tenant is already signed in. Never ask for their full name, room number, or identity confirmation.');
 
     if (bills.length > 0) {
@@ -1178,6 +1252,32 @@ async function sendMessage(req, res) {
         fallback: false,
         suggestions: branchResult.suggestions,
         meta: { intent: branchResult.intent, confidence: 1, source: 'branch_resolution' },
+      });
+    }
+
+    if (!forceEscalation && (scopedMessage || scopedFollowUp) && routedIntent === SUPPORTED_INTENTS.CONTRACT) {
+      const contractResult = buildContractResponse(tenantAccount, userMessage);
+      existingSession.history.push({ role: 'user', content: userMessage }, { role: 'assistant', content: contractResult.message });
+      existingSession.last_intent = contractResult.intent;
+      chatSessions.set(sessionId, existingSession);
+      return res.json({
+        message: contractResult.message, response: contractResult.message, intent: contractResult.intent,
+        session_id: sessionId, needs_admin: false, live_chat_active: false, fallback: false,
+        suggestions: contractResult.suggestions,
+        meta: { intent: contractResult.intent, confidence: 1, source: 'system' },
+      });
+    }
+
+    if (!forceEscalation && (scopedMessage || scopedFollowUp) && routedIntent === SUPPORTED_INTENTS.DOCUMENTS) {
+      const documentsResult = buildDocumentsResponse(tenantAccount);
+      existingSession.history.push({ role: 'user', content: userMessage }, { role: 'assistant', content: documentsResult.message });
+      existingSession.last_intent = documentsResult.intent;
+      chatSessions.set(sessionId, existingSession);
+      return res.json({
+        message: documentsResult.message, response: documentsResult.message, intent: documentsResult.intent,
+        session_id: sessionId, needs_admin: false, live_chat_active: false, fallback: false,
+        suggestions: documentsResult.suggestions,
+        meta: { intent: documentsResult.intent, confidence: 1, source: 'system' },
       });
     }
 
@@ -1605,5 +1705,7 @@ module.exports = {
     requestsOtherTenantInformation,
     detectSystemIntent,
     hasDormitoryScopeSignal,
+    buildContractResponse,
+    buildDocumentsResponse,
   },
 };

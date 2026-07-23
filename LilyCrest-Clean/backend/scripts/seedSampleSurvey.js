@@ -7,7 +7,7 @@ const { connectToMongo, getDb, closeConnection } = require('../config/database')
 const { defaultQuestions } = require('../services/survey.service');
 const { resolveTenantBranch } = require('../services/branchLocation.service');
 
-const SAMPLE_TITLE = 'TEST — Quarterly Tenant Satisfaction Survey';
+const SAMPLE_TITLE = 'Quarterly Tenant Satisfaction Survey';
 
 function parseArgs(args) {
   const options = {};
