@@ -40,3 +40,10 @@ test('production moveIn lifecycle counts as an approved current application', ()
   const statusPattern = __test.approvedReservationFilter.$or[0].status.$regex;
   assert.equal(statusPattern.test('moveIn'), true);
 });
+
+test('phone is hydrated from structured approved application fields', () => {
+  assert.equal(__test.applicationPhone({
+    applicantDetails: { contactNumber: '+639171234567' },
+  }), '+639171234567');
+  assert.equal(__test.applicationPhone({}), '');
+});

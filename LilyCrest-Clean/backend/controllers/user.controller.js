@@ -59,6 +59,22 @@ function completeAddress(source = {}) {
   ].filter(Boolean).map(String).map((part) => part.trim()).filter(Boolean).join(', ');
 }
 
+function applicationPhone(source = {}) {
+  return String(firstValue(
+    source.phone,
+    source.phoneNumber,
+    source.contactNumber,
+    source.mobileNumber,
+    source.applicantDetails?.phone,
+    source.applicantDetails?.phoneNumber,
+    source.applicantDetails?.contactNumber,
+    source.applicantDetails?.mobileNumber,
+    source.applicant_details?.phone,
+    source.applicant_details?.phone_number,
+    source.applicant_details?.contact_number,
+  ) || '').trim();
+}
+
 async function buildTenantProfile(db, user) {
   const identityFilters = [
     { user_id: user.user_id },
@@ -81,6 +97,8 @@ async function buildTenantProfile(db, user) {
   // An approved reservation is authoritative; never fall back to an editable profile address.
   normalized.address = reservation ? completeAddress(reservation) : '';
   normalized.addressSource = reservation && normalized.address ? 'approved_application' : null;
+  normalized.phone = applicationPhone(reservation) || normalized.phone || '';
+  normalized.phoneSource = applicationPhone(reservation) ? 'approved_application' : (normalized.phone ? 'verified_tenant' : null);
   const lastUsernameChangedAt = user.lastUsernameChangedAt ? new Date(user.lastUsernameChangedAt) : null;
   normalized.usernameNextAllowedAt = lastUsernameChangedAt && !Number.isNaN(lastUsernameChangedAt.getTime())
     ? new Date(lastUsernameChangedAt.getTime() + USERNAME_COOLDOWN_MS).toISOString()
@@ -865,5 +883,5 @@ module.exports = {
   getDocumentFile,
   deleteDocument,
   adminGetAllUsers,
-  __test: { completeAddress, usernameCooldownState, approvedReservationFilter },
+  __test: { completeAddress, applicationPhone, usernameCooldownState, approvedReservationFilter },
 };
