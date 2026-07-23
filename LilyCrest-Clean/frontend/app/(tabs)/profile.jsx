@@ -8,6 +8,7 @@ import { useAuth } from '../../src/context/AuthContext';
 import { useTheme } from '../../src/context/ThemeContext';
 import { useAlert } from '../../src/context/AlertContext';
 import { apiService, getApiErrorMessage } from '../../src/services/api';
+import { buildContractSummary } from '../../src/utils/contractPresentation';
 
 const NAME_MAX = 60;
 const USERNAME_MAX = 30;
@@ -314,6 +315,7 @@ export default function ProfileScreen() {
   };
 
   const styles = createStyles(colors, isDarkMode);
+  const contractSummary = buildContractSummary(user?.contract, user?.branch);
 
   const bannerBg = profileBanner
     ? profileBanner.type === 'success'
@@ -558,17 +560,20 @@ export default function ProfileScreen() {
           <View style={styles.infoSection}>
             <Text style={styles.menuGroupLabel}>CONTRACT</Text>
             <View style={styles.infoCard}>
-              {user?.contract ? (
+              {contractSummary ? (
                 <>
-                  <InfoRow icon="shield-checkmark-outline" label="Contract Status" value={user.contract.status || 'Not available'} colors={colors} styles={styles} />
-                  <InfoRow icon="calendar-outline" label="Contract Start Date" value={formatDate(user.contract.startDate)} colors={colors} styles={styles} />
-                  <InfoRow icon="calendar-outline" label="Contract End Date" value={formatDate(user.contract.endDate)} colors={colors} styles={styles} />
-                  <TouchableOpacity style={styles.outlineButton} onPress={() => router.push('/contract-viewer')}>
-                    <Ionicons name="document-text-outline" size={18} color={colors.accent} />
-                    <Text style={styles.outlineButtonText}>View Contract</Text>
-                  </TouchableOpacity>
+                  <InfoRow icon="shield-checkmark-outline" label="Contract Status" value={contractSummary.status} colors={colors} styles={styles} />
+                  {contractSummary.fields.find((field) => field.key === 'period') ? (
+                    <InfoRow icon="calendar-outline" label="Contract Period" value={contractSummary.fields.find((field) => field.key === 'period').value} colors={colors} styles={styles} />
+                  ) : null}
+                  {contractSummary.canOpenPdf ? (
+                    <TouchableOpacity style={styles.outlineButton} onPress={() => router.push('/contract-viewer')}>
+                      <Ionicons name="document-text-outline" size={18} color={colors.accent} />
+                      <Text style={styles.outlineButtonText}>View Contract</Text>
+                    </TouchableOpacity>
+                  ) : <Text style={styles.emptyText}>Some contract details are still being finalized.</Text>}
                 </>
-              ) : <Text style={styles.emptyText}>No contract available yet.</Text>}
+              ) : <Text style={styles.emptyText}>No approved lease contract is available yet.</Text>}
             </View>
           </View>
 

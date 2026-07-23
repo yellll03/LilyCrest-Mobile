@@ -19,6 +19,7 @@ import {
 } from '../src/services/firebaseStorageUpload';
 import { safeBack } from '../src/utils/navigation';
 import { getSessionToken } from '../src/services/secureCredentials';
+import { contractStatusLabel, hasAuthorizedContractPdf } from '../src/utils/contractPresentation';
 
 // ── Document types for upload picker ──
 const UPLOAD_TYPES = [
@@ -316,15 +317,15 @@ export default function MyDocumentsScreen() {
       const doc = sourceDoc.id === 'contract'
         ? {
             ...sourceDoc,
-            status: user?.contract?.fileAvailable ? (user.contract.status || 'Available') : 'Not Available',
-            description: user?.contract?.fileAvailable ? sourceDoc.description : 'No contract available yet.',
+            status: hasAuthorizedContractPdf(user?.contract) ? contractStatusLabel(user.contract.status) : 'Not Available',
+            description: hasAuthorizedContractPdf(user?.contract) ? sourceDoc.description : 'No approved lease contract is available yet.',
           }
         : sourceDoc;
       if (!map[doc.category]) map[doc.category] = [];
       map[doc.category].push(doc);
     });
     return map;
-  }, [user?.contract?.fileAvailable, user?.contract?.status]);
+  }, [user?.contract]);
 
   const visibleCategories = activeCategory
     ? CATEGORIES.filter(c => c.key === activeCategory)

@@ -26,7 +26,7 @@ function overlaps(stay, survey) {
 
 async function resolveEligibility(db, user, survey) {
   const identity = identityFilter(user);
-  if (!identity.$or.length) return { eligible: false, reason: 'NO_TENANT_IDENTITY' };
+  if (!identity.$or.length) return { eligible: false, reason: 'TENANT_IDENTITY_UNRESOLVED' };
 
   const [stays, reservations, moveOutRequests] = await Promise.all([
     db.collection('stays').find(identity).sort({ updatedAt: -1 }).limit(20).toArray(),
@@ -48,12 +48,21 @@ async function resolveEligibility(db, user, survey) {
   if (survey.surveyType === 'MOVE_OUT' && (approvedMoveOut || expiredContract || completed || adminEnabled)) {
     source = active || completed || covering || expiredContract;
   }
-  if (!source) return { eligible: false, reason: 'TENANT_NOT_ELIGIBLE' };
+  if (!source) return { eligible: false, reason: 'NO_ACTIVE_STAY' };
 
   const tenantId = source.tenantId || source.tenant_id || user.user_id || user._id;
+  const userId = user.user_id || user._id;
   const branchId = ref(source);
-  if (survey.branchId && String(survey.branchId) !== branchId) return { eligible: false, reason: 'BRANCH_NOT_ELIGIBLE' };
-  return { eligible: true, tenantId, userId: user.user_id || user._id, branchId: branchId || null };
+  if (survey.branchId && String(survey.branchId) !== branchId) return { eligible: false, reason: 'BRANCH_SCOPE_MISMATCH' };
+  if (Array.isArray(survey.eligibleTestUserIds) && survey.eligibleTestUserIds.length
+    && !survey.eligibleTestUserIds.map(String).includes(String(userId))) {
+    return { eligible: false, reason: 'BRANCH_SCOPE_MISMATCH' };
+  }
+  if (Array.isArray(survey.eligibleTestTenantIds) && survey.eligibleTestTenantIds.length
+    && !survey.eligibleTestTenantIds.map(String).includes(String(tenantId))) {
+    return { eligible: false, reason: 'BRANCH_SCOPE_MISMATCH' };
+  }
+  return { eligible: true, tenantId, userId, branchId: branchId || null };
 }
 
 module.exports = { identityFilter, overlaps, resolveEligibility };
