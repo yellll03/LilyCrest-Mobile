@@ -11,6 +11,7 @@ router.post('/push-token', authMiddleware, userController.savePushToken);
 router.post('/documents', authMiddleware, userController.uploadDocument);
 router.get('/documents', authMiddleware, userController.getUserDocuments);
 router.get('/documents/:docId', authMiddleware, userController.getDocumentFile);
+router.get('/documents/:docId/content', authMiddleware, userController.getDocumentContent);
 router.delete('/documents/:docId', authMiddleware, userController.deleteDocument);
 
 // Admin

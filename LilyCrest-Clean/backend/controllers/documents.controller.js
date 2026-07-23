@@ -12,8 +12,8 @@ function normalizeLine(line) {
 
 function getDocumentPayload(docId, user) {
   const today = new Date().toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-  const userName = user?.name || 'Tenant Name';
-  const userEmail = user?.email || 'tenant@example.com';
+  const userName = user?.name || '';
+  const userEmail = user?.email || '';
 
   const documents = {
     contract: {
@@ -31,30 +31,25 @@ function getDocumentPayload(docId, user) {
         {
           heading: 'Rental Period',
           lines: [
-            'Month-to-month; either party may terminate with 30 days written notice.',
+            'Refer to the tenant-owned approved lease PDF.',
           ],
         },
         {
           heading: 'Monthly Rent',
           lines: [
-            'Rent due every 5th of the month.',
-            'Grace period until the 7th.',
-            'Late fee: PHP 50 per day after grace period.',
+            'Refer to the tenant-owned approved lease PDF.',
           ],
         },
         {
           heading: 'Security Deposit',
           lines: [
-            'Equivalent to one month rent.',
-            'Refundable after move-out inspection.',
-            'Damages and unpaid fees may be deducted.',
+            'Refer to the tenant-owned approved lease PDF.',
           ],
         },
         {
           heading: 'Utilities',
           lines: [
-            'Water and WiFi included in the monthly rent.',
-            'Electricity billed separately based on sub-metered consumption.',
+            'Refer to the tenant-owned approved lease PDF.',
           ],
         },
         {
@@ -67,8 +62,7 @@ function getDocumentPayload(docId, user) {
         {
           heading: 'Termination',
           lines: [
-            '30-day written notice required from either party.',
-            'Early termination may forfeit security deposit.',
+            'Refer to the tenant-owned approved lease PDF.',
           ],
         },
       ],
@@ -126,8 +120,8 @@ function getDocumentPayload(docId, user) {
           'Clean up after use; label personal food items.',
         ]},
         { heading: 'Payments', lines: [
-          'Due on the 5th; grace period until the 7th.',
-          'Late fee: PHP 50 per day.',
+          'Regular monthly rent is due on the same day number as the tenant move-in date.',
+          'A one-day grace period applies; PHP 50 per day begins on the second day after the due date.',
         ]},
         { heading: 'Violations', lines: ['May incur written warnings, fines, or tenancy review.'] },
       ],
@@ -161,7 +155,7 @@ function getDocumentPayload(docId, user) {
       docType: 'PAYMENT POLICY',
       date: `Effective as of: ${today}`,
       sections: [
-        { heading: 'Due Dates', lines: ['5th of each month; grace period through the 7th.', 'Late fee: PHP 50/day after grace; maximum PHP 1,500/month.'] },
+        { heading: 'Due Dates', lines: ['Regular monthly due date uses the tenant move-in day number.', 'One-day grace period; PHP 50/day begins on the second day after the due date.'] },
         { heading: 'Accepted Payment Methods', lines: [
           '- Bank Transfer: BDO 1234-5678-9012 / BPI 9876-5432-1098',
           '- Account Name: LilyCrest Properties Inc.',
@@ -201,6 +195,9 @@ function getDocumentPayload(docId, user) {
 
 function downloadDocument(req, res) {
   const docId = req.params.docId || 'contract';
+  if (docId === 'contract') {
+    return res.status(404).json({ detail: 'No contract available yet.' });
+  }
   const payload = getDocumentPayload(docId, req.user);
 
   if (!payload) {

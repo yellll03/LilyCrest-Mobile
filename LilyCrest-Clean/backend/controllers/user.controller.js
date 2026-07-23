@@ -123,7 +123,7 @@ async function buildTenantProfile(db, user) {
   const contractFileUrl = firstValue(reservation?.contractFileUrl, reservation?.contractUrl);
   const contractStartDate = firstValue(reservation?.contractStartDate, reservation?.contractStart, reservation?.moveInDate);
   const contractEndDate = firstValue(reservation?.contractEndDate, reservation?.contractEnd, reservation?.moveOutDate);
-  const hasContract = Boolean(contractFileUrl || contractStartDate || contractEndDate);
+  const hasContract = Boolean(contractFileUrl);
   normalized.branch = branch;
   normalized.contract = hasContract ? {
     status: String(firstValue(reservation?.contractStatus, reservation?.status) || 'Available'),
@@ -132,7 +132,10 @@ async function buildTenantProfile(db, user) {
     roomNumber: firstValue(reservation?.roomNumber, reservation?.roomName, reservation?.room?.roomNumber) || null,
     property: branch?.branchName || null,
     branch: branch || null,
-    fileUrl: contractFileUrl || null,
+    documentId: `res_${reservation._id}_contract`,
+    fileAvailable: true,
+    generatedDate: firstValue(reservation?.contractGeneratedAt, reservation?.contractSignedAt, reservation?.updatedAt) || null,
+    documentVersion: firstValue(reservation?.contractVersion, reservation?.documentVersion) || null,
   } : null;
   normalized.survey = null;
   // Keep the database identifier available only while resolving owned records.
@@ -172,6 +175,7 @@ const PHONE_REGEX = /^\+63\d{10}$/;
 const ADDRESS_MAX = 200;
 const PICTURE_MAX_BYTES = 2 * 1024 * 1024; // 2 MB decoded image payload
 const DOC_MAX_BYTES = 5 * 1024 * 1024; // 5 MB for document uploads
+const DOCUMENT_CONTENT_MAX_BYTES = 50 * 1024 * 1024;
 const LOCAL_ONLY_URI_PATTERN = /^(?:file|content|ph|assets-library|blob|ms-appdata):\/\/|^\/data\/user\/|^\/storage\/|^\/private\/var\/|^\/var\/mobile\/|(?:^|[\\/])cache(?:[\\/]|$)/i;
 const ALLOWED_DOCUMENT_MIME_TYPES = new Set([
   'image/jpeg',
@@ -531,6 +535,7 @@ function buildReservationDocs(reservation) {
       uploaded_at: submittedAt,
       source: 'reservation',
       file_url: reservation.validIDFrontUrl,
+      mimeType: 'image/jpeg',
     });
   }
   if (reservation.validIDBackUrl) {
@@ -543,6 +548,7 @@ function buildReservationDocs(reservation) {
       uploaded_at: submittedAt,
       source: 'reservation',
       file_url: reservation.validIDBackUrl,
+      mimeType: 'image/jpeg',
     });
   }
   if (reservation.selfiePhotoUrl) {
@@ -554,6 +560,7 @@ function buildReservationDocs(reservation) {
       uploaded_at: submittedAt,
       source: 'reservation',
       file_url: reservation.selfiePhotoUrl,
+      mimeType: 'image/jpeg',
     });
   }
   if (reservation.nbiClearanceUrl) {
@@ -565,6 +572,7 @@ function buildReservationDocs(reservation) {
       uploaded_at: submittedAt,
       source: 'reservation',
       file_url: reservation.nbiClearanceUrl,
+      mimeType: 'image/jpeg',
     });
   }
   if (reservation.companyIDUrl) {
@@ -576,6 +584,7 @@ function buildReservationDocs(reservation) {
       uploaded_at: submittedAt,
       source: 'reservation',
       file_url: reservation.companyIDUrl,
+      mimeType: 'image/jpeg',
     });
   }
   if (reservation.proofOfPaymentUrl) {
@@ -587,6 +596,7 @@ function buildReservationDocs(reservation) {
       uploaded_at: submittedAt,
       source: 'reservation',
       file_url: reservation.proofOfPaymentUrl,
+      mimeType: 'image/jpeg',
     });
   }
   if (reservation.contractFileUrl) {
@@ -598,6 +608,7 @@ function buildReservationDocs(reservation) {
       uploaded_at: submittedAt,
       source: 'reservation',
       file_url: reservation.contractFileUrl,
+      mimeType: 'application/pdf',
     });
   }
 
@@ -622,14 +633,14 @@ async function getUserDocuments(req, res) {
     const mongoId = user?._id;
     if (mongoId) {
       const reservation = await db.collection('reservations').findOne(
-        { userId: mongoId, status: { $in: ['moveIn', 'active', 'completed', 'payment_pending', 'confirmed'] } },
+        { $and: [{ $or: [{ userId: mongoId }, { tenantId: mongoId }, { user_id: req.user.user_id }, { tenant_id: req.user.user_id }] }, approvedReservationFilter] },
         { sort: { createdAt: -1 } }
       );
       reservationDocs = buildReservationDocs(reservation);
     }
 
     // Reservation docs first (submitted during onboarding), then user-uploaded docs
-    const allDocs = [...reservationDocs, ...uploadedDocs];
+    const allDocs = [...reservationDocs, ...uploadedDocs].map(({ file_url, downloadUrl, storagePath, ...doc }) => doc);
     res.json(allDocs);
   } catch (error) {
     console.error('Get documents error:', error);
@@ -654,7 +665,7 @@ async function getDocumentFile(req, res) {
       }
 
       const reservation = await db.collection('reservations').findOne(
-        { userId: user._id, status: { $in: ['moveIn', 'active', 'completed', 'payment_pending', 'confirmed'] } },
+        { $and: [{ $or: [{ userId: user._id }, { tenantId: user._id }, { user_id: req.user.user_id }, { tenant_id: req.user.user_id }] }, approvedReservationFilter] },
         { sort: { createdAt: -1 } }
       );
       if (!reservation) {
@@ -668,10 +679,10 @@ async function getDocumentFile(req, res) {
         return res.status(404).json({ detail: 'Document not found.' });
       }
 
-      // Return file_url as file_data so the frontend can display it
       return res.json({
         ...doc,
-        file_data: doc.file_url,
+        file_url: undefined,
+        fileAvailable: true,
       });
     }
 
@@ -689,7 +700,10 @@ async function getDocumentFile(req, res) {
     if (doc.file_url || doc.downloadUrl) {
       return res.json({
         ...doc,
-        file_data: doc.file_url || doc.downloadUrl,
+        file_url: undefined,
+        downloadUrl: undefined,
+        storagePath: undefined,
+        fileAvailable: true,
       });
     }
 
@@ -697,6 +711,70 @@ async function getDocumentFile(req, res) {
   } catch (error) {
     console.error('Get document file error:', error);
     res.status(500).json({ detail: 'Failed to get document' });
+  }
+}
+
+async function getDocumentContent(req, res) {
+  try {
+    const { docId } = req.params;
+    const db = getDb();
+    const user = await db.collection('users').findOne(
+      { user_id: req.user.user_id },
+      { projection: { _id: 1, uploaded_documents: 1 } },
+    );
+    if (!user) return res.status(404).json({ detail: 'Document not found.' });
+
+    let doc;
+    if (docId.startsWith('res_')) {
+      const reservation = await db.collection('reservations').findOne(
+        { $and: [{ $or: [{ userId: user._id }, { tenantId: user._id }, { user_id: req.user.user_id }, { tenant_id: req.user.user_id }] }, approvedReservationFilter] },
+        { sort: { createdAt: -1 } },
+      );
+      doc = buildReservationDocs(reservation).find((entry) => entry.doc_id === docId);
+    } else {
+      doc = (user.uploaded_documents || []).find((entry) => entry.doc_id === docId);
+    }
+    if (!doc) return res.status(404).json({ detail: 'Document not found.' });
+
+    if (doc.file_data && /^data:/i.test(doc.file_data)) {
+      const match = doc.file_data.match(/^data:([^;,]+);base64,(.+)$/i);
+      if (!match) return res.status(422).json({ detail: 'Document file is invalid.' });
+      const buffer = Buffer.from(match[2], 'base64');
+      if (!buffer.length || buffer.length > DOCUMENT_CONTENT_MAX_BYTES) return res.status(422).json({ detail: 'Document file is invalid.' });
+      res.setHeader('Content-Type', match[1]);
+      res.setHeader('Cache-Control', 'private, no-store');
+      return res.send(buffer);
+    }
+
+    const sourceUrl = firstValue(doc.file_url, doc.downloadUrl);
+    if (!sourceUrl || !/^https:\/\//i.test(sourceUrl)) return res.status(404).json({ detail: 'Document file is missing.' });
+    const upstream = await fetch(sourceUrl, { signal: AbortSignal.timeout(15000) });
+    if (!upstream.ok) return res.status(502).json({ detail: 'Document file is unavailable.' });
+    const contentType = String(upstream.headers.get('content-type') || '').split(';')[0].toLowerCase();
+    if (!contentType.startsWith('image/') && contentType !== 'application/pdf') {
+      return res.status(415).json({ detail: 'Document type is not supported.' });
+    }
+    const buffer = Buffer.from(await upstream.arrayBuffer());
+    if (!buffer.length || buffer.length > DOCUMENT_CONTENT_MAX_BYTES) return res.status(422).json({ detail: 'Document file is invalid.' });
+    const isPdf = buffer.subarray(0, 5).toString() === '%PDF-';
+    const isJpeg = buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+    const isPng = buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+    const isWebp = buffer.subarray(0, 4).toString() === 'RIFF' && buffer.subarray(8, 12).toString() === 'WEBP';
+    const isImage = (contentType === 'image/jpeg' && isJpeg)
+      || (contentType === 'image/png' && isPng)
+      || (contentType === 'image/webp' && isWebp);
+    if ((contentType === 'application/pdf' && !isPdf) || (contentType.startsWith('image/') && !isImage)) {
+      return res.status(422).json({ detail: 'Document file is invalid.' });
+    }
+    res.setHeader('Content-Type', contentType);
+    res.setHeader('Content-Length', buffer.length);
+    res.setHeader('Cache-Control', 'private, no-store');
+    res.setHeader('Content-Disposition', 'inline');
+    return res.send(buffer);
+  } catch (error) {
+    if (error?.name === 'TimeoutError') return res.status(504).json({ detail: 'Document request timed out.' });
+    console.error('Get document content error:', error);
+    return res.status(500).json({ detail: 'Failed to load document.' });
   }
 }
 
@@ -888,6 +966,7 @@ module.exports = {
   uploadDocument,
   getUserDocuments,
   getDocumentFile,
+  getDocumentContent,
   deleteDocument,
   adminGetAllUsers,
   __test: {

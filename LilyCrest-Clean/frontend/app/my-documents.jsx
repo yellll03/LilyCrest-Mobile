@@ -1,5 +1,4 @@
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as ImagePicker from 'expo-image-picker';
 import { useRouter } from 'expo-router';
@@ -14,11 +13,12 @@ import { useToast } from '../src/context/ToastContext';
 import { apiService, getApiErrorMessage } from '../src/services/api';
 import {
   ensureFirebaseStorageAttachments,
-  getAttachmentDownloadUrl,
   IMAGE_UPLOAD_MIME_TYPES,
   MAX_IMAGE_UPLOAD_BYTES,
   toStoredAttachmentMetadata,
 } from '../src/services/firebaseStorageUpload';
+import { safeBack } from '../src/utils/navigation';
+import { getSessionToken } from '../src/services/secureCredentials';
 
 // ── Document types for upload picker ──
 const UPLOAD_TYPES = [
@@ -37,7 +37,7 @@ const UPLOAD_TYPES = [
 const POLICY_DOCUMENTS = [
   {
     id: 'contract', title: 'Lease Contract', description: 'Your rental agreement with LilyCrest', icon: 'document-text',
-    color: '#3B82F6', category: 'Policies', status: 'On File',
+    color: '#3B82F6', category: 'Policies', status: 'Available',
   },
   {
     id: 'house_rules', title: 'House Rules', description: 'General dormitory guidelines and policies', icon: 'home',
@@ -71,22 +71,19 @@ const CATEGORIES = [
 // ── Structured document content for rich preview ──
 function getDocumentSections(docId, user) {
   const today = new Date().toLocaleDateString('en-PH', { year: 'numeric', month: 'long', day: 'numeric' });
-  const userName = user?.name || 'Tenant Name';
+  const userName = user?.name || '';
   const userEmail = user?.email || '';
 
   const docs = {
-    contract: {
+    contract: undefined && {
       header: 'Lease Contract Agreement',
-      subtitle: 'LilyCrest Dormitory — Makati City',
+      subtitle: user?.branch?.branchName || 'LilyCrest Dormitory',
       date: today,
       sections: [
         { title: 'Tenant Information', items: [{ label: 'Name', value: userName }, { label: 'Email', value: userEmail }, { label: 'Status', value: 'Active Tenant', badge: true }] },
-        { title: 'Rental Period', text: 'The lease is month-to-month and continues until terminated by either party with 30 days written notice.' },
-        { title: 'Monthly Rent', items: [{ label: 'Due Date', value: '5th of each month' }, { label: 'Grace Period', value: '2 days (until the 7th)' }, { label: 'Late Fee', value: '₱50/day' }] },
-        { title: 'Security Deposit', text: 'Equivalent to one month\'s rent. Refundable upon move-out subject to room inspection. Deductions may apply for damages beyond normal wear and tear.' },
-        { title: 'Utilities', items: [{ label: 'Water', value: 'Included' }, { label: 'WiFi', value: 'Included (basic)' }, { label: 'Electricity', value: 'Billed separately' }] },
-        { title: 'Termination', text: 'Either party may terminate with 30 days notice. Early termination may result in forfeiture of the security deposit.' },
-        { title: 'Contact', items: [{ label: 'Address', value: '#7 Gil Puyat Ave. cor Marconi St., Brgy Palanan, Makati City' }, { label: 'Phone', value: '+63 912 345 6789' }, { label: 'Email', value: 'admin@lilycrest.ph' }] },
+        { title: 'Rental Period', text: 'Refer to the authenticated approved lease PDF.' },
+        { title: 'Payment Terms', text: 'Refer to the authenticated approved lease PDF.' },
+        { title: 'Terms', text: 'Refer to the authenticated approved lease PDF.' },
       ],
     },
     house_rules: {
@@ -127,7 +124,7 @@ function getDocumentSections(docId, user) {
       header: 'Payment Terms',
       subtitle: 'Billing & Payment Information',
       sections: [
-        { title: 'Due Date', items: [{ label: 'Monthly Due', value: '5th of each month' }, { label: 'Grace Period', value: 'Until the 7th' }, { label: 'Late Fee', value: '₱50/day (max ₱1,500/month)' }] },
+        { title: 'Due Date', items: [{ label: 'Monthly Due', value: 'Same day number as move-in date' }, { label: 'Grace Period', value: '1 day' }, { label: 'Late Fee', value: '₱50/day beginning on day two after due date' }] },
         {
           title: 'Payment Methods', subsections: [
             { label: 'Bank Transfer', detail: 'BDO: 1234-5678-9012 / BPI: 9876-5432-1098\nAccount Name: LilyCrest Properties Inc.' },
@@ -253,7 +250,7 @@ function statusLabel(status) {
 // ── Main Screen ──
 export default function MyDocumentsScreen() {
   const router = useRouter();
-  const { user } = useAuth();
+  const { user, authReady, authStatus } = useAuth();
   const { colors, isDarkMode } = useTheme();
   const { showAlert } = useAlert();
   const { showToast } = useToast();
@@ -270,20 +267,37 @@ export default function MyDocumentsScreen() {
   const [deletingDocId, setDeletingDocId] = useState(null);
   const [previewImage, setPreviewImage] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [docsError, setDocsError] = useState('');
+  const userId = user?.user_id || user?.id || null;
 
   // Fetch uploaded documents
   const fetchUploadedDocs = useCallback(async ({ showLoader = true } = {}) => {
+    if (!authReady) {
+      if (showLoader) setLoadingDocs(true);
+      setRefreshing(false);
+      return;
+    }
+    if (authStatus !== 'authenticated' || !userId) {
+      setUploadedDocs([]);
+      setDocsError('Please sign in to view your documents.');
+      setLoadingDocs(false);
+      setRefreshing(false);
+      return;
+    }
+
     try {
       if (showLoader) setLoadingDocs(true);
+      setDocsError('');
       const response = await apiService.getUserDocuments();
       setUploadedDocs(response?.data || []);
     } catch (error) {
-      console.error('Failed to fetch documents:', error);
+      console.warn('Failed to fetch documents:', error?.normalized || error?.message);
+      setDocsError(getApiErrorMessage(error, 'Unable to load documents. Pull to retry.'));
     } finally {
       if (showLoader) setLoadingDocs(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [authReady, authStatus, userId]);
 
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
@@ -291,35 +305,51 @@ export default function MyDocumentsScreen() {
   }, [fetchUploadedDocs]);
 
   useEffect(() => {
+    if (!authReady || authStatus !== 'authenticated' || !userId) return;
     fetchUploadedDocs();
-  }, [fetchUploadedDocs]);
+  }, [authReady, authStatus, fetchUploadedDocs, userId]);
 
   // Group policy documents by category
   const groupedPolicies = useMemo(() => {
     const map = {};
-    POLICY_DOCUMENTS.forEach(doc => {
+    POLICY_DOCUMENTS.forEach(sourceDoc => {
+      const doc = sourceDoc.id === 'contract'
+        ? {
+            ...sourceDoc,
+            status: user?.contract?.fileAvailable ? (user.contract.status || 'Available') : 'Not Available',
+            description: user?.contract?.fileAvailable ? sourceDoc.description : 'No contract available yet.',
+          }
+        : sourceDoc;
       if (!map[doc.category]) map[doc.category] = [];
       map[doc.category].push(doc);
     });
     return map;
-  }, []);
+  }, [user?.contract?.fileAvailable, user?.contract?.status]);
 
   const visibleCategories = activeCategory
     ? CATEGORIES.filter(c => c.key === activeCategory)
     : CATEGORIES;
 
   const handlePreview = (doc) => {
+    if (doc.id === 'contract') {
+      router.push('/contract-viewer');
+      return;
+    }
     const sections = getDocumentSections(doc.id, user);
     setPreviewDoc({ ...doc, ...sections });
     setShowPreview(true);
   };
 
   const handleDownload = async (doc) => {
+    if (doc.id === 'contract') {
+      router.push('/contract-viewer');
+      return;
+    }
     try {
       setDownloading(doc.id);
       const fileName = `LilyCrest_${doc.title.replace(/\s+/g, '_')}.pdf`;
       const downloadUrl = apiService.downloadDocumentUrl(doc.id);
-      const token = await AsyncStorage.getItem('session_token');
+      const token = await getSessionToken();
 
       if (Platform.OS === 'web') {
         const response = await fetch(downloadUrl, {
@@ -454,24 +484,13 @@ export default function MyDocumentsScreen() {
   // ── View uploaded document image ──
   const handleViewUploadedDoc = async (doc) => {
     try {
-      const response = await apiService.getUserDocumentFile(doc.doc_id);
-      const documentData = response?.data || {};
-      const fileData = documentData.file_data || getAttachmentDownloadUrl(documentData);
-      const mimeType = String(documentData.mimeType || documentData.type || '').toLowerCase();
-      const isPreviewableImage = /^data:image\//i.test(fileData)
-        || (/^https:\/\//i.test(fileData) && (!mimeType || mimeType.startsWith('image/')));
-      const isInvalidLocal = /^(?:file|content|blob|ph|assets-library):\/\//i.test(String(fileData || ''));
-
-      if (fileData && isPreviewableImage && !isInvalidLocal) {
-        setPreviewImage({ uri: fileData, label: doc.label, status: doc.status, uploaded_at: doc.uploaded_at, source: doc.source });
-      } else if (fileData && /^https:\/\//i.test(fileData)) {
-        setPreviewImage({
-          label: doc.label,
-          status: doc.status,
-          uploaded_at: doc.uploaded_at,
-          source: doc.source,
-          error: 'Preview is not available for this document type.',
-        });
+      const mimeType = String(doc.mimeType || '').toLowerCase();
+      const isPdf = mimeType === 'application/pdf' || doc.doc_id.endsWith('_contract');
+      const isImage = mimeType.startsWith('image/') || ['government_id', 'company_id'].includes(doc.type);
+      if (isPdf) {
+        router.push({ pathname: '/document-viewer', params: { kind: 'user', id: doc.doc_id, title: doc.label || 'Document' } });
+      } else if (isImage) {
+        router.push({ pathname: '/image-viewer', params: { id: doc.doc_id, title: doc.label || 'Document' } });
       } else {
         setPreviewImage({
           label: doc.label,
@@ -505,7 +524,7 @@ export default function MyDocumentsScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backButton} onPress={() => safeBack(router, '/(tabs)/profile')}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <View>
@@ -552,6 +571,15 @@ export default function MyDocumentsScreen() {
           />
         )}
       >
+        {docsError ? (
+          <View style={styles.errorBanner}>
+            <Ionicons name="warning" size={15} color="#92400E" />
+            <Text style={styles.errorBannerText}>{docsError}</Text>
+            <TouchableOpacity onPress={() => fetchUploadedDocs({ showLoader: false })}>
+              <Text style={styles.errorRetryText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        ) : null}
 
         {/* ── Personal Documents (Uploaded IDs & Documents) ── */}
         {(!activeCategory || activeCategory === 'Personal') && (
@@ -967,6 +995,9 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   // List
   scrollView: { flex: 1 },
   scrollContent: { padding: 16 },
+  errorBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: isDarkMode ? 'rgba(146,64,14,0.18)' : '#FEF3C7', borderWidth: 1, borderColor: isDarkMode ? 'rgba(251,191,36,0.35)' : '#FDE68A', borderRadius: 12, padding: 12, marginBottom: 14 },
+  errorBannerText: { flex: 1, fontSize: 13, fontWeight: '600', color: isDarkMode ? '#FCD34D' : '#92400E' },
+  errorRetryText: { fontSize: 13, fontWeight: '800', color: colors.primary },
   categoryGroup: { marginBottom: 24 },
   categoryHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   categoryIcon: { width: 28, height: 28, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },

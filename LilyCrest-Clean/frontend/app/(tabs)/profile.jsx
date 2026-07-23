@@ -527,11 +527,32 @@ export default function ProfileScreen() {
                     disabled={!user.branch.isActive || !/^https:\/\//i.test(user.branch.googleMapsUrl || '')}
                   >
                     <Ionicons name="map-outline" size={18} color={colors.accent} />
-                    <Text style={styles.outlineButtonText}>Open in Google Maps</Text>
+                    <Text style={styles.outlineButtonText}>View Location</Text>
                   </TouchableOpacity>
                 </>
               ) : <Text style={styles.emptyText}>Branch location is not available yet.</Text>}
             </View>
+          </View>
+
+          <View style={styles.menuContainer}>
+            {menuGroups.slice(0, 2).map((group) => (
+              <View key={group.label} style={styles.menuGroupWrapper}>
+                <Text style={styles.menuGroupLabel}>{group.label === 'APP' ? 'APP SHORTCUTS' : group.label}</Text>
+                <View style={styles.menuSection}>
+                  {group.items.map((item, index) => (
+                    <TouchableOpacity key={item.label} style={[styles.menuItem, index === group.items.length - 1 && styles.menuItemLast]} onPress={item.onPress} activeOpacity={0.7}>
+                      <View style={styles.menuItemLeft}>
+                        <View style={[styles.menuIconContainer, { backgroundColor: isDarkMode ? `${item.color}25` : `${item.color}15` }]}>
+                          <Ionicons name={item.icon} size={20} color={item.color} />
+                        </View>
+                        <Text style={styles.menuItemText}>{item.label}</Text>
+                      </View>
+                      <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </View>
+            ))}
           </View>
 
           <View style={styles.infoSection}>
@@ -542,14 +563,12 @@ export default function ProfileScreen() {
                   <InfoRow icon="shield-checkmark-outline" label="Contract Status" value={user.contract.status || 'Not available'} colors={colors} styles={styles} />
                   <InfoRow icon="calendar-outline" label="Contract Start Date" value={formatDate(user.contract.startDate)} colors={colors} styles={styles} />
                   <InfoRow icon="calendar-outline" label="Contract End Date" value={formatDate(user.contract.endDate)} colors={colors} styles={styles} />
-                  <InfoRow icon="bed-outline" label="Room Number" value={user.contract.roomNumber || 'Not available'} colors={colors} styles={styles} />
-                  <InfoRow icon="business-outline" label="Property" value={user.contract.property || 'Not available'} colors={colors} styles={styles} />
-                  <TouchableOpacity style={styles.outlineButton} onPress={() => router.push('/my-documents')}>
+                  <TouchableOpacity style={styles.outlineButton} onPress={() => router.push('/contract-viewer')}>
                     <Ionicons name="document-text-outline" size={18} color={colors.accent} />
                     <Text style={styles.outlineButtonText}>View Contract</Text>
                   </TouchableOpacity>
                 </>
-              ) : <Text style={styles.emptyText}>No contract available.</Text>}
+              ) : <Text style={styles.emptyText}>No contract available yet.</Text>}
             </View>
           </View>
 
@@ -568,7 +587,7 @@ export default function ProfileScreen() {
           </View>
 
           <View style={styles.menuContainer}>
-            {menuGroups.map((group) => (
+            {menuGroups.slice(2).map((group) => (
               <View key={group.label} style={styles.menuGroupWrapper}>
                 <Text style={styles.menuGroupLabel}>{group.label}</Text>
                 <View style={styles.menuSection}>
