@@ -1,10 +1,12 @@
 'use strict';
 
 const { ObjectId } = require('mongodb');
+const { resolveTenantBranch } = require('./branchLocation.service');
 
 const ACTIVE_STAY = /^(active|current|occupied|checked_in)$/i;
 const COMPLETED_STAY = /^(completed|moved_out|checked_out)$/i;
 const APPROVED = /^(approved|confirmed)$/i;
+const ACTIVE_RESERVATION = /^(movein|move_in|active|checked_in)$/i;
 
 function identityFilter(user = {}) {
   const raw = [user.user_id, user._id].filter(Boolean);
@@ -34,6 +36,9 @@ async function resolveEligibility(db, user, survey) {
     db.collection('move_out_requests').find(identity).sort({ updatedAt: -1 }).limit(20).toArray(),
   ]);
   const active = stays.find((stay) => ACTIVE_STAY.test(String(stay.status || '')) || stay.isActive === true);
+  const activeReservation = reservations.find((reservation) => ACTIVE_RESERVATION.test(String(
+    reservation.status || reservation.occupancyStatus || reservation.applicationStatus || ''
+  )));
   const completed = stays.find((stay) => COMPLETED_STAY.test(String(stay.status || '')));
   const completedCovering = stays.find((stay) => COMPLETED_STAY.test(String(stay.status || '')) && overlaps(stay, survey));
   const covering = stays.find((stay) => overlaps(stay, survey));
@@ -44,7 +49,7 @@ async function resolveEligibility(db, user, survey) {
     || (Array.isArray(survey.exitSurveyTenantIds) && survey.exitSurveyTenantIds.map(String).includes(String(user.user_id || user._id)));
 
   let source = null;
-  if (survey.surveyType === 'QUARTERLY') source = active || completedCovering;
+  if (survey.surveyType === 'QUARTERLY') source = active || activeReservation || completedCovering;
   if (survey.surveyType === 'MOVE_OUT' && (approvedMoveOut || expiredContract || completed || adminEnabled)) {
     source = active || completed || covering || expiredContract;
   }
@@ -52,7 +57,15 @@ async function resolveEligibility(db, user, survey) {
 
   const tenantId = source.tenantId || source.tenant_id || user.user_id || user._id;
   const userId = user.user_id || user._id;
-  const branchId = ref(source);
+  let branchId = ref(source);
+  if (!branchId) {
+    try {
+      const resolved = await resolveTenantBranch(db, user);
+      branchId = String(resolved?.branch?.branchId || '');
+    } catch (_error) {
+      branchId = '';
+    }
+  }
   if (survey.branchId && String(survey.branchId) !== branchId) return { eligible: false, reason: 'BRANCH_SCOPE_MISMATCH' };
   if (Array.isArray(survey.eligibleTestUserIds) && survey.eligibleTestUserIds.length
     && !survey.eligibleTestUserIds.map(String).includes(String(userId))) {

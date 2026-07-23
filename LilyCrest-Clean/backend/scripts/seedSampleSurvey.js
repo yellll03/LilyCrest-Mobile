@@ -5,6 +5,7 @@ require('dotenv').config();
 const { ObjectId } = require('mongodb');
 const { connectToMongo, getDb, closeConnection } = require('../config/database');
 const { defaultQuestions } = require('../services/survey.service');
+const { resolveTenantBranch } = require('../services/branchLocation.service');
 
 const SAMPLE_TITLE = 'TEST — Quarterly Tenant Satisfaction Survey';
 
@@ -81,14 +82,33 @@ async function resolveScope(db, options) {
   });
   if (!user) throw new Error('TENANT_IDENTITY_UNRESOLVED');
   const identities = [scope.testUserId, user._id, user.user_id].filter(Boolean);
-  const stay = await db.collection('stays').findOne({
+  let stay = await db.collection('stays').findOne({
     $and: [
       { $or: ['user_id', 'userId', 'tenant_id', 'tenantId'].flatMap((key) => identities.map((value) => ({ [key]: value }))) },
       { $or: [{ status: { $regex: '^(active|current|occupied|checked_in)$', $options: 'i' } }, { isActive: true }] },
     ],
   });
+  if (!stay) {
+    stay = await db.collection('reservations').findOne({
+      $and: [
+        { $or: ['user_id', 'userId', 'tenant_id', 'tenantId'].flatMap((key) => identities.map((value) => ({ [key]: value }))) },
+        { $or: [
+          { status: { $regex: '^(movein|move_in|active|checked_in)$', $options: 'i' } },
+          { occupancyStatus: { $regex: '^(active|checked_in)$', $options: 'i' } },
+        ] },
+      ],
+    });
+  }
   if (!stay) throw new Error('NO_ACTIVE_STAY');
-  const stayBranch = String(stay.branchId || stay.branch_id || stay.branchCode || stay.branch || '');
+  let stayBranch = String(stay.branchId || stay.branch_id || stay.branchCode || stay.branch || '');
+  if (!stayBranch) {
+    try {
+      const resolved = await resolveTenantBranch(db, user);
+      stayBranch = String(resolved?.branch?.branchId || '');
+    } catch (_error) {
+      stayBranch = '';
+    }
+  }
   if (stayBranch !== scope.branchId) throw new Error('BRANCH_SCOPE_MISMATCH');
   return { ...scope, testTenantId: String(stay.tenantId || stay.tenant_id || user.user_id || user._id) };
 }

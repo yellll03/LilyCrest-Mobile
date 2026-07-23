@@ -69,6 +69,15 @@ test('ineligible applicant cannot view quarterly survey', async () => {
   const result = await resolveEligibility(eligibilityDb({ reservations: [{ status: 'pending' }] }), { user_id: 'u1' }, survey());
   assert.equal(result.eligible, false);
 });
+test('moveIn reservation is an active quarterly-survey eligibility source', async () => {
+  const result = await resolveEligibility(
+    eligibilityDb({ reservations: [{ tenantId: 'tenant-1', branchId: 'b1', status: 'moveIn' }] }),
+    { user_id: 'u1' },
+    survey({ branchId: 'b1' }),
+  );
+  assert.equal(result.eligible, true);
+  assert.equal(result.tenantId, 'tenant-1');
+});
 test('moved-out tenant is eligible for a quarterly period that covers the stay', async () => {
   const result = await resolveEligibility(eligibilityDb({ stays: [{ status: 'completed', startDate: '2026-06-01', endDate: '2026-07-10' }] }), { user_id: 'u1' }, survey());
   assert.equal(result.eligible, true);
