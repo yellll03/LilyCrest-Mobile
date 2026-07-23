@@ -9,6 +9,26 @@ function formatRoomType(type) {
   return type.split('-').map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
 }
 
+function formatBedLabel(bed, fallback = {}) {
+  const explicit = bed?.label || bed?.name || fallback?.label || fallback?.name;
+  if (explicit && !ObjectId.isValid(String(explicit).trim())) return String(explicit).trim();
+  const position = String(bed?.position || fallback?.position || '').toLowerCase();
+  if (position === 'upper') return 'Upper Bed';
+  if (position === 'lower') return 'Lower Bed';
+  return 'Bed not assigned';
+}
+
+function formatRoomNumber(value) {
+  const roomNumber = String(value || '').trim();
+  return roomNumber && !ObjectId.isValid(roomNumber) ? roomNumber : null;
+}
+
+function formatBranchName(value) {
+  const branch = String(value || '').trim();
+  if (!branch || ObjectId.isValid(branch)) return 'Branch information unavailable';
+  return branch.replace(/[-_]+/g, ' ').replace(/\b\w/g, (letter) => letter.toUpperCase());
+}
+
 function normalizeDateCandidate(...values) {
   for (const value of values) {
     if (!value) continue;
@@ -17,24 +37,6 @@ function normalizeDateCandidate(...values) {
       return value;
     }
   }
-  return null;
-}
-
-function parseLeaseDurationMonths(value) {
-  if (typeof value === 'number' && Number.isFinite(value) && value > 0) {
-    return value;
-  }
-
-  if (typeof value === 'string') {
-    const trimmed = value.trim();
-    if (!trimmed) return null;
-
-    const numeric = Number.parseInt(trimmed, 10);
-    if (Number.isFinite(numeric) && numeric > 0) {
-      return numeric;
-    }
-  }
-
   return null;
 }
 
@@ -77,23 +79,9 @@ function deriveAssignmentContractEnd(record) {
     return explicitMoveOut;
   }
 
-  const moveIn = deriveAssignmentMoveIn(record);
-  const leaseDurationMonths = parseLeaseDurationMonths(
-    record.leaseDuration
-      ?? record.lease_duration
-      ?? record.durationMonths
-      ?? record.duration_months
-      ?? record.contractDurationMonths
-      ?? record.contract_duration_months
-      ?? record.stayDurationMonths
-      ?? record.stay_duration_months
-  );
-
-  if (!moveIn || !leaseDurationMonths) return null;
-
-  const endDate = new Date(moveIn);
-  endDate.setMonth(endDate.getMonth() + leaseDurationMonths);
-  return endDate;
+  // A duration is not an approved legal end date. Contract metadata must remain
+  // unavailable until an authoritative record supplies an explicit end date.
+  return null;
 }
 
 // Get dashboard data
@@ -110,10 +98,10 @@ async function getDashboard(req, res) {
 
     if (mongoId) {
       // Source 1: roomoccupancyhistories (legacy)
-      const occupancy = await db.collection('roomoccupancyhistories').findOne({
-        tenantId: mongoId,
-        stayStatus: 'active',
-      });
+      const occupancy = await db.collection('roomoccupancyhistories').findOne(
+        { tenantId: mongoId, stayStatus: 'active' },
+        { sort: { moveInDate: -1, createdAt: -1 } },
+      );
 
       if (occupancy) {
         const roomDoc = await db.collection('rooms').findOne({ _id: occupancy.roomId });
@@ -130,19 +118,15 @@ async function getDashboard(req, res) {
           move_out_date: occupancyContractEnd,
           contract_end_date: occupancyContractEnd,
           bed_id: occupancy.bedId,
-          branch: occupancy.branchId,
+          branch: formatBranchName(occupancy.branchName || occupancy.branch || occupancy.branchId),
         };
 
         if (roomDoc) {
           room = {
             room_id: roomDoc._id?.toString(),
-            room_number: roomDoc.roomNumber,
+            room_number: formatRoomNumber(roomDoc.roomNumber),
             room_type: formatRoomType(roomDoc.type),
-            bed_type: bed
-              ? bed.position === 'upper'
-                ? 'Upper Bed'
-                : 'Lower Bed'
-              : 'N/A',
+            bed_type: formatBedLabel(bed),
             floor: roomDoc.floor,
             capacity: roomDoc.capacity,
             price: roomDoc.monthlyPrice,
@@ -180,19 +164,15 @@ async function getDashboard(req, res) {
             move_out_date: bedContractEnd,
             contract_end_date: bedContractEnd,
             bed_id: bedHistory.bedId,
-            branch: bedHistory.branch,
+            branch: formatBranchName(bedHistory.branchName || bedHistory.branch),
           };
 
           if (roomDoc) {
             room = {
               room_id: roomDoc._id?.toString(),
-              room_number: roomDoc.roomNumber,
+              room_number: formatRoomNumber(roomDoc.roomNumber),
               room_type: formatRoomType(roomDoc.type),
-              bed_type: bed
-                ? bed.position === 'upper'
-                  ? 'Upper Bed'
-                  : 'Lower Bed'
-                : 'N/A',
+              bed_type: formatBedLabel(bed),
               floor: roomDoc.floor,
               capacity: roomDoc.capacity,
               price: roomDoc.monthlyPrice,
@@ -232,7 +212,7 @@ async function getDashboard(req, res) {
             move_out_date: reservationMoveOut,
             contract_end_date: reservationMoveOut,
             bed_id: selectedBed.id || null,
-            branch: reservation.branch,
+            branch: formatBranchName(reservation.branchName || reservation.branch),
           };
         } else {
           assignment.move_in_date = normalizeDateCandidate(
@@ -256,19 +236,9 @@ async function getDashboard(req, res) {
         if (!room && roomDoc) {
           room = {
             room_id: roomDoc._id?.toString(),
-            room_number: roomDoc.roomNumber,
+            room_number: formatRoomNumber(roomDoc.roomNumber),
             room_type: formatRoomType(roomDoc.type),
-            bed_type: bed
-              ? bed.position === 'upper'
-                ? 'Upper Bed'
-                : selectedBed.position === 'upper'
-                  ? 'Upper Bed'
-                  : 'Lower Bed'
-              : selectedBed.position === 'upper'
-                ? 'Upper Bed'
-                : selectedBed.position === 'lower'
-                  ? 'Lower Bed'
-                  : 'N/A',
+            bed_type: formatBedLabel(bed, selectedBed),
             floor: roomDoc.floor,
             capacity: roomDoc.capacity,
             price: roomDoc.monthlyPrice || reservation.monthlyRent,
