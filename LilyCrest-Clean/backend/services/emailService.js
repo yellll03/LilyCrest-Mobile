@@ -1,8 +1,11 @@
 /**
  * LilyCrest Email Service
- * Sends transactional emails via Nodemailer (SMTP).
+ * Sends transactional emails through Resend's HTTPS API, with SMTP fallback.
  *
- * Required env vars:
+ * Preferred env vars:
+ *   RESEND_API_KEY, EMAIL_FROM
+ *
+ * Optional SMTP fallback:
  *   SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS, SMTP_FROM
  *
  * All public functions are non-throwing — they log warnings and return false
@@ -11,6 +14,7 @@
 
 const nodemailer = require('nodemailer');
 const dns = require('node:dns');
+const axios = require('axios');
 
 // ─── TRANSPORTER (lazily created) ───────────────────────────────────────────
 
@@ -19,13 +23,39 @@ let _transporter = null;
 async function getTransporter() {
   if (_transporter) return _transporter;
 
+  const resendApiKey = process.env.RESEND_API_KEY;
+  if (resendApiKey) {
+    _transporter = {
+      async sendMail({ from, to, subject, html }) {
+        await axios.post(
+          'https://api.resend.com/emails',
+          {
+            from,
+            to: Array.isArray(to) ? to : [to],
+            subject,
+            html,
+          },
+          {
+            headers: {
+              Authorization: `Bearer ${resendApiKey}`,
+              'Content-Type': 'application/json',
+            },
+            timeout: 10000,
+          },
+        );
+      },
+    };
+    console.log('[Email] HTTPS email transport ready');
+    return _transporter;
+  }
+
   const host = process.env.SMTP_HOST;
   const port = parseInt(process.env.SMTP_PORT, 10) || 587;
   const user = process.env.SMTP_USER;
   const pass = process.env.SMTP_PASS;
 
   if (!host || !user || !pass) {
-    console.warn('[Email] SMTP not configured — emails will be skipped. Set SMTP_HOST, SMTP_USER, SMTP_PASS in .env');
+    console.warn('[Email] Email delivery not configured. Set RESEND_API_KEY and EMAIL_FROM.');
     return null;
   }
 
@@ -61,7 +91,10 @@ async function getTransporter() {
 }
 
 function senderAddress() {
-  return process.env.SMTP_FROM || process.env.SMTP_USER || 'noreply@lilycrest.com';
+  return process.env.EMAIL_FROM
+    || process.env.SMTP_FROM
+    || process.env.SMTP_USER
+    || 'LilyCrest Dormitory <onboarding@resend.dev>';
 }
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────
