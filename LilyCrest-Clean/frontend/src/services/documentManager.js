@@ -21,6 +21,10 @@ async function ensureParent(uri) {
   await FileSystem.makeDirectoryAsync(uri.slice(0, uri.lastIndexOf('/')), { intermediates: true });
 }
 
+export async function clearDocumentCache() {
+  await FileSystem.deleteAsync(ROOT, { idempotent: true });
+}
+
 export async function validatePdf(uri, headers = {}) {
   const info = await FileSystem.getInfoAsync(uri);
   if (!info.exists) throw new Error('MISSING_FILE');

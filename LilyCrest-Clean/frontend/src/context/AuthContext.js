@@ -1,10 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { Animated, Platform, Pressable, StatusBar as RNStatusBar, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, Platform, Pressable, StatusBar as RNStatusBar, StyleSheet, Text, View } from 'react-native';
 import { auth, getFreshIdToken, subscribeToAuthState } from '../config/firebase';
 import { api, getApiErrorMessage } from '../services/api';
 import { validateStrongPassword } from '../utils/passwordValidation';
+import { AUTH_MESSAGES, classifyAuthError } from '../utils/authStability';
+import { clearDocumentCache } from '../services/documentManager';
 import {
   arePushNotificationsEnabled,
   clearLastNotificationResponse,
@@ -20,11 +22,13 @@ import {
 } from '../services/notifications';
 import {
   clearCredentials,
+  getSessionToken,
   migrateLegacyCredentials,
+  removeSessionToken,
+  setSessionToken,
 } from '../services/secureCredentials';
 
 const AuthContext = createContext(undefined);
-const SESSION_TOKEN_KEY = 'session_token';
 const SESSION_USER_KEY = 'session_user';
 const ANNOUNCEMENTS_LAST_SEEN_KEY = 'lilycrest_announcements_last_seen';
 const DEFAULT_NOTIFICATION_MESSAGE = 'Open LilyCrest to view the latest update.';
@@ -32,7 +36,7 @@ const DEFAULT_NOTIFICATION_MESSAGE = 'Open LilyCrest to view the latest update.'
 async function persistSession(sessionToken, userData) {
   const writes = [];
   if (sessionToken) {
-    writes.push(AsyncStorage.setItem(SESSION_TOKEN_KEY, sessionToken));
+    writes.push(setSessionToken(sessionToken));
   }
   if (userData) {
     writes.push(AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(userData)));
@@ -41,10 +45,7 @@ async function persistSession(sessionToken, userData) {
 }
 
 async function clearPersistedSession() {
-  await AsyncStorage.multiRemove([SESSION_TOKEN_KEY, SESSION_USER_KEY]).catch(async () => {
-    await AsyncStorage.removeItem(SESSION_TOKEN_KEY).catch(() => {});
-    await AsyncStorage.removeItem(SESSION_USER_KEY).catch(() => {});
-  });
+  await Promise.all([removeSessionToken(), AsyncStorage.removeItem(SESSION_USER_KEY).catch(() => {})]);
 }
 
 async function getCachedSessionUser() {
@@ -60,6 +61,15 @@ async function getCachedSessionUser() {
   } catch (_error) {
     await AsyncStorage.removeItem(SESSION_USER_KEY).catch(() => {});
     return null;
+  }
+}
+
+async function loadAuthoritativeTenantProfile(fallbackUser) {
+  try {
+    const response = await api.get('/users/me');
+    return response?.data || { ...fallbackUser, branch: null };
+  } catch (_) {
+    return { ...fallbackUser, branch: null };
   }
 }
 
@@ -82,6 +92,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [authStatus, setAuthStatus] = useState('initializing');
   const [firebaseUser, setFirebaseUser] = useState(null);
+  const [firebaseAuthReady, setFirebaseAuthReady] = useState(false);
   const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
   const [notificationBanner, setNotificationBanner] = useState(null);
   const router = useRouter();
@@ -125,6 +136,7 @@ export function AuthProvider({ children }) {
   }, []);
 
   const clearNotificationUnread = useCallback(async () => {
+    await api.patch('/notifications/read-all');
     setNotificationUnreadCount(0);
     await AsyncStorage.setItem(ANNOUNCEMENTS_LAST_SEEN_KEY, new Date().toISOString()).catch(() => {});
   }, []);
@@ -153,6 +165,14 @@ export function AuthProvider({ children }) {
   useEffect(() => {
     initializeNotificationHandler();
     requestPushPermissionOnFirstLaunch().catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    const unsubscribe = subscribeToAuthState((fbUser) => {
+      setFirebaseUser(fbUser);
+      setFirebaseAuthReady(true);
+    });
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -281,7 +301,15 @@ export function AuthProvider({ children }) {
 
         // TODO: replace this client-side fallback with a backend unread-count endpoint when available.
         setNotificationUnreadCount(unreadCount);
-      } catch (_error) {
+      } catch (error) {
+        if (error?.response?.status === 401) {
+          await clearPersistedSession();
+          if (!cancelled) {
+            setUser(null);
+            setAuthStatus('unauthenticated');
+          }
+          return;
+        }
         if (!cancelled) {
           setNotificationUnreadCount((prev) => prev);
         }
@@ -294,12 +322,13 @@ export function AuthProvider({ children }) {
   }, [authStatus, user?.user_id]);
 
   useEffect(() => {
+    if (!firebaseAuthReady) return undefined;
     let cancelled = false;
 
     (async () => {
       try {
         await migrateLegacyCredentials();
-        const token = await AsyncStorage.getItem(SESSION_TOKEN_KEY);
+        const token = await getSessionToken();
         if (!token) {
           await AsyncStorage.removeItem(SESSION_USER_KEY).catch(() => {});
           if (!cancelled) {
@@ -309,9 +338,9 @@ export function AuthProvider({ children }) {
           return;
         }
 
-        const response = await api.get('/auth/me', {
+        const response = await api.get('/users/me', {
           headers: { Authorization: `Bearer ${token}` },
-          timeout: 6000,
+          timeout: 30000,
         });
         if (!isAuthUserShape(response.data)) {
           throw new Error('Invalid auth/me response shape');
@@ -337,14 +366,12 @@ export function AuthProvider({ children }) {
         }
 
         const cachedUser = await getCachedSessionUser();
-        if (!cancelled) {
-          if (cachedUser) {
-            setUser(cachedUser);
-            setAuthStatus('authenticated');
-          } else {
-            setUser(null);
-            setAuthStatus('unauthenticated');
-          }
+        if (!cancelled && cachedUser) {
+          setUser(cachedUser);
+          setAuthStatus('authenticated');
+        } else if (!cancelled) {
+          setUser(null);
+          setAuthStatus('unauthenticated');
         }
       }
     })();
@@ -352,14 +379,7 @@ export function AuthProvider({ children }) {
     return () => {
       cancelled = true;
     };
-  }, []);
-
-  useEffect(() => {
-    const unsubscribe = subscribeToAuthState((fbUser) => {
-      setFirebaseUser(fbUser);
-    });
-    return () => unsubscribe();
-  }, []);
+  }, [firebaseAuthReady]);
 
   useEffect(() => {
     if (authStatus !== 'authenticated' || !user?.user_id) return undefined;
@@ -402,6 +422,10 @@ export function AuthProvider({ children }) {
       const { data } = await api.post('/auth/login', {
         email,
         password,
+      }, {
+        // Password authentication also sends the login OTP. Render cold starts
+        // and email delivery can legitimately exceed the shared 15s API timeout.
+        timeout: 60000,
       });
 
       if (data.otp_required) {
@@ -423,40 +447,32 @@ export function AuthProvider({ children }) {
 
       const { user: userData, session_token } = data;
       await persistSession(session_token, userData);
-      setUser(userData);
+      const profile = await loadAuthoritativeTenantProfile(userData);
+      await AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(profile)).catch(() => {});
+      setUser(profile);
       setAuthStatus('authenticated');
       return { success: true };
     } catch (error) {
       const status = error.response?.status;
-      const detail = error.response?.data?.detail;
       const attemptsRemaining = error.response?.data?.attempts_remaining;
-
+      const classified = classifyAuthError(error);
       if (status === 400) {
         await clearPersistedSession();
-        return { success: false, status, error: detail || 'Please check your input and try again.' };
+        return { success: false, status, error: AUTH_MESSAGES.unexpected };
       }
       if (status === 401) {
-        let message = detail || 'Invalid email or password. Please try again.';
-        if (Number.isInteger(attemptsRemaining) && attemptsRemaining >= 0) {
-          const suffix = `${attemptsRemaining} password attempt${attemptsRemaining !== 1 ? 's' : ''} remaining before temporary lock.`;
-          message = `${message}${message.endsWith('.') ? '' : '.'} ${suffix}`;
-        }
         await clearPersistedSession();
-        return { success: false, status, error: message, attemptsRemaining };
+        return { success: false, status, error: AUTH_MESSAGES.invalidCredentials, attemptsRemaining };
       }
       if (status === 403) {
-        return { success: false, status, error: detail || 'Access denied. Your account is not registered as a verified tenant. Please contact the admin office.' };
+        return { success: false, status, error: 'Access denied. Please contact the admin office.' };
       }
-      if (status === 429) {
-        return { success: false, status, error: detail || 'Too many failed attempts. Please wait a moment before trying again.' };
-      }
-      if (status === 500) {
-        return { success: false, status, error: 'A server error occurred. Please try again in a moment.' };
-      }
-      if (status === 503) {
-        return { success: false, status, error: getApiErrorMessage(error, 'Unable to send a verification code right now. Please try again.') };
-      }
-      return { success: false, status: 0, error: getApiErrorMessage(error, 'Unable to connect. Please check your internet connection.') };
+      return {
+        success: false,
+        status: classified.status,
+        errorType: classified.type,
+        error: classified.message,
+      };
     }
   };
 
@@ -480,7 +496,9 @@ export function AuthProvider({ children }) {
       const { user: userData, session_token } = response.data;
 
       await persistSession(session_token, userData);
-      setUser(userData);
+      const profile = await loadAuthoritativeTenantProfile(userData);
+      await AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(profile)).catch(() => {});
+      setUser(profile);
       setAuthStatus('authenticated');
       return { success: true };
     } catch (error) {
@@ -511,7 +529,9 @@ export function AuthProvider({ children }) {
       const { user: userData, session_token } = response.data;
 
       await persistSession(session_token, userData);
-      setUser(userData);
+      const profile = await loadAuthoritativeTenantProfile(userData);
+      await AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(profile)).catch(() => {});
+      setUser(profile);
       setAuthStatus('authenticated');
       return { success: true };
     } catch (error) {
@@ -543,7 +563,9 @@ export function AuthProvider({ children }) {
       const { user: userData, session_token } = response.data;
 
       await persistSession(session_token, userData);
-      setUser(userData);
+      const profile = await loadAuthoritativeTenantProfile(userData);
+      await AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(profile)).catch(() => {});
+      setUser(profile);
       setAuthStatus('authenticated');
       return { success: true };
     } catch (error) {
@@ -561,13 +583,14 @@ export function AuthProvider({ children }) {
   };
 
   const logout = async () => {
-    const token = await AsyncStorage.getItem(SESSION_TOKEN_KEY).catch(() => null);
+    const token = await getSessionToken().catch(() => null);
     const pushToken = await getStoredPushToken().catch(() => null);
     const logoutSyncKey = user?.user_id || 'logout';
 
     try {
       await clearCredentials().catch(() => {});
       await clearPersistedSession();
+      await clearDocumentCache().catch(() => {});
       setUser(null);
       setAuthStatus('unauthenticated');
       setNotificationUnreadCount(0);
@@ -591,7 +614,7 @@ export function AuthProvider({ children }) {
 
   const checkAuth = async () => {
     try {
-      const token = await AsyncStorage.getItem(SESSION_TOKEN_KEY);
+      const token = await getSessionToken();
       if (!token) {
         await AsyncStorage.removeItem(SESSION_USER_KEY).catch(() => {});
         setUser(null);
@@ -599,7 +622,7 @@ export function AuthProvider({ children }) {
         return { authenticated: false };
       }
 
-      const response = await api.get('/auth/me', {
+      const response = await api.get('/users/me', {
         headers: { Authorization: `Bearer ${token}` },
         timeout: 6000,
       });
@@ -620,12 +643,9 @@ export function AuthProvider({ children }) {
       }
 
       const cachedUser = await getCachedSessionUser();
-      if (cachedUser) {
-        setUser(cachedUser);
-        setAuthStatus('authenticated');
-        return { authenticated: true, restoredFromCache: true };
-      }
-
+      if (cachedUser) await AsyncStorage.removeItem(SESSION_USER_KEY).catch(() => {});
+      setUser(null);
+      setAuthStatus('unauthenticated');
       return { authenticated: false };
     }
   };
@@ -638,11 +658,17 @@ export function AuthProvider({ children }) {
     });
   };
 
-  const isLoading = authStatus === 'initializing';
-  const authReady = authStatus !== 'initializing';
+  const isLoading = authStatus === 'initializing' || !firebaseAuthReady;
+  const authReady = authStatus !== 'initializing' && firebaseAuthReady;
 
-  if (authStatus === 'initializing') {
-    return null;
+  if (isLoading) {
+    return (
+      <View style={styles.authLoadingContainer}>
+        <ActivityIndicator size="large" color="#204B7E" />
+        <Text style={styles.authLoadingTitle}>Preparing LilyCrest</Text>
+        <Text style={styles.authLoadingText}>Checking your secure session...</Text>
+      </View>
+    );
   }
 
   return (
@@ -650,6 +676,7 @@ export function AuthProvider({ children }) {
       value={{
         user,
         firebaseUser,
+        firebaseAuthReady,
         isLoading,
         authReady,
         authStatus,
@@ -721,6 +748,25 @@ const bannerTopInset = Platform.OS === 'ios'
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  authLoadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 24,
+    backgroundColor: '#F8FAFC',
+  },
+  authLoadingTitle: {
+    marginTop: 14,
+    fontSize: 16,
+    fontWeight: '800',
+    color: '#1E293B',
+  },
+  authLoadingText: {
+    marginTop: 6,
+    fontSize: 13,
+    fontWeight: '500',
+    color: '#64748B',
   },
   bannerOverlay: {
     position: 'absolute',
