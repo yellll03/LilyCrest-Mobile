@@ -8,9 +8,9 @@ const { resolveTenantBranch } = require('../services/branchLocation.service');
 const firstValue = (...values) => values.find((value) => value !== undefined && value !== null && String(value).trim() !== '');
 const approvedReservationFilter = {
   $or: [
-    { status: { $regex: /^(approved|confirmed|active|completed|checked_in)$/i } },
-    { applicationStatus: { $regex: /^(approved|confirmed|active|completed|checked_in)$/i } },
-    { approvalStatus: { $regex: /^(approved|confirmed|active|completed|checked_in)$/i } },
+    { status: { $regex: /^(approved|confirmed|active|completed|checked_in|movein)$/i } },
+    { applicationStatus: { $regex: /^(approved|confirmed|active|completed|checked_in|movein)$/i } },
+    { approvalStatus: { $regex: /^(approved|confirmed|active|completed|checked_in|movein)$/i } },
     { isApproved: true },
   ],
 };

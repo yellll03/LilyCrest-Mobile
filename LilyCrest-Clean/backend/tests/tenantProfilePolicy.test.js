@@ -35,3 +35,8 @@ test('profile keeps Mongo identity for ownership lookup but never returns it', (
   assert.match(source, /delete normalized\._id/);
   assert.doesNotMatch(source, /user_id: req\.user\.user_id \},\s*\{ projection: \{ _id: 0 \}/);
 });
+
+test('production moveIn lifecycle counts as an approved current application', () => {
+  const statusPattern = __test.approvedReservationFilter.$or[0].status.$regex;
+  assert.equal(statusPattern.test('moveIn'), true);
+});
