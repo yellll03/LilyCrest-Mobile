@@ -47,3 +47,9 @@ test('phone is hydrated from structured approved application fields', () => {
   }), '+639171234567');
   assert.equal(__test.applicationPhone({}), '');
 });
+
+test('Philippine local mobile number is normalized to canonical +63 format', () => {
+  assert.equal(__test.normalizePhilippinePhone('0928 318 2050'), '+639283182050');
+  assert.equal(__test.normalizePhilippinePhone('+639283182050'), '+639283182050');
+  assert.equal(__test.normalizePhilippinePhone('invalid'), 'invalid');
+});

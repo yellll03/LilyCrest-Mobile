@@ -59,8 +59,15 @@ function completeAddress(source = {}) {
   ].filter(Boolean).map(String).map((part) => part.trim()).filter(Boolean).join(', ');
 }
 
+function normalizePhilippinePhone(value) {
+  const compact = String(value || '').replace(/[\s()-]/g, '');
+  if (/^09\d{9}$/.test(compact)) return `+63${compact.slice(1)}`;
+  if (/^\+63\d{10}$/.test(compact)) return compact;
+  return String(value || '').trim();
+}
+
 function applicationPhone(source = {}) {
-  return String(firstValue(
+  return normalizePhilippinePhone(firstValue(
     source.phone,
     source.phoneNumber,
     source.contactNumber,
@@ -72,7 +79,7 @@ function applicationPhone(source = {}) {
     source.applicant_details?.phone,
     source.applicant_details?.phone_number,
     source.applicant_details?.contact_number,
-  ) || '').trim();
+  ));
 }
 
 async function buildTenantProfile(db, user) {
@@ -97,7 +104,7 @@ async function buildTenantProfile(db, user) {
   // An approved reservation is authoritative; never fall back to an editable profile address.
   normalized.address = reservation ? completeAddress(reservation) : '';
   normalized.addressSource = reservation && normalized.address ? 'approved_application' : null;
-  normalized.phone = applicationPhone(reservation) || normalized.phone || '';
+  normalized.phone = applicationPhone(reservation) || normalizePhilippinePhone(normalized.phone) || '';
   normalized.phoneSource = applicationPhone(reservation) ? 'approved_application' : (normalized.phone ? 'verified_tenant' : null);
   const lastUsernameChangedAt = user.lastUsernameChangedAt ? new Date(user.lastUsernameChangedAt) : null;
   normalized.usernameNextAllowedAt = lastUsernameChangedAt && !Number.isNaN(lastUsernameChangedAt.getTime())
@@ -883,5 +890,7 @@ module.exports = {
   getDocumentFile,
   deleteDocument,
   adminGetAllUsers,
-  __test: { completeAddress, applicationPhone, usernameCooldownState, approvedReservationFilter },
+  __test: {
+    completeAddress, applicationPhone, normalizePhilippinePhone, usernameCooldownState, approvedReservationFilter,
+  },
 };
