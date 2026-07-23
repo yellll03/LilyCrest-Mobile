@@ -33,6 +33,11 @@ function getTransporter() {
     port,
     secure: port === 465,
     auth: { user, pass },
+    // Authentication waits for OTP delivery before replying to the app. Bound
+    // every SMTP phase so a stalled mail server cannot hang mobile login.
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 20000,
     tls: { rejectUnauthorized: false },
   });
 
