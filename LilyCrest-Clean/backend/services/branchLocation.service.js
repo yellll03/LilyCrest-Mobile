@@ -64,6 +64,9 @@ async function findTierRecords(db, user, tier) {
         const records = await db.collection(collectionName).find({
           $and: [identity, activeCondition],
         }).sort({ updatedAt: -1, moveInDate: -1, createdAt: -1 }).limit(20).toArray();
+        let linkedReservationFound = false;
+        let linkedRoomFound = false;
+        const initialResultCount = results.length;
         for (const record of records) {
           if (branchReference(record)) {
             results.push(record);
@@ -78,6 +81,7 @@ async function findTierRecords(db, user, tier) {
                 { reservation_id: reservationId },
               ],
             });
+            linkedReservationFound = linkedReservationFound || Boolean(reservation);
             if (reservation && branchReference(reservation)) {
               results.push(reservation);
               continue;
@@ -88,7 +92,16 @@ async function findTierRecords(db, user, tier) {
           const room = await db.collection('rooms').findOne({
             $or: [{ _id: objectId(roomId) || roomId }, { roomId }, { room_id: roomId }],
           });
+          linkedRoomFound = linkedRoomFound || Boolean(room);
           if (room) results.push(room);
+        }
+        if (records.length && results.length === initialResultCount) {
+          console.warn('[BranchResolution] Active assignment source has no branch reference', {
+            source: collectionName,
+            recordCount: records.length,
+            linkedReservationFound,
+            linkedRoomFound,
+          });
         }
       } catch (_) {
         // Legacy deployments may not contain both assignment collections.
@@ -162,9 +175,11 @@ function publicBranchLocation(branch) {
 }
 
 async function resolveTenantBranch(db, user = {}) {
+  const tierSummary = [];
   for (const tier of ['current_stay', 'active_room_assignment', 'approved_contract', 'approved_reservation']) {
     const records = await findTierRecords(db, user, tier);
     const references = uniqueReferences(records);
+    tierSummary.push({ tier, recordCount: records.length, referenceCount: references.length });
     if (references.length > 1) {
       throw resolutionError('BRANCH_ASSIGNMENT_CONFLICT', 'Multiple branch assignments were found. Please contact the admin office.');
     }
@@ -174,6 +189,7 @@ async function resolveTenantBranch(db, user = {}) {
       return { branch: publicBranchLocation(branch), source: tier };
     }
   }
+  console.warn('[BranchResolution] No authoritative branch assignment resolved', { tiers: tierSummary });
   throw resolutionError('BRANCH_ASSIGNMENT_MISSING', 'Branch location is not available yet.');
 }
 
