@@ -10,12 +10,13 @@
  */
 
 const nodemailer = require('nodemailer');
+const dns = require('node:dns');
 
 // ─── TRANSPORTER (lazily created) ───────────────────────────────────────────
 
 let _transporter = null;
 
-function getTransporter() {
+async function getTransporter() {
   if (_transporter) return _transporter;
 
   const host = process.env.SMTP_HOST;
@@ -28,8 +29,19 @@ function getTransporter() {
     return null;
   }
 
+  let ipv4Host;
+  try {
+    [ipv4Host] = await dns.promises.resolve4(host);
+  } catch (err) {
+    console.warn(`[Email] SMTP IPv4 resolution failed for ${host}:`, err?.message);
+    return null;
+  }
+  if (!ipv4Host) return null;
+
   _transporter = nodemailer.createTransport({
-    host,
+    // Render cannot route to the Gmail IPv6 address. Keep the original
+    // hostname as TLS SNI while connecting to its resolved IPv4 address.
+    host: ipv4Host,
     port,
     secure: port === 465,
     auth: { user, pass },
@@ -38,7 +50,10 @@ function getTransporter() {
     connectionTimeout: 10000,
     greetingTimeout: 10000,
     socketTimeout: 20000,
-    tls: { rejectUnauthorized: false },
+    tls: {
+      rejectUnauthorized: false,
+      servername: host,
+    },
   });
 
   console.log(`[Email] SMTP transporter ready → ${host}:${port}`);
@@ -202,7 +217,7 @@ function noteBox(body) {
 // ─── PASSWORD CHANGED EMAIL ─────────────────────────────────────────────────
 
 async function sendPasswordChangedEmail(toEmail, userName = 'Tenant', ip = 'Unknown') {
-  const transporter = getTransporter();
+  const transporter = await getTransporter();
   if (!transporter) return false;
 
   const now = new Date();
@@ -260,7 +275,7 @@ async function sendPasswordChangedEmail(toEmail, userName = 'Tenant', ip = 'Unkn
 // ─── LOGIN OTP EMAIL ────────────────────────────────────────────────────────
 
 async function sendLoginOtpEmail(toEmail, userName = 'Tenant', otpCode) {
-  const transporter = getTransporter();
+  const transporter = await getTransporter();
   if (!transporter) return false;
 
   const maskedEmail = maskEmail(toEmail);
@@ -312,7 +327,7 @@ async function sendLoginOtpEmail(toEmail, userName = 'Tenant', otpCode) {
 // ─── PAYMENT RECEIPT EMAIL ───────────────────────────────────────────────────
 
 async function sendPaymentReceiptEmail(toEmail, userName = 'Tenant', receipt = {}) {
-  const transporter = getTransporter();
+  const transporter = await getTransporter();
   if (!transporter) return false;
 
   const maskedEmail = maskEmail(toEmail);
@@ -384,7 +399,7 @@ async function sendPaymentReceiptEmail(toEmail, userName = 'Tenant', receipt = {
 // ─── PASSWORD RESET EMAIL ────────────────────────────────────────────────────
 
 async function sendPasswordResetEmail(toEmail, userName = 'Tenant', resetLink) {
-  const transporter = getTransporter();
+  const transporter = await getTransporter();
   if (!transporter) return false;
 
   const maskedEmail = maskEmail(toEmail);

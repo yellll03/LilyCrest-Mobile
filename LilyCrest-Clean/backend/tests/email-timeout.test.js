@@ -8,4 +8,6 @@ test('OTP email transport cannot hang mobile authentication indefinitely', () =>
   assert.match(source, /connectionTimeout:\s*10000/);
   assert.match(source, /greetingTimeout:\s*10000/);
   assert.match(source, /socketTimeout:\s*20000/);
+  assert.match(source, /dns\.promises\.resolve4\(host\)/);
+  assert.match(source, /servername:\s*host/);
 });

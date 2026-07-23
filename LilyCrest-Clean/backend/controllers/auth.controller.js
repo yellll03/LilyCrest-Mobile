@@ -5,6 +5,7 @@ const { getDb } = require('../config/database');
 const { verifyFirebaseIdToken, verifyTenantInFirebase, admin } = require('../config/firebase');
 const { sendPasswordResetEmail, sendPasswordChangedEmail } = require('../services/emailService');
 const { normalizeUser } = require('../utils/normalizeUser');
+const { isAccountActive } = require('../middleware/auth');
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────
 
@@ -167,6 +168,10 @@ function normalizeOtpCode(value) {
   return String(value ?? '').replace(/\D/g, '').slice(0, 6);
 }
 
+function hashAuthSecret(value) {
+  return crypto.createHash('sha256').update(String(value || '')).digest('hex');
+}
+
 function parseDateSafe(value) {
   const parsed = value instanceof Date ? value : new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
@@ -258,7 +263,7 @@ async function login(req, res) {
       const mongoUser = tenantByEmail || await findTenantByEmail(db, emailRaw);
       if (mongoUser) {
         // Don't create Firebase accounts for inactive tenants
-        if (mongoUser.is_active === false) {
+        if (!isAccountActive(mongoUser)) {
           logAttempt(db, emailRaw, false, 'inactive', req);
           return res.status(403).json({ detail: 'Access denied. Your tenant account is inactive. Please contact admin.' });
         }
@@ -306,7 +311,7 @@ async function login(req, res) {
           detail: 'Access denied. Your account is not registered as a verified tenant. Please contact the admin office.',
         });
       }
-      if (mongoUser.is_active === false) {
+      if (!isAccountActive(mongoUser)) {
         logAttempt(db, emailRaw, false, 'inactive', req);
         return res.status(403).json({ detail: 'Access denied. Your tenant account is inactive. Please contact admin.' });
       }
@@ -368,7 +373,7 @@ async function login(req, res) {
     return res.status(500).json({ detail: 'Account configuration error. Please contact the admin office.' });
   }
 
-  if (tenant.is_active === false) {
+  if (!isAccountActive(tenant)) {
     logAttempt(db, emailRaw, false, 'inactive', req);
     return res.status(403).json({ detail: 'Access denied. Your tenant account is inactive. Please contact admin.' });
   }
@@ -410,8 +415,8 @@ async function login(req, res) {
   // Clear any existing OTP for this user
   await db.collection('otp_store').deleteMany({ user_id: tenant.user_id });
   await db.collection('otp_store').insertOne({
-    otp_token: otpToken,
-    otp_code: otpCode,
+    otp_token_hash: hashAuthSecret(otpToken),
+    otp_code_hash: hashAuthSecret(otpCode),
     user_id: tenant.user_id,
     email: emailRaw,
     attempts: 0,
@@ -423,13 +428,16 @@ async function login(req, res) {
   const emailSent = await sendLoginOtpEmail(emailRaw, tenant.name || 'Tenant', otpCode);
   const otpEmailDeliveryFailed = !emailSent;
   if (otpEmailDeliveryFailed) {
-    await db.collection('otp_store').deleteOne({ otp_token: otpToken }).catch(() => {});
+    await db.collection('otp_store').deleteOne({ otp_token_hash: hashAuthSecret(otpToken) }).catch(() => {});
     logAttempt(db, emailRaw, false, 'otp_email_failed', req);
-    console.warn(`[Login] OTP email failed for user_id=${tenant.user_id} — proceeding anyway`);
+    console.warn(`[Login] OTP email failed for user_id=${tenant.user_id}`);
   }
 
   if (otpEmailDeliveryFailed) {
-    return res.status(503).json({ detail: 'Unable to send verification code right now. Please try again.' });
+    return res.status(503).json({
+      code: 'OTP_DELIVERY_UNAVAILABLE',
+      detail: 'Unable to send verification code right now. Please try again.',
+    });
   }
 
   logAttempt(db, emailRaw, true, 'otp_sent', req);
@@ -455,7 +463,8 @@ async function verifyOtp(req, res) {
   }
 
   const db = getDb();
-  const record = await db.collection('otp_store').findOne({ otp_token: normalizedToken });
+  const tokenHash = hashAuthSecret(normalizedToken);
+  const record = await db.collection('otp_store').findOne({ otp_token_hash: tokenHash });
 
   if (!record) {
     return res.status(400).json({ detail: 'Invalid or expired session. Please log in again.' });
@@ -463,29 +472,36 @@ async function verifyOtp(req, res) {
 
   const expiry = parseDateSafe(record.expires_at);
   if (!expiry || new Date() > expiry) {
-    await db.collection('otp_store').deleteOne({ otp_token: normalizedToken });
+    await db.collection('otp_store').deleteOne({ otp_token_hash: tokenHash });
     return res.status(400).json({ detail: 'Verification code has expired. Please log in again.' });
   }
 
   const attempts = parseOtpAttempts(record.attempts);
   if (attempts >= 3) {
-    await db.collection('otp_store').deleteOne({ otp_token: normalizedToken });
+    await db.collection('otp_store').deleteOne({ otp_token_hash: tokenHash });
     return res.status(400).json({ detail: 'Too many incorrect attempts. Please log in again.' });
   }
 
-  const storedCode = normalizeOtpCode(record.otp_code);
-  if (storedCode !== normalizedCode) {
-    await db.collection('otp_store').updateOne({ otp_token: normalizedToken }, { $inc: { attempts: 1 } });
+  if (record.otp_code_hash !== hashAuthSecret(normalizedCode)) {
+    await db.collection('otp_store').updateOne({ otp_token_hash: tokenHash }, { $inc: { attempts: 1 } });
     const remaining = 3 - (attempts + 1);
     const detail = remaining > 0
       ? `Incorrect code. ${remaining} attempt${remaining !== 1 ? 's' : ''} remaining.`
       : 'Too many incorrect attempts. Please log in again.';
-    if (remaining <= 0) await db.collection('otp_store').deleteOne({ otp_token: normalizedToken });
+    if (remaining <= 0) await db.collection('otp_store').deleteOne({ otp_token_hash: tokenHash });
     return res.status(400).json({ detail, attempts_remaining: remaining });
   }
 
   // Valid — delete OTP and create session
-  await db.collection('otp_store').deleteOne({ otp_token: normalizedToken });
+  const consumed = await db.collection('otp_store').deleteOne({
+    otp_token_hash: tokenHash,
+    otp_code_hash: hashAuthSecret(normalizedCode),
+    attempts: { $lt: 3 },
+    expires_at: { $gt: new Date() },
+  });
+  if (consumed.deletedCount !== 1) {
+    return res.status(400).json({ detail: 'Invalid or expired session. Please log in again.' });
+  }
 
   const session = await createSession(db, record.user_id);
   res.cookie('session_token', session.session_token, cookieOptions());
@@ -506,7 +522,8 @@ async function resendOtp(req, res) {
   }
 
   const db = getDb();
-  const record = await db.collection('otp_store').findOne({ otp_token: normalizedToken });
+  const tokenHash = hashAuthSecret(normalizedToken);
+  const record = await db.collection('otp_store').findOne({ otp_token_hash: tokenHash });
 
   const expiry = parseDateSafe(record?.expires_at);
   if (!record || !expiry || new Date() > expiry) {
@@ -517,8 +534,8 @@ async function resendOtp(req, res) {
   const newExpiry = new Date(Date.now() + 10 * 60 * 1000);
 
   await db.collection('otp_store').updateOne(
-    { otp_token: normalizedToken },
-    { $set: { otp_code: newCode, attempts: 0, expires_at: newExpiry } },
+    { otp_token_hash: tokenHash },
+    { $set: { otp_code_hash: hashAuthSecret(newCode), attempts: 0, expires_at: newExpiry } },
   );
 
   const { sendLoginOtpEmail } = require('../services/emailService');
@@ -591,7 +608,7 @@ async function googleSignIn(req, res) {
       });
     }
 
-    if (tenant.is_active === false) {
+    if (!isAccountActive(tenant)) {
       return res.status(403).json({
         detail: 'Access denied. Your tenant account is inactive. Please contact admin.',
       });
@@ -660,6 +677,9 @@ async function googleSignIn(req, res) {
 
 async function register(req, res) {
   try {
+    if (process.env.ALLOW_PUBLIC_REGISTRATION !== 'true') {
+      return res.status(403).json({ detail: 'Public registration is currently disabled. Please contact the admin office.' });
+    }
     const email = normalizeEmailInput(req.body?.email);
     const { password, name, phone } = req.body;
     if (!email || !password) {
@@ -702,22 +722,26 @@ async function register(req, res) {
     await db.collection('users').insertOne({
       user_id: userId,
       email,
+      email_normalized: email,
       name: name || email.split('@')[0],
       phone: phone || null,
       picture: null,
       role: 'resident',
+      status: 'pending_approval',
+      is_active: false,
       firebase_uid: fbUid,
       username: email,
+      username_normalized: email,
       created_at: new Date(),
       last_login: new Date(),
     });
 
-    // Create session
-    const session = await createSession(db, userId);
-    res.cookie('session_token', session.session_token, cookieOptions());
-
     const user = await getCleanUser(db, userId);
-    res.status(201).json({ user, session_token: session.session_token });
+    res.status(201).json({
+      user,
+      approval_required: true,
+      message: 'Registration submitted. An administrator must approve the account before sign-in.',
+    });
   } catch (error) {
     console.error('Registration error:', error);
     res.status(500).json({ detail: 'Registration failed' });
