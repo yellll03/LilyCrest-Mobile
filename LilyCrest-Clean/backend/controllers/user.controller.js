@@ -110,6 +110,9 @@ async function buildTenantProfile(db, user) {
     fileUrl: contractFileUrl || null,
   } : null;
   normalized.survey = null;
+  // Keep the database identifier available only while resolving owned records.
+  // It must never be exposed by the public profile response.
+  delete normalized._id;
   return normalized;
 }
 
@@ -117,10 +120,7 @@ async function buildTenantProfile(db, user) {
 async function getMe(req, res) {
   try {
     const db = getDb();
-    const user = await db.collection('users').findOne(
-      { user_id: req.user.user_id },
-      { projection: { _id: 0 } },
-    );
+    const user = await db.collection('users').findOne({ user_id: req.user.user_id });
 
     if (!user) {
       return res.status(404).json({ detail: 'User not found' });
@@ -393,10 +393,7 @@ async function updateMe(req, res) {
       });
     }
 
-    const updatedUser = await db.collection('users').findOne(
-      { user_id: userId },
-      { projection: { _id: 0 } }
-    );
+    const updatedUser = await db.collection('users').findOne({ user_id: userId });
 
     res.json(await buildTenantProfile(db, updatedUser));
   } catch (error) {

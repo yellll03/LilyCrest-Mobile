@@ -3,6 +3,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { __test } = require('../controllers/user.controller');
+const fs = require('node:fs');
+const path = require('node:path');
 
 test('structured approved-application address is formatted without object coercion', () => {
   const address = __test.completeAddress({
@@ -25,4 +27,11 @@ test('username cooldown uses server timestamp and allows exactly seven days', ()
   const changedAt = new Date('2026-07-01T00:00:00.000Z');
   assert.equal(__test.usernameCooldownState(changedAt, new Date('2026-07-07T23:59:59.999Z')).active, true);
   assert.equal(__test.usernameCooldownState(changedAt, new Date('2026-07-08T00:00:00.000Z')).active, false);
+});
+
+test('profile keeps Mongo identity for ownership lookup but never returns it', () => {
+  const source = fs.readFileSync(path.join(__dirname, '../controllers/user.controller.js'), 'utf8');
+  assert.match(source, /findOne\(\{ user_id: req\.user\.user_id \}\)/);
+  assert.match(source, /delete normalized\._id/);
+  assert.doesNotMatch(source, /user_id: req\.user\.user_id \},\s*\{ projection: \{ _id: 0 \}/);
 });
