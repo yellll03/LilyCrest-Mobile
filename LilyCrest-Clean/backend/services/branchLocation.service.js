@@ -20,16 +20,22 @@ function identityFilter(user = {}, fieldNames = ['user_id', 'userId', 'tenant_id
 
 function branchReference(record = {}) {
   const value = record.branchId ?? record.branch_id ?? record.branchCode ?? record.branch_code
-    ?? record.branchSlug ?? record.branch_slug ?? record.branch;
+    ?? record.branchSlug ?? record.branch_slug ?? record.branch ?? record.branchName;
   if (value && typeof value === 'object') return value.branchId || value.branchCode || value._id || null;
   return value == null ? null : String(value).trim();
 }
 
+function normalizedBranchReference(reference) {
+  const normalized = String(reference || '').trim().toLowerCase()
+    .replace(/[–—]/g, '-')
+    .replace(/[\s_]+/g, '-');
+  if (/(^|-)guadalupe($|-)/.test(normalized)) return 'guadalupe';
+  if (/(^|-)gil-?puyat($|-)/.test(normalized)) return 'gil-puyat';
+  return normalized.replace(/^branch-/, '');
+}
+
 function uniqueReferences(records = []) {
-  return [...new Set(records.map(branchReference).filter(Boolean).map((reference) => {
-    const normalized = String(reference).trim().toLowerCase().replace(/[\s_]+/g, '-');
-    return normalized.replace(/^branch-/, '');
-  }))];
+  return [...new Set(records.map(branchReference).filter(Boolean).map(normalizedBranchReference))];
 }
 
 function resolutionError(code, message) {
@@ -46,17 +52,17 @@ async function findTierRecords(db, user, tier) {
   }
   if (tier === 'active_room_assignment') {
     const results = [];
-    for (const collectionName of ['room_assignments', 'bedhistories']) {
+    for (const collectionName of ['roomoccupancyhistories', 'room_assignments', 'bedhistories']) {
       try {
+        const activeCondition = collectionName === 'roomoccupancyhistories'
+          ? { stayStatus: ACTIVE_STAY }
+          : { $or: [
+            { status: ACTIVE_STAY },
+            { isActive: true },
+            { $and: [{ moveInDate: { $exists: true } }, { moveOutDate: null }] },
+          ] };
         const records = await db.collection(collectionName).find({
-          $and: [
-            identity,
-            { $or: [
-              { status: ACTIVE_STAY },
-              { isActive: true },
-              { $and: [{ moveInDate: { $exists: true } }, { moveOutDate: null }] },
-            ] },
-          ],
+          $and: [identity, activeCondition],
         }).sort({ updatedAt: -1, moveInDate: -1, createdAt: -1 }).limit(20).toArray();
         for (const record of records) {
           if (branchReference(record)) {
@@ -93,7 +99,7 @@ async function findTierRecords(db, user, tier) {
 }
 
 async function findBranch(db, reference) {
-  const normalizedReference = String(reference || '').trim().toLowerCase().replace(/[\s_]+/g, '-');
+  const normalizedReference = normalizedBranchReference(reference);
   const filters = [
     { branchId: reference }, { branchCode: reference }, { slug: reference },
     { branch_id: reference }, { id: reference },
@@ -157,4 +163,6 @@ async function resolveTenantBranch(db, user = {}) {
   throw resolutionError('BRANCH_ASSIGNMENT_MISSING', 'Branch location is not available yet.');
 }
 
-module.exports = { branchReference, publicBranchLocation, resolveTenantBranch, uniqueReferences };
+module.exports = {
+  branchReference, normalizedBranchReference, publicBranchLocation, resolveTenantBranch, uniqueReferences,
+};

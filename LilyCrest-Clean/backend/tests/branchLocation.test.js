@@ -8,12 +8,13 @@ function cursor(records) {
   return { sort() { return this; }, limit() { return this; }, async toArray() { return records; } };
 }
 
-function fakeDb({ stays = [], assignments = [], rooms = [], reservations = [], branches = [] } = {}) {
+function fakeDb({ stays = [], occupancies = [], assignments = [], rooms = [], reservations = [], branches = [] } = {}) {
   return {
     collection(name) {
       return {
         find(query) {
           if (name === 'stays') return cursor(stays);
+          if (name === 'roomoccupancyhistories') return cursor(occupancies);
           if (name === 'room_assignments') return cursor(assignments);
           if (name !== 'reservations') return cursor([]);
           const contractTier = JSON.stringify(query).includes('contractStatus');
@@ -91,6 +92,20 @@ test('active room assignment resolves through its room before reservation', asyn
   }), { user_id: 'tenant-a' });
   assert.equal(result.source, 'active_room_assignment');
   assert.equal(result.branch.branchCode, 'guadalupe');
+});
+
+test('production occupancy branch name resolves before room and reservation', async () => {
+  const result = await resolveTenantBranch(fakeDb({
+    occupancies: [{
+      tenantId: 'tenant-a',
+      stayStatus: 'active',
+      roomId: 'room-gp-205',
+      branchName: 'LilyCrest Residences – Gil Puyat',
+    }],
+    reservations: [{ branch: 'guadalupe', status: 'approved' }],
+  }), { _id: 'tenant-a', user_id: 'user-a' });
+  assert.equal(result.source, 'active_room_assignment');
+  assert.equal(result.branch.branchCode, 'gil-puyat');
 });
 
 test('known branch slug resolves through canonical location without a database branch record', async () => {
