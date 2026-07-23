@@ -63,6 +63,10 @@ router.use('/chatbot', chatbotRoutes);
 const paymongoRoutes = require('./paymongo.routes');
 router.use('/paymongo', paymongoRoutes);
 
+// Tenant survey and authorized survey-management routes
+const surveyRoutes = require('./survey.routes');
+router.use('/surveys', surveyRoutes);
+
 function seedAccessMiddleware(req, res, next) {
   if (process.env.NODE_ENV === 'production') {
     return res.status(404).json({ detail: 'Not found' });
