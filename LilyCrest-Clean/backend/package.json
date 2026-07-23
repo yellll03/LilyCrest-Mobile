@@ -11,6 +11,7 @@
     "maintenance:migrate-to-primary": "node scripts/migrateMaintenanceToPrimary.js"
   },
   "dependencies": {
+    "@fontsource/noto-serif": "^5.3.0",
     "@google/generative-ai": "^0.24.1",
     "axios": "^1.13.6",
     "cookie-parser": "^1.4.6",
@@ -21,6 +22,8 @@
     "firebase-admin": "^12.0.0",
     "mongodb": "^6.3.0",
     "nodemailer": "^8.0.4",
+    "pdf-parse": "^2.4.5",
+    "pdfkit": "^0.19.1",
     "uuid": "^9.0.1"
   },
   "devDependencies": {

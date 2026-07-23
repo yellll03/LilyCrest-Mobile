@@ -1,0 +1,200 @@
+[
+  {
+    "templateKey": "PRIVATE_ROOM_SHORT_TERM",
+    "sourceTemplate": "Lease_Private_Room_ShortTerm.pdf",
+    "generatedSample": "PRIVATE_ROOM_SHORT_TERM.comparison.pdf",
+    "sourceSha256": "503ca04f7e954b5112418cf58732fe4e57e0475404eb764cb053c10f5379533c",
+    "pageSize": {
+      "widthPoints": 612,
+      "heightPoints": 936,
+      "widthInches": 8.5,
+      "heightInches": 13
+    },
+    "sourcePageCount": 1,
+    "generatedPageCount": 1,
+    "wordingComparison": "PASS — normalized only for extraction line wrapping and parser page markers",
+    "sectionOrder": [
+      "SECTION 1 – PURPOSE.",
+      "SECTION 2 – DURATION.",
+      "SECTION 3 – RENTAL RATE.",
+      "SECTION 4 – DEPOSITS AND ADVANCES.",
+      "SECTION 5 – FORCE MAJEURE.",
+      "SECTION 6 – LESSOR’S RIGHT OF ENTRY.",
+      "SECTION 7 – EXPIRATION OF LEASE."
+    ],
+    "fontDifference": "Source embeds subset DejaVu Serif; recreation uses OFL Noto Serif. Client approval required.",
+    "paginationDifference": "None detected",
+    "signatureBlockComparison": "Present; physical alignment review required.",
+    "knownLimitations": [
+      "Dynamic tenant substitution is disabled until legal/pricing conflicts and authoritative data approvals are resolved.",
+      "No digital signatures are added.",
+      "Print and physical-device validation remain pending."
+    ],
+    "approvalStatus": "UNDER_REVIEW"
+  },
+  {
+    "templateKey": "PRIVATE_ROOM_LONG_TERM",
+    "sourceTemplate": "Lease_Private_Room_LongTerm.pdf",
+    "generatedSample": "PRIVATE_ROOM_LONG_TERM.comparison.pdf",
+    "sourceSha256": "da2d514a498ace822e791438c8aae5cb123f9466d7090521bf116734356c34cf",
+    "pageSize": {
+      "widthPoints": 612,
+      "heightPoints": 936,
+      "widthInches": 8.5,
+      "heightInches": 13
+    },
+    "sourcePageCount": 1,
+    "generatedPageCount": 1,
+    "wordingComparison": "PASS — normalized only for extraction line wrapping and parser page markers",
+    "sectionOrder": [
+      "SECTION 1 – PURPOSE.",
+      "SECTION 2 – DURATION.",
+      "SECTION 3 – RENTAL RATE.",
+      "SECTION 4 – DEPOSITS AND ADVANCES.",
+      "SECTION 5 – FORCE MAJEURE.",
+      "SECTION 6 – LESSOR’S RIGHT OF ENTRY.",
+      "SECTION 7 – EXPIRATION OF LEASE."
+    ],
+    "fontDifference": "Source embeds subset DejaVu Serif; recreation uses OFL Noto Serif. Client approval required.",
+    "paginationDifference": "None detected",
+    "signatureBlockComparison": "Present; physical alignment review required.",
+    "knownLimitations": [
+      "Dynamic tenant substitution is disabled until legal/pricing conflicts and authoritative data approvals are resolved.",
+      "No digital signatures are added.",
+      "Print and physical-device validation remain pending."
+    ],
+    "approvalStatus": "UNDER_REVIEW"
+  },
+  {
+    "templateKey": "DOUBLE_SHARING_SHORT_TERM",
+    "sourceTemplate": "Lease_Double_Sharing_ShortTerm.pdf",
+    "generatedSample": "DOUBLE_SHARING_SHORT_TERM.comparison.pdf",
+    "sourceSha256": "cb31224d8da20a77112bf8d852e43b87e6d11ebd9baf64c9236df9b3793e5f82",
+    "pageSize": {
+      "widthPoints": 612,
+      "heightPoints": 936,
+      "widthInches": 8.5,
+      "heightInches": 13
+    },
+    "sourcePageCount": 1,
+    "generatedPageCount": 1,
+    "wordingComparison": "PASS — normalized only for extraction line wrapping and parser page markers",
+    "sectionOrder": [
+      "SECTION 1 – PURPOSE.",
+      "SECTION 2 – DURATION.",
+      "SECTION 3 – RENTAL RATE.",
+      "SECTION 4 – DEPOSITS AND ADVANCES.",
+      "SECTION 5 – FORCE MAJEURE.",
+      "SECTION 6 – LESSOR’S RIGHT OF ENTRY.",
+      "SECTION 7 – EXPIRATION OF LEASE."
+    ],
+    "fontDifference": "Source embeds subset DejaVu Serif; recreation uses OFL Noto Serif. Client approval required.",
+    "paginationDifference": "None detected",
+    "signatureBlockComparison": "Present; physical alignment review required.",
+    "knownLimitations": [
+      "Dynamic tenant substitution is disabled until legal/pricing conflicts and authoritative data approvals are resolved.",
+      "No digital signatures are added.",
+      "Print and physical-device validation remain pending."
+    ],
+    "approvalStatus": "UNDER_REVIEW"
+  },
+  {
+    "templateKey": "DOUBLE_SHARING_LONG_TERM",
+    "sourceTemplate": "Lease_Double_Sharing_LongTerm.pdf",
+    "generatedSample": "DOUBLE_SHARING_LONG_TERM.comparison.pdf",
+    "sourceSha256": "2237ce7724a05fad558a0f584b77c6871f6d516591867cd080a903a0136f81bf",
+    "pageSize": {
+      "widthPoints": 612,
+      "heightPoints": 936,
+      "widthInches": 8.5,
+      "heightInches": 13
+    },
+    "sourcePageCount": 1,
+    "generatedPageCount": 1,
+    "wordingComparison": "PASS — normalized only for extraction line wrapping and parser page markers",
+    "sectionOrder": [
+      "SECTION 1 – PURPOSE.",
+      "SECTION 2 – DURATION.",
+      "SECTION 3 – RENTAL RATE.",
+      "SECTION 4 – DEPOSITS AND ADVANCES.",
+      "SECTION 5 – FORCE MAJEURE.",
+      "SECTION 6 – LESSOR’S RIGHT OF ENTRY.",
+      "SECTION 7 – EXPIRATION OF LEASE."
+    ],
+    "fontDifference": "Source embeds subset DejaVu Serif; recreation uses OFL Noto Serif. Client approval required.",
+    "paginationDifference": "None detected",
+    "signatureBlockComparison": "Present; physical alignment review required.",
+    "knownLimitations": [
+      "Dynamic tenant substitution is disabled until legal/pricing conflicts and authoritative data approvals are resolved.",
+      "No digital signatures are added.",
+      "Print and physical-device validation remain pending."
+    ],
+    "approvalStatus": "UNDER_REVIEW"
+  },
+  {
+    "templateKey": "QUADRUPLE_SHARING_SHORT_TERM",
+    "sourceTemplate": "Lease_Quadruple_Sharing_ShortTerm.pdf",
+    "generatedSample": "QUADRUPLE_SHARING_SHORT_TERM.comparison.pdf",
+    "sourceSha256": "9f80573491518335c0dc10b21274257c02fa4e4a538fcae71c2ea9716da62b91",
+    "pageSize": {
+      "widthPoints": 612,
+      "heightPoints": 936,
+      "widthInches": 8.5,
+      "heightInches": 13
+    },
+    "sourcePageCount": 1,
+    "generatedPageCount": 1,
+    "wordingComparison": "PASS — normalized only for extraction line wrapping and parser page markers",
+    "sectionOrder": [
+      "SECTION 1 – PURPOSE.",
+      "SECTION 2 – DURATION.",
+      "SECTION 3 – RENTAL RATE.",
+      "SECTION 4 – DEPOSITS AND ADVANCES.",
+      "SECTION 5 – FORCE MAJEURE.",
+      "SECTION 6 – LESSOR’S RIGHT OF ENTRY.",
+      "SECTION 7 – EXPIRATION OF LEASE."
+    ],
+    "fontDifference": "Source embeds subset DejaVu Serif; recreation uses OFL Noto Serif. Client approval required.",
+    "paginationDifference": "None detected",
+    "signatureBlockComparison": "Present; physical alignment review required.",
+    "knownLimitations": [
+      "Dynamic tenant substitution is disabled until legal/pricing conflicts and authoritative data approvals are resolved.",
+      "No digital signatures are added.",
+      "Print and physical-device validation remain pending."
+    ],
+    "approvalStatus": "UNDER_REVIEW"
+  },
+  {
+    "templateKey": "QUADRUPLE_SHARING_LONG_TERM",
+    "sourceTemplate": "Lease_Quadruple_Sharing_LongTerm.pdf",
+    "generatedSample": "QUADRUPLE_SHARING_LONG_TERM.comparison.pdf",
+    "sourceSha256": "37c678867452a7b1c6fff6a2146f11d5454d035db58e91d906ad273bbb0a6856",
+    "pageSize": {
+      "widthPoints": 612,
+      "heightPoints": 936,
+      "widthInches": 8.5,
+      "heightInches": 13
+    },
+    "sourcePageCount": 1,
+    "generatedPageCount": 1,
+    "wordingComparison": "PASS — normalized only for extraction line wrapping and parser page markers",
+    "sectionOrder": [
+      "SECTION 1 – PURPOSE.",
+      "SECTION 2 – DURATION.",
+      "SECTION 3 – RENTAL RATE.",
+      "SECTION 4 – DEPOSITS AND ADVANCES.",
+      "SECTION 5 – FORCE MAJEURE.",
+      "SECTION 6 – LESSOR’S RIGHT OF ENTRY.",
+      "SECTION 7 – EXPIRATION OF LEASE."
+    ],
+    "fontDifference": "Source embeds subset DejaVu Serif; recreation uses OFL Noto Serif. Client approval required.",
+    "paginationDifference": "None detected",
+    "signatureBlockComparison": "Present; physical alignment review required.",
+    "knownLimitations": [
+      "Dynamic tenant substitution is disabled until legal/pricing conflicts and authoritative data approvals are resolved.",
+      "No digital signatures are added.",
+      "Print and physical-device validation remain pending."
+    ],
+    "approvalStatus": "UNDER_REVIEW"
+  }
+]
