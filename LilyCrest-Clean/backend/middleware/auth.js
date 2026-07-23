@@ -1,6 +1,13 @@
 const { getDb } = require('../config/database');
 const { normalizeUser } = require('../utils/normalizeUser');
 
+function isAccountActive(user = {}) {
+  if (user.deleted_at || user.deletedAt || user.is_deleted === true || user.isDeleted === true) return false;
+  if (user.is_active === false || user.isActive === false || user.disabled === true || user.is_disabled === true) return false;
+  const status = String(user.status || user.account_status || '').trim().toLowerCase();
+  return !['inactive', 'disabled', 'deleted', 'suspended', 'blocked', 'terminated', 'pending', 'pending_approval'].includes(status);
+}
+
 // Authentication middleware
 async function authMiddleware(req, res, next) {
 
@@ -36,6 +43,10 @@ async function authMiddleware(req, res, next) {
     const user = await db.collection('users').findOne({ user_id: session.user_id });
     if (!user) {
       return res.status(401).json({ detail: 'User not found' });
+    }
+    if (!isAccountActive(user)) {
+      await db.collection('user_sessions').deleteMany({ user_id: session.user_id });
+      return res.status(403).json({ detail: 'Access denied. Your account is inactive. Please contact admin.' });
     }
 
     req.user = normalizeUser(user);
@@ -78,7 +89,7 @@ async function optionalAuthMiddleware(req, res, next) {
 
     if (session?.user_id) {
       const user = await db.collection('users').findOne({ user_id: session.user_id });
-      req.user = user ? normalizeUser(user) : null;
+      req.user = user && isAccountActive(user) ? normalizeUser(user) : null;
     } else {
       req.user = null;
     }
@@ -89,4 +100,4 @@ async function optionalAuthMiddleware(req, res, next) {
   return next();
 }
 
-module.exports = { authMiddleware, adminMiddleware, optionalAuthMiddleware };
+module.exports = { authMiddleware, adminMiddleware, optionalAuthMiddleware, isAccountActive };
