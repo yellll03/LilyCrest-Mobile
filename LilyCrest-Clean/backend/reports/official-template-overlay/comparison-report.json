@@ -1,0 +1,950 @@
+[
+  {
+    "templateKey": "PRIVATE_ROOM_SHORT_TERM",
+    "sourceSha256": "503ca04f7e954b5112418cf58732fe4e57e0475404eb764cb053c10f5379533c",
+    "sourcePageCount": 1,
+    "generatedPageCount": 1,
+    "sourcePageSize": {
+      "width": 612,
+      "height": 936
+    },
+    "generatedPageSize": {
+      "width": 612,
+      "height": 936
+    },
+    "dimensionsMatch": true,
+    "baseTemplatePreserved": true,
+    "legalTextRecreated": false,
+    "overlayFieldCount": 12,
+    "allFieldsFit": true,
+    "placements": [
+      {
+        "field": "executionDay",
+        "page": 1,
+        "x": 349.44,
+        "y": 847.2,
+        "width": 8.05,
+        "boxWidth": 22.48,
+        "fontSize": 7.2,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "executionMonthYear",
+        "page": 1,
+        "x": 416.69,
+        "y": 847.2,
+        "width": 31.41,
+        "boxWidth": 74.92,
+        "fontSize": 7.2,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "tenantLegalName",
+        "page": 1,
+        "x": 94.1,
+        "y": 793.6,
+        "width": 59.9,
+        "boxWidth": 153.59,
+        "fontSize": 7.2,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "tenantAddress",
+        "page": 1,
+        "x": 93.92,
+        "y": 784.95,
+        "width": 120.15,
+        "boxWidth": 213.5,
+        "fontSize": 7.1,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "roomNumber",
+        "page": 1,
+        "x": 484.23,
+        "y": 739.98,
+        "width": 23.14,
+        "boxWidth": 37.46,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "bedSlot",
+        "page": 1,
+        "x": 54.77,
+        "y": 731.35,
+        "width": 22.43,
+        "boxWidth": 37.46,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "leaseDurationWords",
+        "page": 1,
+        "x": 431.62,
+        "y": 648.35,
+        "width": 14.57,
+        "boxWidth": 37.46,
+        "fontSize": 7.1,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "leaseDurationNumber",
+        "page": 1,
+        "x": 481.75,
+        "y": 648.35,
+        "width": 3.97,
+        "boxWidth": 22.48,
+        "fontSize": 7.1,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "moveInDate",
+        "page": 1,
+        "x": 63.74,
+        "y": 639.7,
+        "width": 41.94,
+        "boxWidth": 74.92,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "moveOutDate",
+        "page": 1,
+        "x": 136.8,
+        "y": 639.7,
+        "width": 64,
+        "boxWidth": 74.92,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "advanceCoverageStart",
+        "page": 1,
+        "x": 200.13,
+        "y": 480.65,
+        "width": 41.94,
+        "boxWidth": 74.92,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "advanceCoverageEnd",
+        "page": 1,
+        "x": 278.72,
+        "y": 480.65,
+        "width": 52.08,
+        "boxWidth": 74.92,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      }
+    ],
+    "beforePreview": "PRIVATE_ROOM_SHORT_TERM.before.png",
+    "afterOverlayPreview": "PRIVATE_ROOM_SHORT_TERM.after.png",
+    "generatedPdf": "PRIVATE_ROOM_SHORT_TERM.overlay.pdf",
+    "differenceSummary": "The official source page and legal content streams are preserved; differences are restricted to the 12 approved overlay boxes.",
+    "result": "PASS"
+  },
+  {
+    "templateKey": "PRIVATE_ROOM_LONG_TERM",
+    "sourceSha256": "da2d514a498ace822e791438c8aae5cb123f9466d7090521bf116734356c34cf",
+    "sourcePageCount": 1,
+    "generatedPageCount": 1,
+    "sourcePageSize": {
+      "width": 612,
+      "height": 936
+    },
+    "generatedPageSize": {
+      "width": 612,
+      "height": 936
+    },
+    "dimensionsMatch": true,
+    "baseTemplatePreserved": true,
+    "legalTextRecreated": false,
+    "overlayFieldCount": 12,
+    "allFieldsFit": true,
+    "placements": [
+      {
+        "field": "executionDay",
+        "page": 1,
+        "x": 349.44,
+        "y": 847.2,
+        "width": 8.05,
+        "boxWidth": 22.48,
+        "fontSize": 7.2,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "executionMonthYear",
+        "page": 1,
+        "x": 416.69,
+        "y": 847.2,
+        "width": 31.41,
+        "boxWidth": 74.92,
+        "fontSize": 7.2,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "tenantLegalName",
+        "page": 1,
+        "x": 94.1,
+        "y": 793.6,
+        "width": 59.9,
+        "boxWidth": 153.59,
+        "fontSize": 7.2,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "tenantAddress",
+        "page": 1,
+        "x": 93.92,
+        "y": 784.95,
+        "width": 120.15,
+        "boxWidth": 213.5,
+        "fontSize": 7.1,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "roomNumber",
+        "page": 1,
+        "x": 484.23,
+        "y": 739.98,
+        "width": 23.14,
+        "boxWidth": 37.46,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "bedSlot",
+        "page": 1,
+        "x": 54.77,
+        "y": 731.35,
+        "width": 22.43,
+        "boxWidth": 37.46,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "leaseDurationWords",
+        "page": 1,
+        "x": 427.64,
+        "y": 648.35,
+        "width": 22.53,
+        "boxWidth": 37.46,
+        "fontSize": 7.1,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "leaseDurationNumber",
+        "page": 1,
+        "x": 479.76,
+        "y": 648.35,
+        "width": 7.94,
+        "boxWidth": 22.48,
+        "fontSize": 7.1,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "moveInDate",
+        "page": 1,
+        "x": 63.74,
+        "y": 639.7,
+        "width": 41.94,
+        "boxWidth": 74.92,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "moveOutDate",
+        "page": 1,
+        "x": 148.12,
+        "y": 639.7,
+        "width": 41.94,
+        "boxWidth": 74.92,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "advanceCoverageStart",
+        "page": 1,
+        "x": 196.38,
+        "y": 489.3,
+        "width": 41.94,
+        "boxWidth": 74.92,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "advanceCoverageEnd",
+        "page": 1,
+        "x": 275.54,
+        "y": 489.3,
+        "width": 52.08,
+        "boxWidth": 74.92,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      }
+    ],
+    "beforePreview": "PRIVATE_ROOM_LONG_TERM.before.png",
+    "afterOverlayPreview": "PRIVATE_ROOM_LONG_TERM.after.png",
+    "generatedPdf": "PRIVATE_ROOM_LONG_TERM.overlay.pdf",
+    "differenceSummary": "The official source page and legal content streams are preserved; differences are restricted to the 12 approved overlay boxes.",
+    "result": "PASS"
+  },
+  {
+    "templateKey": "DOUBLE_SHARING_SHORT_TERM",
+    "sourceSha256": "cb31224d8da20a77112bf8d852e43b87e6d11ebd9baf64c9236df9b3793e5f82",
+    "sourcePageCount": 1,
+    "generatedPageCount": 1,
+    "sourcePageSize": {
+      "width": 612,
+      "height": 936
+    },
+    "generatedPageSize": {
+      "width": 612,
+      "height": 936
+    },
+    "dimensionsMatch": true,
+    "baseTemplatePreserved": true,
+    "legalTextRecreated": false,
+    "overlayFieldCount": 12,
+    "allFieldsFit": true,
+    "placements": [
+      {
+        "field": "executionDay",
+        "page": 1,
+        "x": 349.44,
+        "y": 847.2,
+        "width": 8.05,
+        "boxWidth": 22.48,
+        "fontSize": 7.2,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "executionMonthYear",
+        "page": 1,
+        "x": 416.69,
+        "y": 847.2,
+        "width": 31.41,
+        "boxWidth": 74.92,
+        "fontSize": 7.2,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "tenantLegalName",
+        "page": 1,
+        "x": 94.1,
+        "y": 793.6,
+        "width": 59.9,
+        "boxWidth": 153.59,
+        "fontSize": 7.2,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "tenantAddress",
+        "page": 1,
+        "x": 93.92,
+        "y": 784.95,
+        "width": 120.15,
+        "boxWidth": 213.5,
+        "fontSize": 7.1,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "roomNumber",
+        "page": 1,
+        "x": 500.76,
+        "y": 739.98,
+        "width": 23.14,
+        "boxWidth": 37.46,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "bedSlot",
+        "page": 1,
+        "x": 70.8,
+        "y": 731.35,
+        "width": 22.43,
+        "boxWidth": 37.46,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "leaseDurationWords",
+        "page": 1,
+        "x": 375.89,
+        "y": 648.35,
+        "width": 14.57,
+        "boxWidth": 37.46,
+        "fontSize": 7.1,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "leaseDurationNumber",
+        "page": 1,
+        "x": 418.75,
+        "y": 648.35,
+        "width": 3.97,
+        "boxWidth": 22.48,
+        "fontSize": 7.1,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "moveInDate",
+        "page": 1,
+        "x": 508.85,
+        "y": 648.35,
+        "width": 41.94,
+        "boxWidth": 68.78,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "moveOutDate",
+        "page": 1,
+        "x": 63.54,
+        "y": 639.7,
+        "width": 64,
+        "boxWidth": 74.92,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "advanceCoverageStart",
+        "page": 1,
+        "x": 196.38,
+        "y": 489.3,
+        "width": 41.94,
+        "boxWidth": 74.92,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "advanceCoverageEnd",
+        "page": 1,
+        "x": 275.54,
+        "y": 489.3,
+        "width": 52.08,
+        "boxWidth": 74.92,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      }
+    ],
+    "beforePreview": "DOUBLE_SHARING_SHORT_TERM.before.png",
+    "afterOverlayPreview": "DOUBLE_SHARING_SHORT_TERM.after.png",
+    "generatedPdf": "DOUBLE_SHARING_SHORT_TERM.overlay.pdf",
+    "differenceSummary": "The official source page and legal content streams are preserved; differences are restricted to the 12 approved overlay boxes.",
+    "result": "PASS"
+  },
+  {
+    "templateKey": "DOUBLE_SHARING_LONG_TERM",
+    "sourceSha256": "2237ce7724a05fad558a0f584b77c6871f6d516591867cd080a903a0136f81bf",
+    "sourcePageCount": 1,
+    "generatedPageCount": 1,
+    "sourcePageSize": {
+      "width": 612,
+      "height": 936
+    },
+    "generatedPageSize": {
+      "width": 612,
+      "height": 936
+    },
+    "dimensionsMatch": true,
+    "baseTemplatePreserved": true,
+    "legalTextRecreated": false,
+    "overlayFieldCount": 12,
+    "allFieldsFit": true,
+    "placements": [
+      {
+        "field": "executionDay",
+        "page": 1,
+        "x": 349.44,
+        "y": 847.2,
+        "width": 8.05,
+        "boxWidth": 22.48,
+        "fontSize": 7.2,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "executionMonthYear",
+        "page": 1,
+        "x": 416.69,
+        "y": 847.2,
+        "width": 31.41,
+        "boxWidth": 74.92,
+        "fontSize": 7.2,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "tenantLegalName",
+        "page": 1,
+        "x": 94.1,
+        "y": 793.6,
+        "width": 59.9,
+        "boxWidth": 153.59,
+        "fontSize": 7.2,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "tenantAddress",
+        "page": 1,
+        "x": 93.92,
+        "y": 784.95,
+        "width": 120.15,
+        "boxWidth": 213.5,
+        "fontSize": 7.1,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "roomNumber",
+        "page": 1,
+        "x": 500.76,
+        "y": 739.98,
+        "width": 23.14,
+        "boxWidth": 37.46,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "bedSlot",
+        "page": 1,
+        "x": 70.8,
+        "y": 731.35,
+        "width": 22.43,
+        "boxWidth": 37.46,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "leaseDurationWords",
+        "page": 1,
+        "x": 371.91,
+        "y": 648.35,
+        "width": 22.53,
+        "boxWidth": 37.46,
+        "fontSize": 7.1,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "leaseDurationNumber",
+        "page": 1,
+        "x": 416.76,
+        "y": 648.35,
+        "width": 7.94,
+        "boxWidth": 22.48,
+        "fontSize": 7.1,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "moveInDate",
+        "page": 1,
+        "x": 508.85,
+        "y": 648.35,
+        "width": 41.94,
+        "boxWidth": 68.78,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "moveOutDate",
+        "page": 1,
+        "x": 74.76,
+        "y": 639.7,
+        "width": 41.94,
+        "boxWidth": 74.92,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "advanceCoverageStart",
+        "page": 1,
+        "x": 196.38,
+        "y": 489.3,
+        "width": 41.94,
+        "boxWidth": 74.92,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "advanceCoverageEnd",
+        "page": 1,
+        "x": 275.54,
+        "y": 489.3,
+        "width": 52.08,
+        "boxWidth": 74.92,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      }
+    ],
+    "beforePreview": "DOUBLE_SHARING_LONG_TERM.before.png",
+    "afterOverlayPreview": "DOUBLE_SHARING_LONG_TERM.after.png",
+    "generatedPdf": "DOUBLE_SHARING_LONG_TERM.overlay.pdf",
+    "differenceSummary": "The official source page and legal content streams are preserved; differences are restricted to the 12 approved overlay boxes.",
+    "result": "PASS"
+  },
+  {
+    "templateKey": "QUADRUPLE_SHARING_SHORT_TERM",
+    "sourceSha256": "9f80573491518335c0dc10b21274257c02fa4e4a538fcae71c2ea9716da62b91",
+    "sourcePageCount": 1,
+    "generatedPageCount": 1,
+    "sourcePageSize": {
+      "width": 612,
+      "height": 936
+    },
+    "generatedPageSize": {
+      "width": 612,
+      "height": 936
+    },
+    "dimensionsMatch": true,
+    "baseTemplatePreserved": true,
+    "legalTextRecreated": false,
+    "overlayFieldCount": 12,
+    "allFieldsFit": true,
+    "placements": [
+      {
+        "field": "executionDay",
+        "page": 1,
+        "x": 349.44,
+        "y": 847.2,
+        "width": 8.05,
+        "boxWidth": 22.48,
+        "fontSize": 7.2,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "executionMonthYear",
+        "page": 1,
+        "x": 416.69,
+        "y": 847.2,
+        "width": 31.41,
+        "boxWidth": 74.92,
+        "fontSize": 7.2,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "tenantLegalName",
+        "page": 1,
+        "x": 94.1,
+        "y": 793.6,
+        "width": 59.9,
+        "boxWidth": 153.59,
+        "fontSize": 7.2,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "tenantAddress",
+        "page": 1,
+        "x": 93.92,
+        "y": 784.95,
+        "width": 120.15,
+        "boxWidth": 213.5,
+        "fontSize": 7.1,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "roomNumber",
+        "page": 1,
+        "x": 535.11,
+        "y": 739.98,
+        "width": 23.14,
+        "boxWidth": 37.46,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "bedSlot",
+        "page": 1,
+        "x": 105.6,
+        "y": 731.35,
+        "width": 22.43,
+        "boxWidth": 37.46,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "leaseDurationWords",
+        "page": 1,
+        "x": 375.89,
+        "y": 648.35,
+        "width": 14.57,
+        "boxWidth": 37.46,
+        "fontSize": 7.1,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "leaseDurationNumber",
+        "page": 1,
+        "x": 418.75,
+        "y": 648.35,
+        "width": 3.97,
+        "boxWidth": 22.48,
+        "fontSize": 7.1,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "moveInDate",
+        "page": 1,
+        "x": 508.85,
+        "y": 648.35,
+        "width": 41.94,
+        "boxWidth": 68.78,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "moveOutDate",
+        "page": 1,
+        "x": 63.54,
+        "y": 639.7,
+        "width": 64,
+        "boxWidth": 74.92,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "advanceCoverageStart",
+        "page": 1,
+        "x": 196.38,
+        "y": 489.3,
+        "width": 41.94,
+        "boxWidth": 74.92,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "advanceCoverageEnd",
+        "page": 1,
+        "x": 275.54,
+        "y": 489.3,
+        "width": 52.08,
+        "boxWidth": 74.92,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      }
+    ],
+    "beforePreview": "QUADRUPLE_SHARING_SHORT_TERM.before.png",
+    "afterOverlayPreview": "QUADRUPLE_SHARING_SHORT_TERM.after.png",
+    "generatedPdf": "QUADRUPLE_SHARING_SHORT_TERM.overlay.pdf",
+    "differenceSummary": "The official source page and legal content streams are preserved; differences are restricted to the 12 approved overlay boxes.",
+    "result": "PASS"
+  },
+  {
+    "templateKey": "QUADRUPLE_SHARING_LONG_TERM",
+    "sourceSha256": "37c678867452a7b1c6fff6a2146f11d5454d035db58e91d906ad273bbb0a6856",
+    "sourcePageCount": 1,
+    "generatedPageCount": 1,
+    "sourcePageSize": {
+      "width": 612,
+      "height": 936
+    },
+    "generatedPageSize": {
+      "width": 612,
+      "height": 936
+    },
+    "dimensionsMatch": true,
+    "baseTemplatePreserved": true,
+    "legalTextRecreated": false,
+    "overlayFieldCount": 12,
+    "allFieldsFit": true,
+    "placements": [
+      {
+        "field": "executionDay",
+        "page": 1,
+        "x": 349.44,
+        "y": 847.2,
+        "width": 8.05,
+        "boxWidth": 22.48,
+        "fontSize": 7.2,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "executionMonthYear",
+        "page": 1,
+        "x": 416.69,
+        "y": 847.2,
+        "width": 31.41,
+        "boxWidth": 74.92,
+        "fontSize": 7.2,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "tenantLegalName",
+        "page": 1,
+        "x": 94.1,
+        "y": 793.6,
+        "width": 59.9,
+        "boxWidth": 153.59,
+        "fontSize": 7.2,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "tenantAddress",
+        "page": 1,
+        "x": 93.92,
+        "y": 784.95,
+        "width": 120.15,
+        "boxWidth": 213.5,
+        "fontSize": 7.1,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "roomNumber",
+        "page": 1,
+        "x": 535.11,
+        "y": 739.98,
+        "width": 23.14,
+        "boxWidth": 37.46,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "bedSlot",
+        "page": 1,
+        "x": 105.6,
+        "y": 731.35,
+        "width": 22.43,
+        "boxWidth": 37.46,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "leaseDurationWords",
+        "page": 1,
+        "x": 371.91,
+        "y": 648.35,
+        "width": 22.53,
+        "boxWidth": 37.46,
+        "fontSize": 7.1,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "leaseDurationNumber",
+        "page": 1,
+        "x": 416.76,
+        "y": 648.35,
+        "width": 7.94,
+        "boxWidth": 22.48,
+        "fontSize": 7.1,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "moveInDate",
+        "page": 1,
+        "x": 508.85,
+        "y": 648.35,
+        "width": 41.94,
+        "boxWidth": 68.78,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "moveOutDate",
+        "page": 1,
+        "x": 74.76,
+        "y": 639.7,
+        "width": 41.94,
+        "boxWidth": 74.92,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "advanceCoverageStart",
+        "page": 1,
+        "x": 196.38,
+        "y": 489.3,
+        "width": 41.94,
+        "boxWidth": 74.92,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      },
+      {
+        "field": "advanceCoverageEnd",
+        "page": 1,
+        "x": 275.54,
+        "y": 489.3,
+        "width": 52.08,
+        "boxWidth": 74.92,
+        "fontSize": 7,
+        "alignment": "center",
+        "fits": true
+      }
+    ],
+    "beforePreview": "QUADRUPLE_SHARING_LONG_TERM.before.png",
+    "afterOverlayPreview": "QUADRUPLE_SHARING_LONG_TERM.after.png",
+    "generatedPdf": "QUADRUPLE_SHARING_LONG_TERM.overlay.pdf",
+    "differenceSummary": "The official source page and legal content streams are preserved; differences are restricted to the 12 approved overlay boxes.",
+    "result": "PASS"
+  }
+]

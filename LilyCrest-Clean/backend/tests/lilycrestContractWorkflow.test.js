@@ -3,7 +3,8 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { extractOfficialLegalText } = require('../domain/contracts/officialLegalText');
-const { personalizeDefinition } = require('../domain/contracts/longBondRenderer');
+const { overlayOfficialTemplate } = require('../domain/contracts/officialTemplateOverlay');
+const { selectTemplate } = require('../domain/contracts/templateRegistry');
 const {
   addMonths, fullLegalName, pricingFromOfficialTemplate, residentialAddress, roomType,
 } = require('../services/contractPublication.service');
@@ -24,9 +25,8 @@ test('existing reservation fields resolve without a duplicate stay or approval e
   });
 });
 
-test('official contract text is populated only with verified snapshot fields', async () => {
-  const official = await extractOfficialLegalText('QUADRUPLE_SHARING', 'SHORT_TERM');
-  const personalized = personalizeDefinition(official.definition, {
+test('official PDF remains the base and only verified fields are overlaid', async () => {
+  const rendered = await overlayOfficialTemplate(selectTemplate('QUADRUPLE_SHARING', 'SHORT_TERM'), {
     tenantLegalName: 'Verified Tenant',
     tenantResidentialAddress: '7 Main Street, Makati',
     roomNumber: 'GP-205',
@@ -36,8 +36,10 @@ test('official contract text is populated only with verified snapshot fields', a
     contractEndDate: '2026-11-20T00:00:00.000Z',
     generatedAt: '2026-07-24T00:00:00.000Z',
   });
-  assert.match(personalized.introductoryClauses, /Verified Tenant/);
-  assert.match(personalized.introductoryClauses, /Room GP-205, Bed\/Slot No\. upper/);
-  assert.match(personalized.numberedSections[1].text, /period of 4 \(4\) months/);
-  assert.doesNotMatch(personalized.numberedSections[1].text, /_{4,}/);
+  assert.equal(rendered.bytes.subarray(0, 5).toString(), '%PDF-');
+  assert.equal(rendered.comparison.baseTemplatePreserved, true);
+  assert.equal(rendered.comparison.legalTextRecreated, false);
+  assert.equal(rendered.comparison.dimensionsMatch, true);
+  assert.equal(rendered.comparison.allFieldsFit, true);
+  assert.equal(rendered.comparison.overlayFieldCount, 12);
 });

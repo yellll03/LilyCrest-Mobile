@@ -58,7 +58,7 @@ function createDraftRecord(input, now = new Date()) {
     bedId: input.bedId,
     templateKey: input.templateKey,
     sourceTemplateSha256: input.sourceTemplateSha256,
-    generatorVersion: GENERATOR_VERSION,
+    generatorVersion: input.generatorVersion || GENERATOR_VERSION,
     status: 'DRAFT',
     version: input.version,
     previousContractId: input.previousContractId || null,

@@ -5,7 +5,7 @@ const { ObjectId } = require('mongodb');
 const { admin, resolveStorageBucket } = require('../config/firebase');
 const { resolveTenantBranch } = require('./branchLocation.service');
 const { extractOfficialLegalText } = require('../domain/contracts/officialLegalText');
-const { renderOfficialLease } = require('../domain/contracts/longBondRenderer');
+const { overlayOfficialTemplate } = require('../domain/contracts/officialTemplateOverlay');
 const { createDraftRecord, publishPreReleaseRecord } = require('../domain/contracts/generatedContractRecord');
 const { calculateMoveInFinancials, RESERVATION_FEE_APPLICATION } = require('../domain/billing/moveInFinancials');
 
@@ -157,7 +157,9 @@ async function publishTenantTestContract(db, userId, publishedBy) {
     userId,
     status: { $in: ['PRE_RELEASE_TEST', 'APPROVED', 'ACTIVE'] },
   }, { sort: { generatedAt: -1 } });
-  if (existing) return { ok: true, existing: true, record: existing };
+  if (existing?.generatorVersion === 'official-template-overlay-v1') {
+    return { ok: true, existing: true, record: existing };
+  }
 
   const resolved = await resolveContractSnapshot(db, userId);
   if (!resolved.ok) return resolved;
@@ -170,11 +172,14 @@ async function publishTenantTestContract(db, userId, publishedBy) {
     bedId: resolved.snapshot.bedId,
     templateKey: resolved.official.template.key,
     sourceTemplateSha256: resolved.official.integrity.actualSha256,
-    version: 1,
+    version: Number(existing?.version || 0) + 1,
+    previousContractId: existing?.contractId || null,
+    generatorVersion: 'official-template-overlay-v1',
     snapshot: resolved.snapshot,
     generatedBy: publishedBy,
   });
-  const pdf = await renderOfficialLease(resolved.official.definition, { generatorVersion: 'lilycrest-workflow-v1' }, resolved.snapshot);
+  const rendered = await overlayOfficialTemplate(resolved.official.template, resolved.snapshot);
+  const pdf = rendered.bytes;
   const bucketName = resolveStorageBucket();
   if (!bucketName) return { ok: false, blockers: ['DOCUMENT_STORAGE_NOT_CONFIGURED'] };
   const storagePath = `tenant-contracts/${userId}/${draft.publicDocumentId}.pdf`;
@@ -188,6 +193,7 @@ async function publishTenantTestContract(db, userId, publishedBy) {
     publishedBy,
     publishedAt: new Date(),
   });
+  published.comparison = rendered.comparison;
   await db.collection('generatedContracts').insertOne(published);
   return { ok: true, existing: false, record: published };
 }
