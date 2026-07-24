@@ -82,6 +82,21 @@ const isPaidBillStatus = (status) => PAID_STATUSES.has(String(status || '').toLo
 const isBillOutstanding = (bill) => !NON_PAYABLE_STATUSES.has(getBillStatus(bill));
 const getBillPaymentDate = (bill) => bill?.payment_date || bill?.paymentDate || bill?.paidAt || bill?.paid_at || null;
 const getBillReleaseDate = (bill) => bill?.release_date || bill?.releaseDate || bill?.created_at || bill?.createdAt || null;
+function getDisplaySchedule(bill) {
+  const utilitySchedules = Object.values(bill?.utility_deadlines || {});
+  const hasUtilityCharge = Number(bill?.electricity || 0) > 0 || Number(bill?.water || 0) > 0 || utilitySchedules.length > 0;
+  const releasedUtilities = utilitySchedules
+    .filter((schedule) => schedule?.billReleaseDate && schedule?.finalDueDate)
+    .sort((left, right) => new Date(left.finalDueDate) - new Date(right.finalDueDate));
+  const hasRent = Number(bill?.rent || 0) > 0;
+  const candidates = [
+    ...releasedUtilities.map((schedule) => ({ releaseDate: schedule.billReleaseDate, dueDate: schedule.finalDueDate })),
+    ...(hasRent && (bill?.due_date || bill?.dueDate) ? [{ releaseDate: getBillReleaseDate(bill), dueDate: bill.due_date || bill.dueDate }] : []),
+  ].sort((left, right) => new Date(left.dueDate) - new Date(right.dueDate));
+  if (candidates.length) return { ...candidates[0], unreleasedUtility: false };
+  if (hasUtilityCharge) return { releaseDate: null, dueDate: null, unreleasedUtility: true };
+  return { releaseDate: getBillReleaseDate(bill), dueDate: bill?.due_date || bill?.dueDate || null, unreleasedUtility: false };
+}
 const getBillOwedAmount = (bill) => {
   const candidates = [bill?.remaining_amount, bill?.total, bill?.amount];
   for (const value of candidates) {
@@ -262,11 +277,12 @@ export default function BillingScreen() {
       const value = Number(bill.penalties ?? bill.penalty ?? bill.late_penalty ?? bill.latePenalty ?? 0);
       return sum + (Number.isFinite(value) && value > 0 ? value : 0);
     }, 0);
-    const dueDate = summaryBill?.due_date || summaryBill?.dueDate;
+    const summarySchedule = getDisplaySchedule(summaryBill);
+    const dueDate = summarySchedule.dueDate;
     const summaryId = getBillId(summaryBill);
     const timingApplies = summaryId && String(summaryId) === String(getBillId(currentSummary.bill) || '');
     const daysOverdue = timingApplies
-      ? Number(currentSummary.timing?.days_overdue ?? currentSummary.timing?.daysOverdue ?? 0)
+      ? Number(currentSummary.timing?.days_overdue ?? currentSummary.timing?.daysOverdue ?? currentSummary.timing?.days ?? 0)
       : 0;
 
     if (latestIsPaid) {
@@ -316,7 +332,15 @@ export default function BillingScreen() {
           </View>
         ) : (
           <>
-            <View style={styles.heroMetadata}>
+            {summarySchedule.unreleasedUtility ? (
+              <View style={styles.utilityPendingBanner}>
+                <Ionicons name="information-circle-outline" size={18} color="#BFDBFE" />
+                <View style={styles.utilityPendingCopy}>
+                  <Text style={styles.utilityPendingTitle}>Utility schedule pending</Text>
+                  <Text style={styles.heroMessageText}>Your utility bill has not been released yet.</Text>
+                </View>
+              </View>
+            ) : <View style={styles.heroMetadata}>
               <View style={styles.heroMetadataItem}>
                 <Text style={styles.heroMetadataLabel}>Due Date</Text>
                 <Text style={styles.heroMetadataValue}>{safeDate(dueDate)}</Text>
@@ -325,12 +349,12 @@ export default function BillingScreen() {
                 <Text style={styles.heroMetadataLabel}>Late Penalty</Text>
                 <Text style={styles.heroMetadataValue}>{penalty > 0 ? safeCurrency(penalty) : 'None'}</Text>
               </View>
-            </View>
+            </View>}
             {overdueBill && daysOverdue > 0 && (
               <Text style={styles.heroOverdueText}>Overdue by {daysOverdue} {daysOverdue === 1 ? 'day' : 'days'}</Text>
             )}
             <Pressable
-              style={styles.heroPayBtn}
+              style={[styles.heroPayBtn, summarySchedule.unreleasedUtility && styles.heroPayBtnAfterMessage]}
               onPress={() => {
                 const id = getBillId(overdueBill || outstandingBills[0]);
                 if (id) router.push({ pathname: '/bill-details', params: { billId: String(id) } });
@@ -378,7 +402,7 @@ export default function BillingScreen() {
     const billId = getBillId(bill);
     const paid = isPaid(bill);
     const statusCfg = getStatusConfig(bill?.status);
-    const releaseDate = getBillReleaseDate(bill);
+    const schedule = getDisplaySchedule(bill);
 
     return (
       <Pressable
@@ -393,7 +417,7 @@ export default function BillingScreen() {
           <View style={{ flex: 1 }}>
             <Text style={styles.billTitle} numberOfLines={1}>{bill.billing_period || bill.description || 'Billing Statement'}</Text>
             <Text style={styles.billDue}>
-              Released {safeDate(releaseDate)} · Due {safeDate(bill.due_date || bill.dueDate)}
+              {schedule.unreleasedUtility ? 'Your utility bill has not been released yet.' : `Released ${safeDate(schedule.releaseDate)} · Due ${safeDate(schedule.dueDate)}`}
             </Text>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: statusCfg.bg }]}>
@@ -570,10 +594,21 @@ function createStyles(c, isDarkMode) {
     heroMessage: { gap: 4 },
     heroMessageLead: { fontSize: 14, fontWeight: '700', color: '#ffffff' },
     heroMessageText: { fontSize: 13, color: 'rgba(255,255,255,0.7)' },
+    utilityPendingBanner: {
+      flexDirection: 'row',
+      alignItems: 'flex-start',
+      gap: 10,
+      padding: 12,
+      borderRadius: 12,
+      backgroundColor: 'rgba(255,255,255,0.08)',
+    },
+    utilityPendingCopy: { flex: 1, gap: 3 },
+    utilityPendingTitle: { fontSize: 13, fontWeight: '700', color: '#ffffff' },
     heroOverdueText: { fontSize: 12, fontWeight: '700', color: '#FCA5A5', marginBottom: 12 },
     accountStatus: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 5, paddingHorizontal: 10, borderRadius: 20 },
     accountStatusText: { fontSize: 12, fontWeight: '700' },
     heroPayBtn: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: c.accent, paddingVertical: 10, paddingHorizontal: 18, borderRadius: 20 },
+    heroPayBtnAfterMessage: { marginTop: 14 },
     heroPayText: { color: '#ffffff', fontWeight: '700', fontSize: 14 },
 
     insightCard: {
