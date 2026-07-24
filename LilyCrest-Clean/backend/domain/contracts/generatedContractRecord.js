@@ -1,9 +1,13 @@
 'use strict';
 
 const crypto = require('crypto');
+const {
+  RESERVATION_FEE_APPLICATION,
+  calculateMoveInFinancials,
+} = require('../billing/moveInFinancials');
 
 const GENERATOR_VERSION = 'option-a-v1';
-const ALLOWED_STATUS = new Set(['DRAFT', 'UNDER_REVIEW', 'APPROVED', 'ACTIVE']);
+const ALLOWED_STATUS = new Set(['DRAFT', 'UNDER_REVIEW', 'PRE_RELEASE_TEST', 'APPROVED', 'ACTIVE']);
 
 function canonicalJson(value) {
   if (Array.isArray(value)) return `[${value.map(canonicalJson).join(',')}]`;
@@ -17,11 +21,34 @@ function snapshotSha256(snapshot) {
   return crypto.createHash('sha256').update(canonicalJson(snapshot)).digest('hex');
 }
 
+function canonicalizeSnapshotPricing(snapshot) {
+  const next = structuredClone(snapshot);
+  const pricing = next?.pricing;
+  if (!pricing) return next;
+  const required = [pricing.advanceRent, pricing.securityDeposit, pricing.reservationFee];
+  if (required.some((value) => value === null || value === undefined || String(value).trim() === '')) {
+    return next;
+  }
+  const financials = calculateMoveInFinancials({
+    advanceRent: pricing.advanceRent,
+    securityDeposit: pricing.securityDeposit,
+    reservationFeeAlreadyPaid: pricing.reservationFee,
+  });
+  next.pricing = {
+    ...pricing,
+    reservationFeeApplication: RESERVATION_FEE_APPLICATION,
+    totalDueBeforeMoveIn: financials.totalDueBeforeMoveIn,
+    remainingBalance: financials.remainingBalance,
+  };
+  return next;
+}
+
 function createDraftRecord(input, now = new Date()) {
-  const snapshot = structuredClone(input.snapshot);
+  const snapshot = canonicalizeSnapshotPricing(input.snapshot);
   const timestamp = now.toISOString();
   return {
     contractId: input.contractId || crypto.randomUUID(),
+    publicDocumentId: input.publicDocumentId || crypto.randomUUID(),
     userId: input.userId,
     tenantId: input.tenantId,
     reservationId: input.reservationId,
@@ -44,6 +71,26 @@ function createDraftRecord(input, now = new Date()) {
     approvedAt: null,
     approvedBy: null,
     createdAt: timestamp,
+  };
+}
+
+function publishPreReleaseRecord(record, publication) {
+  if (!['DRAFT', 'UNDER_REVIEW'].includes(record.status)) {
+    throw new Error('Only a draft or under-review contract can be published for controlled testing.');
+  }
+  if (snapshotSha256(record.snapshot) !== record.snapshotSha256) {
+    throw new Error('The contract snapshot changed after generation.');
+  }
+  if (!publication?.testFileUrl || !publication?.publishedBy || !publication?.publishedAt) {
+    throw new Error('Complete controlled-publication metadata is required.');
+  }
+  return {
+    ...structuredClone(record),
+    status: 'PRE_RELEASE_TEST',
+    testFileUrl: publication.testFileUrl,
+    testPublishedAt: new Date(publication.publishedAt).toISOString(),
+    testPublishedBy: publication.publishedBy,
+    finalFileUrl: null,
   };
 }
 
@@ -83,6 +130,8 @@ module.exports = {
   approveRecord,
   assertImmutableApprovedRecord,
   canonicalJson,
+  canonicalizeSnapshotPricing,
   createDraftRecord,
+  publishPreReleaseRecord,
   snapshotSha256,
 };

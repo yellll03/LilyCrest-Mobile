@@ -4,6 +4,8 @@ const { getDb } = require('../config/database');
 const { buildBrandedPdf, esc } = require('../utils/pdfBuilder');
 const { notifyBillCreated } = require('../services/pushService');
 const { calculateLatePenalty } = require('../domain/billing/billingPolicy');
+const { extractMoveInFinancials } = require('../domain/billing/moveInFinancials');
+const { resolveUtilityDeadline } = require('../domain/billing/utilityBillingPolicy');
 
 const MAX_BILL_AMOUNT = 500000;
 const ALLOWED_BILL_STATUSES = new Set([
@@ -472,6 +474,16 @@ function normalizeLegacyBill(bill = {}) {
   if (!normalized.bill_id && bill._id) normalized.bill_id = String(bill._id);
   if (!normalized.legacy_billing_id && fallbackId) normalized.legacy_billing_id = fallbackId;
   normalized._id = undefined;
+  const moveInFinancials = extractMoveInFinancials(normalized);
+  if (moveInFinancials) {
+    normalized.move_in_financials = moveInFinancials;
+    normalized.advance_rent = moveInFinancials.advanceRent;
+    normalized.security_deposit = moveInFinancials.securityDeposit;
+    normalized.reservation_fee_already_paid = moveInFinancials.reservationFeeAlreadyPaid;
+    normalized.total = moveInFinancials.remainingBalance;
+    normalized.amount = moveInFinancials.remainingBalance;
+    normalized.remaining_amount = moveInFinancials.remainingBalance;
+  }
   const effectiveStatus = getEffectiveBillStatus(normalized);
 
   normalized.status = effectiveStatus || normalized.status;
@@ -599,6 +611,40 @@ function toObjectIdIfValid(value) {
   } catch (_error) {
     return null;
   }
+}
+
+function isMoveInFinancialBill(bill = {}) {
+  const descriptor = [
+    bill.billing_type, bill.billingType, bill.type, bill.category,
+    bill.description, bill.billing_period,
+    ...(Array.isArray(bill.items) ? bill.items.flatMap((item) => [item?.label, item?.description, item?.type]) : []),
+  ].filter(Boolean).join(' ').toLowerCase();
+  return /\bmove[\s-]?in\b|advance rent|security deposit|deposits? and advances?/.test(descriptor);
+}
+
+function applyMoveInFinancials(bill, financials) {
+  if (!financials || !isMoveInFinancialBill(bill)) return bill;
+  const settled = isPaidBill(bill);
+  return {
+    ...bill,
+    move_in_financials: financials,
+    advance_rent: financials.advanceRent,
+    security_deposit: financials.securityDeposit,
+    reservation_fee_already_paid: financials.reservationFeeAlreadyPaid,
+    amount: financials.remainingBalance,
+    total: financials.remainingBalance,
+    original_total: financials.totalDueBeforeMoveIn,
+    remaining_amount: settled ? 0 : financials.remainingBalance,
+  };
+}
+
+async function findLatestOwnedReservation(db, ownerFilters) {
+  const collection = db.collection('reservations');
+  if (!collection || typeof collection.findOne !== 'function') return null;
+  return collection.findOne(
+    { $or: ownerFilters },
+    { sort: { approvedAt: -1, updatedAt: -1, createdAt: -1 } },
+  ).catch(() => null);
 }
 
 function billingMonthKey(value) {
@@ -875,11 +921,18 @@ function mapRealBill(b, userId) {
   const waterBreakdown = b.water_breakdown && typeof b.water_breakdown === 'object'
     ? b.water_breakdown
     : (b.waterBreakdown && typeof b.waterBreakdown === 'object' ? b.waterBreakdown : undefined);
+  const utilityDeadline = resolveUtilityDeadline({
+    billingPeriodStart: b.billingPeriodStart ?? b.periodStart,
+    billingPeriodEnd: b.billingPeriodEnd ?? b.periodEnd,
+    meterReadingDate: b.meterReadingDate ?? b.readingDate,
+    billReleaseDate: b.billReleaseDate ?? b.releaseDate,
+    providerDueDate: b.providerDueDate ?? b.utilityProviderDueDate,
+  });
 
   // Format billing period from billingMonth ISO string → "April 2026"
   const billingPeriod = normalizeBillingPeriod(b.billingMonth ?? b.description, '');
 
-  return {
+  const mapped = {
     billing_id: b.billing_id || b.legacyBillingId || b._id?.toString(),
     bill_id: b._id?.toString(),
     legacy_billing_id: b.legacyBillingId || b.billing_id || '',
@@ -911,6 +964,10 @@ function mapRealBill(b, userId) {
     additional_charges: b.additionalCharges,
     electricity_breakdown: electricityBreakdown,
     water_breakdown: waterBreakdown,
+    utility_deadlines: {
+      ...(Number(c.electricity ?? b.electricity ?? 0) > 0 ? { electricity: utilityDeadline } : {}),
+      ...(Number(c.water ?? b.water ?? 0) > 0 ? { water: utilityDeadline } : {}),
+    },
     created_at: b.createdAt,
     updated_at: b.updatedAt,
     isArchived: b.isArchived ?? false,
@@ -923,6 +980,19 @@ function mapRealBill(b, userId) {
     cancelledAt: b.cancelledAt ?? b.canceledAt,
     invalidatedAt: b.invalidatedAt,
     voidedAt: b.voidedAt,
+  };
+  const moveInFinancials = extractMoveInFinancials(b);
+  if (!moveInFinancials) return mapped;
+  return {
+    ...mapped,
+    move_in_financials: moveInFinancials,
+    advance_rent: moveInFinancials.advanceRent,
+    security_deposit: moveInFinancials.securityDeposit,
+    reservation_fee_already_paid: moveInFinancials.reservationFeeAlreadyPaid,
+    amount: moveInFinancials.remainingBalance,
+    total: moveInFinancials.remainingBalance,
+    original_total: moveInFinancials.totalDueBeforeMoveIn,
+    remaining_amount: isSettled ? 0 : moveInFinancials.remainingBalance,
   };
 }
 
@@ -951,7 +1021,7 @@ async function fetchUserBills(db, user, {
     return [];
   }
 
-  const [legacyBills, rawRealBills] = await Promise.all([
+  const [legacyBills, rawRealBills, reservation] = await Promise.all([
     db.collection('billing')
       .find({ $or: ownerFilters })
       .toArray()
@@ -959,12 +1029,15 @@ async function fetchUserBills(db, user, {
     db.collection('bills')
       .find({ $or: ownerFilters })
       .toArray(),
+    findLatestOwnedReservation(db, ownerFilters),
   ]);
 
   const enrichedRealBills = await enrichRealBillsWithUtilityBreakdowns(db, rawRealBills);
   const realBills = enrichedRealBills.map((bill) => ({ ...mapRealBill(bill, userId), __source: 'real' }));
 
-  const visibleBills = dedupeTenantBills([...legacyBills, ...realBills]);
+  const reservationFinancials = reservation ? extractMoveInFinancials(reservation) : null;
+  const visibleBills = dedupeTenantBills([...legacyBills, ...realBills])
+    .map((bill) => applyMoveInFinancials(bill, reservationFinancials));
   return applyBillFilters(visibleBills, { billingId, paidOnly, unpaidOnly, limit });
 }
 
@@ -1421,11 +1494,20 @@ async function downloadBillPdf(req, res) {
 
     // Charge breakdown table
     const tableRows = [];
-    if (bill.rent) tableRows.push({ label: 'Monthly Rent', value: formatMoney(bill.rent) });
-    if (bill.electricity) tableRows.push({ label: 'Electricity', value: formatMoney(bill.electricity) });
-    if (bill.water) tableRows.push({ label: 'Water', value: formatMoney(bill.water) });
-    if (bill.penalties) tableRows.push({ label: 'Penalties / Late Fees', value: formatMoney(bill.penalties) });
-    if (bill.items?.length) {
+    const moveInFinancials = bill.move_in_financials || null;
+    if (moveInFinancials) {
+      tableRows.push(
+        { label: 'One Month Advance Rent', value: formatMoney(moveInFinancials.advanceRent) },
+        { label: 'Security Deposit', value: formatMoney(moveInFinancials.securityDeposit) },
+        { label: 'Reservation Fee Already Paid', value: `- ${formatMoney(moveInFinancials.reservationFeeAlreadyPaid)}` },
+      );
+    } else {
+      if (bill.rent) tableRows.push({ label: 'Monthly Rent', value: formatMoney(bill.rent) });
+      if (bill.electricity) tableRows.push({ label: 'Electricity', value: formatMoney(bill.electricity) });
+      if (bill.water) tableRows.push({ label: 'Water', value: formatMoney(bill.water) });
+      if (bill.penalties) tableRows.push({ label: 'Penalties / Late Fees', value: formatMoney(bill.penalties) });
+    }
+    if (!moveInFinancials && bill.items?.length) {
       bill.items.forEach((item) => {
         tableRows.push({ label: normalizeLine(item.label || item.description || 'Charge'), value: formatMoney(item.amount) });
       });
@@ -1508,7 +1590,10 @@ async function downloadBillPdf(req, res) {
       date: `Released: ${formatDate(bill.release_date || bill.created_at)}`,
       infoRows,
       tableRows,
-      totalRow: { label: 'TOTAL AMOUNT DUE', value: formatMoney(bill.total || bill.amount || 0) },
+      totalRow: {
+        label: moveInFinancials ? 'REMAINING MOVE-IN BALANCE' : 'TOTAL AMOUNT DUE',
+        value: formatMoney(bill.total || bill.amount || 0),
+      },
       breakdownSections,
     });
 
@@ -1550,6 +1635,9 @@ module.exports = {
   buildBillVisibilitySignature,
   DEMO_BILLS,
   mapRealBill,
+  normalizeLegacyBill,
+  applyMoveInFinancials,
+  isMoveInFinancialBill,
   resolveCurrentBill,
   currentBillTiming,
   billPeriodKey,

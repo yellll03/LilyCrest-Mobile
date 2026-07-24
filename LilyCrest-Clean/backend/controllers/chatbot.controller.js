@@ -654,6 +654,31 @@ async function buildBillingResponse(db, user, message = '') {
     };
   }
 
+  const lowerMessage = String(message || '').toLowerCase();
+  const requestedUtilities = [
+    /\b(electricity|electric|meralco|kuryente)\b/.test(lowerMessage) ? 'electricity' : null,
+    /\b(water|tubig)\b/.test(lowerMessage) ? 'water' : null,
+  ].filter(Boolean);
+  if (requestedUtilities.length) {
+    const schedules = requestedUtilities
+      .map((utility) => ({ utility, deadline: currentBill.utility_deadlines?.[utility] }))
+      .filter(({ deadline }) => deadline?.billReleaseDate && deadline?.finalDueDate);
+    if (!schedules.length) {
+      return {
+        message: 'Your utility bill has not been released yet.',
+        intent: SUPPORTED_INTENTS.BILLING,
+        suggestions: [{ label: 'Open billing', prompt: 'Where can I see my bill details?' }],
+      };
+    }
+    const first = schedules[0].deadline;
+    const labels = schedules.map(({ utility }) => utility).join(' and ');
+    return {
+      message: `Your ${labels} bill was released on ${formatShortDate(first.billReleaseDate)} and is due on ${formatShortDate(first.finalDueDate)}.`,
+      intent: SUPPORTED_INTENTS.BILLING,
+      suggestions: [{ label: 'Open billing', prompt: 'Where can I see my bill details?' }],
+    };
+  }
+
   const currentAmount = getBillAmountValue(currentBill);
   const currentDueDate = formatShortDate(currentBill.due_date || currentBill.dueDate);
   const timing = currentBillTiming(currentBill, new Date());

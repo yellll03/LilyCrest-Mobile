@@ -4,6 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const { normalizeUser } = require('../utils/normalizeUser');
 const { admin, resolveStorageBucket } = require('../config/firebase');
 const { resolveTenantBranch } = require('../services/branchLocation.service');
+const { extractMoveInFinancials } = require('../domain/billing/moveInFinancials');
 
 const firstValue = (...values) => values.find((value) => value !== undefined && value !== null && String(value).trim() !== '');
 const approvedReservationFilter = {
@@ -14,6 +15,58 @@ const approvedReservationFilter = {
     { isApproved: true },
   ],
 };
+const TENANT_VISIBLE_CONTRACT_STATUSES = ['PRE_RELEASE_TEST', 'APPROVED', 'ACTIVE'];
+
+async function findTenantVisibleContract(db, user) {
+  if (!user?._id || !user?.user_id) return null;
+  return db.collection('generatedContracts').findOne({
+    status: { $in: TENANT_VISIBLE_CONTRACT_STATUSES },
+    publicDocumentId: { $type: 'string', $ne: '' },
+    $or: [
+      { userId: user.user_id },
+      { tenantId: user.user_id },
+      { tenantId: user._id },
+      { tenantId: String(user._id) },
+    ],
+  }, { sort: { approvedAt: -1, testPublishedAt: -1, generatedAt: -1 } });
+}
+
+function tenantContractFileUrl(contract) {
+  if (!contract) return null;
+  return ['APPROVED', 'ACTIVE'].includes(contract.status)
+    ? contract.finalFileUrl
+    : (contract.status === 'PRE_RELEASE_TEST' ? contract.testFileUrl : null);
+}
+
+function tenantContractStatusLabel(contract) {
+  if (contract?.status === 'PRE_RELEASE_TEST') return 'Pre-release Test Contract';
+  if (contract?.status === 'ACTIVE') return 'Active';
+  if (contract?.status === 'APPROVED') return 'Approved';
+  return null;
+}
+
+function tenantContractDocument(contract) {
+  const fileUrl = tenantContractFileUrl(contract);
+  if (!contract?.publicDocumentId || !fileUrl) return null;
+  const snapshot = contract.snapshot || {};
+  return {
+    doc_id: `lease_${contract.publicDocumentId}`,
+    type: 'lease_contract',
+    label: 'Lease Contract',
+    status: tenantContractStatusLabel(contract),
+    uploaded_at: contract.approvedAt || contract.testPublishedAt || contract.generatedAt,
+    source: 'generated_contract',
+    file_url: fileUrl,
+    mimeType: 'application/pdf',
+    contractPeriod: {
+      startDate: snapshot.contractStartDate || null,
+      endDate: snapshot.contractEndDate || null,
+    },
+    roomNumber: snapshot.roomNumber || null,
+    branchName: snapshot.branchName || null,
+    leaseType: snapshot.leaseType === 'SHORT_TERM' ? 'Short-term' : (snapshot.leaseType === 'LONG_TERM' ? 'Long-term' : null),
+  };
+}
 
 function addressParts(source = {}) {
   const candidates = [
@@ -120,22 +173,23 @@ async function buildTenantProfile(db, user) {
     if (branchError?.code === 'BRANCH_ASSIGNMENT_CONFLICT') throw branchError;
   }
 
-  const contractFileUrl = firstValue(reservation?.contractFileUrl, reservation?.contractUrl);
-  const contractStartDate = firstValue(reservation?.contractStartDate, reservation?.contractStart, reservation?.moveInDate);
-  const contractEndDate = firstValue(reservation?.contractEndDate, reservation?.contractEnd, reservation?.moveOutDate);
-  const hasContract = Boolean(contractFileUrl);
+  const generatedContract = await findTenantVisibleContract(db, user);
+  const contractDocument = tenantContractDocument(generatedContract);
+  const moveInFinancials = reservation ? extractMoveInFinancials(reservation) : null;
   normalized.branch = branch;
-  normalized.contract = hasContract ? {
-    status: String(firstValue(reservation?.contractStatus, reservation?.status) || 'Available'),
-    startDate: contractStartDate || null,
-    endDate: contractEndDate || null,
-    roomNumber: firstValue(reservation?.roomNumber, reservation?.roomName, reservation?.room?.roomNumber) || null,
-    property: branch?.branchName || null,
+  normalized.contract = contractDocument ? {
+    status: contractDocument.status,
+    startDate: contractDocument.contractPeriod.startDate,
+    endDate: contractDocument.contractPeriod.endDate,
+    roomNumber: contractDocument.roomNumber,
+    property: contractDocument.branchName,
     branch: branch || null,
-    documentId: `res_${reservation._id}_contract`,
+    leaseType: contractDocument.leaseType,
+    documentId: contractDocument.doc_id,
     fileAvailable: true,
-    generatedDate: firstValue(reservation?.contractGeneratedAt, reservation?.contractSignedAt, reservation?.updatedAt) || null,
-    documentVersion: firstValue(reservation?.contractVersion, reservation?.documentVersion) || null,
+    generatedDate: contractDocument.uploaded_at,
+    documentVersion: generatedContract.version || null,
+    moveInFinancials,
   } : null;
   normalized.survey = null;
   // Keep the database identifier available only while resolving owned records.
@@ -599,19 +653,6 @@ function buildReservationDocs(reservation) {
       mimeType: 'image/jpeg',
     });
   }
-  if (reservation.contractFileUrl) {
-    docs.push({
-      doc_id: `res_${resId}_contract`,
-      type: 'other',
-      label: 'Signed Contract',
-      status: 'verified',
-      uploaded_at: submittedAt,
-      source: 'reservation',
-      file_url: reservation.contractFileUrl,
-      mimeType: 'application/pdf',
-    });
-  }
-
   return docs;
 }
 
@@ -637,6 +678,14 @@ async function getUserDocuments(req, res) {
         { sort: { createdAt: -1 } }
       );
       reservationDocs = buildReservationDocs(reservation);
+      const generatedContract = await findTenantVisibleContract(db, { _id: mongoId, user_id: req.user.user_id });
+      const contractDocument = tenantContractDocument(generatedContract);
+      if (contractDocument) {
+        reservationDocs = [
+          ...reservationDocs.filter((document) => document.type !== 'lease_contract' && !document.doc_id?.endsWith('_contract')),
+          contractDocument,
+        ];
+      }
     }
 
     // Reservation docs first (submitted during onboarding), then user-uploaded docs
@@ -655,6 +704,14 @@ async function getDocumentFile(req, res) {
     const db = getDb();
 
     // Reservation documents (ID starts with 'res_')
+    if (docId.startsWith('lease_')) {
+      const user = await db.collection('users').findOne({ user_id: req.user.user_id }, { projection: { _id: 1, user_id: 1 } });
+      const contract = await findTenantVisibleContract(db, user);
+      const contractDocument = tenantContractDocument(contract);
+      if (!contractDocument || contractDocument.doc_id !== docId) return res.status(404).json({ detail: 'Document not found.' });
+      return res.json({ ...contractDocument, file_url: undefined, fileAvailable: true });
+    }
+
     if (docId.startsWith('res_')) {
       const user = await db.collection('users').findOne(
         { user_id: req.user.user_id },
@@ -725,7 +782,11 @@ async function getDocumentContent(req, res) {
     if (!user) return res.status(404).json({ detail: 'Document not found.' });
 
     let doc;
-    if (docId.startsWith('res_')) {
+    if (docId.startsWith('lease_')) {
+      const contract = await findTenantVisibleContract(db, { _id: user._id, user_id: req.user.user_id });
+      doc = tenantContractDocument(contract);
+      if (doc?.doc_id !== docId) doc = null;
+    } else if (docId.startsWith('res_')) {
       const reservation = await db.collection('reservations').findOne(
         { $and: [{ $or: [{ userId: user._id }, { tenantId: user._id }, { user_id: req.user.user_id }, { tenant_id: req.user.user_id }] }, approvedReservationFilter] },
         { sort: { createdAt: -1 } },
@@ -971,5 +1032,6 @@ module.exports = {
   adminGetAllUsers,
   __test: {
     completeAddress, applicationPhone, normalizePhilippinePhone, usernameCooldownState, approvedReservationFilter,
+    findTenantVisibleContract, tenantContractDocument, tenantContractStatusLabel,
   },
 };
