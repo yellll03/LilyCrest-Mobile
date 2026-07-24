@@ -38,6 +38,13 @@ function tenantContractFileUrl(contract) {
     : (contract.status === 'PRE_RELEASE_TEST' ? contract.testFileUrl : null);
 }
 
+function tenantContractStoragePath(contract) {
+  if (!contract) return null;
+  return ['APPROVED', 'ACTIVE'].includes(contract.status)
+    ? contract.finalStoragePath
+    : (contract.status === 'PRE_RELEASE_TEST' ? contract.testStoragePath : null);
+}
+
 function tenantContractStatusLabel(contract) {
   if (contract?.status === 'PRE_RELEASE_TEST') return 'Pre-release Test Contract';
   if (contract?.status === 'ACTIVE') return 'Active';
@@ -47,7 +54,8 @@ function tenantContractStatusLabel(contract) {
 
 function tenantContractDocument(contract) {
   const fileUrl = tenantContractFileUrl(contract);
-  if (!contract?.publicDocumentId || !fileUrl) return null;
+  const storagePath = tenantContractStoragePath(contract);
+  if (!contract?.publicDocumentId || !(fileUrl || storagePath)) return null;
   const snapshot = contract.snapshot || {};
   return {
     doc_id: `lease_${contract.publicDocumentId}`,
@@ -57,6 +65,7 @@ function tenantContractDocument(contract) {
     uploaded_at: contract.approvedAt || contract.testPublishedAt || contract.generatedAt,
     source: 'generated_contract',
     file_url: fileUrl,
+    storagePath,
     mimeType: 'application/pdf',
     contractPeriod: {
       startDate: snapshot.contractStartDate || null,
@@ -804,6 +813,20 @@ async function getDocumentContent(req, res) {
       if (!buffer.length || buffer.length > DOCUMENT_CONTENT_MAX_BYTES) return res.status(422).json({ detail: 'Document file is invalid.' });
       res.setHeader('Content-Type', match[1]);
       res.setHeader('Cache-Control', 'private, no-store');
+      return res.send(buffer);
+    }
+
+    if (doc.storagePath) {
+      const bucketName = resolveStorageBucket();
+      if (!bucketName) return res.status(503).json({ detail: 'Document storage is not configured.' });
+      const [buffer] = await admin.storage().bucket(bucketName).file(doc.storagePath).download();
+      if (!buffer.length || buffer.length > DOCUMENT_CONTENT_MAX_BYTES || buffer.subarray(0, 5).toString() !== '%PDF-') {
+        return res.status(422).json({ detail: 'Document file is invalid.' });
+      }
+      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Length', buffer.length);
+      res.setHeader('Cache-Control', 'private, no-store');
+      res.setHeader('Content-Disposition', 'inline');
       return res.send(buffer);
     }
 

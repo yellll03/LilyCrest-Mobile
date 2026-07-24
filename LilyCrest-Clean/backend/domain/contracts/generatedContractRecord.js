@@ -81,13 +81,14 @@ function publishPreReleaseRecord(record, publication) {
   if (snapshotSha256(record.snapshot) !== record.snapshotSha256) {
     throw new Error('The contract snapshot changed after generation.');
   }
-  if (!publication?.testFileUrl || !publication?.publishedBy || !publication?.publishedAt) {
+  if (!(publication?.testFileUrl || publication?.testStoragePath) || !publication?.publishedBy || !publication?.publishedAt) {
     throw new Error('Complete controlled-publication metadata is required.');
   }
   return {
     ...structuredClone(record),
     status: 'PRE_RELEASE_TEST',
     testFileUrl: publication.testFileUrl,
+    testStoragePath: publication.testStoragePath || null,
     testPublishedAt: new Date(publication.publishedAt).toISOString(),
     testPublishedBy: publication.publishedBy,
     finalFileUrl: null,

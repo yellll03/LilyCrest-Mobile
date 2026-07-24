@@ -34,8 +34,56 @@ function blocksFromDefinition(definition) {
   ];
 }
 
-function renderOfficialLease(definition, metadata = {}) {
+function readableDate(value) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) throw new Error('A valid contract date is required.');
+  return date.toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila' });
+}
+
+function personalizeDefinition(definition, snapshot) {
+  if (!snapshot) return definition;
+  const legalName = String(snapshot.tenantLegalName || '').trim();
+  const address = String(snapshot.tenantResidentialAddress || '').trim();
+  const room = String(snapshot.roomNumber || '').trim();
+  const bed = String(snapshot.bedSlotNumber || '').trim();
+  const months = Number(snapshot.leaseDurationMonths);
+  if (!legalName || !address || !room || !bed || !Number.isInteger(months) || months < 1) {
+    throw new Error('Complete verified lease particulars are required.');
+  }
+  const generated = new Date(snapshot.generatedAt || Date.now());
+  const start = readableDate(snapshot.contractStartDate);
+  const end = readableDate(snapshot.contractEndDate);
+  const advanceEnd = new Date(snapshot.contractStartDate);
+  advanceEnd.setMonth(advanceEnd.getMonth() + 1);
+
+  const introductoryClauses = definition.introductoryClauses
+    .replace('this ______ day of ____________________', `this ${generated.getDate()} day of ${generated.toLocaleDateString('en-PH', { month: 'long', year: 'numeric', timeZone: 'Asia/Manila' })}`)
+    .replace(/_{20,}, of legal age/, `${legalName}, of legal age`)
+    .replace(/postal and residential address at _{20,}/, `postal and residential address at ${address}`)
+    .replace(/Room _+,\s*Bed\/Slot No\. _+/, `Room ${room}, Bed/Slot No. ${bed}`);
+
+  const numberedSections = definition.numberedSections.map((section) => {
+    let text = section.text;
+    if (section.marker.startsWith('SECTION 2')) {
+      text = text.replace(/period of _+ \( _+ \) months, from _+ to _+\./, `period of ${months} (${months}) months, from ${start} to ${end}.`);
+    }
+    if (section.marker.startsWith('SECTION 4')) {
+      text = text.replace(/covering the period of _+ to _+,/, `covering the period of ${start} to ${readableDate(advanceEnd)},`);
+    }
+    return { ...section, text };
+  });
+
+  return {
+    ...definition,
+    introductoryClauses,
+    numberedSections,
+    signatureAndWitnessSection: `${definition.signatureAndWitnessSection} ${legalName} – LESSEE`,
+  };
+}
+
+function renderOfficialLease(definition, metadata = {}, snapshot = null) {
   return new Promise((resolve, reject) => {
+    const renderedDefinition = personalizeDefinition(definition, snapshot);
     const doc = new PDFDocument({
       size: [LONG_BOND.widthPoints, LONG_BOND.heightPoints],
       margins: MARGINS,
@@ -52,10 +100,10 @@ function renderOfficialLease(definition, metadata = {}) {
     doc.on('error', reject);
     doc.on('end', () => resolve(Buffer.concat(chunks)));
 
-    blocksFromDefinition(definition).forEach((block) => renderBlock(doc, block));
+    blocksFromDefinition(renderedDefinition).forEach((block) => renderBlock(doc, block));
 
     doc.end();
   });
 }
 
-module.exports = { FONTS, MARGINS, blocksFromDefinition, renderOfficialLease };
+module.exports = { FONTS, MARGINS, blocksFromDefinition, personalizeDefinition, renderOfficialLease };
