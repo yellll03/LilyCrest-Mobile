@@ -171,7 +171,7 @@ async function resolveBillWithSource(db, billingId, user) {
 }
 
 // ── Save checkout reference to the correct collection ────────────────────────
-async function saveCheckoutRef(db, billingId, userId, mongoId, checkoutId, referenceNumber) {
+async function saveCheckoutRef(db, billingId, userId, mongoId, checkoutId, referenceNumber, checkoutUrl) {
   const realFilter = buildRealBillLookupFilter(billingId, mongoId, {}, userId);
   if (realFilter) {
     const realResult = await db.collection('bills').updateOne(
@@ -179,10 +179,13 @@ async function saveCheckoutRef(db, billingId, userId, mongoId, checkoutId, refer
       {
         $set: {
           paymongoSessionId: checkoutId,
+          paymongoCheckoutUrl: checkoutUrl || null,
+          paymongoSessionCreatedAt: new Date(),
           paymongoReference: referenceNumber,
           paymentMethod: 'paymongo',
           updatedAt: new Date(),
         },
+        $unset: { checkoutClaimedAt: '' },
       }
     );
     if (realResult.matchedCount > 0) return;
@@ -200,6 +203,29 @@ async function saveCheckoutRef(db, billingId, userId, mongoId, checkoutId, refer
     }
   );
   if (legacyResult.matchedCount > 0) return;
+}
+
+async function findBillByCheckoutId(db, checkoutId) {
+  const real = await db.collection('bills').findOne(
+    { paymongoSessionId: checkoutId },
+    { projection: { _id: 1, userId: 1, tenantId: 1, billing_id: 1, legacyBillingId: 1 } },
+  );
+  if (real) return { source: 'real', bill: real };
+  const legacy = await db.collection('billing').findOne(
+    { paymongo_checkout_id: checkoutId },
+    { projection: { _id: 1, user_id: 1, userId: 1, billing_id: 1 } },
+  );
+  return legacy ? { source: 'legacy', bill: legacy } : null;
+}
+
+function userOwnsCheckoutBill(user, located) {
+  if (!user || !located?.bill) return false;
+  if (['admin', 'superadmin'].includes(String(user.role || '').toLowerCase())) return true;
+  const ownerCandidates = [located.bill.user_id, located.bill.userId, located.bill.tenantId]
+    .filter(Boolean)
+    .map((value) => String(value));
+  return ownerCandidates.includes(String(user.user_id || ''))
+    || ownerCandidates.includes(String(user._id || ''));
 }
 
 function isPaidStatus(status) {
@@ -301,6 +327,7 @@ async function markLegacyBillPaidAtomic(db, filter, {
   checkoutId,
   paymentDate,
   referenceNumber,
+  paymentChannel,
 } = {}) {
   const resolvedPaymentDate = paymentDate instanceof Date ? paymentDate : new Date();
   const updated = unwrapMongoDocument(await db.collection('billing').findOneAndUpdate(
@@ -312,6 +339,7 @@ async function markLegacyBillPaidAtomic(db, filter, {
         payment_method: 'paymongo',
         payment_date: resolvedPaymentDate,
         paymongo_payment_id: paymentId || null,
+        ...(paymentChannel ? { payment_channel: paymentChannel } : {}),
         ...(checkoutId ? { paymongo_checkout_id: checkoutId } : {}),
         ...(referenceNumber ? { paymongo_reference: referenceNumber } : {}),
         ...(eventType ? { paymongo_event: eventType } : {}),
@@ -339,6 +367,7 @@ async function markRealBillPaidAtomic(db, filter, userId, {
   checkoutId,
   paymentDate,
   referenceNumber,
+  paymentChannel,
 } = {}) {
   const resolvedPaymentDate = paymentDate instanceof Date ? paymentDate : new Date();
   const updated = unwrapMongoDocument(await db.collection('bills').findOneAndUpdate(
@@ -351,6 +380,7 @@ async function markRealBillPaidAtomic(db, filter, userId, {
         paidAt: resolvedPaymentDate,
         paymentDate: resolvedPaymentDate,
         paymongoPaymentId: paymentId || null,
+        ...(paymentChannel ? { paymentChannel } : {}),
         ...(checkoutId ? { paymongoSessionId: checkoutId } : {}),
         ...(referenceNumber ? { paymongoReference: referenceNumber } : {}),
         ...(eventType ? { paymongoEvent: eventType } : {}),
@@ -585,6 +615,11 @@ async function reconcileCheckoutSessionPayment(db, checkoutId, {
   const billingId = String(metadata.billing_id || '').trim();
   const userId = String(metadata.user_id || '').trim();
   const paymentId = String(state.payments[0]?.id || '').trim();
+  // The actual channel the tenant paid with (gcash/card/grab_pay/paymaya/...),
+  // as reported by PayMongo on the settled Payment resource itself — not
+  // inferred from the checkout's offered payment_method_types, since a
+  // tenant only ever actually uses one of them.
+  const paymentChannel = String(state.payments[0]?.attributes?.source?.type || '').trim().toLowerCase();
   const referenceNumber = String(resolvedSession?.attributes?.reference_number || '').trim();
   const userEmailHint = String(metadata.user_email || '').trim();
   const paymentDate = getCheckoutSessionPaymentDate(resolvedSession) || new Date();
@@ -594,6 +629,7 @@ async function reconcileCheckoutSessionPayment(db, checkoutId, {
     checkoutId,
     paymentDate,
     referenceNumber,
+    paymentChannel,
   });
   const paymentUserId = resolvedUserId || userId;
 
@@ -622,15 +658,28 @@ async function reconcileCheckoutSessionPayment(db, checkoutId, {
 }
 
 // Create a PayMongo Checkout Session for a specific bill
+// A tenant re-opening the same unpaid bill, a double tap, or a client retry
+// must not each mint a brand-new PayMongo checkout session. REUSE_WINDOW_MS
+// bounds how long a just-created session is offered back to the tenant
+// instead of creating another one; CLAIM_TTL_MS is a short atomic lock so two
+// near-simultaneous requests for the same bill can't both pass the "no
+// existing session" check and both call PayMongo. Both are enforced on the
+// bill document itself via an atomic MongoDB update — no separate lock
+// collection needed, and no bill is ever marked paid by any of this; that
+// remains solely the webhook/poll reconciliation's job.
+const CHECKOUT_REUSE_WINDOW_MS = 20 * 60 * 1000;
+const CHECKOUT_CLAIM_TTL_MS = 20 * 1000;
+
 async function createCheckoutSession(req, res) {
+  const db = getDb();
+  let claimedFilter = null;
   try {
     const { billingId } = req.body;
     if (!billingId) {
       return res.status(400).json({ detail: 'billingId is required' });
     }
 
-    const db = getDb();
-    const { bill } = await resolveBillWithSource(db, billingId, req.user);
+    const { bill, source } = await resolveBillWithSource(db, billingId, req.user);
 
     if (!bill) {
       return res.status(404).json({ detail: BILL_UNAVAILABLE_MESSAGE });
@@ -648,6 +697,57 @@ async function createCheckoutSession(req, res) {
     const amount = Math.round((bill.remaining_amount ?? bill.total ?? bill.amount ?? 0) * 100); // centavos
     if (amount <= 0) {
       return res.status(400).json({ detail: 'Invalid bill amount' });
+    }
+
+    const realFilter = source === 'real'
+      ? buildRealBillLookupFilter(billingId, req.user?._id, {}, req.user?.user_id)
+      : null;
+    const now = new Date();
+
+    if (realFilter) {
+      const existing = await db.collection('bills').findOne(realFilter, {
+        projection: { paymongoSessionId: 1, paymongoSessionCreatedAt: 1, paymongoCheckoutUrl: 1 },
+      });
+      const createdAt = existing?.paymongoSessionCreatedAt ? new Date(existing.paymongoSessionCreatedAt) : null;
+      if (existing?.paymongoSessionId && existing?.paymongoCheckoutUrl && createdAt && (now - createdAt) < CHECKOUT_REUSE_WINDOW_MS) {
+        try {
+          const statusResponse = await axios.get(`${PAYMONGO_BASE}/checkout_sessions/${existing.paymongoSessionId}`, {
+            headers: paymongoHeaders(),
+          });
+          const sessionStatus = statusResponse.data?.data?.attributes?.status;
+          const alreadyPaid = Array.isArray(statusResponse.data?.data?.attributes?.payments)
+            && statusResponse.data.data.attributes.payments.some((p) => p?.attributes?.status === 'paid');
+          if (!alreadyPaid && sessionStatus !== 'expired') {
+            return res.json({
+              checkout_url: existing.paymongoCheckoutUrl,
+              checkout_id: existing.paymongoSessionId,
+              reused: true,
+            });
+          }
+        } catch (_lookupError) {
+          // PayMongo lookup failed (network/expired/unknown id) — fall through
+          // and create a fresh session rather than blocking payment entirely.
+        }
+      }
+
+      // Atomically claim the right to create a session for this exact bill so
+      // two requests racing past the reuse check above can't both call
+      // PayMongo. The loser gets a clear, actionable message instead of a
+      // second live checkout.
+      const claim = await db.collection('bills').findOneAndUpdate(
+        {
+          ...realFilter,
+          $or: [
+            { checkoutClaimedAt: { $exists: false } },
+            { checkoutClaimedAt: { $lt: new Date(now.getTime() - CHECKOUT_CLAIM_TTL_MS) } },
+          ],
+        },
+        { $set: { checkoutClaimedAt: now } },
+      );
+      if (!claim) {
+        return res.status(409).json({ detail: 'A payment session is already being created for this bill. Please wait a moment and try again.' });
+      }
+      claimedFilter = realFilter;
     }
 
     const description = bill.description || `Bill ${billingId}`;
@@ -700,11 +800,13 @@ async function createCheckoutSession(req, res) {
     const checkoutId = session?.id;
 
     if (!checkoutUrl) {
+      if (claimedFilter) await db.collection('bills').updateOne(claimedFilter, { $unset: { checkoutClaimedAt: '' } });
       return res.status(500).json({ detail: 'Failed to create checkout session' });
     }
 
-    // Save checkout reference to the correct collection (legacy or real)
-    await saveCheckoutRef(db, billingId, req.user.user_id, req.user._id, checkoutId, referenceNumber);
+    // Save checkout reference to the correct collection (legacy or real).
+    // This also clears the claim lock set above.
+    await saveCheckoutRef(db, billingId, req.user.user_id, req.user._id, checkoutId, referenceNumber, checkoutUrl);
 
     res.json({
       checkout_url: checkoutUrl,
@@ -712,6 +814,9 @@ async function createCheckoutSession(req, res) {
       reference: referenceNumber,
     });
   } catch (error) {
+    if (claimedFilter) {
+      try { await db.collection('bills').updateOne(claimedFilter, { $unset: { checkoutClaimedAt: '' } }); } catch (_) {}
+    }
     console.error('PayMongo checkout error:', error?.response?.data || error.message);
     const paymongoError = error?.response?.data?.errors?.[0]?.detail;
     res.status(500).json({
@@ -729,6 +834,11 @@ async function getCheckoutStatus(req, res) {
     }
 
     const db = getDb();
+    const located = await findBillByCheckoutId(db, checkoutId);
+    if (!located) return res.status(404).json({ detail: BILL_UNAVAILABLE_MESSAGE });
+    if (!userOwnsCheckoutBill(req.user, located)) {
+      return res.status(403).json({ detail: 'You do not have access to this checkout session.' });
+    }
     const reconciliation = await reconcileCheckoutSessionPayment(db, checkoutId);
 
     const session = reconciliation.session;

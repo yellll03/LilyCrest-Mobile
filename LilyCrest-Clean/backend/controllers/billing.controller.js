@@ -20,6 +20,64 @@ const LEGACY_BILL_STATUS_MAP = {
   canceled: 'cancelled',
 };
 
+// Tenant-facing labels for canonical bill statuses — mirrors the label set
+// already used in the mobile app's own status badges (frontend
+// app/billing-history.jsx, app/bill-details.jsx STATUS_CONFIG) so a
+// downloaded bill PDF reads the same way the app does, instead of showing an
+// internal status keyword like "PENDING_VERIFICATION" verbatim.
+const BILL_STATUS_LABELS = {
+  paid: 'Paid',
+  settled: 'Paid',
+  unpaid: 'Unpaid',
+  pending: 'Unpaid',
+  overdue: 'Overdue',
+  pending_verification: 'Payment Under Review',
+  verification: 'Payment Under Review',
+  partially_paid: 'Partially Paid',
+  rejected: 'Payment Rejected',
+  cancelled: 'Cancelled',
+  // Defensive/future-proofing only: these two are part of
+  // NON_PAYABLE_BILL_STATUSES but no code path currently writes them to a
+  // bill. Mapped here so that if one is ever introduced, it renders a
+  // proper label instead of silently falling through.
+  duplicate: 'Duplicate',
+  refunded: 'Refunded',
+};
+
+function billStatusLabel(status) {
+  const key = String(status || '').trim().toLowerCase();
+  return BILL_STATUS_LABELS[key] || (key ? key.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) : 'Unpaid');
+}
+
+// PayMongo is the payment gateway, not the payment method the tenant actually
+// selected (GCash/Card/Maya/Online Banking) — the backend doesn't currently
+// capture which specific channel was used, so showing the gateway's own name
+// as if it were "the method" would overstate what's known. A neutral, honest
+// label is used instead until the gateway's actual channel is captured.
+// PAYMENT_CHANNEL_LABELS maps PayMongo's actual settled-payment source type
+// (captured at reconciliation time — see paymongo.controller.js's
+// reconcileCheckoutSessionPayment) to the tenant-facing method name. If the
+// channel isn't known (older records, or a payment that never made it
+// through reconciliation with that detail), fall back to the raw stored
+// method/processor name so nothing is fabricated.
+const PAYMENT_CHANNEL_LABELS = {
+  gcash: 'GCash',
+  card: 'Card',
+  grab_pay: 'GrabPay',
+  paymaya: 'Maya',
+  billease: 'BillEase',
+  dob: 'Online Banking',
+  dob_ubp: 'Online Banking',
+};
+
+function billPaymentMethodLabel(rawMethod, channel) {
+  const channelLabel = PAYMENT_CHANNEL_LABELS[String(channel || '').trim().toLowerCase()];
+  if (channelLabel) return channelLabel;
+  const value = String(rawMethod || '').trim();
+  if (!value) return '';
+  return value.toLowerCase() === 'paymongo' ? 'Online Payment' : value;
+}
+
 // ── Presentation-mode mock bills ─────────────────────────────────────────────
 // Used as PDF fallback when a bill ID is not found in the database.
 // These match the mock data already shown in the mobile billing screens.
@@ -955,6 +1013,7 @@ function mapRealBill(b, userId) {
     original_total: originalTotal,
     remaining_amount: isSettled ? 0 : b.remainingAmount,
     payment_method: b.paymentMethod,
+    payment_channel: b.paymentChannel || null,
     payment_date: paymentDate,
     paymongo_reference: b.paymongoReference,
     paymongo_checkout_id: b.paymongoSessionId,
@@ -1469,7 +1528,7 @@ async function downloadBillPdf(req, res) {
     const infoRows = [
       { label: 'Tenant', value: normalizeLine(req.user?.name || 'Tenant') },
       { label: 'Email', value: normalizeLine(req.user?.email || '---') },
-      { label: 'Status', value: (bill.status || 'pending').toUpperCase() },
+      { label: 'Status', value: billStatusLabel(bill.status) },
     ];
     if (bill.billing_period) {
       infoRows.push({ label: 'Billing Period', value: normalizeLine(bill.billing_period) });
@@ -1482,7 +1541,7 @@ async function downloadBillPdf(req, res) {
     // Payment info (only for paid bills)
     if (isPaidBill(bill)) {
       if (bill.payment_method) {
-        infoRows.push({ label: 'Payment Method', value: bill.payment_method === 'paymongo' ? 'PayMongo' : normalizeLine(bill.payment_method) });
+        infoRows.push({ label: 'Payment Method', value: normalizeLine(billPaymentMethodLabel(bill.payment_method, bill.payment_channel)) });
       }
       if (bill.payment_date) {
         infoRows.push({ label: 'Payment Date', value: formatDate(bill.payment_date) });
@@ -1641,4 +1700,6 @@ module.exports = {
   resolveCurrentBill,
   currentBillTiming,
   billPeriodKey,
+  billStatusLabel,
+  billPaymentMethodLabel,
 };

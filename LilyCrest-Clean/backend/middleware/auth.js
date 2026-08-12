@@ -46,7 +46,7 @@ async function authMiddleware(req, res, next) {
     }
     if (!isAccountActive(user)) {
       await db.collection('user_sessions').deleteMany({ user_id: session.user_id });
-      return res.status(403).json({ detail: 'Access denied. Your account is inactive. Please contact admin.' });
+      return res.status(403).json({ code: 'ACCOUNT_INACTIVE', detail: 'Access denied. Your account is inactive. Please contact admin.' });
     }
 
     req.user = normalizeUser(user);

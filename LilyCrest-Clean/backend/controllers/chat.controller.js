@@ -1,7 +1,12 @@
 const { ObjectId } = require('mongodb');
 const { getDb } = require('../config/database');
 
-const MAX_MESSAGE_CHARS = 1000;
+// Matches chatbot.controller.js's MAX_CHAT_MESSAGE_CHARS and the single
+// client-side cap the mobile UI already applies to both the AI assistant and
+// human support composer — this used to be 1000 while chatbot.controller.js
+// was 800, silently allowing longer human-support messages than the UI ever
+// exposed a way to send.
+const MAX_MESSAGE_CHARS = 800;
 const ACTIVE_CONVERSATION_STATUSES = ['open', 'in_review', 'waiting_tenant', 'resolved'];
 const ADMIN_LISTABLE_STATUSES = new Set(['open', 'in_review', 'waiting_tenant', 'resolved', 'closed']);
 const VALID_CATEGORIES = new Set([
@@ -805,4 +810,5 @@ module.exports = {
   getAdminConversationMessages,
   sendAdminMessage,
   updateAdminConversationStatus,
+  __test: { normalizeMessage, MAX_MESSAGE_CHARS },
 };
