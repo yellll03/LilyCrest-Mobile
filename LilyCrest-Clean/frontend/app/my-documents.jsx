@@ -20,7 +20,7 @@ import {
 import { safeBack } from '../src/utils/navigation';
 import { getSessionToken } from '../src/services/secureCredentials';
 import { useTenantContract } from '../src/hooks/useTenantContract';
-import { contractStatusLabel, hasAuthorizedContractPdf } from '../src/utils/contractPresentation';
+import { contractStatusLabel } from '../src/utils/contractPresentation';
 
 // ── Document types for upload picker ──
 const UPLOAD_TYPES = [
@@ -311,7 +311,7 @@ export default function MyDocumentsScreen() {
     fetchUploadedDocs();
   }, [authReady, authStatus, fetchUploadedDocs, userId]);
 
-  const { contract: tenantContract } = useTenantContract();
+  const { contract: tenantContract, error: contractError } = useTenantContract();
 
   // Group policy documents by category
   const groupedPolicies = useMemo(() => {
@@ -320,15 +320,17 @@ export default function MyDocumentsScreen() {
       const doc = sourceDoc.id === 'contract'
         ? {
             ...sourceDoc,
-            status: hasAuthorizedContractPdf(tenantContract) ? contractStatusLabel(tenantContract) : 'Not Available',
-            description: hasAuthorizedContractPdf(tenantContract) ? sourceDoc.description : 'No approved lease contract is available yet.',
+            status: tenantContract ? contractStatusLabel(tenantContract) : 'Not Available',
+            description: tenantContract
+              ? sourceDoc.description
+              : (contractError || 'No approved lease contract is available yet.'),
           }
         : sourceDoc;
       if (!map[doc.category]) map[doc.category] = [];
       map[doc.category].push(doc);
     });
     return map;
-  }, [tenantContract]);
+  }, [tenantContract, contractError]);
 
   const visibleCategories = activeCategory
     ? CATEGORIES.filter(c => c.key === activeCategory)

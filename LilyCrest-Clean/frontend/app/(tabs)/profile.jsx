@@ -316,7 +316,7 @@ export default function ProfileScreen() {
   };
 
   const styles = createStyles(colors, isDarkMode);
-  const { contract: tenantContract } = useTenantContract();
+  const { contract: tenantContract, error: contractError } = useTenantContract();
   const contractSummary = buildContractSummary(tenantContract);
 
   const bannerBg = profileBanner
@@ -568,14 +568,15 @@ export default function ProfileScreen() {
                   {contractSummary.fields.find((field) => field.key === 'period') ? (
                     <InfoRow icon="calendar-outline" label="Contract Period" value={contractSummary.fields.find((field) => field.key === 'period').value} colors={colors} styles={styles} />
                   ) : null}
-                  {contractSummary.canOpenPdf ? (
-                    <TouchableOpacity style={styles.outlineButton} onPress={() => router.push('/contract-viewer')}>
-                      <Ionicons name="document-text-outline" size={18} color={colors.accent} />
-                      <Text style={styles.outlineButtonText}>View Contract</Text>
-                    </TouchableOpacity>
-                  ) : <Text style={styles.emptyText}>Some contract details are still being finalized.</Text>}
+                  <TouchableOpacity style={styles.outlineButton} onPress={() => router.push('/contract-viewer')}>
+                    <Ionicons name="document-text-outline" size={18} color={colors.accent} />
+                    <Text style={styles.outlineButtonText}>View Contract</Text>
+                  </TouchableOpacity>
+                  {!contractSummary.canOpenPdf ? (
+                    <Text style={styles.emptyText}>Some contract details are still being finalized.</Text>
+                  ) : null}
                 </>
-              ) : <Text style={styles.emptyText}>No approved lease contract is available yet.</Text>}
+              ) : <Text style={styles.emptyText}>{contractError || 'No approved lease contract is available yet.'}</Text>}
             </View>
           </View>
 
