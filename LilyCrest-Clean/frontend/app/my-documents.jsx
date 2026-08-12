@@ -19,6 +19,7 @@ import {
 } from '../src/services/firebaseStorageUpload';
 import { safeBack } from '../src/utils/navigation';
 import { getSessionToken } from '../src/services/secureCredentials';
+import { useTenantContract } from '../src/hooks/useTenantContract';
 import { contractStatusLabel, hasAuthorizedContractPdf } from '../src/utils/contractPresentation';
 
 // ── Document types for upload picker ──
@@ -310,6 +311,8 @@ export default function MyDocumentsScreen() {
     fetchUploadedDocs();
   }, [authReady, authStatus, fetchUploadedDocs, userId]);
 
+  const { contract: tenantContract } = useTenantContract();
+
   // Group policy documents by category
   const groupedPolicies = useMemo(() => {
     const map = {};
@@ -317,15 +320,15 @@ export default function MyDocumentsScreen() {
       const doc = sourceDoc.id === 'contract'
         ? {
             ...sourceDoc,
-            status: hasAuthorizedContractPdf(user?.contract) ? contractStatusLabel(user.contract.status) : 'Not Available',
-            description: hasAuthorizedContractPdf(user?.contract) ? sourceDoc.description : 'No approved lease contract is available yet.',
+            status: hasAuthorizedContractPdf(tenantContract) ? contractStatusLabel(tenantContract) : 'Not Available',
+            description: hasAuthorizedContractPdf(tenantContract) ? sourceDoc.description : 'No approved lease contract is available yet.',
           }
         : sourceDoc;
       if (!map[doc.category]) map[doc.category] = [];
       map[doc.category].push(doc);
     });
     return map;
-  }, [user?.contract]);
+  }, [tenantContract]);
 
   const visibleCategories = activeCategory
     ? CATEGORIES.filter(c => c.key === activeCategory)

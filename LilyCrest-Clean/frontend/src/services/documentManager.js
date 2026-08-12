@@ -8,10 +8,50 @@ export const MAX_PDF_BYTES = 50 * 1024 * 1024;
 
 export const documentUrl = (kind, id) => {
   if (kind === 'bill') return `${MOBILE_API_BASE_URL}/billing/${encodeURIComponent(id)}/pdf`;
-  if (kind === 'policy' || kind === 'contract') return `${MOBILE_API_BASE_URL}/documents/${encodeURIComponent(id)}`;
-  if (kind === 'user') return `${MOBILE_API_BASE_URL}/users/documents/${encodeURIComponent(id)}/content`;
+  if (kind === 'policy') return `${MOBILE_API_BASE_URL}/documents/${encodeURIComponent(id)}`;
+  if (kind === 'contract-prepared') return `${MOBILE_API_BASE_URL}/contracts/${encodeURIComponent(id)}/documents/prepared`;
+  if (kind === 'contract-final') return `${MOBILE_API_BASE_URL}/contracts/${encodeURIComponent(id)}/documents/final`;
   return null;
 };
+
+// `kind === 'user'` documents (uploaded, reservation-derived, and generated
+// contracts) are served as a binary stream from GET /users/documents/:docId/content
+// — the metadata endpoint (GET /users/documents/:docId) intentionally omits
+// file_data/file_url/storagePath, so the bytes must come from /content, the
+// same endpoint imageDocumentManager.js already uses for images.
+const userDocumentContentUrl = (id) => `${MOBILE_API_BASE_URL}/users/documents/${encodeURIComponent(id)}/content`;
+
+async function fetchUserDocumentPdf({ userId, id, onProgress }) {
+  const token = await getSessionToken();
+  if (!token) throw new Error('UNAUTHENTICATED');
+
+  const uri = cachedDocumentPath(userId, 'user', id);
+  await ensureParent(uri);
+
+  const task = FileSystem.createDownloadResumable(
+    userDocumentContentUrl(id),
+    uri,
+    { headers: { Authorization: `Bearer ${token}`, Accept: 'application/pdf' } },
+    ({ totalBytesWritten, totalBytesExpectedToWrite }) => {
+      onProgress?.(totalBytesExpectedToWrite > 0 ? totalBytesWritten / totalBytesExpectedToWrite : 0);
+    },
+  );
+  const result = await task.downloadAsync();
+  if (!result?.uri || result.status < 200 || result.status >= 300) {
+    await FileSystem.deleteAsync(uri, { idempotent: true });
+    const error = new Error(`HTTP_${result?.status || 0}`);
+    error.status = result?.status;
+    throw error;
+  }
+
+  try {
+    const info = await validatePdf(uri, result.headers);
+    return { uri, size: info.size, cached: false };
+  } catch (error) {
+    await FileSystem.deleteAsync(uri, { idempotent: true });
+    throw error;
+  }
+}
 
 const safePart = (value) => String(value || 'document').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
 export const cachedDocumentPath = (userId, kind, id) =>
@@ -54,6 +94,8 @@ export async function getCachedPdf(userId, kind, id) {
 }
 
 export async function fetchPdf({ userId, kind, id, onProgress }) {
+  if (kind === 'user') return fetchUserDocumentPdf({ userId, id, onProgress });
+
   let url = documentUrl(kind, id);
   let useAuthorization = true;
   if (!url) throw new Error('INVALID_ID');

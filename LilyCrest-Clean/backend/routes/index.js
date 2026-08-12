@@ -67,6 +67,11 @@ router.use('/paymongo', paymongoRoutes);
 const surveyRoutes = require('./survey.routes');
 router.use('/surveys', surveyRoutes);
 
+// Authoritative Contract bridge (proxies to Capstone-Website; see
+// contracts.routes.js for why this isn't a local implementation)
+const contractRoutes = require('./contracts.routes');
+router.use('/contracts', contractRoutes);
+
 function seedAccessMiddleware(req, res, next) {
   if (process.env.NODE_ENV === 'production') {
     return res.status(404).json({ detail: 'Not found' });

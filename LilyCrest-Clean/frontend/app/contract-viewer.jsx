@@ -1,19 +1,19 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAuth } from '../src/context/AuthContext';
 import { useTheme } from '../src/context/ThemeContext';
+import { useTenantContract } from '../src/hooks/useTenantContract';
 import { buildContractSummary } from '../src/utils/contractPresentation';
 import { safeBack } from '../src/utils/navigation';
 
 export default function ContractViewer() {
   const router = useRouter();
-  const { user } = useAuth();
   const { colors } = useTheme();
   const [showDocumentInfo, setShowDocumentInfo] = useState(false);
-  const summary = buildContractSummary(user?.contract, user?.branch);
+  const { contract, loading, error, reload } = useTenantContract();
+  const summary = buildContractSummary(contract);
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]}>
@@ -24,7 +24,19 @@ export default function ContractViewer() {
         <Text style={[styles.headerTitle, { color: colors.text }]}>Lease Contract</Text>
       </View>
       <ScrollView contentContainerStyle={styles.content}>
-        {!summary ? (
+        {loading ? (
+          <View style={styles.empty}>
+            <ActivityIndicator color={colors.accent} />
+          </View>
+        ) : error ? (
+          <View style={styles.empty}>
+            <Ionicons name="cloud-offline-outline" size={58} color={colors.textSecondary} />
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>{error}</Text>
+            <TouchableOpacity style={[styles.open, { backgroundColor: colors.primary }]} onPress={reload}>
+              <Text style={styles.openText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        ) : !summary ? (
           <View style={styles.empty}>
             <Ionicons name="document-outline" size={58} color={colors.textSecondary} />
             <Text style={[styles.emptyTitle, { color: colors.text }]}>No approved lease contract is available yet.</Text>
@@ -50,7 +62,14 @@ export default function ContractViewer() {
             {summary.canOpenPdf ? (
               <TouchableOpacity
                 style={[styles.open, { backgroundColor: colors.primary }]}
-                onPress={() => router.push({ pathname: '/document-viewer', params: { kind: 'user', id: user.contract.documentId, title: 'Lease Contract' } })}
+                onPress={() => router.push({
+                  pathname: '/document-viewer',
+                  params: {
+                    kind: summary.documentVariant === 'final' ? 'contract-final' : 'contract-prepared',
+                    id: contract.id,
+                    title: 'Lease Contract',
+                  },
+                })}
               >
                 <Ionicons name="document-text-outline" size={20} color="#fff" />
                 <Text style={styles.openText}>Open Contract PDF</Text>

@@ -8,6 +8,7 @@ import { useAuth } from '../../src/context/AuthContext';
 import { useTheme } from '../../src/context/ThemeContext';
 import { useAlert } from '../../src/context/AlertContext';
 import { apiService, getApiErrorMessage } from '../../src/services/api';
+import { useTenantContract } from '../../src/hooks/useTenantContract';
 import { buildContractSummary } from '../../src/utils/contractPresentation';
 
 const NAME_MAX = 60;
@@ -315,7 +316,8 @@ export default function ProfileScreen() {
   };
 
   const styles = createStyles(colors, isDarkMode);
-  const contractSummary = buildContractSummary(user?.contract, user?.branch);
+  const { contract: tenantContract } = useTenantContract();
+  const contractSummary = buildContractSummary(tenantContract);
 
   const bannerBg = profileBanner
     ? profileBanner.type === 'success'

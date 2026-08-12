@@ -247,7 +247,11 @@ export const apiService = {
 
   // Documents
   downloadDocumentUrl: (docId = 'contract') => `${MOBILE_API_BASE_URL}/documents/${docId}`,
-  
+
+  // Lease Contract (authoritative record — same Contract Capstone-Website's
+  // Web admin manages, served via its mobileContractRoutes.js bridge at /api/m)
+  getCurrentContract: () => api.get('/contracts/current'),
+
   // Maintenance
   getMyMaintenance: (status) => api.get('/maintenance/me', { params: { status } }),
   getMaintenance: (requestId) => api.get(`/maintenance/${requestId}`),
