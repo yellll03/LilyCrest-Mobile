@@ -26,7 +26,8 @@ const getBillId = (bill) => bill?.billing_id || bill?.id || bill?._id || bill?.b
 function safeCurrency(amount) {
   const n = Number(amount);
   if (!Number.isFinite(n) || n === 0) return '\u20b10.00';
-  return `\u20b1${n.toLocaleString(undefined, { minimumFractionDigits: 2 })}`;
+  const absolute = Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2 });
+  return `${n < 0 ? '\u2212' : ''}\u20b1${absolute}`;
 }
 
 function safeDate(value) {
@@ -267,14 +268,23 @@ export default function BillDetailsScreen() {
   const expectsWaterBreakdown =
     Number(bill.water || 0) > 0 || (bill.billing_type || '').toLowerCase() === 'water';
 
+  const moveInFinancials = bill.move_in_financials || bill.moveInFinancials || null;
   // Charge items
   const charges = [];
-  if (bill.rent) charges.push({ label: 'Rent', amount: bill.rent, icon: 'home', color: '#1d4ed8' });
-  if (bill.electricity) charges.push({ label: 'Electricity', amount: bill.electricity, icon: 'flash', color: '#b45309' });
-  if (bill.water) charges.push({ label: 'Water', amount: bill.water, icon: 'water', color: '#0284c7' });
-  if (bill.penalties) charges.push({ label: 'Penalty', amount: bill.penalties, icon: 'warning', color: '#b91c1c' });
+  if (moveInFinancials) {
+    charges.push(
+      { label: 'One Month Advance Rent', amount: moveInFinancials.advanceRent, icon: 'home', color: '#1d4ed8' },
+      { label: 'Security Deposit', amount: moveInFinancials.securityDeposit, icon: 'shield-checkmark', color: '#0284c7' },
+      { label: 'Reservation Fee Already Paid', amount: -moveInFinancials.reservationFeeAlreadyPaid, icon: 'remove-circle', color: '#15803d' },
+    );
+  } else {
+    if (bill.rent) charges.push({ label: 'Rent', amount: bill.rent, icon: 'home', color: '#1d4ed8' });
+    if (bill.electricity) charges.push({ label: 'Electricity', amount: bill.electricity, icon: 'flash', color: '#b45309' });
+    if (bill.water) charges.push({ label: 'Water', amount: bill.water, icon: 'water', color: '#0284c7' });
+    if (bill.penalties) charges.push({ label: 'Penalty', amount: bill.penalties, icon: 'warning', color: '#b91c1c' });
+  }
   // Include extra line items if present
-  if (Array.isArray(bill.items)) {
+  if (!moveInFinancials && Array.isArray(bill.items)) {
     bill.items.forEach((item) => {
       const label = item.label || item.description || 'Charge';
       if (charges.find((charge) => charge.label === label)) return;
@@ -375,7 +385,7 @@ export default function BillDetailsScreen() {
               ))}
               <View style={styles.totalDivider} />
               <View style={styles.totalRow}>
-                <Text style={styles.totalLabel}>TOTAL AMOUNT</Text>
+                <Text style={styles.totalLabel}>{moveInFinancials ? 'REMAINING BALANCE' : 'TOTAL AMOUNT'}</Text>
                 <Text style={styles.totalValue}>{safeCurrency(totalAmount)}</Text>
               </View>
             </>
