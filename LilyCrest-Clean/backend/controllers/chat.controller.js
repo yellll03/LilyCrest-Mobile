@@ -44,6 +44,40 @@ function displayName(user, fallback = 'Tenant') {
   return user.name || user.fullName || fullName || user.email || user.user_id || fallback;
 }
 
+function asObjectId(value) {
+  if (!value) return null;
+  try {
+    const candidate = typeof value?.toHexString === 'function'
+      ? value.toHexString()
+      : String(value);
+    return ObjectId.isValid(candidate) ? new ObjectId(candidate) : null;
+  } catch (_error) {
+    return null;
+  }
+}
+
+function buildTenantConversationFilter(user = {}) {
+  const filters = [];
+  const userId = typeof user.user_id === 'string' ? user.user_id.trim() : '';
+  const objectId = asObjectId(user._id);
+  const objectIdString = objectId ? objectId.toHexString() : '';
+
+  if (objectId) {
+    filters.push({ tenantId: objectId });
+    filters.push({ userId: objectId });
+  }
+  if (objectIdString) {
+    filters.push({ tenantId: objectIdString });
+    filters.push({ userId: objectIdString });
+  }
+  if (userId) {
+    filters.push({ tenantUserId: userId });
+    filters.push({ user_id: userId });
+  }
+
+  return filters.length ? { $or: filters } : { _id: null };
+}
+
 function sanitizeBranch(value) {
   if (typeof value !== 'string') return null;
   const branch = value.trim();
@@ -52,13 +86,6 @@ function sanitizeBranch(value) {
 
 function normalizeRole(value) {
   return String(value || '').trim().toLowerCase();
-}
-
-function asObjectId(value) {
-  if (!value) return null;
-  if (value instanceof ObjectId) return value;
-  if (typeof value === 'string' && ObjectId.isValid(value)) return new ObjectId(value);
-  return null;
 }
 
 function normalizeMessage(rawMessage) {
@@ -250,7 +277,7 @@ async function findConversationForTenant(db, conversationId, user) {
 
   const conversation = await db.collection('chat_conversations').findOne({
     _id,
-    tenantId: user._id,
+    ...buildTenantConversationFilter(user),
   });
 
   if (!conversation) {
@@ -423,7 +450,7 @@ async function startConversation(req, res) {
 
     let conversation = await db.collection('chat_conversations').findOne(
       {
-        tenantId: req.user._id,
+        ...buildTenantConversationFilter(req.user),
         status: { $in: ACTIVE_CONVERSATION_STATUSES },
       },
       { sort: { updatedAt: -1 } }
@@ -458,7 +485,7 @@ async function startConversation(req, res) {
     } else {
       const now = new Date();
       const newConversation = {
-        tenantId: req.user._id,
+        tenantId: asObjectId(req.user._id) || req.user._id,
         tenantUserId: req.user.user_id || '',
         tenantName,
         tenantEmail: req.user.email || '',
@@ -512,7 +539,7 @@ async function getMyConversations(req, res) {
   try {
     const db = getDb();
     const conversations = await db.collection('chat_conversations')
-      .find({ tenantId: req.user._id })
+      .find(buildTenantConversationFilter(req.user))
       .sort({ lastMessageAt: -1, updatedAt: -1 })
       .limit(50)
       .toArray();
