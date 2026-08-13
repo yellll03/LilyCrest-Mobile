@@ -76,11 +76,36 @@ function getBillPaymentDate(bill) {
   );
 }
 
+function getBillDeadline(bill) {
+  const utilityDeadlineEntries = Object.entries(bill?.utility_deadlines || {});
+  const utilityEntries = utilityDeadlineEntries
+    .map(([type, deadline]) => ({ type, date: deadline?.finalDueDate ? new Date(deadline.finalDueDate) : null }))
+    .filter((entry) => entry.date && !Number.isNaN(entry.date.getTime()));
+  const obligations = [...utilityEntries];
+  const rentAmount = toFiniteAmount(bill?.rent) || 0;
+  const hasUtilityCharge = (toFiniteAmount(bill?.electricity) || 0) > 0
+    || (toFiniteAmount(bill?.water) || 0) > 0
+    || utilityDeadlineEntries.length > 0;
+  const rawRentDue = bill?.due_date || bill?.dueDate || null;
+  if (rawRentDue && (rentAmount > 0 || !hasUtilityCharge)) {
+    const date = new Date(rawRentDue);
+    if (!Number.isNaN(date.getTime())) obligations.push({ type: 'rent', date });
+  }
+  if (!obligations.length) return null;
+  obligations.sort((left, right) => left.date.getTime() - right.date.getTime());
+  const earliest = obligations[0];
+  const sameDateTypes = obligations
+    .filter((entry) => entry.date.getTime() === earliest.date.getTime())
+    .map((entry) => entry.type);
+  const labels = { rent: 'Rent', electricity: 'Electricity', water: 'Water' };
+  return {
+    date: earliest.date,
+    label: sameDateTypes.map((type) => labels[type] || type).join(' and '),
+  };
+}
+
 function getBillDueDate(bill) {
-  const raw = bill?.due_date || bill?.dueDate || null;
-  if (!raw) return null;
-  const parsed = new Date(raw);
-  return Number.isNaN(parsed.getTime()) ? null : parsed;
+  return getBillDeadline(bill)?.date || null;
 }
 
 function getBillDateValue(bill) {
@@ -186,7 +211,7 @@ function buildOutstandingSnapshot(bills) {
   const outstandingBills = getOutstandingBills(bills);
   const outstandingTotal = outstandingBills.reduce((sum, bill) => sum + (getUnpaidAmount(bill) || 0), 0);
   const dueBills = outstandingBills
-    .map((bill) => ({ bill, dueDate: getBillDueDate(bill) }))
+    .map((bill) => ({ bill, deadline: getBillDeadline(bill), dueDate: getBillDueDate(bill) }))
     .filter((entry) => entry.dueDate)
     .sort((left, right) => left.dueDate.getTime() - right.dueDate.getTime());
 
@@ -200,6 +225,7 @@ function buildOutstandingSnapshot(bills) {
     overdueCount: overdueBills.length,
     overdueBill: overdueBills[0]?.bill || null,
     nextDueBill: nextDue?.bill || null,
+    nextDueLabel: nextDue?.deadline?.label || null,
     nextDueDate: nextDue?.dueDate || null,
     nextDueDays: nextDue ? getDaysUntil(nextDue.dueDate) : null,
   };
@@ -467,7 +493,7 @@ function buildStats({ snapshot, comparisonInsight, paymentHealthInsight, latestB
       id: 'next-due',
       label: 'Next deadline',
       value: formatShortDate(snapshot.nextDueDate),
-      helper: describeDueTiming(snapshot.nextDueDays),
+      helper: `${snapshot.nextDueLabel ? `${snapshot.nextDueLabel} · ` : ''}${describeDueTiming(snapshot.nextDueDays)}`,
       tone: snapshot.nextDueDays !== null && snapshot.nextDueDays < 0 ? 'critical' : snapshot.nextDueDays !== null && snapshot.nextDueDays <= DUE_SOON_DAYS ? 'warning' : 'neutral',
     });
   } else if (latestBill && isPaidBill(latestBill) && getBillPaymentDate(latestBill)) {
