@@ -555,7 +555,23 @@ export function AuthProvider({ children }) {
         return { success: false, error: 'No authentication token available' };
       }
 
-      const response = await api.post('/auth/google', { idToken: tokenToUse });
+      let response;
+      try {
+        response = await api.post('/auth/google', { idToken: tokenToUse });
+      } catch (firstError) {
+        // Retry exactly once, and only when no HTTP response was ever
+        // received (connection-level failure: timeout / network error —
+        // error.response is undefined). A request the server actually
+        // answered (4xx/5xx) must never be retried here; those are real
+        // outcomes, not transient connectivity. The backend pairs this
+        // with a short session-reuse window so a retry after a connection
+        // stall can't invalidate a session whose success response the
+        // first attempt simply never delivered, or mint a duplicate one.
+        if (firstError.response) {
+          throw firstError;
+        }
+        response = await api.post('/auth/google', { idToken: tokenToUse });
+      }
       if (!isSessionPayloadShape(response.data)) {
         await clearPersistedSession();
         return { success: false, error: 'Received an invalid Google sign-in response. Please try again.' };
