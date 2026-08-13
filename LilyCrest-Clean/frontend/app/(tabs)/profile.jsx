@@ -33,6 +33,24 @@ const validateName = (name) => {
   return { valid: true, error: '' };
 };
 
+// Mirrors the backend's authoritative tenant-eligibility predicate
+// (server/mobile/security/mobileAuthCore.js evaluateTenant) so this badge
+// never claims a status the service-access gates would disagree with.
+const getTenancyStatus = (user) => {
+  const role = String(user?.role || '').toLowerCase();
+  const tenantStatus = String(user?.tenantStatus || user?.tenant_status || '').toLowerCase();
+  if (role === 'tenant' && tenantStatus === 'active') {
+    return { label: 'Active Tenant', tone: 'active' };
+  }
+  if (role === 'tenant') {
+    return { label: 'Pending Move-in', tone: 'pending' };
+  }
+  if (role === 'applicant') {
+    return { label: 'Applicant', tone: 'pending' };
+  }
+  return { label: 'Account', tone: 'pending' };
+};
+
 const validateUsername = (username) => {
   if (!username.trim()) return { valid: false, error: 'Username is required' };
   if (username.trim().length < 3) return { valid: false, error: 'Username must be at least 3 characters' };
@@ -60,6 +78,7 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { colors, isDarkMode } = useTheme();
   const { showAlert } = useAlert();
+  const tenancyStatus = getTenancyStatus(user);
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -391,8 +410,10 @@ export default function ProfileScreen() {
           <Text style={styles.userEmail}>{user?.email || ''}</Text>
           <View style={styles.statusContainer}>
             <View style={styles.statusBadge}>
-              <View style={styles.statusDot} />
-              <Text style={styles.statusText}>Active Tenant</Text>
+              <View style={[styles.statusDot, tenancyStatus.tone === 'pending' && styles.statusDotPending]} />
+              <Text style={[styles.statusText, tenancyStatus.tone === 'pending' && styles.statusTextPending]}>
+                {tenancyStatus.label}
+              </Text>
             </View>
           </View>
         </View>
@@ -787,6 +808,8 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   },
   statusDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E' },
   statusText: { fontSize: 13, fontWeight: '600', color: isDarkMode ? '#4ade80' : '#166534' },
+  statusDotPending: { backgroundColor: '#f59e0b' },
+  statusTextPending: { color: isDarkMode ? '#fbbf24' : '#92400e' },
 
   menuContainer: { gap: 4 },
   menuGroupWrapper: { marginHorizontal: 20, marginBottom: 8 },
