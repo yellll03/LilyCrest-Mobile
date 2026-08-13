@@ -20,7 +20,7 @@ module.exports = {
     android: {
       package: 'com.lilycrest.lilycrestdorm',
       versionCode: 3,
-      googleServicesFile: './google-services.json',
+      googleServicesFile: process.env.GOOGLE_SERVICES_JSON || './google-services.json',
       config: {
         googleSignIn: {
           apiKey: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_API_KEY || '',

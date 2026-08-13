@@ -14,7 +14,8 @@
     "web": "expo start --web",
     "prebuild": "expo prebuild --clean",
     "lint": "expo lint",
-    "test": "jest"
+    "test": "jest",
+    "eas-build-pre-install": "node ./scripts/eas-copy-google-services.js"
   },
   "dependencies": {
     "@babel/runtime": "^7.20.6",
