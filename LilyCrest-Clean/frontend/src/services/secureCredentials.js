@@ -66,6 +66,39 @@ export async function migrateLegacyCredentials() {
   }
 }
 
+export async function getSessionToken() {
+  let token = await getSecureItem(SESSION_TOKEN_KEY).catch(() => null);
+  if (token) return token;
+  const legacyToken = await AsyncStorage.getItem(SESSION_TOKEN_KEY).catch(() => null);
+  if (!legacyToken) return null;
+  try {
+    await setSecureItem(SESSION_TOKEN_KEY, legacyToken);
+    await AsyncStorage.removeItem(SESSION_TOKEN_KEY);
+    token = legacyToken;
+  } catch (error) {
+    console.warn('[SecureAuth] Session token migration failed:', error?.message);
+  }
+  return token;
+}
+
+export async function setSessionToken(token) {
+  const normalized = typeof token === 'string' ? token.trim() : '';
+  if (!normalized) return removeSessionToken();
+  if (!canUseSecureStore()) {
+    await AsyncStorage.setItem(SESSION_TOKEN_KEY, normalized);
+    return;
+  }
+  await setSecureItem(SESSION_TOKEN_KEY, normalized);
+  await AsyncStorage.removeItem(SESSION_TOKEN_KEY).catch(() => {});
+}
+
+export async function removeSessionToken() {
+  await Promise.all([
+    deleteSecureItem(SESSION_TOKEN_KEY),
+    AsyncStorage.removeItem(SESSION_TOKEN_KEY).catch(() => {}),
+  ]);
+}
+
 export async function savePendingLogin({ otpToken, email, maskedEmail, rememberMe } = {}) {
   const token = typeof otpToken === 'string' ? otpToken.trim() : '';
   if (!token) return false;
@@ -134,7 +167,7 @@ export async function saveCredentials(email = '') {
 
 export async function getCredentials() {
   await migrateLegacyCredentials();
-  const token = await AsyncStorage.getItem(SESSION_TOKEN_KEY).catch(() => null);
+  const token = await getSessionToken();
   if (!token) return null;
   const email = await AsyncStorage.getItem('last_email').catch(() => '');
   return { email: email || '', sessionToken: token };
@@ -162,7 +195,7 @@ export async function hasStoredCredentials() {
   const [biometricSetting, biometricSession, sessionToken] = await Promise.all([
     AsyncStorage.getItem(BIOMETRIC_SETTING_KEY).catch(() => null),
     AsyncStorage.getItem(BIOMETRIC_SESSION_KEY).catch(() => null),
-    AsyncStorage.getItem(SESSION_TOKEN_KEY).catch(() => null),
+    getSessionToken(),
   ]);
 
   return biometricSetting === 'true'
