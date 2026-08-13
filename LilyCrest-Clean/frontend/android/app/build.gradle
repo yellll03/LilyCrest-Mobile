@@ -85,7 +85,7 @@ android {
     ndkVersion rootProject.ext.ndkVersion
     externalNativeBuild {
         cmake {
-            version "4.3.2+"
+            version "3.22.1"
         }
     }
 
