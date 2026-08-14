@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import * as Print from 'expo-print';
 import Pdf from 'react-native-pdf';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../src/context/AuthContext';
@@ -13,7 +14,6 @@ export default function DocumentViewer() {
   const router = useRouter();
   const pdfRef = useRef(null);
   const { kind = 'policy', id, title = 'Document' } = useLocalSearchParams();
-  const sensitive = kind === 'user' || kind === 'contract';
   const { user } = useAuth();
   const { colors } = useTheme();
   const [uri, setUri] = useState(null);
@@ -59,9 +59,12 @@ export default function DocumentViewer() {
         <TouchableOpacity disabled={!uri} accessibilityLabel="Download PDF" onPress={async () => { try { const saved = await downloadPdf(uri, title); Alert.alert('Download complete', `${saved.filename} was saved.`); } catch (e) { Alert.alert('Download unavailable', documentErrorMessage(e)); } }}>
           <Ionicons name="download-outline" size={24} color={uri ? colors.primary : colors.textSecondary} />
         </TouchableOpacity>
-        {!sensitive && <TouchableOpacity disabled={!uri} onPress={async () => { try { await sharePdf(uri, title); } catch (e) { Alert.alert('Share unavailable', documentErrorMessage(e)); } }}>
+        <TouchableOpacity disabled={!uri} accessibilityLabel="Print PDF" onPress={async () => { try { await Print.printAsync({ uri }); } catch (e) { Alert.alert('Print unavailable', documentErrorMessage(e)); } }}>
+          <Ionicons name="print-outline" size={24} color={uri ? colors.primary : colors.textSecondary} />
+        </TouchableOpacity>
+        <TouchableOpacity disabled={!uri} accessibilityLabel="Share PDF" onPress={async () => { try { await sharePdf(uri, title); } catch (e) { Alert.alert('Share unavailable', documentErrorMessage(e)); } }}>
           <Ionicons name="share-outline" size={24} color={uri ? colors.primary : colors.textSecondary} />
-        </TouchableOpacity>}
+        </TouchableOpacity>
       </View>
       {loading ? <View style={styles.center}><ActivityIndicator size="large" color={colors.primary} /><Text style={{ color: colors.textSecondary }}>Loading PDF… {progress ? `${Math.round(progress * 100)}%` : ''}</Text></View>
       : error ? <View style={styles.center}><Ionicons name="document-outline" size={54} color={colors.textSecondary} /><Text style={[styles.error, { color: colors.text }]}>{error}</Text><TouchableOpacity style={[styles.retry, { backgroundColor: colors.primary }]} onPress={() => load(true)}><Text style={styles.retryText}>Retry</Text></TouchableOpacity></View>

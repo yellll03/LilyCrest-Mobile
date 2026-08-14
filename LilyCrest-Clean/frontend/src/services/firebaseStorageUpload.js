@@ -7,6 +7,7 @@ const NEEDS_CACHE_COPY_PATTERN = /^(?:content|ph|assets-library):\/\//i;
 const ABSOLUTE_LOCAL_PATH_PATTERN = /^\/(?:data\/user\/|storage\/|private\/var\/|var\/mobile\/)/i;
 const IMAGE_NAME_PATTERN = /\.(png|jpe?g|gif|webp|bmp|heic|heif)$/i;
 const DOCUMENT_NAME_PATTERN = /\.(pdf|docx?|txt|csv)$/i;
+const FIREBASE_STORAGE_BUCKET_FALLBACK = 'dormitorymanagement-caps-572cf.firebasestorage.app';
 
 export const MAX_IMAGE_UPLOAD_BYTES = 5 * 1024 * 1024;
 export const MAX_ATTACHMENT_UPLOAD_BYTES = 10 * 1024 * 1024;
@@ -53,6 +54,18 @@ const EXTENSION_MIME_TYPE_MAP = Object.entries(MIME_TYPE_EXTENSION_MAP).reduce((
   return acc;
 }, {});
 
+export function isLocalOnlyAttachmentUri(value = '') {
+  const normalized = String(value || '').trim();
+  if (!normalized || /^https?:\/\//i.test(normalized)) {
+    return false;
+  }
+  return LOCAL_ONLY_URI_PATTERN.test(normalized);
+}
+
+export function isUploadedHttpsAttachmentUri(value = '') {
+  return /^https:\/\//i.test(String(value || '').trim());
+}
+
 function normalizeAttachmentRemoteUrl(value = '') {
   const normalized = String(value || '').trim();
   if (!normalized) return '';
@@ -67,30 +80,62 @@ function normalizeAttachmentRemoteUrl(value = '') {
   return normalized;
 }
 
-export function isLocalOnlyAttachmentUri(value = '') {
-  const normalized = String(value || '').trim();
-  if (!normalized || /^https?:\/\//i.test(normalized)) {
-    return false;
-  }
-  return LOCAL_ONLY_URI_PATTERN.test(normalized);
+function firebaseStorageBucket() {
+  return String(process.env.EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET || FIREBASE_STORAGE_BUCKET_FALLBACK).trim();
 }
 
-export function isUploadedHttpsAttachmentUri(value = '') {
-  return /^https:\/\//i.test(String(value || '').trim());
+function attachmentDownloadTokenFromEntry(entry = {}) {
+  const token = entry?.downloadToken
+    || entry?.download_token
+    || entry?.firebaseStorageDownloadToken
+    || entry?.firebase_storage_download_token
+    || entry?.firebaseStorageDownloadTokens
+    || entry?.firebase_storage_download_tokens
+    || entry?.token;
+  return String(token || '').split(',')[0].trim();
+}
+
+function firebaseDownloadUrlFromStoragePath(storagePath = '', token = '') {
+  const normalizedPath = String(storagePath || '').trim().replace(/^\/+/, '');
+  const bucket = firebaseStorageBucket();
+  if (!normalizedPath || !bucket || !token) return '';
+  return `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(bucket)}/o/${encodeURIComponent(normalizedPath)}?alt=media&token=${encodeURIComponent(token)}`;
+}
+
+function firebaseDownloadUrlFromGsUri(uri = '', token = '') {
+  const match = String(uri || '').trim().match(/^gs:\/\/([^/]+)\/(.+)$/i);
+  if (!match || !token) return '';
+  return `https://firebasestorage.googleapis.com/v0/b/${encodeURIComponent(match[1])}/o/${encodeURIComponent(match[2])}?alt=media&token=${encodeURIComponent(token)}`;
 }
 
 export function getAttachmentDownloadUrl(attachment = {}) {
   if (typeof attachment === 'string') return normalizeAttachmentRemoteUrl(attachment);
-  return normalizeAttachmentRemoteUrl(
+  const token = attachmentDownloadTokenFromEntry(attachment);
+  const rawUrl = (
     attachment?.downloadUrl
     || attachment?.download_url
+    || attachment?.attachmentUrl
+    || attachment?.attachment_url
+    || attachment?.mediaUrl
+    || attachment?.media_url
     || attachment?.fileUrl
     || attachment?.file_url
+    || attachment?.fileData
+    || attachment?.file_data
     || attachment?.signedUrl
+    || attachment?.signed_url
     || attachment?.secure_url
     || attachment?.url
     || attachment?.uri
     || ''
+  );
+  const normalizedUrl = normalizeAttachmentRemoteUrl(rawUrl);
+  if (/^gs:\/\//i.test(normalizedUrl)) {
+    return firebaseDownloadUrlFromGsUri(normalizedUrl, token);
+  }
+  return (
+    normalizedUrl
+    || firebaseDownloadUrlFromStoragePath(attachment?.storagePath || attachment?.storage_path, token)
   ).trim();
 }
 

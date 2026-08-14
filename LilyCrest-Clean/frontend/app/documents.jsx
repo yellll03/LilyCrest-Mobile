@@ -1,91 +1,33 @@
 import React from 'react';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as FileSystem from 'expo-file-system/legacy';
-import * as Sharing from 'expo-sharing';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../src/context/ThemeContext';
-import { useAlert } from '../src/context/AlertContext';
-import { apiService, getApiErrorMessage } from '../src/services/api';
+import { safeBack } from '../src/utils/navigation';
 
 const documents = [
-  { title: 'House Rules', icon: 'home', color: '#F59E0B', description: 'General dormitory guidelines', category: 'Policy' },
-  { title: 'Curfew Policy', icon: 'time', color: '#9333EA', description: 'Entry and exit times', category: 'Policy' },
-  { title: 'Visitor Policy', icon: 'people', color: '#06B6D4', description: 'Guest registration rules', category: 'Policy' },
-  { title: 'Payment Terms', icon: 'cash', color: '#ff9000', description: 'Billing and payment policies', category: 'Billing' },
-  { title: 'Emergency Procedures', icon: 'alert-circle', color: '#EF4444', description: 'Safety and emergency contacts', category: 'Safety' },
-  { title: 'Contract Agreement', icon: 'document-text', color: '#3B82F6', description: 'Tenancy agreement terms', category: 'Contract', download: true },
+  { id: 'house_rules', title: 'House Rules', icon: 'home', color: '#F59E0B', description: 'General dormitory guidelines', category: 'Policy' },
+  { id: 'curfew_policy', title: 'Curfew Policy', icon: 'time', color: '#9333EA', description: 'Entry and exit times', category: 'Policy' },
+  { id: 'visitor_policy', title: 'Visitor Policy', icon: 'people', color: '#06B6D4', description: 'Guest registration rules', category: 'Policy' },
+  { id: 'payment_terms', title: 'Payment Terms', icon: 'cash', color: '#ff9000', description: 'Billing and payment policies', category: 'Billing' },
+  { id: 'emergency_procedures', title: 'Emergency Procedures', icon: 'alert-circle', color: '#EF4444', description: 'Safety and emergency contacts', category: 'Safety' },
+  { id: 'contract', title: 'Lease Contract', icon: 'document-text', color: '#3B82F6', description: 'Status, dates, and agreement', category: 'Contract', contract: true },
 ];
 
 export default function DocumentsScreen() {
   const router = useRouter();
   const { colors, isDarkMode } = useTheme();
-  const { showAlert } = useAlert();
-
-  const handlePress = async (doc) => {
-    if (doc.download) {
-      const url = apiService.downloadDocumentUrl('contract');
-      const fileName = 'LilyCrest_Contract_Agreement.pdf';
-      const token = await AsyncStorage.getItem('session_token');
-
-      if (!token) {
-        showAlert({ title: 'Login Required', message: 'Please log in to download this document.', type: 'warning' });
-        return;
-      }
-
-      try {
-        if (Platform.OS === 'web') {
-          const response = await fetch(url, {
-            headers: { Authorization: `Bearer ${token}` },
-          });
-          if (!response.ok) throw new Error(`Download failed (${response.status})`);
-
-          const blob = await response.blob();
-          const objectUrl = window.URL.createObjectURL(blob);
-          const anchor = document.createElement('a');
-          anchor.href = objectUrl;
-          anchor.download = fileName;
-          document.body.appendChild(anchor);
-          anchor.click();
-          anchor.remove();
-          window.URL.revokeObjectURL(objectUrl);
-          return;
-        }
-
-        const fileUri = `${FileSystem.cacheDirectory}${fileName}`;
-        const result = await FileSystem.downloadAsync(url, fileUri, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-
-        if (!result?.uri || result.status < 200 || result.status >= 300) {
-          throw new Error(`Download failed (${result?.status || 'unknown status'})`);
-        }
-
-        if (await Sharing.isAvailableAsync()) {
-          await Sharing.shareAsync(result.uri, {
-            mimeType: 'application/pdf',
-            dialogTitle: 'Contract Agreement PDF',
-            UTI: 'com.adobe.pdf',
-          });
-        } else {
-          showAlert({ title: 'Saved', message: `Document saved to ${result.uri}`, type: 'success' });
-        }
-      } catch (error) {
-        console.error('Contract download error:', error);
-
-        showAlert({ title: 'Download Failed', message: getApiErrorMessage(error, 'There was a problem downloading the document. Please try again.'), type: 'error' });
-      }
-    }
-  };
+  const handlePress = (doc) => router.push(doc.contract
+    ? '/contract-viewer'
+    : { pathname: '/document-viewer', params: { kind: 'policy', id: doc.id, title: doc.title } });
 
   const styles = createStyles(colors, isDarkMode);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backButton} onPress={() => safeBack(router, '/(tabs)/home')}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>House Rules & Documents</Text>
@@ -112,7 +54,7 @@ export default function DocumentsScreen() {
             <View style={[styles.categoryTag, { backgroundColor: `${doc.color}12` }]}>
               <Text style={[styles.categoryText, { color: doc.color }]}>{doc.category}</Text>
             </View>
-            <Ionicons name={doc.download ? "download-outline" : "chevron-forward"} size={18} color={colors.textMuted} style={{ marginLeft: 8 }} />
+            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} style={{ marginLeft: 8 }} />
           </TouchableOpacity>
         ))}
       </ScrollView>

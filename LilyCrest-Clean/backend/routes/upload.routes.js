@@ -7,8 +7,11 @@ const { admin, resolveStorageBucket } = require('../config/firebase');
 const router = express.Router();
 
 const IMAGEKIT_PRIVATE_KEY = String(process.env.IMAGEKIT_PRIVATE_KEY || '').trim();
+// Hard ceilings enforced against the decoded upload buffer itself — never
+// relaxed by a client-supplied maxBytes, since that value is untrusted input.
+const MAX_IMAGE_UPLOAD_BYTES = 5 * 1024 * 1024;
 const MAX_FIREBASE_UPLOAD_BYTES = 10 * 1024 * 1024;
-const ALLOWED_FIREBASE_UPLOAD_MIME_TYPES = new Set([
+const IMAGE_UPLOAD_MIME_TYPES = new Set([
   'image/jpeg',
   'image/jpg',
   'image/png',
@@ -17,6 +20,9 @@ const ALLOWED_FIREBASE_UPLOAD_MIME_TYPES = new Set([
   'image/bmp',
   'image/heic',
   'image/heif',
+]);
+const ALLOWED_FIREBASE_UPLOAD_MIME_TYPES = new Set([
+  ...IMAGE_UPLOAD_MIME_TYPES,
   'application/pdf',
   'application/msword',
   'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
@@ -98,16 +104,24 @@ function requestedMimeTypes(body = {}) {
   );
 }
 
+// The cap for this mime type is authoritative; a client-supplied maxBytes
+// can only tighten it further, never loosen it (e.g. an image can't be
+// pushed past MAX_IMAGE_UPLOAD_BYTES by requesting a larger maxBytes).
+function resolveUploadMaxBytes(mimeType, requestedMaxBytes) {
+  const mimeTypeCeiling = IMAGE_UPLOAD_MIME_TYPES.has(mimeType) ? MAX_IMAGE_UPLOAD_BYTES : MAX_FIREBASE_UPLOAD_BYTES;
+  const requested = Number(requestedMaxBytes);
+  return Number.isFinite(requested)
+    ? Math.min(Math.max(1, requested), mimeTypeCeiling)
+    : mimeTypeCeiling;
+}
+
 router.post('/firebase-storage', authMiddleware, async (req, res) => {
   try {
     const mimeType = String(req.body?.mimeType || req.body?.type || '').trim().toLowerCase();
     const fileName = safeFileName(req.body?.fileName || req.body?.name, mimeType);
     const buffer = decodeBase64Payload(req.body?.dataBase64);
     const requestedAllowedTypes = requestedMimeTypes(req.body);
-    const requestedMaxBytes = Number(req.body?.maxBytes);
-    const maxBytes = Number.isFinite(requestedMaxBytes)
-      ? Math.min(Math.max(1, requestedMaxBytes), MAX_FIREBASE_UPLOAD_BYTES)
-      : MAX_FIREBASE_UPLOAD_BYTES;
+    const maxBytes = resolveUploadMaxBytes(mimeType, req.body?.maxBytes);
 
     if (!buffer) {
       return res.status(400).json({ detail: 'Upload file data is required.' });
@@ -174,5 +188,13 @@ router.post('/firebase-storage', authMiddleware, async (req, res) => {
     return res.status(500).json({ detail: 'Upload failed, please retry.' });
   }
 });
+
+router.__test = {
+  resolveUploadMaxBytes,
+  decodeBase64Payload,
+  MAX_IMAGE_UPLOAD_BYTES,
+  MAX_FIREBASE_UPLOAD_BYTES,
+  IMAGE_UPLOAD_MIME_TYPES,
+};
 
 module.exports = router;

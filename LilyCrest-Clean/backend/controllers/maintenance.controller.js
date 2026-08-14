@@ -49,7 +49,11 @@ function isMaintenanceTransitionAllowed(from, to, actor = 'admin', action = '') 
 const MAX_PROGRESS_ATTACHMENTS = 4;
 const MAX_PROGRESS_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const MAX_TENANT_ATTACHMENTS = 4;
-const MAX_TENANT_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+// QA requirement: every inquiry (tenant-submitted maintenance request and its
+// follow-up replies) is capped at 5MB per attachment regardless of whether it
+// is an image, PDF, or other supported document type — independent of the
+// generic upload endpoint's own (larger) per-mime-type ceiling.
+const INQUIRY_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
 const FIREBASE_STORAGE_BUCKET_FALLBACK = 'dormitorymanagement-caps-572cf.firebasestorage.app';
 const LOCAL_ONLY_URI_PATTERN = /^(?:file|content|ph|assets-library|blob|ms-appdata):\/\/|^\/data\/user\/|^\/storage\/|^\/private\/var\/|^\/var\/mobile\/|(?:^|[\\/])cache(?:[\\/]|$)/i;
 const IMAGE_ATTACHMENT_NAME_PATTERN = /\.(png|jpe?g|gif|webp|bmp|heic|heif)(?:\?.*)?$/i;
@@ -381,8 +385,11 @@ function normalizeTenantAttachments(rawAttachments) {
     if (!isSupportedTenantAttachment({ downloadUrl: uriCheck.value, originalName, mimeType })) {
       return { error: 'Maintenance attachments must be images, PDFs, documents, text, or CSV files.' };
     }
-    if (Number.isFinite(size) && size > MAX_TENANT_ATTACHMENT_BYTES) {
-      return { error: 'Maintenance attachment exceeds the 10 MB limit.' };
+    // Reject outright (rather than silently skipping the check) when size is
+    // missing or non-numeric — a client cannot bypass the 5MB inquiry cap by
+    // omitting the size field the upload endpoint returned.
+    if (!Number.isFinite(size) || size > INQUIRY_ATTACHMENT_MAX_BYTES) {
+      return { error: 'Maintenance attachment exceeds the 5 MB limit.' };
     }
 
     return {
@@ -1997,4 +2004,8 @@ module.exports = {
   isMaintenanceTransitionAllowed,
   sanitizeAttachmentForTenant,
   buildTenantRequestResponse,
+  // Exported only for direct unit testing of the inquiry attachment 5MB cap
+  // (see tests/inquiryAttachmentSizeLimit.test.js).
+  normalizeTenantAttachments,
+  INQUIRY_ATTACHMENT_MAX_BYTES,
 };
