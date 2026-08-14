@@ -4,16 +4,19 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
+import { safeBack } from '../src/utils/navigation';
+import { useAuth } from '../src/context/AuthContext';
 
 export default function AboutScreen() {
   const router = useRouter();
   const { colors } = useTheme();
+  const { user } = useAuth();
   const styles = useThemedStyles(createStyles);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backButton} onPress={() => safeBack(router, '/(tabs)/profile')}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>About</Text>
@@ -47,7 +50,7 @@ export default function AboutScreen() {
           <Text style={styles.cardTitle}>Contact Us</Text>
           <TouchableOpacity style={styles.contactItem}><Ionicons name="call" size={20} color={colors.text} /><Text style={styles.contactText}>+63 912 345 6789</Text></TouchableOpacity>
           <TouchableOpacity style={styles.contactItem}><Ionicons name="mail" size={20} color={colors.text} /><Text style={styles.contactText}>support@lilycrest.ph</Text></TouchableOpacity>
-          <TouchableOpacity style={styles.contactItem}><Ionicons name="location" size={20} color={colors.text} /><Text style={styles.contactText}>#7 Gil Puyat Ave., Makati City</Text></TouchableOpacity>
+          <TouchableOpacity style={styles.contactItem}><Ionicons name="location" size={20} color={colors.text} /><Text style={styles.contactText}>{user?.branch?.branchAddress || 'Branch location is not available yet.'}</Text></TouchableOpacity>
         </View>
 
         <View style={styles.linksSection}>

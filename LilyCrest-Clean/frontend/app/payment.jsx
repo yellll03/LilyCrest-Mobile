@@ -14,6 +14,7 @@ import {
   getBillingApiMessage,
   isBillingUnavailableMessage,
 } from '../src/services/billingState';
+import { safeBack } from '../src/utils/navigation';
 
 function safeCurrency(amount) {
   const n = Number(amount);
@@ -174,7 +175,7 @@ export default function PaymentScreen() {
             <Pressable style={styles.retryBtnSmall} onPress={loadBill}>
               <Text style={styles.retryBtnSmallText}>Try Again</Text>
             </Pressable>
-            <Pressable style={styles.backBtnSmall} onPress={() => router.back()}>
+            <Pressable style={styles.backBtnSmall} onPress={() => safeBack(router, '/(tabs)/billing')}>
               <Text style={styles.backBtnSmallText}>Go Back</Text>
             </Pressable>
           </View>
@@ -185,7 +186,6 @@ export default function PaymentScreen() {
 
   const isOutstanding = isBillOutstanding(bill);
   const totalAmount = bill.total || bill.amount || 0;
-
   const moveInFinancials = bill.move_in_financials || bill.moveInFinancials || null;
 
   const charges = [];
@@ -205,7 +205,7 @@ export default function PaymentScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Pressable onPress={() => router.back()} style={styles.headerBack}>
+        <Pressable onPress={() => safeBack(router, '/(tabs)/billing')} style={styles.headerBack}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </Pressable>
         <Text style={styles.headerTitle}>Payment</Text>
@@ -331,7 +331,7 @@ export default function PaymentScreen() {
           </View>
         )}
 
-        <Pressable style={styles.cancelBtn} onPress={() => router.back()}>
+        <Pressable style={styles.cancelBtn} onPress={() => safeBack(router, '/(tabs)/billing')}>
           <Text style={styles.cancelText}>{isOutstanding ? 'Cancel' : 'Go Back'}</Text>
         </Pressable>
 

@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../src/context/ThemeContext';
+import { safeBack } from '../src/utils/navigation';
 
 const HOUSE_RULES = [
   {
@@ -83,9 +84,9 @@ const HOUSE_RULES = [
     icon: 'card',
     color: '#ff9000',
     rules: [
-      'Monthly rent is due on the 5th of each month',
-      'Grace period: 2 days (until the 7th)',
-      'Late fee: ₱50.00 per day after grace period',
+      'Monthly rent is due on the same day number as your move-in date',
+      'Grace period: 1 day',
+      'Late fee: ₱50.00 per day beginning on the second day after due date',
       'Accepted payments: Bank transfer (BDO/BPI), GCash, Maya',
       'Always submit proof of payment through the app'
     ]
@@ -114,7 +115,7 @@ export default function HouseRulesScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backButton} onPress={() => safeBack(router, '/(tabs)/home')}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>House Rules</Text>

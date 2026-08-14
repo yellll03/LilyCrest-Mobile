@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '../src/context/ThemeContext';
 import { useAlert } from '../src/context/AlertContext';
 import { useToast } from '../src/context/ToastContext';
+import { useAuth } from '../src/context/AuthContext';
 import {
   getStoredPushToken,
   registerForPushNotifications,
@@ -13,11 +14,13 @@ import {
   setPushNotificationsEnabled,
 } from '../src/services/notifications';
 import { clearCredentials, enableBiometricSession } from '../src/services/secureCredentials';
+import { safeBack } from '../src/utils/navigation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
 
 export default function SettingsScreen() {
   const router = useRouter();
+  const { user, authReady, authStatus } = useAuth();
   const { isDarkMode, toggleDarkMode, colors } = useTheme();
   const { showAlert } = useAlert();
   const { showToast } = useToast();
@@ -58,6 +61,14 @@ export default function SettingsScreen() {
 
   const handleNotificationToggle = async (value) => {
     if (notificationSaving) return;
+    if (!authReady || authStatus !== 'authenticated' || !user?.user_id) {
+      showToast({
+        type: 'warning',
+        title: 'Sign In Required',
+        message: 'Please sign in before changing push notification settings.',
+      });
+      return;
+    }
 
     const previousValue = notifications;
     setNotifications(value);
@@ -154,7 +165,7 @@ export default function SettingsScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backButton} onPress={() => safeBack(router, '/(tabs)/profile')}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Settings</Text>
