@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { format, formatDistanceToNow } from 'date-fns';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, FlatList, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
 import { apiService, getApiErrorMessage } from '../../src/services/api';
+import { resolveNotificationRoute } from '../../src/services/notifications';
 
 function safeFormat(dateStr, fmt) {
   try {
@@ -61,6 +62,7 @@ function isNew(dateStr) {
 }
 
 export default function AnnouncementsScreen() {
+  const router = useRouter();
   const { colors } = useTheme();
   const { clearNotificationUnread } = useAuth();
   const styles = useThemedStyles((c, dark) => StyleSheet.create({
@@ -246,6 +248,11 @@ export default function AnnouncementsScreen() {
       flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
       borderTopWidth: 1, borderTopColor: c.border, paddingTop: 12,
     },
+    notificationAction: {
+      minHeight: 44, borderRadius: 10, backgroundColor: c.accent,
+      justifyContent: 'center', alignItems: 'center', marginTop: 10,
+    },
+    notificationActionText: { color: '#FFFFFF', fontWeight: '800' },
     modalCloseBtn: {
       width: 28, height: 28, borderRadius: 8,
       backgroundColor: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
@@ -268,9 +275,7 @@ export default function AnnouncementsScreen() {
   const fetchAnnouncements = useCallback(async (silent = false) => {
     if (!silent) setFetchError(null);
     try {
-      const response = apiService.getNotifications
-        ? await apiService.getNotifications()
-        : await apiService.getAnnouncements();
+      const response = await apiService.getAnnouncements();
       setAnnouncements(Array.isArray(response.data) ? response.data : []);
       setFetchError(null);
     } catch (error) {
@@ -319,6 +324,7 @@ export default function AnnouncementsScreen() {
       case 'assistant':   return { bg: '#F3E8FF', text: '#9333EA', icon: 'chatbubble-ellipses' };
       case 'security':    return { bg: '#FEE2E2', text: '#DC2626', icon: 'shield-checkmark' };
       case 'reservation': return { bg: '#DCFCE7', text: '#16A34A', icon: 'calendar' };
+      case 'survey':      return { bg: '#F3E8FF', text: '#7E22CE', icon: 'chatbox-ellipses' };
       case 'rules':       return { bg: '#EEF2FF', text: '#4F46E5', icon: 'document-text' };
       case 'promo':       return { bg: '#DCFCE7', text: '#16A34A', icon: 'pricetag' };
       case 'event':       return { bg: '#F3E8FF', text: '#9333EA', icon: 'calendar' };
@@ -353,6 +359,96 @@ export default function AnnouncementsScreen() {
     const catMatch = !selectedCategory || selectedCategory === 'All' || (a.category || 'General') === selectedCategory;
     return catMatch && (a.priority || '').toLowerCase() === 'high';
   }).length;
+
+  const announcementKeyExtractor = useCallback(
+    (announcement) => announcement.notification_id || announcement.announcement_id || `${announcement.title}-${String(getAnnouncementDateValue(announcement) || '')}`,
+    []
+  );
+
+  const toggleExpanded = useCallback((id) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const renderAnnouncementItem = useCallback(({ item: announcement }) => {
+    const catColor = getCategoryColor(announcement.category || 'General');
+    const prioColor = getPriorityColor(announcement.priority);
+    const announcementDate = getAnnouncementDateValue(announcement);
+    const isRecent = isNew(announcementDate);
+    const isExpanded = expandedIds.has(announcement.announcement_id);
+    const isLong = (announcement.content || '').length > 120;
+
+    return (
+      <TouchableOpacity
+        style={styles.announcementCard}
+        onPress={() => setSelectedAnn(announcement)}
+        activeOpacity={0.85}
+      >
+        {/* Left priority accent */}
+        <View style={[styles.cardAccent, { backgroundColor: prioColor }]} />
+
+        <View style={styles.cardBody}>
+          {/* Icon + title row */}
+          <View style={styles.cardHeader}>
+            <View style={[styles.priorityIcon, { backgroundColor: `${prioColor}14` }]}>
+              <Ionicons name={getPriorityIcon(announcement.priority)} size={16} color={prioColor} />
+            </View>
+            <View style={styles.titleColumn}>
+              <View style={styles.titleRow}>
+                <Text style={styles.announcementTitle} numberOfLines={2}>{announcement.title}</Text>
+                {isRecent && <View style={styles.newDot} />}
+              </View>
+              <Text style={styles.announcementTime}>{safeDistanceToNow(announcementDate)}</Text>
+            </View>
+          </View>
+
+          {/* Category + Urgent badges */}
+          <View style={styles.badgeRow}>
+            <View style={[styles.categoryBadge, { backgroundColor: catColor.bg }]}>
+              <Ionicons name={catColor.icon} size={10} color={catColor.text} />
+              <Text style={[styles.categoryBadgeText, { color: catColor.text }]}>{announcement.category || 'General'}</Text>
+            </View>
+            {(announcement.priority || '').toLowerCase() === 'high' && (
+              <View style={styles.urgentBadge}>
+                <Ionicons name="warning" size={10} color="#DC2626" />
+                <Text style={styles.urgentText}>Urgent</Text>
+              </View>
+            )}
+          </View>
+
+          {/* Content preview */}
+          <Text style={styles.announcementContent} numberOfLines={isExpanded ? undefined : 3}>
+            {announcement.content}
+          </Text>
+          {isLong && (
+            <TouchableOpacity
+              style={styles.readMoreBtn}
+              onPress={() => toggleExpanded(announcement.announcement_id)}
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+            >
+              <Text style={styles.readMoreText}>{isExpanded ? 'Show less' : 'Read more'}</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Footer */}
+          <View style={styles.announcementFooter}>
+            <View style={styles.footerLeft}>
+              <Ionicons name="calendar-outline" size={11} color={colors.textMuted} />
+              <Text style={styles.announcementDate}>{safeFormat(announcementDate, 'MMM dd, yyyy')}</Text>
+            </View>
+            <View style={styles.footerAuthor}>
+              <Ionicons name="person-circle-outline" size={11} color={colors.textMuted} />
+              <Text style={styles.authorText}>{announcement.author_name || announcement.source_label || 'LilyCrest System'}</Text>
+            </View>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  }, [colors.textMuted, expandedIds, styles, toggleExpanded]);
 
   if (isLoading) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color={colors.primary} /></View>;
 
@@ -435,20 +531,21 @@ export default function AnnouncementsScreen() {
       </View>
 
       {/* ── Content ── */}
-      <ScrollView
+      <FlatList
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
+        data={filteredAnnouncements}
+        keyExtractor={announcementKeyExtractor}
+        renderItem={renderAnnouncementItem}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
         showsVerticalScrollIndicator={false}
-      >
-        {fetchError ? (
+        ListHeaderComponent={fetchError ? (
           <View style={styles.errorBanner}>
             <Ionicons name="cloud-offline-outline" size={15} color="#92400E" />
             <Text style={styles.errorBannerText}>{fetchError}</Text>
           </View>
         ) : null}
-
-        {filteredAnnouncements.length === 0 ? (
+        ListEmptyComponent={(
           <View style={styles.emptyState}>
             <View style={styles.emptyIcon}>
               <Ionicons name="notifications-outline" size={26} color={colors.textMuted} />
@@ -456,95 +553,9 @@ export default function AnnouncementsScreen() {
             <Text style={styles.emptyTitle}>{fetchError ? 'Could not load notifications' : 'No notifications'}</Text>
             <Text style={styles.emptyText}>{fetchError ? 'Check your connection and pull down to refresh.' : 'No notifications in this category yet. Pull down to refresh.'}</Text>
           </View>
-        ) : filteredAnnouncements.map((announcement) => {
-          const catColor = getCategoryColor(announcement.category || 'General');
-          const prioColor = getPriorityColor(announcement.priority);
-          const announcementDate = getAnnouncementDateValue(announcement);
-          const isRecent = isNew(announcementDate);
-
-          return (
-            <TouchableOpacity
-              key={announcement.notification_id || announcement.announcement_id || `${announcement.title}-${String(announcementDate || '')}`}
-              style={styles.announcementCard}
-              onPress={() => setSelectedAnn(announcement)}
-              activeOpacity={0.85}
-            >
-              {/* Left priority accent */}
-              <View style={[styles.cardAccent, { backgroundColor: prioColor }]} />
-
-              <View style={styles.cardBody}>
-                {/* Icon + title row */}
-                <View style={styles.cardHeader}>
-                  <View style={[styles.priorityIcon, { backgroundColor: `${prioColor}14` }]}>
-                    <Ionicons name={getPriorityIcon(announcement.priority)} size={16} color={prioColor} />
-                  </View>
-                  <View style={styles.titleColumn}>
-                    <View style={styles.titleRow}>
-                      <Text style={styles.announcementTitle} numberOfLines={2}>{announcement.title}</Text>
-                      {isRecent && <View style={styles.newDot} />}
-                    </View>
-                    <Text style={styles.announcementTime}>{safeDistanceToNow(announcementDate)}</Text>
-                  </View>
-                </View>
-
-                {/* Category + Urgent badges */}
-                <View style={styles.badgeRow}>
-                  <View style={[styles.categoryBadge, { backgroundColor: catColor.bg }]}>
-                    <Ionicons name={catColor.icon} size={10} color={catColor.text} />
-                    <Text style={[styles.categoryBadgeText, { color: catColor.text }]}>{announcement.category || 'General'}</Text>
-                  </View>
-                  {(announcement.priority || '').toLowerCase() === 'high' && (
-                    <View style={styles.urgentBadge}>
-                      <Ionicons name="warning" size={10} color="#DC2626" />
-                      <Text style={styles.urgentText}>Urgent</Text>
-                    </View>
-                  )}
-                </View>
-
-                {/* Content preview */}
-                {(() => {
-                  const isExpanded = expandedIds.has(announcement.announcement_id);
-                  const isLong = (announcement.content || '').length > 120;
-                  return (
-                    <>
-                      <Text style={styles.announcementContent} numberOfLines={isExpanded ? undefined : 3}>
-                        {announcement.content}
-                      </Text>
-                      {isLong && (
-                        <TouchableOpacity
-                          style={styles.readMoreBtn}
-                          onPress={() => setExpandedIds((prev) => {
-                            const next = new Set(prev);
-                            if (next.has(announcement.announcement_id)) next.delete(announcement.announcement_id);
-                            else next.add(announcement.announcement_id);
-                            return next;
-                          })}
-                          hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
-                        >
-                          <Text style={styles.readMoreText}>{isExpanded ? 'Show less' : 'Read more'}</Text>
-                        </TouchableOpacity>
-                      )}
-                    </>
-                  );
-                })()}
-
-                {/* Footer */}
-                <View style={styles.announcementFooter}>
-                  <View style={styles.footerLeft}>
-                    <Ionicons name="calendar-outline" size={11} color={colors.textMuted} />
-                    <Text style={styles.announcementDate}>{safeFormat(announcementDate, 'MMM dd, yyyy')}</Text>
-                  </View>
-                  <View style={styles.footerAuthor}>
-                    <Ionicons name="person-circle-outline" size={11} color={colors.textMuted} />
-                    <Text style={styles.authorText}>{announcement.author_name || announcement.source_label || 'LilyCrest System'}</Text>
-                  </View>
-                </View>
-              </View>
-            </TouchableOpacity>
-          );
-        })}
-        <View style={styles.bottomSpacer} />
-      </ScrollView>
+        )}
+        ListFooterComponent={<View style={styles.bottomSpacer} />}
+      />
 
       {/* ── Detail sheet ── */}
       <Modal
@@ -600,6 +611,25 @@ export default function AnnouncementsScreen() {
                   {/* Full content */}
                   <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
                     <Text style={styles.modalContent}>{selectedAnn.content}</Text>
+                    {String(selectedAnn.category || selectedAnn.type || '').toLowerCase() === 'survey' ? (
+                      <TouchableOpacity
+                        style={styles.notificationAction}
+                        accessibilityRole="button"
+                        accessibilityLabel="Open survey"
+                        onPress={() => {
+                          const destination = resolveNotificationRoute({
+                            ...(selectedAnn.data || {}),
+                            url: selectedAnn.url || selectedAnn.data?.url,
+                            type: 'survey',
+                            surveyId: selectedAnn.data?.surveyId || selectedAnn.surveyId,
+                          });
+                          setSelectedAnn(null);
+                          router.push(destination);
+                        }}
+                      >
+                        <Text style={styles.notificationActionText}>Open Survey</Text>
+                      </TouchableOpacity>
+                    ) : null}
                   </ScrollView>
 
                   {/* Footer */}

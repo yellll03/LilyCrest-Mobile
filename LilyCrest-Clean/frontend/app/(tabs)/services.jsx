@@ -1,9 +1,12 @@
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { Link, useFocusEffect } from 'expo-router';
+import * as FileSystem from 'expo-file-system/legacy';
+import * as Sharing from 'expo-sharing';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     ActivityIndicator,
+    FlatList,
     Image,
     KeyboardAvoidingView,
     Linking,
@@ -22,7 +25,6 @@ import LilyFlowerIcon from '../../src/components/assistant/LilyFlowerIcon';
 import { useAuth } from '../../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
 import { useToast } from '../../src/context/ToastContext';
-import { MOBILE_API_BASE_URL } from '../../src/config/api';
 import { apiService, getApiErrorMessage } from '../../src/services/api';
 import {
   ensureFirebaseStorageAttachments,
@@ -31,11 +33,10 @@ import {
   getAttachmentDownloadUrl,
   isDocumentAttachmentCandidate,
   isImageAttachmentCandidate,
-  MAX_ATTACHMENT_UPLOAD_BYTES,
-  MAX_IMAGE_UPLOAD_BYTES,
   toStoredAttachmentMetadata,
 } from '../../src/services/firebaseStorageUpload';
 import { pickDocument, pickFromCamera, pickFromLibrary } from '../../src/utils/attachmentPicker';
+import { classifyMaintenanceAttachment, getValidMaintenanceAttachmentUrl } from '../../src/utils/maintenanceAttachmentViewer';
 
 function safeFormat(dateStr, fmt) {
   try {
@@ -83,113 +84,35 @@ function isOpenableAttachment(attachment = {}) {
   return /^https?:\/\//i.test(url) || /^data:image\//i.test(url);
 }
 
-const TENANT_CONVERSATION_TYPES = new Set([
-  'admin_reply',
-  'admin_update',
-  'tenant_reply',
-  'tenant_summary',
-  'summary',
-]);
-
-const INTERNAL_THREAD_TYPES = new Set([
-  'status_change',
-  'status_changed',
-  'status_visible',
-  'internal_note',
-  'internal_log',
-  'workflow_action',
-  'viewed',
-  'processing',
-  'draft_saved',
-  'tenant_submitted',
-  'tenant_cancelled',
-  'tenant_reopened',
-  'tenant_confirmed_resolved',
-]);
-
-function getSenderRoleLabel(role = '', fallback = '') {
-  const normalized = String(role || '').trim().toLowerCase().replace(/\s+/g, '_');
-  if (normalized === 'tenant') return 'You';
-  if (normalized === 'owner' || normalized === 'property_owner') return 'Owner';
-  if (normalized === 'branch_admin' || normalized === 'branch') return 'Branch Admin';
-  if (normalized === 'service_provider' || normalized === 'provider' || normalized === 'technician') return 'Service Provider';
-  if (normalized === 'admin') return fallback && !/admin/i.test(fallback) ? fallback : 'Branch Admin';
-  return fallback || 'Branch Admin';
-}
-
-function summaryToConversationText(summary = {}) {
-  return [
-    summary.action_taken ? `Action taken: ${summary.action_taken}` : '',
-    summary.assigned_provider ? `Assigned provider: ${summary.assigned_provider}` : '',
-    summary.schedule ? `Schedule: ${summary.schedule}` : '',
-    summary.next_step ? `Next step: ${summary.next_step}` : '',
-    summary.completion_note ? `Completion note: ${summary.completion_note}` : '',
-  ].filter(Boolean).join('\n');
-}
-
-function hasConversationContent(entry = {}) {
-  const message = typeof entry?.message === 'string'
-    ? entry.message.trim()
-    : typeof entry?.note === 'string'
-      ? entry.note.trim()
-      : '';
-  const summary = entry?.summary || entry?.tenantSummary || null;
-  const attachments = Array.isArray(entry?.attachments) ? entry.attachments.filter(Boolean) : [];
-  return Boolean(message || summary || attachments.length);
-}
-
-function isTenantConversationEntry(entry = {}) {
-  const type = String(entry?.type || entry?.kind || entry?.event || '').toLowerCase();
-  const visibility = String(entry?.visibility || (entry?.visibleToTenant === false ? 'internal' : 'tenant')).toLowerCase();
-  const role = String(entry?.senderRole || entry?.sender_role || entry?.actor_role || '').toLowerCase();
-
-  if (visibility === 'internal' || entry?.visibleToTenant === false || entry?.isTenantVisible === false) return false;
-  if (entry?.internal === true || entry?.adminOnly === true || entry?.isInternal === true) return false;
-  if (INTERNAL_THREAD_TYPES.has(type)) return false;
-  if (type && !TENANT_CONVERSATION_TYPES.has(type)) return false;
-  if (role === 'system') return false;
-  return hasConversationContent(entry);
+function sanitizeAttachmentErrorMessage(value = '') {
+  return String(value || 'Attachment could not be opened.')
+    .replace(/https?:\/\/[^\s,}]+/gi, '[attachment-url]')
+    .replace(/([?&]token=)[^&\s]+/gi, '$1[redacted]')
+    .slice(0, 300);
 }
 
 function buildRequestProgress(request) {
   if (!request) return [];
 
-  const publicEntries = Array.isArray(request.publicReplies)
-    ? request.publicReplies
-    : Array.isArray(request.tenantReplies)
-      ? request.tenantReplies
-      : Array.isArray(request.thread)
-        ? request.thread
-        : Array.isArray(request.conversation)
-          ? request.conversation
-          : Array.isArray(request.updates)
-            ? request.updates
-            : [];
-  const progress = publicEntries
-    .filter(isTenantConversationEntry)
+  if (Array.isArray(request.thread) && request.thread.length > 0) {
+    return request.thread
       .map((entry, index) => {
         const timestamp = entry?.created_at || entry?.createdAt || entry?.timestamp || null;
-        const role = entry?.senderRole || entry?.sender_role || entry?.actor_role || null;
-        const summary = entry?.summary || entry?.tenantSummary || null;
-        const message = typeof entry?.message === 'string'
-          ? entry.message.trim()
-          : typeof entry?.note === 'string'
-            ? entry.note.trim()
-            : summaryToConversationText(summary);
-        const entryAttachments = Array.isArray(entry?.attachments) ? entry.attachments.filter(Boolean) : [];
-        const summaryAttachments = Array.isArray(summary?.attachments) ? summary.attachments.filter(Boolean) : [];
         return {
           id: entry?.update_id || `${entry?.type || 'update'}_${timestamp || index}`,
-          title: entry?.type === 'tenant_summary' ? 'Maintenance Summary' : entry?.title || getProgressTitle(entry),
+          title: entry?.title || getProgressTitle(entry),
           type: entry?.type || entry?.kind || 'maintenance_update',
-          message,
+          message: typeof entry?.message === 'string' ? entry.message.trim() : '',
           timestamp,
-          attachments: entryAttachments.length ? entryAttachments : summaryAttachments,
-          actorLabel: getSenderRoleLabel(role, entry?.senderName || entry?.sender_name || entry?.actor_name || entry?.actorLabel || ''),
-          actorRole: role,
-          isTenant: String(role || '').toLowerCase() === 'tenant',
-          isSummary: entry?.type === 'tenant_summary' || entry?.kind === 'tenant_summary' || Boolean(summary),
-          summary,
+          status: entry?.status || entry?.status_to || null,
+          statusFrom: entry?.status_from || null,
+          statusTo: entry?.status_to || entry?.status || null,
+          attachments: Array.isArray(entry?.attachments) ? entry.attachments.filter(Boolean) : [],
+          actorLabel: entry?.senderName || entry?.actor_name || entry?.actorLabel || null,
+          actorRole: entry?.senderRole || entry?.actor_role || null,
+          isTenant: (entry?.senderRole || entry?.actor_role || '').toLowerCase() === 'tenant',
+          isSummary: entry?.type === 'tenant_summary' || entry?.kind === 'tenant_summary' || Boolean(entry?.summary || entry?.tenantSummary),
+          summary: entry?.summary || entry?.tenantSummary || null,
         };
       })
       .sort((left, right) => {
@@ -197,67 +120,56 @@ function buildRequestProgress(request) {
         const rightTime = new Date(right.timestamp || 0).getTime();
         return leftTime - rightTime;
       });
+  }
+
+  const history = Array.isArray(request.statusHistory) ? request.statusHistory : [];
+  const progress = history
+    .map((entry, index) => {
+      const note = typeof entry?.note === 'string' && entry.note.trim()
+        ? entry.note.trim()
+        : null;
+      const timestamp = entry?.timestamp || entry?.created_at || entry?.createdAt || null;
+      const actorRole = String(entry?.actor_role || '').toLowerCase();
+
+      return {
+        id: `${entry?.event || 'progress'}_${entry?.status || 'update'}_${timestamp || index}`,
+        title: getProgressTitle(entry),
+        message: note,
+        timestamp,
+        attachments: Array.isArray(entry?.attachments) ? entry.attachments.filter(Boolean) : [],
+        actorLabel: actorRole === 'admin'
+          ? 'Admin'
+          : actorRole === 'tenant'
+            ? 'You'
+            : entry?.actor_name || null,
+        actorRole,
+        isTenant: actorRole === 'tenant',
+        isSummary: entry?.event === 'tenant_summary',
+      };
+    })
+    .filter((entry) => entry.title || entry.message)
+    .sort((left, right) => {
+      const leftTime = new Date(left.timestamp || 0).getTime();
+      const rightTime = new Date(right.timestamp || 0).getTime();
+      return rightTime - leftTime;
+    });
 
   if (progress.length > 0) {
     return progress;
   }
 
-  const summary = request.tenant_summary || request.tenantSummary || null;
-  if (summary) {
+  if (request.notes) {
     return [{
-      id: `summary_${request.request_id || 'maintenance'}`,
-      title: 'Maintenance Summary',
-      type: 'tenant_summary',
-      message: summaryToConversationText(summary) || 'A maintenance summary is available.',
-      timestamp: summary.created_at || request.updated_at || request.updatedAt || request.created_at || request.createdAt || null,
-      attachments: Array.isArray(summary.attachments) ? summary.attachments.filter(Boolean) : [],
-      actorLabel: 'Branch Admin',
-      actorRole: 'admin',
-      isTenant: false,
-      isSummary: true,
-      summary,
+      id: `legacy_${request.request_id || 'reply'}`,
+      title: formatStatusLabel(request.status),
+      message: request.notes,
+      timestamp: request.updated_at || request.updatedAt || request.created_at || request.createdAt || null,
+      attachments: [],
+      actorLabel: 'Admin',
     }];
   }
 
   return [];
-}
-
-function unwrapMaintenanceRequests(response) {
-  const payload = response?.data;
-  if (Array.isArray(payload)) return payload;
-  if (Array.isArray(payload?.data?.requests)) return payload.data.requests;
-  if (Array.isArray(payload?.requests)) return payload.requests;
-  if (Array.isArray(payload?.data)) return payload.data;
-  return [];
-}
-
-function isMaintenanceRequestPayload(value) {
-  return Boolean(
-    value
-    && typeof value === 'object'
-    && !Array.isArray(value)
-    && (
-      value.request_id
-      || value.requestId
-      || value._id
-      || value.status
-      || value.request_type
-      || value.thread
-      || value.publicReplies
-      || value.tenantReplies
-    )
-  );
-}
-
-function unwrapMaintenanceRequest(response, fallback = null) {
-  const payload = response?.data ?? response;
-  const candidates = [
-    payload?.data?.request,
-    payload?.request,
-    payload?.data,
-    payload,
-  ];
-  return candidates.find(isMaintenanceRequestPayload) || fallback;
 }
 
 const REQUEST_TYPES = [
@@ -289,6 +201,11 @@ const ACTIVE_STATUSES = ['pending', 'viewed', 'in_progress', 'assigned', 'schedu
 const RESOLVED_STATUSES = ['completed', 'resolved', 'rejected'];
 const CLOSED_REPLY_STATUSES = ['cancelled', 'rejected'];
 const MAX_MAINTENANCE_ATTACHMENTS = 4;
+// Every inquiry attachment (image, PDF, or other supported document type) is
+// capped at 5MB, regardless of the generic upload endpoint's own larger
+// per-mime ceiling. Mirrors INQUIRY_ATTACHMENT_MAX_BYTES enforced server-side
+// in maintenance.controller.js's normalizeTenantAttachments.
+const INQUIRY_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
 
 function getStatusNextStep(status, request = {}) {
   switch ((status || '').toLowerCase()) {
@@ -328,7 +245,7 @@ function canReplyToRequest(request = {}) {
 }
 
 export default function ServicesScreen() {
-  const { user } = useAuth();
+  const { user, authReady, authStatus } = useAuth();
   const { colors } = useTheme();
   const { showToast } = useToast();
   const styles = useThemedStyles((c) => StyleSheet.create({
@@ -461,6 +378,7 @@ export default function ServicesScreen() {
   const [editDescription, setEditDescription] = useState('');
   const [saving, setSaving] = useState(false);
   const [previewAttachment, setPreviewAttachment] = useState(null);
+  const [previewAttachmentError, setPreviewAttachmentError] = useState('');
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [showReopenModal, setShowReopenModal] = useState(false);
   const [reopenNote, setReopenNote] = useState('');
@@ -472,6 +390,7 @@ export default function ServicesScreen() {
   // Search
   const [searchQuery, setSearchQuery] = useState('');
   const bannerTimerRef = useRef(null);
+  const userId = user?.user_id || user?.id || null;
   const isDirty = useMemo(() => Boolean(selectedType) || description.trim().length > 0 || attachments.length > 0, [attachments.length, description, selectedType]);
   const createFormErrors = useMemo(() => ({
     type: selectedType ? '' : 'Please select a service type',
@@ -557,41 +476,57 @@ export default function ServicesScreen() {
   };
 
   const fetchRequests = useCallback(async () => {
+    if (!authReady) return;
+    if (authStatus !== 'authenticated' || !userId) {
+      setRequests([]);
+      setIsLoading(false);
+      setRefreshing(false);
+      showBannerMessage('warning', 'Please sign in to view service requests.', { withToast: false });
+      return;
+    }
+
     try {
       const response = await apiService.getMyMaintenance();
       // Force new array to trigger rerender even if values are identical
-      const nextRequests = [...unwrapMaintenanceRequests(response)].sort((a, b) => {
+      const nextRequests = [...(response.data || [])].sort((a, b) => {
         const aTime = new Date(a.latestActivityAt || a.lastActivityAt || a.updated_at || a.created_at || 0).getTime();
         const bTime = new Date(b.latestActivityAt || b.lastActivityAt || b.updated_at || b.created_at || 0).getTime();
         return bTime - aTime;
       });
       setRequests(nextRequests);
     } catch (error) {
-      console.error('Fetch requests error:', error);
+      console.warn('Fetch requests error:', error?.normalized || error?.message);
+      showBannerMessage('error', getApiErrorMessage(error, 'Unable to load service requests. Pull to retry.'), { withToast: false });
     } finally {
       setIsLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [authReady, authStatus, showBannerMessage, userId]);
 
   useEffect(() => {
+    if (!authReady) return;
     fetchRequests();
-  }, [fetchRequests]);
+  }, [authReady, fetchRequests]);
 
   useFocusEffect(
     useCallback(() => {
+      if (!authReady || authStatus !== 'authenticated' || !userId) return undefined;
       // Refresh immediately when tab gains focus
       fetchRequests();
       // Also poll while this tab is focused
       const interval = setInterval(() => { fetchRequests(); }, 60000);
       return () => clearInterval(interval);
-    }, [fetchRequests])
+    }, [authReady, authStatus, fetchRequests, userId])
   );
 
   const onRefresh = useCallback(() => {
+    if (!authReady || authStatus !== 'authenticated' || !userId) {
+      setRefreshing(false);
+      return;
+    }
     setRefreshing(true);
     fetchRequests();
-  }, [fetchRequests]);
+  }, [authReady, authStatus, fetchRequests, userId]);
 
   const handleSubmit = async () => {
     setHasAttemptedSubmit(true);
@@ -611,7 +546,7 @@ export default function ServicesScreen() {
         allowedMimeTypes: DEFAULT_UPLOAD_MIME_TYPES,
         entityId: tempRequestId,
         folder: 'maintenance-attachments',
-        maxBytes: MAX_ATTACHMENT_UPLOAD_BYTES,
+        maxBytes: INQUIRY_ATTACHMENT_MAX_BYTES,
         tenantId: user?.user_id || user?.id || 'unknown-tenant',
       });
       setAttachments(uploadedAttachments);
@@ -633,7 +568,7 @@ export default function ServicesScreen() {
       setAttachmentUploadStatus(attachments.length ? 'Upload failed, please retry' : '');
       const message = error?.message === 'Upload failed, please retry'
         ? 'Upload failed, please retry'
-        : getApiErrorMessage(error, 'Failed to submit request. Please try again.');
+        : error?.response?.data?.detail || 'Failed to submit request. Please try again.';
       showBannerMessage('error', message);
     } finally {
       setSubmitting(false);
@@ -666,7 +601,7 @@ export default function ServicesScreen() {
         showBannerMessage('error', 'Please select an image, PDF, document, text, or CSV file.');
         return;
       }
-      const maxBytes = isImageAttachmentCandidate(file) ? MAX_IMAGE_UPLOAD_BYTES : MAX_ATTACHMENT_UPLOAD_BYTES;
+      const maxBytes = INQUIRY_ATTACHMENT_MAX_BYTES;
       if (file.size && file.size > maxBytes) {
         showBannerMessage('error', `Attachment exceeds ${Math.round(maxBytes / (1024 * 1024))} MB limit.`);
         return;
@@ -720,31 +655,15 @@ export default function ServicesScreen() {
     setDetailLoading(true);
     try {
       const response = await apiService.getMaintenance(request.request_id);
-      const detail = unwrapMaintenanceRequest(response, request);
-      if (typeof __DEV__ !== 'undefined' && __DEV__) {
-        const thread = buildRequestProgress(detail);
-        console.log('[Maintenance detail]', {
-          endpoint: `${MOBILE_API_BASE_URL}/maintenance/${request.request_id}`,
-          requestId: detail?.request_id,
-          responseKeys: Object.keys(response?.data || {}),
-          threadCount: thread.length,
-          replyAttachmentCounts: thread.map((entry) => ({
-            id: entry.id,
-            type: entry.type,
-            attachmentCount: Array.isArray(entry.attachments) ? entry.attachments.length : 0,
-          })),
-          replyAttachmentCount: thread.reduce((count, entry) => count + (Array.isArray(entry.attachments) ? entry.attachments.length : 0), 0),
-        });
-      }
+      const detail = response?.data || request;
       setDetailRequest(detail);
       const readResponse = await apiService.markMaintenanceRead(request.request_id).catch(() => null);
-      const readDetail = unwrapMaintenanceRequest(readResponse, null);
-      if (readDetail) {
-        setDetailRequest(readDetail);
+      if (readResponse?.data) {
+        setDetailRequest(readResponse.data);
       }
       fetchRequests();
     } catch (error) {
-      showBannerMessage('error', getApiErrorMessage(error, 'Failed to load maintenance details.'));
+      showBannerMessage('error', error?.response?.data?.detail || 'Failed to load maintenance details.');
     } finally {
       setDetailLoading(false);
     }
@@ -775,7 +694,7 @@ export default function ServicesScreen() {
       setShowDetailModal(false);
       fetchRequests();
     } catch (e) {
-      showBannerMessage('error', getApiErrorMessage(e, 'Failed to update request.'));
+      showBannerMessage('error', e?.response?.data?.detail || 'Failed to update request.');
     } finally {
       setSaving(false);
     }
@@ -790,7 +709,7 @@ export default function ServicesScreen() {
       setShowDetailModal(false);
       fetchRequests();
     } catch (e) {
-      showBannerMessage('error', getApiErrorMessage(e, 'Failed to cancel request. Please try again.'));
+      showBannerMessage('error', e?.response?.data?.detail || 'Failed to cancel request. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -806,7 +725,7 @@ export default function ServicesScreen() {
       setReopenNote('');
       fetchRequests();
     } catch (e) {
-      showBannerMessage('error', getApiErrorMessage(e, 'Failed to reopen request. Please try again.'));
+      showBannerMessage('error', e?.response?.data?.detail || 'Failed to reopen request. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -817,11 +736,11 @@ export default function ServicesScreen() {
     setSaving(true);
     try {
       const response = await apiService.confirmMaintenanceResolved(detailRequest.request_id);
-      setDetailRequest(unwrapMaintenanceRequest(response, detailRequest));
+      setDetailRequest(response?.data || detailRequest);
       showBannerMessage('success', 'Resolution confirmed.');
       fetchRequests();
     } catch (e) {
-      showBannerMessage('error', getApiErrorMessage(e, 'Failed to confirm resolution.'));
+      showBannerMessage('error', e?.response?.data?.detail || 'Failed to confirm resolution.');
     } finally {
       setSaving(false);
     }
@@ -836,7 +755,7 @@ export default function ServicesScreen() {
         showBannerMessage('error', 'Please select an image, PDF, document, text, or CSV file.');
         return;
       }
-      const maxBytes = isImageAttachmentCandidate(file) ? MAX_IMAGE_UPLOAD_BYTES : MAX_ATTACHMENT_UPLOAD_BYTES;
+      const maxBytes = INQUIRY_ATTACHMENT_MAX_BYTES;
       if (file.size && file.size > maxBytes) {
         showBannerMessage('error', `Attachment exceeds ${Math.round(maxBytes / (1024 * 1024))} MB limit.`);
         return;
@@ -871,14 +790,14 @@ export default function ServicesScreen() {
         allowedMimeTypes: DEFAULT_UPLOAD_MIME_TYPES,
         entityId: detailRequest.request_id,
         folder: 'maintenance-followups',
-        maxBytes: MAX_ATTACHMENT_UPLOAD_BYTES,
+        maxBytes: INQUIRY_ATTACHMENT_MAX_BYTES,
         tenantId: user?.user_id || user?.id || 'unknown-tenant',
       });
       const response = await apiService.sendMaintenanceReply(detailRequest.request_id, {
         message: replyMessage.trim(),
         attachments: uploadedAttachments.map(toStoredAttachmentMetadata),
       });
-      setDetailRequest(unwrapMaintenanceRequest(response, detailRequest));
+      setDetailRequest(response?.data || detailRequest);
       setReplyMessage('');
       setReplyAttachments([]);
       setReplyUploadStatus('');
@@ -886,32 +805,52 @@ export default function ServicesScreen() {
       fetchRequests();
     } catch (error) {
       setReplyUploadStatus(replyAttachments.length ? 'Upload failed, please retry' : '');
-      showBannerMessage('error', getApiErrorMessage(error, error?.message || 'Failed to send follow-up.'));
+      showBannerMessage('error', error?.response?.data?.detail || error?.message || 'Failed to send follow-up.');
     } finally {
       setSendingReply(false);
     }
   };
 
   const openAttachment = async (attachment) => {
-    const url = getAttachmentDownloadUrl(attachment);
-    if (!url) {
-      showBannerMessage('error', 'Attachment link is unavailable.');
-      return;
-    }
-    if (isImageAttachment(attachment)) {
-      setPreviewAttachment(attachment);
-      return;
-    }
-    if (!/^https?:\/\//i.test(url)) {
-      showBannerMessage('error', 'This attachment cannot be opened on this device.');
-      return;
-    }
+    const attachmentType = classifyMaintenanceAttachment(attachment);
+    const url = getValidMaintenanceAttachmentUrl(attachment);
+    const name = getAttachmentDisplayName(attachment);
+    const mimeType = String(attachment?.mimeType || attachment?.type || 'application/octet-stream');
+    let hostname = '';
+    try { hostname = new URL(url).hostname; } catch (_) { hostname = ''; }
+    const hasAltMedia = /[?&]alt=media(?:&|$)/i.test(url);
+    const hasDownloadToken = /[?&]token=[^&]+/i.test(url);
+    const hasInternalStoragePath = Boolean(attachment?.storagePath || attachment?.storage_path);
+    console.info('[MaintenanceAttachment] open', { name, mimeType, hostname, type: attachmentType, hasAltMedia, hasDownloadToken, hasInternalStoragePath });
+
     try {
-      const supported = await Linking.canOpenURL(url);
-      if (!supported) throw new Error('Unsupported URL');
-      await Linking.openURL(url);
-    } catch (_) {
-      showBannerMessage('error', 'Unable to open this attachment.');
+      if (attachmentType === 'unsupported') throw new Error('This file type is not supported.');
+      if (!url) throw new Error('Attachment link is missing or invalid.');
+      if (attachmentType === 'image') {
+        setPreviewAttachmentError('');
+        setPreviewAttachment({ ...attachment, downloadUrl: url });
+        return;
+      }
+      const safeName = name.replace(/[^a-zA-Z0-9._-]+/g, '-').slice(-120) || 'attachment';
+      const localUri = `${FileSystem.cacheDirectory || FileSystem.documentDirectory}maintenance-${Date.now()}-${safeName}`;
+      const result = await FileSystem.downloadAsync(url, localUri);
+      console.info('[MaintenanceAttachment] download', { name, mimeType, hostname, httpStatus: result.status });
+      if (result.status < 200 || result.status >= 300) {
+        if (result.status === 402) throw new Error('File storage is temporarily unavailable because Firebase billing is disabled. Please contact the administrator.');
+        if (result.status === 404) throw new Error('This attachment no longer exists.');
+        if ([401, 403].includes(result.status)) throw new Error('Attachment access has expired. Please contact the dormitory administrator.');
+        throw new Error(`Attachment download failed (HTTP ${result.status}).`);
+      }
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(result.uri, { mimeType, dialogTitle: `Open ${name}` });
+        return;
+      }
+      const supported = await Linking.canOpenURL(result.uri);
+      if (!supported) throw new Error('No compatible document viewer is installed on this device.');
+      await Linking.openURL(result.uri);
+    } catch (error) {
+      console.warn('[MaintenanceAttachment] failure', { name, mimeType, hostname, errorType: error?.name || 'Error', message: error?.message || 'Unknown error' });
+      showBannerMessage('error', error?.message || 'Unable to open this attachment.');
     }
   };
 
@@ -945,6 +884,149 @@ export default function ServicesScreen() {
   }, [activeRequests, activeTab, cancelledRequests, resolvedRequests]);
   const totalUnreadMaintenance = useMemo(() => requests.reduce((sum, request) => sum + Number(request.unreadTenantCount || 0), 0), [requests]);
 
+  const requestKeyExtractor = useCallback((request) => request.request_id, []);
+
+  const renderRequestItem = useCallback(({ item: request }) => {
+    const typeInfo = getTypeInfo(request.request_type);
+    const statusColor = getStatusColor(request.status);
+    const urgencyInfo = URGENCY_LEVELS.find(u => u.id === request.urgency) || URGENCY_LEVELS[1];
+    const unreadCount = Number(request.unreadTenantCount || 0);
+    const latestUpdate = request.latestTenantVisibleUpdate || null;
+    const lastActivity = request.latestActivityAt || request.lastActivityAt || request.updated_at || request.created_at;
+    const hasNewAttachment = latestUpdate?.hasAttachments;
+    const locationParts = [request.branch, request.room_id || request.roomId].filter(Boolean);
+    return (
+      <TouchableOpacity style={[styles.requestCard, { borderLeftColor: unreadCount > 0 ? colors.primary : typeInfo.color }]} onPress={() => openDetail(request)} activeOpacity={0.85}>
+        <View style={styles.requestHeader}>
+          <View style={[styles.requestIcon, { backgroundColor: `${typeInfo.color}15` }]}>
+            <Ionicons name={typeInfo.icon} size={20} color={typeInfo.color} />
+          </View>
+          <View style={styles.requestInfo}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+              <Text style={styles.requestType}>{typeInfo.label}</Text>
+              {unreadCount > 0 ? (
+                <View style={{ backgroundColor: colors.primary, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2 }}>
+                  <Text style={{ color: colors.surface, fontSize: 9, fontWeight: '800' }}>{unreadCount > 9 ? '9+' : unreadCount} new</Text>
+                </View>
+              ) : null}
+            </View>
+            <Text style={styles.requestDate}>Last update {safeFormat(lastActivity, 'MMM dd, yyyy • h:mm a')}</Text>
+          </View>
+          <View style={[styles.statusBadge, { backgroundColor: statusColor.bg, borderColor: `${statusColor.text}30` }]}>
+            <Text style={[styles.statusText, { color: statusColor.text }]}>{statusColor.label}</Text>
+          </View>
+        </View>
+        <Text style={styles.requestDescription} numberOfLines={2}>{request.description}</Text>
+        {locationParts.length > 0 ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 7 }}>
+            <Ionicons name="location-outline" size={12} color={colors.textMuted} />
+            <Text style={{ fontSize: 10, color: colors.textMuted }} numberOfLines={1}>{locationParts.join(' / ')}</Text>
+          </View>
+        ) : null}
+        {latestUpdate ? (
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, backgroundColor: unreadCount > 0 ? '#EFF6FF' : colors.surfaceSecondary, borderRadius: 9, paddingVertical: 7, paddingHorizontal: 9 }}>
+            <Ionicons name={hasNewAttachment ? 'attach' : 'chatbubble-ellipses-outline'} size={13} color={unreadCount > 0 ? '#2563EB' : colors.textMuted} />
+            <Text style={{ flex: 1, fontSize: 11, color: unreadCount > 0 ? '#1D4ED8' : colors.textMuted, fontWeight: unreadCount > 0 ? '700' : '500' }} numberOfLines={1}>
+              {unreadCount > 0 ? (hasNewAttachment ? 'New attachment available' : latestUpdate.senderRole === 'admin' ? 'Admin replied' : 'New update available') : latestUpdate.preview}
+            </Text>
+          </View>
+        ) : null}
+        <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: urgencyInfo.color }} />
+              <Text style={{ fontSize: 10, color: colors.textMuted, fontWeight: '500' }}>{urgencyInfo.label}</Text>
+            </View>
+            {(request.attachments?.length || latestUpdate?.attachmentCount) ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
+                <Ionicons name="attach" size={12} color={colors.textMuted} />
+                <Text style={{ fontSize: 10, color: colors.textMuted }}>{(request.attachments?.length || 0) + (latestUpdate?.attachmentCount || 0)}</Text>
+              </View>
+            ) : null}
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+            <Text style={{ fontSize: 10, color: colors.textMuted }}>View details</Text>
+            <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  }, [colors, styles, openDetail]);
+
+  const requestListHeader = (
+    <>
+      {!showModal ? renderBanner() : null}
+
+      <TouchableOpacity style={styles.submitCard} onPress={() => setShowModal(true)}>
+        <View style={styles.submitIcon}><Ionicons name="add-circle" size={32} color={colors.primary} /></View>
+        <View style={styles.submitContent}>
+          <Text style={styles.submitTitle}>Submit New Inquiry</Text>
+          <Text style={styles.submitDescription}>Report issues, request maintenance, or send concerns</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={24} color={colors.textMuted} />
+      </TouchableOpacity>
+
+      <View style={styles.quickServicesCard}>
+        <Text style={styles.sectionTitle}>Quick Service Request</Text>
+        <View style={styles.servicesGrid}>
+          {REQUEST_TYPES.slice(0, 6).map((type) => (
+            <TouchableOpacity key={type.id} style={styles.serviceItem} onPress={() => { setSelectedType(type.id); setShowModal(true); }}>
+              <View style={[styles.serviceIcon, { backgroundColor: `${type.color}15` }]}>
+                <Ionicons name={type.icon} size={24} color={type.color} />
+              </View>
+              <Text style={styles.serviceLabel}>{type.label}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </View>
+
+      <View style={{ backgroundColor: colors.surfaceSecondary, borderRadius: 10, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, marginBottom: 10 }}>
+        <Ionicons name="search" size={16} color={colors.textMuted} />
+        <TextInput
+          style={{ flex: 1, paddingVertical: 10, paddingHorizontal: 8, fontSize: 13, color: colors.text }}
+          placeholder="Search requests..."
+          placeholderTextColor={colors.textMuted}
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+        />
+        {searchQuery.length > 0 && (
+          <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      <View style={styles.tabContainer}>
+        <TouchableOpacity style={[styles.tab, activeTab === 'active' && styles.tabActive]} onPress={() => setActiveTab('active')}>
+          <Ionicons name="time-outline" size={15} color={activeTab === 'active' ? colors.surface : colors.textMuted} />
+          <Text style={[styles.tabText, activeTab === 'active' && styles.tabTextActive]}>Active ({activeRequests.length})</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.tab, activeTab === 'resolved' && styles.tabActive]} onPress={() => setActiveTab('resolved')}>
+          <Ionicons name="checkmark-circle-outline" size={15} color={activeTab === 'resolved' ? colors.surface : colors.textMuted} />
+          <Text style={[styles.tabText, activeTab === 'resolved' && styles.tabTextActive]}>Resolved ({resolvedRequests.length})</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={[styles.tab, activeTab === 'cancelled' && styles.tabActive]} onPress={() => setActiveTab('cancelled')}>
+          <Ionicons name="close-circle-outline" size={15} color={activeTab === 'cancelled' ? colors.surface : colors.textMuted} />
+          <Text style={[styles.tabText, activeTab === 'cancelled' && styles.tabTextActive]}>Cancelled ({cancelledRequests.length})</Text>
+        </TouchableOpacity>
+      </View>
+    </>
+  );
+
+  const requestListEmpty = (
+    <View style={styles.emptyState}>
+      <View style={styles.emptyIcon}>
+        <Ionicons name={activeTab === 'active' ? 'construct-outline' : activeTab === 'resolved' ? 'checkmark-done-circle' : 'close-circle-outline'} size={36} color={activeTab === 'active' ? colors.primary : activeTab === 'resolved' ? '#22C55E' : '#9CA3AF'} />
+      </View>
+      <Text style={styles.emptyTitle}>
+        {activeTab === 'active' ? 'No Active Requests' : activeTab === 'resolved' ? 'No Resolved Requests' : 'No Cancelled Requests'}
+      </Text>
+      <Text style={styles.emptyText}>
+        {activeTab === 'active' ? 'You have no pending or in-progress requests. Tap above to submit one!' : activeTab === 'resolved' ? 'Resolved requests will appear here.' : 'You haven’t cancelled any requests.'}
+      </Text>
+    </View>
+  );
+
   if (isLoading) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color={colors.primary} /></View>;
 
   return (
@@ -965,143 +1047,18 @@ export default function ServicesScreen() {
         </TouchableOpacity>
       </View>
 
-      <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />} showsVerticalScrollIndicator={false}>
-        {!showModal ? renderBanner() : null}
-
-        <TouchableOpacity style={styles.submitCard} onPress={() => setShowModal(true)}>
-          <View style={styles.submitIcon}><Ionicons name="add-circle" size={32} color={colors.primary} /></View>
-          <View style={styles.submitContent}>
-            <Text style={styles.submitTitle}>Submit New Inquiry</Text>
-            <Text style={styles.submitDescription}>Report issues, request maintenance, or send concerns</Text>
-          </View>
-          <Ionicons name="chevron-forward" size={24} color={colors.textMuted} />
-        </TouchableOpacity>
-
-        <View style={styles.quickServicesCard}>
-          <Text style={styles.sectionTitle}>Quick Service Request</Text>
-          <View style={styles.servicesGrid}>
-            {REQUEST_TYPES.slice(0, 6).map((type) => (
-              <TouchableOpacity key={type.id} style={styles.serviceItem} onPress={() => { setSelectedType(type.id); setShowModal(true); }}>
-                <View style={[styles.serviceIcon, { backgroundColor: `${type.color}15` }]}>
-                  <Ionicons name={type.icon} size={24} color={type.color} />
-                </View>
-                <Text style={styles.serviceLabel}>{type.label}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        </View>
-
-        <View style={{ backgroundColor: colors.surfaceSecondary, borderRadius: 10, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, marginBottom: 10 }}>
-          <Ionicons name="search" size={16} color={colors.textMuted} />
-          <TextInput
-            style={{ flex: 1, paddingVertical: 10, paddingHorizontal: 8, fontSize: 13, color: colors.text }}
-            placeholder="Search requests..."
-            placeholderTextColor={colors.textMuted}
-            value={searchQuery}
-            onChangeText={setSearchQuery}
-          />
-          {searchQuery.length > 0 && (
-            <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="close-circle" size={16} color={colors.textMuted} />
-            </TouchableOpacity>
-          )}
-        </View>
-
-        <View style={styles.tabContainer}>
-          <TouchableOpacity style={[styles.tab, activeTab === 'active' && styles.tabActive]} onPress={() => setActiveTab('active')}>
-            <Ionicons name="time-outline" size={15} color={activeTab === 'active' ? colors.surface : colors.textMuted} />
-            <Text style={[styles.tabText, activeTab === 'active' && styles.tabTextActive]}>Active ({activeRequests.length})</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.tab, activeTab === 'resolved' && styles.tabActive]} onPress={() => setActiveTab('resolved')}>
-            <Ionicons name="checkmark-circle-outline" size={15} color={activeTab === 'resolved' ? colors.surface : colors.textMuted} />
-            <Text style={[styles.tabText, activeTab === 'resolved' && styles.tabTextActive]}>Resolved ({resolvedRequests.length})</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={[styles.tab, activeTab === 'cancelled' && styles.tabActive]} onPress={() => setActiveTab('cancelled')}>
-            <Ionicons name="close-circle-outline" size={15} color={activeTab === 'cancelled' ? colors.surface : colors.textMuted} />
-            <Text style={[styles.tabText, activeTab === 'cancelled' && styles.tabTextActive]}>Cancelled ({cancelledRequests.length})</Text>
-          </TouchableOpacity>
-        </View>
-
-        {currentList.length === 0 ? (
-            <View style={styles.emptyState}>
-              <View style={styles.emptyIcon}>
-                <Ionicons name={activeTab === 'active' ? 'construct-outline' : activeTab === 'resolved' ? 'checkmark-done-circle' : 'close-circle-outline'} size={36} color={activeTab === 'active' ? colors.primary : activeTab === 'resolved' ? '#22C55E' : '#9CA3AF'} />
-              </View>
-              <Text style={styles.emptyTitle}>
-                {activeTab === 'active' ? 'No Active Requests' : activeTab === 'resolved' ? 'No Resolved Requests' : 'No Cancelled Requests'}
-              </Text>
-              <Text style={styles.emptyText}>
-                {activeTab === 'active' ? 'You have no pending or in-progress requests. Tap above to submit one!' : activeTab === 'resolved' ? 'Resolved requests will appear here.' : 'You haven\u2019t cancelled any requests.'}
-              </Text>
-            </View>
-        ) : currentList.map((request) => {
-          const typeInfo = getTypeInfo(request.request_type);
-          const statusColor = getStatusColor(request.status);
-          const urgencyInfo = URGENCY_LEVELS.find(u => u.id === request.urgency) || URGENCY_LEVELS[1];
-          const unreadCount = Number(request.unreadTenantCount || 0);
-          const latestUpdate = request.latestTenantVisibleUpdate || null;
-          const lastActivity = request.latestActivityAt || request.lastActivityAt || request.updated_at || request.created_at;
-          const hasNewAttachment = latestUpdate?.hasAttachments;
-          const locationParts = [request.branch, request.room_id || request.roomId].filter(Boolean);
-          return (
-            <TouchableOpacity key={request.request_id} style={[styles.requestCard, { borderLeftColor: unreadCount > 0 ? colors.primary : typeInfo.color }]} onPress={() => openDetail(request)} activeOpacity={0.85}>
-              <View style={styles.requestHeader}>
-                <View style={[styles.requestIcon, { backgroundColor: `${typeInfo.color}15` }]}>
-                  <Ionicons name={typeInfo.icon} size={20} color={typeInfo.color} />
-                </View>
-                <View style={styles.requestInfo}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                    <Text style={styles.requestType}>{typeInfo.label}</Text>
-                    {unreadCount > 0 ? (
-                      <View style={{ backgroundColor: colors.primary, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2 }}>
-                        <Text style={{ color: colors.surface, fontSize: 9, fontWeight: '800' }}>{unreadCount > 9 ? '9+' : unreadCount} new</Text>
-                      </View>
-                    ) : null}
-                  </View>
-                  <Text style={styles.requestDate}>Last update {safeFormat(lastActivity, 'MMM dd, yyyy \u2022 h:mm a')}</Text>
-                </View>
-                <View style={[styles.statusBadge, { backgroundColor: statusColor.bg, borderColor: `${statusColor.text}30` }]}>
-                  <Text style={[styles.statusText, { color: statusColor.text }]}>{statusColor.label}</Text>
-                </View>
-              </View>
-              <Text style={styles.requestDescription} numberOfLines={2}>{request.description}</Text>
-              {locationParts.length > 0 ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 7 }}>
-                  <Ionicons name="location-outline" size={12} color={colors.textMuted} />
-                  <Text style={{ fontSize: 10, color: colors.textMuted }} numberOfLines={1}>{locationParts.join(' / ')}</Text>
-                </View>
-              ) : null}
-              {latestUpdate ? (
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, backgroundColor: unreadCount > 0 ? '#EFF6FF' : colors.surfaceSecondary, borderRadius: 9, paddingVertical: 7, paddingHorizontal: 9 }}>
-                  <Ionicons name={hasNewAttachment ? 'attach' : 'chatbubble-ellipses-outline'} size={13} color={unreadCount > 0 ? '#2563EB' : colors.textMuted} />
-                  <Text style={{ flex: 1, fontSize: 11, color: unreadCount > 0 ? '#1D4ED8' : colors.textMuted, fontWeight: unreadCount > 0 ? '700' : '500' }} numberOfLines={1}>
-                    {unreadCount > 0 ? (hasNewAttachment ? 'New attachment available' : latestUpdate.senderRole === 'tenant' ? 'New update available' : 'Admin replied') : latestUpdate.preview}
-                  </Text>
-                </View>
-              ) : null}
-              <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 8 }}>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                    <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: urgencyInfo.color }} />
-                    <Text style={{ fontSize: 10, color: colors.textMuted, fontWeight: '500' }}>{urgencyInfo.label}</Text>
-                  </View>
-                  {(request.attachments?.length || latestUpdate?.attachmentCount) ? (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 3 }}>
-                      <Ionicons name="attach" size={12} color={colors.textMuted} />
-                      <Text style={{ fontSize: 10, color: colors.textMuted }}>{(request.attachments?.length || 0) + (latestUpdate?.attachmentCount || 0)}</Text>
-                    </View>
-                  ) : null}
-                </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                  <Text style={{ fontSize: 10, color: colors.textMuted }}>View details</Text>
-                  <Ionicons name="chevron-forward" size={14} color={colors.textMuted} />
-                </View>
-              </View>
-            </TouchableOpacity>
-          );
-        })}
-        <View style={styles.bottomSpacer} />
-      </ScrollView>
+      <FlatList
+        style={styles.scrollView}
+        contentContainerStyle={styles.scrollContent}
+        data={currentList}
+        keyExtractor={requestKeyExtractor}
+        renderItem={renderRequestItem}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
+        showsVerticalScrollIndicator={false}
+        ListHeaderComponent={requestListHeader}
+        ListEmptyComponent={requestListEmpty}
+        ListFooterComponent={<View style={styles.bottomSpacer} />}
+      />
 
       <Link href="/(tabs)/chatbot" prefetch asChild>
         <TouchableOpacity style={styles.chatbotButton}>
@@ -1397,18 +1354,18 @@ export default function ServicesScreen() {
                     </View>
                   )}
 
-                  {/* Conversation */}
+                  {/* Progress Updates */}
                   {!editMode && detailProgressEntries.length > 0 && (
                     <View style={{ marginBottom: 14 }}>
-                      <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text, marginBottom: 8 }}>Conversation</Text>
-                      <View style={{ gap: 12 }}>
+                      <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text, marginBottom: 8 }}>Maintenance Thread</Text>
+                      <View style={{ gap: 10 }}>
                         {detailProgressEntries.map((entry) => (
-                          <View key={entry.id} style={{ alignSelf: entry.isTenant ? 'flex-end' : 'flex-start', maxWidth: '92%', backgroundColor: entry.isTenant ? '#DCFCE7' : colors.surfaceSecondary, borderRadius: 14, borderTopRightRadius: entry.isTenant ? 4 : 14, borderTopLeftRadius: entry.isTenant ? 14 : 4, padding: 12, borderWidth: 1, borderColor: entry.isTenant ? '#BBF7D0' : colors.border }}>
+                          <View key={entry.id} style={{ backgroundColor: entry.actorRole === 'tenant' ? '#ECFDF5' : colors.surfaceSecondary, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: entry.actorRole === 'tenant' ? '#BBF7D0' : '#E5E7EB' }}>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 10, marginBottom: entry.message ? 6 : 0 }}>
                               <View style={{ flex: 1 }}>
-                                <Text style={{ fontSize: 12, fontWeight: '800', color: entry.isTenant ? '#166534' : colors.text }}>{entry.actorLabel || (entry.isTenant ? 'You' : 'Branch Admin')}</Text>
-                                {entry.isSummary ? (
-                                  <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>Maintenance Summary</Text>
+                                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>{entry.title}</Text>
+                                {entry.actorLabel ? (
+                                  <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>{entry.actorLabel}</Text>
                                 ) : null}
                               </View>
                               {entry.timestamp ? (
@@ -1420,23 +1377,40 @@ export default function ServicesScreen() {
                             {entry.message ? (
                               <Text style={{ fontSize: 14, color: colors.text, lineHeight: 20 }}>{entry.message}</Text>
                             ) : null}
+                            {entry.statusTo ? (
+                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: entry.message ? 8 : 2 }}>
+                                <Ionicons name="git-branch-outline" size={13} color={colors.textMuted} />
+                                <Text style={{ fontSize: 11, color: colors.textMuted }}>
+                                  Status {entry.statusFrom ? `${formatStatusLabel(entry.statusFrom)} to ` : ''}{formatStatusLabel(entry.statusTo)}
+                                </Text>
+                              </View>
+                            ) : null}
                             {entry.attachments?.length > 0 ? (
                               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
                                 <View style={{ flexDirection: 'row' }}>
                                   {entry.attachments.map((att, idx) => (
                                     <TouchableOpacity
                                       key={`${getAttachmentDownloadUrl(att) || 'attachment'}_${idx}`}
-                                      style={{ width: isImageAttachment(att) ? 180 : 132, height: isImageAttachment(att) ? 128 : 96, borderRadius: 12, backgroundColor: colors.surface, marginRight: 10, overflow: 'hidden', borderWidth: 1, borderColor: '#D1D5DB', justifyContent: 'center', alignItems: 'center' }}
+                                      style={{ width: 96, height: 96, borderRadius: 12, backgroundColor: colors.surface, marginRight: 10, overflow: 'hidden', borderWidth: 1, borderColor: '#D1D5DB', justifyContent: 'center', alignItems: 'center' }}
                                       activeOpacity={0.85}
                                       onPress={() => openAttachment(att)}
                                     >
                                       {getAttachmentDownloadUrl(att) && isImageAttachment(att) ? (
-                                        <Image source={{ uri: getAttachmentDownloadUrl(att) }} style={{ width: 180, height: 128 }} resizeMode="cover" onError={() => showBannerMessage('error', 'Attachment preview could not be loaded.')} />
+                                        <Image source={{ uri: getAttachmentDownloadUrl(att) }} style={{ width: 96, height: 96 }} resizeMode="cover" onError={(event) => {
+                                          const message = sanitizeAttachmentErrorMessage(event?.nativeEvent?.error || 'Attachment preview could not be loaded.');
+                                          console.warn('[MaintenanceAttachment] image-preview-failure', { name: getAttachmentDisplayName(att, idx), mimeType: att?.mimeType || att?.type || 'image', hostname: (() => { try { return new URL(getAttachmentDownloadUrl(att)).hostname; } catch (_) { return ''; } })(), errorType: 'ReactNativeImageError', message });
+                                          showBannerMessage('error', /code=402|HTTP code.*402/i.test(message)
+                                            ? 'File storage is unavailable because Firebase billing is disabled. Please contact the administrator.'
+                                            : `Image could not be opened: ${message}`);
+                                        }} />
                                       ) : (
                                         <View style={{ paddingHorizontal: 8, alignItems: 'center', gap: 6 }}>
                                           <Ionicons name={isOpenableAttachment(att) ? 'document-text-outline' : 'alert-circle-outline'} size={24} color={colors.textMuted} />
                                           <Text style={{ fontSize: 11, color: colors.textMuted, textAlign: 'center' }} numberOfLines={2}>
                                             {getAttachmentDisplayName(att, idx)}
+                                          </Text>
+                                          <Text style={{ fontSize: 10, color: colors.primary, fontWeight: '800' }}>
+                                            {isOpenableAttachment(att) ? 'Open document' : 'Unavailable'}
                                           </Text>
                                         </View>
                                       )}
@@ -1448,11 +1422,6 @@ export default function ServicesScreen() {
                           </View>
                         ))}
                       </View>
-                    </View>
-                  )}
-                  {!editMode && detailProgressEntries.length === 0 && (
-                    <View style={{ backgroundColor: colors.surfaceSecondary, borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: colors.border }}>
-                      <Text style={{ color: colors.textMuted, fontSize: 13, lineHeight: 19 }}>No admin replies yet. Messages and attachments from the maintenance team will appear here.</Text>
                     </View>
                   )}
 
@@ -1474,6 +1443,17 @@ export default function ServicesScreen() {
                           </TouchableOpacity>
                         ))}
                       </ScrollView>
+                    </View>
+                  )}
+
+                  {/* Reopen note if exists */}
+                  {!editMode && detailRequest.reopen_note && (
+                    <View style={{ backgroundColor: '#EFF6FF', borderRadius: 12, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#BFDBFE' }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+                        <Ionicons name="refresh" size={14} color="#2563EB" />
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: '#2563EB' }}>Reopened</Text>
+                      </View>
+                      <Text style={{ fontSize: 13, color: '#1E40AF' }}>{detailRequest.reopen_note}</Text>
                     </View>
                   )}
 
@@ -1570,8 +1550,8 @@ export default function ServicesScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      <Modal visible={Boolean(previewAttachment)} transparent animationType="fade" onRequestClose={() => setPreviewAttachment(null)}>
-        <TouchableOpacity style={styles.confirmOverlay} activeOpacity={1} onPress={() => setPreviewAttachment(null)}>
+      <Modal visible={Boolean(previewAttachment)} transparent animationType="fade" onRequestClose={() => { setPreviewAttachment(null); setPreviewAttachmentError(''); }}>
+        <TouchableOpacity style={styles.confirmOverlay} activeOpacity={1} onPress={() => { setPreviewAttachment(null); setPreviewAttachmentError(''); }}>
           <TouchableOpacity
             activeOpacity={1}
             onPress={() => {}}
@@ -1589,7 +1569,7 @@ export default function ServicesScreen() {
           >
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
               <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text }}>Attachment Preview</Text>
-              <TouchableOpacity onPress={() => setPreviewAttachment(null)}>
+              <TouchableOpacity onPress={() => { setPreviewAttachment(null); setPreviewAttachmentError(''); }}>
                 <Ionicons name="close" size={22} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
@@ -1598,8 +1578,23 @@ export default function ServicesScreen() {
                 source={{ uri: getAttachmentDownloadUrl(previewAttachment) }}
                 style={{ width: '100%', height: 340, borderRadius: 14, backgroundColor: colors.surfaceSecondary }}
                 resizeMode="contain"
-                onError={() => showBannerMessage('error', 'Attachment preview could not be loaded.')}
+                onError={(event) => {
+                  const message = sanitizeAttachmentErrorMessage(event?.nativeEvent?.error || 'Attachment preview could not be loaded.');
+                  let hostname = '';
+                  try { hostname = new URL(getAttachmentDownloadUrl(previewAttachment)).hostname; } catch (_) { hostname = ''; }
+                  console.warn('[MaintenanceAttachment] image-preview-failure', { name: getAttachmentDisplayName(previewAttachment), mimeType: previewAttachment?.mimeType || previewAttachment?.type || 'image', hostname, errorType: 'ReactNativeImageError', message });
+                  const visibleError = /code=402|HTTP code.*402/i.test(message)
+                    ? 'File storage is unavailable because Firebase billing is disabled. Please contact the administrator.'
+                    : `Image could not be opened: ${message}`;
+                  setPreviewAttachmentError(visibleError);
+                  showBannerMessage('error', visibleError);
+                }}
               />
+            ) : null}
+            {previewAttachmentError ? (
+              <View style={{ backgroundColor: '#FEF2F2', borderColor: '#FECACA', borderWidth: 1, borderRadius: 10, padding: 10 }}>
+                <Text style={{ color: '#B91C1C', fontSize: 12, lineHeight: 18 }}>{previewAttachmentError}</Text>
+              </View>
             ) : null}
             <Text style={{ fontSize: 13, color: colors.textMuted }}>
               {previewAttachment ? getAttachmentDisplayName(previewAttachment) : 'Attachment preview'}

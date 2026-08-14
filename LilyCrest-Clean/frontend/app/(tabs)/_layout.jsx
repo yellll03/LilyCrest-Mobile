@@ -1,8 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs, usePathname } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, Platform, StyleSheet, Text, View } from 'react-native';
+import { useAuth } from '../../src/context/AuthContext';
 import { useTheme } from '../../src/context/ThemeContext';
 import { apiService } from '../../src/services/api';
 
@@ -11,8 +12,14 @@ const LAST_SEEN_KEY = 'lilycrest_announcements_last_seen';
 function useUnreadAnnouncementCount() {
   const [unreadCount, setUnreadCount] = useState(0);
   const pathname = usePathname();
+  const { authReady, authStatus } = useAuth();
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
+    if (!authReady || authStatus !== 'authenticated') {
+      setUnreadCount(0);
+      return;
+    }
+
     try {
       const [resp, lastSeenStr] = await Promise.all([
         apiService.getAnnouncements(),
@@ -28,7 +35,7 @@ function useUnreadAnnouncementCount() {
     } catch (_) {
       // silently ignore — badge is non-critical
     }
-  };
+  }, [authReady, authStatus]);
 
   // Clear badge when the user opens the announcements tab
   useEffect(() => {
@@ -40,10 +47,14 @@ function useUnreadAnnouncementCount() {
 
   // Poll for new announcements every 60 s
   useEffect(() => {
+    if (!authReady || authStatus !== 'authenticated') {
+      setUnreadCount(0);
+      return undefined;
+    }
     refresh();
     const interval = setInterval(refresh, 60000);
     return () => clearInterval(interval);
-  }, []);
+  }, [authReady, authStatus, refresh]);
 
   return unreadCount;
 }
