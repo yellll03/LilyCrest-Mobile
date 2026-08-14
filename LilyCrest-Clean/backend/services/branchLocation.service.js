@@ -42,6 +42,31 @@ function resolutionError(code, message) {
   return Object.assign(new Error(message), { code, status: code === 'BRANCH_ASSIGNMENT_CONFLICT' ? 409 : 404 });
 }
 
+// Reservation documents identify their room via roomId but never carry a
+// direct branch/branchId/branchCode field themselves (confirmed against
+// production data — every approved/move-in reservation has this shape).
+// Only the active_room_assignment tier resolved branch this way; the
+// approved_contract and approved_reservation tiers below were comparing
+// branchReference() directly against the reservation, which is always
+// empty, so those tiers could match records but still contribute zero
+// branch references, making branch resolution fail for every tenant.
+async function resolveViaRoom(db, records) {
+  const results = [];
+  for (const record of records) {
+    if (branchReference(record)) {
+      results.push(record);
+      continue;
+    }
+    const roomId = record.roomId || record.room_id;
+    if (!roomId) continue;
+    const room = await db.collection('rooms').findOne({
+      $or: [{ _id: objectId(roomId) || roomId }, { roomId }, { room_id: roomId }],
+    });
+    if (room) results.push(room);
+  }
+  return results;
+}
+
 async function findTierRecords(db, user, tier) {
   const identity = identityFilter(user);
   if (!identity.$or.length) return [];
@@ -110,19 +135,21 @@ async function findTierRecords(db, user, tier) {
     return results;
   }
   if (tier === 'approved_contract') {
-    return db.collection('reservations').find({
+    const records = await db.collection('reservations').find({
       $and: [
         identity,
         { $or: [{ contractStatus: APPROVED }, { leaseStatus: APPROVED }, { contractApproved: true }] },
       ],
     }).sort({ contractApprovedAt: -1, updatedAt: -1 }).limit(20).toArray();
+    return resolveViaRoom(db, records);
   }
-  return db.collection('reservations').find({
+  const records = await db.collection('reservations').find({
     $and: [
       identity,
       { $or: [{ status: APPROVED }, { applicationStatus: APPROVED }, { approvalStatus: APPROVED }, { isApproved: true }] },
     ],
   }).sort({ approvedAt: -1, updatedAt: -1, createdAt: -1 }).limit(20).toArray();
+  return resolveViaRoom(db, records);
 }
 
 async function findBranch(db, reference) {

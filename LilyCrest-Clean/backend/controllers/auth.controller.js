@@ -4,7 +4,7 @@ const { v4: uuidv4 } = require('uuid');
 const { getDb } = require('../config/database');
 const { verifyFirebaseIdToken, verifyTenantInFirebase, admin } = require('../config/firebase');
 const { sendPasswordResetEmail, sendPasswordChangedEmail } = require('../services/emailService');
-const { normalizeUser } = require('../utils/normalizeUser');
+const { normalizeUser, sanitizeUserForClient } = require('../utils/normalizeUser');
 const { isAccountActive } = require('../middleware/auth');
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────
@@ -63,11 +63,28 @@ async function createSession(db, userId) {
   const token = generateSessionToken();
   const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
+  // Capstone-Website's mobileTenantAuth (the shared gate for the contracts/
+  // billing/documents/surveys/PayMongo bridge routes — see
+  // routes/contracts.routes.js) rejects any session whose security_version
+  // doesn't match the user's current securityVersion, mirroring its own
+  // mobileSession.js createSession(). This backend and Capstone-Website
+  // share the same users/user_sessions collections, so a session minted
+  // here without that field is silently treated as revoked (0 vs whatever
+  // the account's securityVersion actually is) by every one of those bridge
+  // routes, even though it works fine against this backend's own
+  // authMiddleware, which never checks it.
+  const owner = await db.collection('users').findOne(
+    { user_id: userId },
+    { projection: { securityVersion: 1, security_version: 1 } },
+  );
+  const securityVersion = Number(owner?.securityVersion ?? owner?.security_version ?? 0);
+
   // Remove old sessions for this user (single-session model)
   await db.collection('user_sessions').deleteMany({ user_id: userId });
   await db.collection('user_sessions').insertOne({
     user_id: userId,
     session_token: token,
+    security_version: Number.isSafeInteger(securityVersion) && securityVersion >= 0 ? securityVersion : 0,
     expires_at: expiresAt,
     created_at: new Date(),
   });
@@ -206,7 +223,7 @@ async function getCleanUser(db, userId) {
     { user_id: userId },
     { projection: { _id: 0 } },
   );
-  return normalizeUser(doc);
+  return sanitizeUserForClient(normalizeUser(doc));
 }
 
 // ─── EMAIL / PASSWORD LOGIN ─────────────────────────────────────────────────
@@ -751,9 +768,7 @@ async function register(req, res) {
 // ─── GET CURRENT USER ───────────────────────────────────────────────────────
 
 async function getMe(req, res) {
-  const normalizedUser = normalizeUser(req.user);
-  const { _id, ...user } = normalizedUser;
-  res.json(user);
+  res.json(sanitizeUserForClient(normalizeUser(req.user)));
 }
 
 // ─── LOGOUT ─────────────────────────────────────────────────────────────────
@@ -772,6 +787,40 @@ async function logout(req, res) {
   } catch (error) {
     console.error('Logout error:', error);
     res.status(500).json({ detail: 'Logout failed' });
+  }
+}
+
+// ─── SESSION TEARDOWN (recently-expired best-effort cleanup) ───────────────
+// Mounted behind authMiddlewareRecentSession, which accepts a session token
+// that expired within the last few minutes — never an arbitrary or guessed
+// token, still an exact match against a real session record for req.user.
+// This lets the mobile app disable its own device's push-token association
+// even when the request that discovered the expiry already got a 401 from the
+// normal (strict) authMiddleware. Idempotent and side-effect-scoped to the
+// caller's own account only.
+async function sessionTeardown(req, res) {
+  try {
+    const db = getDb();
+    const rawPushToken = typeof req.body?.push_token === 'string' ? req.body.push_token.trim() : '';
+
+    if (rawPushToken) {
+      const { persistPushTokenForUser } = require('./user.controller');
+      await persistPushTokenForUser(db, req.user.user_id, {
+        rawPushToken,
+        notificationsEnabled: false,
+      });
+    }
+
+    if (req.session?._id) {
+      await db.collection('user_sessions').deleteOne({ _id: req.session._id });
+    }
+
+    res.json({ status: 'ok' });
+  } catch (error) {
+    console.error('Session teardown error:', error);
+    // Best-effort by design — the client is already treating itself as logged
+    // out regardless of this call's outcome.
+    res.status(500).json({ detail: 'Session teardown failed' });
   }
 }
 
@@ -1264,6 +1313,7 @@ module.exports = {
   resendOtp,
   getMe,
   logout,
+  sessionTeardown,
   changePassword,
   forgotPassword,
   getResetPasswordPage,
