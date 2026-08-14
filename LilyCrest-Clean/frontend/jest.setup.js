@@ -33,3 +33,16 @@ jest.mock('expo-image-picker', () => ({
 jest.mock('expo-document-picker', () => ({
   getDocumentAsync: jest.fn(),
 }));
+
+// expo-image's native view manager isn't registered under jest-expo's mocked
+// NativeModules shape above, so requiring it directly throws. Render it as a
+// thin wrapper around RN's own Image instead — good enough for behavioral
+// tests (onLoad/onError/props all still fire) without needing the real
+// native module.
+jest.mock('expo-image', () => {
+  const React = require('react');
+  const { Image: RNImage } = require('react-native');
+  const ExpoImageMock = React.forwardRef((props, ref) => React.createElement(RNImage, { ...props, ref }));
+  ExpoImageMock.displayName = 'Image';
+  return { Image: ExpoImageMock };
+});

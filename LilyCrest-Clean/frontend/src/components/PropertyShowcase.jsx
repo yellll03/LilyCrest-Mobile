@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRef, useState, useEffect, useCallback } from 'react';
+import { useRef, useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Dimensions,
   ImageBackground,
@@ -7,9 +7,11 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TouchableOpacity,
   View,
 } from 'react-native';
 import { useTheme } from '../context/ThemeContext';
+import ImageLightbox from './ImageLightbox';
 
 const { width: SCREEN_W } = Dimensions.get('window');
 const CARD_W = SCREEN_W * 0.72;
@@ -36,6 +38,8 @@ export default function PropertyShowcase() {
   const { colors, isDarkMode } = useTheme();
   const scrollRef = useRef(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [preview, setPreview] = useState({ visible: false, index: 0 });
+  const propertyImages = useMemo(() => PROPERTY_ITEMS.map((item) => item.image), []);
 
   const intervalRef = useRef(null);
   const startAutoScroll = useCallback(() => {
@@ -79,19 +83,25 @@ export default function PropertyShowcase() {
         contentContainerStyle={s.scrollContent}
         onMomentumScrollEnd={handleScrollEnd}
       >
-        {PROPERTY_ITEMS.map((item) => (
-          <ImageBackground
+        {PROPERTY_ITEMS.map((item, idx) => (
+          <TouchableOpacity
             key={item.key}
-            source={item.image}
-            style={s.card}
-            imageStyle={s.cardImageStyle}
-            resizeMode="cover"
+            activeOpacity={0.85}
+            onPress={() => setPreview({ visible: true, index: idx })}
+            accessibilityLabel={`View larger photo: ${item.label}`}
           >
-            <View style={s.labelContainer}>
-              <Ionicons name={item.icon} size={13} color="rgba(255,255,255,0.85)" />
-              <Text style={s.labelText}>{item.label}</Text>
-            </View>
-          </ImageBackground>
+            <ImageBackground
+              source={item.image}
+              style={s.card}
+              imageStyle={s.cardImageStyle}
+              resizeMode="cover"
+            >
+              <View style={s.labelContainer}>
+                <Ionicons name={item.icon} size={13} color="rgba(255,255,255,0.85)" />
+                <Text style={s.labelText}>{item.label}</Text>
+              </View>
+            </ImageBackground>
+          </TouchableOpacity>
         ))}
       </ScrollView>
 
@@ -103,6 +113,13 @@ export default function PropertyShowcase() {
           />
         ))}
       </View>
+
+      <ImageLightbox
+        visible={preview.visible}
+        images={propertyImages}
+        initialIndex={preview.index}
+        onClose={() => setPreview((p) => ({ ...p, visible: false }))}
+      />
     </View>
   );
 }

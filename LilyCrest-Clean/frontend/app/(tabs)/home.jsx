@@ -1,10 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
 import { Link, useFocusEffect, useRouter } from 'expo-router';
+import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Animated,
-    Image,
     Keyboard,
     Linking,
     Platform,
@@ -17,6 +17,7 @@ import {
     View
 } from 'react-native';
 import AppHeader from '../../src/components/AppHeader';
+import ImageLightbox from '../../src/components/ImageLightbox';
 import PropertyShowcase from '../../src/components/PropertyShowcase';
 import StyledModal from '../../src/components/StyledModal';
 import LilyFlowerIcon from '../../src/components/assistant/LilyFlowerIcon';
@@ -119,6 +120,9 @@ export default function HomeScreen() {
   const [searchFocused, setSearchFocused] = useState(false);
   const [loadError, setLoadError] = useState(null);
   const [modalData, setModalData] = useState({ visible: false, title: '', message: '', type: 'info' });
+  // Shared by both room and property photos — only one lightbox can be
+  // visible at a time, so one instance/state covers both (see ImageLightbox).
+  const [imagePreview, setImagePreview] = useState({ visible: false, images: [], index: 0 });
   const searchInputRef = useRef(null);
   const latestDashboardRequestRef = useRef(0);
   const isFetchingRef = useRef(false);
@@ -311,9 +315,8 @@ export default function HomeScreen() {
   const billingNextDueLabel = useMemo(() => {
     if (billingNextDueStat?.value) return billingNextDueStat.value;
     if (billingInsightPanel?.meta?.nextDueLabel) return billingInsightPanel.meta.nextDueLabel;
-    if (latestBill?.due_date || latestBill?.dueDate) return safeFormatDate(latestBill.due_date || latestBill.dueDate, 'MMM dd');
     return null;
-  }, [billingInsightPanel, billingNextDueStat, latestBill]);
+  }, [billingInsightPanel, billingNextDueStat]);
   const billingMetaChips = useMemo(() => {
     const chips = [];
     if (billingRecordCount > 0) {
@@ -592,14 +595,9 @@ export default function HomeScreen() {
     fetchDashboard(true);
   }, [authReady, fetchDashboard, userId]);
 
-  const openMap = () => {
-    const address = '#7 Gil Puyat Ave. cor Marconi St. Brgy Palanan, Makati City';
-    const url = Platform.select({
-      ios: `maps:0,0?q=${encodeURIComponent(address)}`,
-      android: `geo:0,0?q=${encodeURIComponent(address)}`,
-      web: `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`,
-    });
-    if (url) Linking.openURL(url);
+  const openMap = async () => {
+    const url = user?.branch?.isActive ? user.branch.googleMapsUrl : null;
+    if (url && await Linking.canOpenURL(url)) await Linking.openURL(url);
   };
 
   // ── Loading state ──
@@ -715,13 +713,13 @@ export default function HomeScreen() {
 
 
         {/* ── Location Card ── */}
-        <TouchableOpacity style={styles.locationCard} onPress={openMap} activeOpacity={0.7}>
+        <TouchableOpacity style={styles.locationCard} onPress={openMap} activeOpacity={0.7} disabled={!user?.branch?.isActive || !user?.branch?.googleMapsUrl}>
           <View style={styles.locationIconContainer}>
             <Ionicons name="location" size={22} color={colors.primary} />
           </View>
           <View style={styles.locationInfo}>
-            <Text style={styles.branchName}>LilyCrest Gil Puyat</Text>
-            <Text style={styles.addressText}>#7 Gil Puyat Ave. cor Marconi St., Brgy Palanan, Makati City</Text>
+            <Text style={styles.branchName}>{user?.branch?.branchName || 'Branch location is not available yet.'}</Text>
+            <Text style={styles.addressText}>{user?.branch?.branchAddress || 'Branch location is not available yet.'}</Text>
           </View>
           <View style={styles.mapButton}>
             <Ionicons name="navigate" size={16} color={colors.primary} />
@@ -747,47 +745,58 @@ export default function HomeScreen() {
             )}
           </View>
 
-          <TouchableOpacity
-            style={styles.tenancyContent}
-            activeOpacity={0.7}
-            onPress={() => {
-              const room = tenancyRoom;
-              setModalData({
-                visible: true,
-                title: `Room ${room?.room_number || '---'}`,
-                message: [
-                  `Type: ${room?.room_type || 'Standard'}`,
-                  `Bed: ${room?.bed_type || 'N/A'}`,
-                  `Capacity: ${room?.capacity || 0} pax`,
-                  `Floor: ${room?.floor || 1}`,
-                  `Monthly Rate: ${safeCurrency(room?.price)}`,
-                  '',
-                  room?.amenities?.length ? `Amenities: ${room.amenities.join(', ')}` : '',
-                  room?.description ? room.description : '',
-                ].filter(Boolean).join('\n'),
-                type: 'info',
-              });
-            }}
-          >
-            <View style={styles.roomImageContainer}>
+          <View style={styles.tenancyContent}>
+            <TouchableOpacity
+              style={styles.roomImageContainer}
+              activeOpacity={0.7}
+              disabled={!tenancyRoom?.images?.length}
+              onPress={() => {
+                setImagePreview({ visible: true, images: tenancyRoom.images, index: 0 });
+              }}
+            >
               <Image
                 source={tenancyRoom?.images?.[0] ? { uri: tenancyRoom.images[0] } : require('../../assets/images/Pic-quad.jpg')}
                 style={styles.roomImage}
+                cachePolicy="memory-disk"
+                contentFit="cover"
               />
               <View style={styles.roomTypeBadge}>
                 <Text style={styles.roomTypeText}>{tenancyRoom?.room_type || 'Standard'}</Text>
               </View>
-              <View style={styles.roomViewBadge}>
-                <Ionicons name="expand-outline" size={12} color="#ffffff" />
-              </View>
-            </View>
+              {tenancyRoom?.images?.length ? (
+                <View style={styles.roomViewBadge}>
+                  <Ionicons name="expand-outline" size={12} color="#ffffff" />
+                </View>
+              ) : null}
+            </TouchableOpacity>
 
-            <View style={styles.roomDetails}>
-              <Text style={styles.roomNumber}>Room {tenancyRoom?.room_number || '---'}</Text>
+            <TouchableOpacity
+              style={styles.roomDetails}
+              activeOpacity={0.7}
+              onPress={() => {
+                const room = tenancyRoom;
+                setModalData({
+                  visible: true,
+                  title: room?.room_number ? `Room ${room.room_number}` : 'Room information unavailable',
+                  message: [
+                    `Type: ${room?.room_type || 'Standard'}`,
+                    `Bed: ${room?.bed_type || 'Bed not assigned'}`,
+                    `Capacity: ${room?.capacity || 0} pax`,
+                    `Floor: ${room?.floor || 1}`,
+                    `Monthly Rate: ${safeCurrency(room?.price)}`,
+                    '',
+                    room?.amenities?.length ? `Amenities: ${room.amenities.join(', ')}` : '',
+                    room?.description ? room.description : '',
+                  ].filter(Boolean).join('\n'),
+                  type: 'info',
+                });
+              }}
+            >
+              <Text style={styles.roomNumber}>{tenancyRoom?.room_number ? `Room ${tenancyRoom.room_number}` : 'Room information unavailable'}</Text>
               <View style={styles.roomInfoGrid}>
                 <View style={styles.roomInfoItem}>
                   <Ionicons name="bed-outline" size={15} color={colors.textSecondary} />
-                  <Text style={styles.roomInfoText}>{tenancyRoom?.bed_type || 'N/A'}</Text>
+                  <Text style={styles.roomInfoText}>{tenancyRoom?.bed_type || 'Bed not assigned'}</Text>
                 </View>
                 <View style={styles.roomInfoItem}>
                   <Ionicons name="people-outline" size={15} color={colors.textSecondary} />
@@ -802,8 +811,8 @@ export default function HomeScreen() {
                 <Text style={styles.priceLabel}>Monthly Rate</Text>
                 <Text style={styles.priceValue}>{safeCurrency(tenancyRoom?.price)}</Text>
               </View>
-            </View>
-          </TouchableOpacity>
+            </TouchableOpacity>
+          </View>
 
           {/* Tenancy Dates — with duration & countdown */}
           <View style={styles.tenancyDates}>
@@ -1101,6 +1110,12 @@ export default function HomeScreen() {
         message={modalData.message}
         type={modalData.type}
         onClose={() => setModalData(m => ({ ...m, visible: false }))}
+      />
+      <ImageLightbox
+        visible={imagePreview.visible}
+        images={imagePreview.images}
+        initialIndex={imagePreview.index}
+        onClose={() => setImagePreview((p) => ({ ...p, visible: false }))}
       />
     </View>
   );
