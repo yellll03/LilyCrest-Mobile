@@ -129,6 +129,12 @@ async function getMyNotifications(req, res) {
       .catch(() => []);
 
     const mergedByKey = new Map();
+    const [readReceipts, readState] = await Promise.all([
+      db.collection('notification_reads').find({ user_id: userId }).project({ notification_key: 1 }).toArray().catch(() => []),
+      db.collection('notification_read_state').findOne({ user_id: userId }).catch(() => null),
+    ]);
+    const readKeys = new Set(readReceipts.map((entry) => normalizeString(entry.notification_key)).filter(Boolean));
+    const allReadAt = readState?.all_read_at ? new Date(readState.all_read_at).getTime() : 0;
 
     sortNotifications([
       ...storedNotifications.map((doc) => sanitizeStoredNotification(doc)),
@@ -141,6 +147,8 @@ async function getMyNotifications(req, res) {
         content: normalizeString(notification.content || notification.body),
         body: normalizeString(notification.body || notification.content),
       };
+      const notificationTime = normalizedNotification.created_at ? new Date(normalizedNotification.created_at).getTime() : 0;
+      normalizedNotification.read = normalizedNotification.read === true || readKeys.has(key) || (allReadAt > 0 && notificationTime <= allReadAt);
 
       const existing = mergedByKey.get(key);
       if (!existing) {
@@ -162,6 +170,58 @@ async function getMyNotifications(req, res) {
   }
 }
 
+async function markNotificationRead(req, res) {
+  const userId = req.user?.user_id;
+  const notificationKey = normalizeString(req.params.notificationId);
+  if (!notificationKey) return res.status(400).json({ detail: 'notificationId is required.' });
+  const db = getDb();
+  const stored = await db.collection('notifications').find({ user_id: userId }).limit(200).toArray();
+  let ownedNotification = stored
+    .map((doc) => sanitizeStoredNotification(doc))
+    .find((item) => buildNotificationKey(item) === notificationKey || item.notification_id === notificationKey);
+
+  if (!ownedNotification) {
+    const announcements = await db.collection('announcements').find({
+      $and: [
+        { $or: [{ is_active: true }, { isActive: true }, { is_active: { $exists: false }, isActive: { $exists: false } }] },
+        { isArchived: { $ne: true } },
+        { $or: [
+          { is_private: { $ne: true }, isPrivate: { $ne: true } },
+          { is_private: true, user_id: userId },
+          { isPrivate: true, userId },
+        ] },
+      ],
+    }).limit(200).toArray();
+    ownedNotification = announcements
+      .map((doc) => normalizeAnnouncementNotification(doc))
+      .find((item) => buildNotificationKey(item) === notificationKey || item.notification_id === notificationKey);
+  }
+
+  if (!ownedNotification) return res.status(404).json({ detail: 'Notification not found.' });
+  const ownedKey = buildNotificationKey(ownedNotification);
+  await db.collection('notification_reads').updateOne(
+    { user_id: userId, notification_key: ownedKey },
+    { $set: { read_at: new Date() }, $setOnInsert: { created_at: new Date() } },
+    { upsert: true },
+  );
+  return res.json({ status: 'read', notification_id: ownedKey });
+}
+
+async function markAllNotificationsRead(req, res) {
+  const db = getDb();
+  const userId = req.user?.user_id;
+  const now = new Date();
+  await db.collection('notification_read_state').updateOne(
+    { user_id: userId },
+    { $set: { all_read_at: now, updated_at: now }, $setOnInsert: { created_at: now } },
+    { upsert: true },
+  );
+  await db.collection('notifications').updateMany({ user_id: userId }, { $set: { read: true, read_at: now } });
+  return res.json({ status: 'all_read', read_at: now });
+}
+
 module.exports = {
   getMyNotifications,
+  markNotificationRead,
+  markAllNotificationsRead,
 };

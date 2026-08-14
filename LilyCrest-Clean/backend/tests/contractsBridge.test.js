@@ -16,6 +16,11 @@ const axios = require('axios');
 const { __test } = require('../routes/contracts.routes');
 const { proxyJson, proxyStream, forwardAuthHeader, resolveContractUpstreamBase, CONTRACT_ID_PATTERN } = __test;
 
+// All tests below except the two "not configured" cases exercise proxy
+// behavior against a configured upstream; those two save/restore this value
+// around their own overrides.
+process.env.CONTRACT_UPSTREAM_URL = process.env.CONTRACT_UPSTREAM_URL || 'https://api.lilycrest.space';
+
 function fakeJsonRes() {
   return {
     statusCode: null,
@@ -58,16 +63,45 @@ test('forwardAuthHeader only recognizes a Bearer header, never a cookie or other
   assert.equal(forwardAuthHeader({ headers: {} }), null);
 });
 
-test('resolveContractUpstreamBase is server-controlled and never derived from the request', () => {
-  const original = process.env.BACKEND_URL;
+test('resolveContractUpstreamBase reads CONTRACT_UPSTREAM_URL, not BACKEND_URL', () => {
+  const originalUpstream = process.env.CONTRACT_UPSTREAM_URL;
+  const originalBackend = process.env.BACKEND_URL;
   try {
-    delete process.env.BACKEND_URL;
-    assert.equal(resolveContractUpstreamBase(), 'https://api.lilycrest.space');
-    process.env.BACKEND_URL = 'https://staging-api.lilycrest.space/';
-    assert.equal(resolveContractUpstreamBase(), 'https://staging-api.lilycrest.space');
+    delete process.env.CONTRACT_UPSTREAM_URL;
+    // BACKEND_URL is this server's own public URL elsewhere in the codebase
+    // (paymongo.controller.js, auth.controller.js). Setting it must never
+    // leak into the Contract upstream target — that was the self-proxy bug.
+    process.env.BACKEND_URL = 'https://api.lilycrest.space';
+    assert.equal(resolveContractUpstreamBase(), '');
+
+    process.env.CONTRACT_UPSTREAM_URL = 'https://staging-capstone-website.example/';
+    assert.equal(resolveContractUpstreamBase(), 'https://staging-capstone-website.example');
   } finally {
-    if (original === undefined) delete process.env.BACKEND_URL;
-    else process.env.BACKEND_URL = original;
+    if (originalUpstream === undefined) delete process.env.CONTRACT_UPSTREAM_URL;
+    else process.env.CONTRACT_UPSTREAM_URL = originalUpstream;
+    if (originalBackend === undefined) delete process.env.BACKEND_URL;
+    else process.env.BACKEND_URL = originalBackend;
+  }
+});
+
+test('proxyJson fails closed with 502 when CONTRACT_UPSTREAM_URL is not configured, even if BACKEND_URL is set', async () => {
+  const originalUpstream = process.env.CONTRACT_UPSTREAM_URL;
+  const originalBackend = process.env.BACKEND_URL;
+  delete process.env.CONTRACT_UPSTREAM_URL;
+  process.env.BACKEND_URL = 'https://api.lilycrest.space';
+  let called = false;
+  try {
+    await withMockedAxiosGet(async () => { called = true; return { status: 200, data: {} }; }, async () => {
+      const res = fakeJsonRes();
+      await proxyJson({ headers: { authorization: 'Bearer t' } }, res, '/api/m/contracts/current');
+      assert.equal(res.statusCode, 502);
+      assert.equal(called, false);
+    });
+  } finally {
+    if (originalUpstream === undefined) delete process.env.CONTRACT_UPSTREAM_URL;
+    else process.env.CONTRACT_UPSTREAM_URL = originalUpstream;
+    if (originalBackend === undefined) delete process.env.BACKEND_URL;
+    else process.env.BACKEND_URL = originalBackend;
   }
 });
 

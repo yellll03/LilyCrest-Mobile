@@ -867,7 +867,15 @@ async function getCheckoutStatus(req, res) {
  */
 function verifyWebhookSignature(req) {
   const secret = process.env.PAYMONGO_WEBHOOK_SECRET;
-  if (!secret) return process.env.NODE_ENV !== 'production';
+  // SECURITY: fail CLOSED, not open, when the secret is unavailable. This
+  // previously auto-passed (`return true`) whenever NODE_ENV wasn't exactly
+  // 'production' AND the secret was unset — meaning a deployed environment
+  // that simply never had NODE_ENV set would silently accept any
+  // unauthenticated "payment succeeded" event as genuine.
+  if (!secret) {
+    console.warn('[PayMongo] PAYMONGO_WEBHOOK_SECRET not set — rejecting webhook (fail closed)');
+    return false;
+  }
 
   const sigHeader = req.headers['paymongo-signature'];
   if (!sigHeader) return false;

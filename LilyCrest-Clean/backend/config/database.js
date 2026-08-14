@@ -40,4 +40,10 @@ function getDb() {
   return db;
 }
 
-module.exports = { connectToMongo, getDb };
+async function closeConnection() {
+  if (client) await client.close();
+  client = null;
+  db = null;
+}
+
+module.exports = { connectToMongo, getDb, closeConnection };

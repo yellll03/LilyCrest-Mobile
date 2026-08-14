@@ -1,12 +1,21 @@
 'use strict';
 
 // Server-side bridge to the authoritative Contract system, which lives in
-// Capstone-Website (Contract model + mobileContractRoutes.js), deployed
-// separately at BACKEND_URL (default https://api.lilycrest.space). The
-// mobile app only ever talks to this host (mobile-api.lilycrest.space) — see
-// frontend/src/config/api.js isDisallowedMobileRuntimeUrl, which refuses to
-// let the app call the admin host directly. This router relays the request
-// server-to-server instead of duplicating Contract business logic here.
+// Capstone-Website (Contract model + mobileContractRoutes.js), deployed as a
+// separate service from this backend. The mobile app never calls that admin
+// host directly — see frontend/src/config/api.js isDisallowedMobileRuntimeUrl
+// — so this router relays the request server-to-server instead of
+// duplicating Contract business logic here.
+//
+// CONTRACT_UPSTREAM_URL must name that separate Capstone-Website host. It is
+// deliberately its own env var, not BACKEND_URL: BACKEND_URL is already used
+// everywhere else in this codebase (paymongo.controller.js, auth.controller.js)
+// to mean "this server's own public URL", used to build callback/redirect
+// links back to itself. Reusing it here would silently point the Contract
+// bridge at this same server instead of Capstone-Website whenever BACKEND_URL
+// is set to this server's own host (the documented, correct value for its
+// other purpose) — so there is no safe default to fall back to, and a
+// missing/unset value fails the request rather than guessing.
 //
 // Identity is never trusted from the client or decoded locally: the
 // Authorization header is forwarded byte-for-byte, and Capstone-Website's
@@ -19,18 +28,17 @@ const router = require('express').Router();
 const axios = require('axios');
 const { authMiddleware } = require('../middleware/auth');
 
-const DEFAULT_CONTRACT_UPSTREAM = 'https://api.lilycrest.space';
 const CONTRACT_ID_PATTERN = /^[a-f0-9]{24}$/i;
 
 function normalizeBaseUrl(value) {
   return String(value || '').trim().replace(/\/+$/, '');
 }
 
-// BACKEND_URL is a server-controlled deployment setting (already used by
-// paymongo.controller.js and auth.controller.js for the same host) — never
-// derived from client input, so there is no SSRF surface here.
+// Server-controlled deployment setting — never derived from client input, so
+// there is no SSRF surface here. Returns '' when unset; callers must treat
+// that as "not configured" rather than substituting a guessed host.
 function resolveContractUpstreamBase() {
-  return normalizeBaseUrl(process.env.BACKEND_URL) || DEFAULT_CONTRACT_UPSTREAM;
+  return normalizeBaseUrl(process.env.CONTRACT_UPSTREAM_URL);
 }
 
 function forwardAuthHeader(req) {
@@ -44,8 +52,14 @@ async function proxyJson(req, res, upstreamPath) {
     return res.status(401).json({ detail: 'Not authenticated' });
   }
 
+  const upstreamBase = resolveContractUpstreamBase();
+  if (!upstreamBase) {
+    console.error('[Contracts bridge] CONTRACT_UPSTREAM_URL is not configured');
+    return res.status(502).json({ detail: 'Contract service is not configured. Please try again later.' });
+  }
+
   try {
-    const upstream = await axios.get(`${resolveContractUpstreamBase()}${upstreamPath}`, {
+    const upstream = await axios.get(`${upstreamBase}${upstreamPath}`, {
       headers: { Authorization: authorization },
       timeout: 15000,
       validateStatus: () => true,
@@ -66,11 +80,17 @@ async function proxyStream(req, res, upstreamPath) {
     return res.status(401).json({ detail: 'Not authenticated' });
   }
 
+  const upstreamBase = resolveContractUpstreamBase();
+  if (!upstreamBase) {
+    console.error('[Contracts bridge] CONTRACT_UPSTREAM_URL is not configured');
+    return res.status(502).json({ detail: 'Contract document service is not configured. Please try again later.' });
+  }
+
   const query = req.query?.download === '1' ? '?download=1' : '';
 
   let upstream;
   try {
-    upstream = await axios.get(`${resolveContractUpstreamBase()}${upstreamPath}${query}`, {
+    upstream = await axios.get(`${upstreamBase}${upstreamPath}${query}`, {
       headers: { Authorization: authorization },
       timeout: 20000,
       responseType: 'stream',

@@ -13,6 +13,14 @@ function detectTypingIntent(text = '') {
   return 'general';
 }
 
+function unwrapAssistantPayload(result) {
+  const body = result?.data || {};
+  if (body?.data && typeof body.data === 'object' && (body.data.message || body.data.response)) {
+    return body.data;
+  }
+  return body;
+}
+
 export function useAssistantChat(initialSessionId) {
   const { run } = useAsyncCall();
   const [sessionId, setSessionId] = useState(initialSessionId);
@@ -33,7 +41,7 @@ export function useAssistantChat(initialSessionId) {
   }, [initialSessionId]);
 
   const sendMessage = useCallback(
-    async (text) => {
+    async (text, attachments = []) => {
       const now = Date.now();
       if (now - cooldownRef.current < RATE_LIMIT_MS) {
         return { error: { code: 'rate_limited', detail: 'Please wait a moment before sending again.' } };
@@ -51,16 +59,17 @@ export function useAssistantChat(initialSessionId) {
         attempt += 1;
 
         const { data, error } = await run(`chat-${sessionId}-${attempt}`, async () =>
-          apiService.sendChatMessage(text, sessionId)
+          apiService.sendChatMessage(text, sessionId, attachments)
         );
 
         if (!error) {
           setIsTyping(false);
-          const response = data?.data?.message || data?.data?.response || '';
-          const intent = data?.data?.intent || 'general';
-          const metadata = data?.data?.meta || {};
-          const needsAdmin = data?.data?.needs_admin || false;
-          const suggestions = Array.isArray(data?.data?.suggestions) ? data.data.suggestions : [];
+          const payload = unwrapAssistantPayload(data);
+          const response = payload?.message || payload?.response || '';
+          const intent = payload?.intent || payload?.meta?.intent || 'general';
+          const metadata = payload?.meta || payload?.metadata || {};
+          const needsAdmin = Boolean(payload?.needs_admin ?? payload?.needsAdmin);
+          const suggestions = Array.isArray(payload?.suggestions) ? payload.suggestions : [];
           return { response, intent, metadata, needsAdmin, suggestions, attempt };
         }
 

@@ -8,6 +8,8 @@ const path = require('path');
 
 // Import configurations
 const { connectToMongo } = require('./config/database');
+const { ensureIndexes: ensureSurveyIndexes } = require('./services/survey.service');
+const { sendDueSoonReminders } = require('./services/surveyNotification.service');
 const { initializeFirebase } = require('./config/firebase');
 const { cacheMiddleware } = require('./middleware/cache');
 
@@ -100,12 +102,15 @@ app.use(cors({
   maxAge: 86400
 }));
 
-// Allow base64-encoded maintenance progress photos in admin status updates.
-// The `verify` callback preserves the raw body buffer so the PayMongo webhook
-// handler can compute and verify the HMAC-SHA256 signature.
+const preserveRawBody = (req, _res, buf) => { req.rawBody = buf; };
+// Base64 uploads are the only routes allowed to exceed the normal API limit.
+app.use(['/api/upload/firebase-storage', '/api/m/upload/firebase-storage'], express.json({
+  limit: '11mb',
+  verify: preserveRawBody,
+}));
 app.use(express.json({
-  limit: '30mb',
-  verify: (req, _res, buf) => { req.rawBody = buf; },
+  limit: '1mb',
+  verify: preserveRawBody,
 }));
 app.use(cookieParser());
 
@@ -293,7 +298,14 @@ async function startServer() {
       { firebase_uid: 1 },
       { unique: true, sparse: true, name: 'firebase_uid_1_sparse' },
     );
+    await users.createIndex({ email_normalized: 1 }, { unique: true, sparse: true, name: 'email_normalized_unique' });
+    await users.createIndex({ username_normalized: 1 }, { unique: true, sparse: true, name: 'username_normalized_unique' });
     await ensureNotificationIndexes(notifications);
+    await ensureSurveyIndexes(db);
+    sendDueSoonReminders(db).catch((error) => console.warn('[Survey reminders]', error?.message));
+    setInterval(() => {
+      sendDueSoonReminders(db).catch((error) => console.warn('[Survey reminders]', error?.message));
+    }, 6 * 60 * 60 * 1000).unref();
 
     // Billing collection indexes (frequently queried)
     const billing = db.collection('billing');
@@ -337,12 +349,6 @@ async function startServer() {
 
       const indexes = await users.indexes();
       for (const idx of indexes) {
-        // Drop unique indexes on email/username — enforce uniqueness in app code instead
-        if ((idx.key?.email || idx.key?.username) && idx.unique) {
-          console.log(`[Migration] Dropping unique index: ${idx.name}`);
-          try { await users.dropIndex(idx.name); } catch (_) {}
-        }
-
         // Drop any legacy non-sparse unique indexes on firebaseUid or firebase_uid
         const isFirebaseIdx = idx.key?.firebaseUid || idx.key?.firebase_uid;
         if (isFirebaseIdx && idx.unique && !idx.sparse) {

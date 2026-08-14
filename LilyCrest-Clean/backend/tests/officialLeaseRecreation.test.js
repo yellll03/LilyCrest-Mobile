@@ -27,6 +27,10 @@ test('all six sources produce exact ordered legal structures', async () => {
     assert.deepEqual(result.definition.numberedSections.map((section) => section.marker), SECTION_MARKERS);
     assert.equal(result.definition.sourceText.includes('LILYCREST GIL PUYAT'), true);
     assert.equal(result.definition.sourceText.includes('ACKNOWLEDGMENT'), true);
+    const sectionFour = result.definition.numberedSections[3].text;
+    assert.match(sectionFour, /one \(1\) month advance rent/i);
+    assert.match(sectionFour, /one \(1\) month security deposit/i);
+    assert.match(sectionFour, /reservation fee .* shall be credited as partial payment for the said amounts/i);
   }
 });
 

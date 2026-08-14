@@ -1,12 +1,16 @@
 'use strict';
 
 const { validateTemplateReadiness } = require('./templateRegistry');
+const {
+  RESERVATION_FEE_APPLICATION,
+  calculateMoveInFinancials,
+} = require('../billing/moveInFinancials');
 
 const FORBIDDEN_PLACEHOLDERS = /\b(?:N\/A|TBD|Unknown|Sample|Guest)\b/i;
 const REQUIRED_PRICING_FIELDS = Object.freeze([
   'regularMonthlyRental', 'promoMonthlyRental', 'approvedMonthlyRental',
   'reservationFee', 'advanceRent', 'securityDeposit', 'approvedBy',
-  'approvedAt', 'approvalReference',
+  'approvedAt', 'approvalReference', 'totalDueBeforeMoveIn', 'remainingBalance',
 ]);
 
 function present(value) {
@@ -17,9 +21,23 @@ function validatePricing(pricing) {
   if (!pricing || REQUIRED_PRICING_FIELDS.some((field) => !present(pricing[field]))) {
     return 'PRICING_INCOMPLETE';
   }
-  if (pricing.currency !== 'PHP' || pricing.reservationFeeApplication !== 'ADVANCE_RENT_ONLY') {
+  if (pricing.currency !== 'PHP' || pricing.reservationFeeApplication !== RESERVATION_FEE_APPLICATION) {
     return 'PRICING_CONFLICT';
   }
+  let expected;
+  try {
+    expected = calculateMoveInFinancials({
+      advanceRent: pricing.advanceRent,
+      securityDeposit: pricing.securityDeposit,
+      reservationFeeAlreadyPaid: pricing.reservationFee,
+    });
+  } catch (_error) {
+    return 'PRICING_CONFLICT';
+  }
+  if (
+    Number(pricing.totalDueBeforeMoveIn) !== expected.totalDueBeforeMoveIn
+    || Number(pricing.remainingBalance) !== expected.remainingBalance
+  ) return 'PRICING_CONFLICT';
   if (pricing.approvalStatus !== 'APPROVED') return 'PRICING_APPROVAL_MISSING';
   return null;
 }

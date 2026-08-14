@@ -22,7 +22,7 @@ const {
   notifyAdminChatAccepted,
   notifyChatbotReply,
 } = require('../services/pushService');
-const { fetchUserBills, resolveCurrentBill, currentBillTiming } = require('./billing.controller');
+const { fetchUserBills, resolveCurrentBill, currentBillTiming, billStatusLabel } = require('./billing.controller');
 const { extractMoveInFinancials } = require('../domain/billing/moveInFinancials');
 const { normalizeUser } = require('../utils/normalizeUser');
 const { loadAttachmentParts } = require('../services/assistantAttachment.service');
@@ -160,6 +160,18 @@ function normalizeSessionId(rawSessionId, userId) {
     return { ok: false, error: 'Invalid session id format' };
   }
   return { ok: true, value: candidate };
+}
+
+// A sessionId is a client-supplied, guessable/enumerable string — it must
+// never be treated as proof of ownership. Every read/write against
+// liveChatQueue that isn't already admin-gated must resolve the session
+// through this helper so a tenant who knows or guesses another tenant's
+// sessionId cannot read their live-chat status/messages or inject messages
+// into their active admin conversation.
+function getOwnedLiveChat(sessionId, userId) {
+  const liveChat = liveChatQueue.get(sessionId);
+  if (!liveChat || liveChat.user_id !== userId) return null;
+  return liveChat;
 }
 
 function normalizeUserMessage(rawMessage) {
@@ -377,8 +389,12 @@ function dateTimeValue(value) {
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
+// Billing statuses get the same tenant-friendly wording as billing history,
+// bill details, and the downloadable bill PDF (billing.controller.js
+// billStatusLabel) instead of the generic formatStatusLabel() used for
+// maintenance/lease statuses, which just underscores-to-spaces a raw keyword.
 function formatBillStatus(bill = {}) {
-  return formatStatusLabel(bill.status || bill.payment_status || bill.paymentStatus || 'posted');
+  return billStatusLabel(bill.status || bill.payment_status || bill.paymentStatus);
 }
 
 function summarizeBillForContext(bill = {}) {
@@ -1130,7 +1146,7 @@ async function sendMessage(req, res) {
     const pendingBills = bills.filter(isBillUnpaid).slice(0, 3);
 
     // Check if this is an active live chat (admin is responding)
-    const liveChat = liveChatQueue.get(sessionId);
+    const liveChat = getOwnedLiveChat(sessionId, userId);
     if (liveChat && liveChat.status === 'active') {
       liveChat.messages.push({ sender: 'tenant', content: userMessage, timestamp: new Date() });
       return res.json({ response: null, session_id: sessionId, live_chat_active: true, admin_name: liveChat.admin_name, message: 'Message sent to admin' });
@@ -1537,7 +1553,7 @@ async function getLiveStatus(req, res) {
     if (!normalizedSession.ok) {
       return res.status(400).json({ detail: normalizedSession.error });
     }
-    const liveChat = liveChatQueue.get(normalizedSession.value);
+    const liveChat = getOwnedLiveChat(normalizedSession.value, req.user.user_id);
     if (!liveChat) {
       return res.json({ active: false, in_queue: false });
     }
@@ -1732,5 +1748,10 @@ module.exports = {
     hasDormitoryScopeSignal,
     buildContractResponse,
     buildDocumentsResponse,
+    formatBillStatus,
+    summarizeBillForContext,
+    buildBillingResponse,
+    getOwnedLiveChat,
+    liveChatQueue,
   },
 };

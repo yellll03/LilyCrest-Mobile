@@ -78,7 +78,7 @@ function getOrCreateSession(sessionId) {
 }
 
 // Full generative call with chat history
-async function sendGeminiMessage(sessionId, prompt) {
+async function sendGeminiMessage(sessionId, prompt, attachmentParts = []) {
   const session = getOrCreateSession(sessionId);
   const recentHistory = Array.isArray(session.history)
     ? session.history.slice(-MAX_HISTORY_MESSAGES)
@@ -89,7 +89,7 @@ async function sendGeminiMessage(sessionId, prompt) {
     parts: [{ text: h.content }],
   }));
 
-  contents.push({ role: 'user', parts: [{ text: prompt }] });
+  contents.push({ role: 'user', parts: [{ text: prompt }, ...attachmentParts] });
 
   try {
     const client = getGenAIClient();

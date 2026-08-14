@@ -2,6 +2,7 @@ const { getDb } = require('../config/database');
 const { ObjectId } = require('mongodb');
 const { fetchUserBills } = require('./billing.controller');
 const { countActiveMaintenanceForUser } = require('./maintenance.controller');
+const { sanitizeUserForClient } = require('../utils/normalizeUser');
 
 // Convert slug like 'quadruple-sharing' → 'Quadruple Sharing'
 function formatRoomType(type) {
@@ -261,7 +262,7 @@ async function getDashboard(req, res) {
     const activeMaintenanceCount = await countActiveMaintenanceForUser(db, req.user);
 
     res.json({
-      user: { ...req.user, _id: undefined },
+      user: sanitizeUserForClient(req.user),
       assignment,
       room,
       billing,

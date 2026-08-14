@@ -25,5 +25,8 @@ describe('contract and survey display source contracts', () => {
     expect(surveySource).toContain('Unable to load surveys right now.');
     expect(surveySource).toContain('>Retry</Text>');
     expect(surveySource).not.toContain('safeSurveyErrorMessage');
+    expect(surveySource).toContain('Estimated Time: 2–3 minutes');
+    expect(profileSource).toContain('apiService.getMySurveys()');
+    expect(profileSource).toContain("activeSurvey?.surveyType === 'QUARTERLY'");
   });
 });

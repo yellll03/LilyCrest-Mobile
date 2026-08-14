@@ -32,6 +32,33 @@ describe('useAssistantChat', () => {
     expect(output.metadata.intent).toBe('greet');
   });
 
+  it('unwraps API response envelopes', async () => {
+    apiService.sendChatMessage.mockResolvedValue({
+      data: {
+        success: true,
+        data: {
+          message: 'hello from Lily',
+          intent: 'billing',
+          suggestions: [{ label: 'Latest bill', prompt: 'Show my latest bill.' }],
+          needs_admin: true,
+          meta: { confidence: 1 },
+        },
+      },
+    });
+
+    const { result } = renderHook(() => useAssistantChat('session-1'));
+
+    let output;
+    await act(async () => {
+      output = await result.current.sendMessage('billing please');
+    });
+
+    expect(output.response).toBe('hello from Lily');
+    expect(output.intent).toBe('billing');
+    expect(output.needsAdmin).toBe(true);
+    expect(output.suggestions).toHaveLength(1);
+  });
+
   it('rate limits rapid submits', async () => {
     apiService.sendChatMessage.mockResolvedValue({ data: { response: 'ok' } });
     const { result } = renderHook(() => useAssistantChat('session-2'));

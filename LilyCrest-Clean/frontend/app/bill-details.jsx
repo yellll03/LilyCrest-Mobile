@@ -44,6 +44,31 @@ function shortDate(value) {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
 }
 
+// PayMongo is the payment gateway, not the payment method the tenant actually
+// picked. The backend now captures the actual settled-payment channel
+// (GCash/Card/Maya/GrabPay/Online Banking) at reconciliation time and
+// returns it as bill.payment_channel; show that when known, and only fall
+// back to a generic "Online Payment" label for older records where it
+// wasn't captured. Mirrors backend/controllers/billing.controller.js's
+// PAYMENT_CHANNEL_LABELS/billPaymentMethodLabel.
+const PAYMENT_CHANNEL_LABELS = {
+  gcash: 'GCash',
+  card: 'Card',
+  grab_pay: 'GrabPay',
+  paymaya: 'Maya',
+  billease: 'BillEase',
+  dob: 'Online Banking',
+  dob_ubp: 'Online Banking',
+};
+
+function paymentMethodLabel(rawMethod, channel) {
+  const channelLabel = PAYMENT_CHANNEL_LABELS[String(channel || '').trim().toLowerCase()];
+  if (channelLabel) return channelLabel;
+  const value = String(rawMethod || '').trim();
+  if (!value) return '';
+  return value.toLowerCase() === 'paymongo' ? 'Online Payment' : value;
+}
+
 const STATUS_CONFIG = {
   paid: { bg: '#ecfdf3', text: '#15803d', icon: 'checkmark-circle', label: 'Paid' },
   settled: { bg: '#ecfdf3', text: '#15803d', icon: 'checkmark-circle', label: 'Paid' },
@@ -53,6 +78,7 @@ const STATUS_CONFIG = {
   pending_verification: { bg: '#eff6ff', text: '#1d4ed8', icon: 'hourglass', label: 'Payment Under Review' },
   verification: { bg: '#eff6ff', text: '#1d4ed8', icon: 'hourglass', label: 'Payment Under Review' },
   partially_paid: { bg: '#fff7ed', text: '#c2410c', icon: 'pie-chart', label: 'Partially Paid' },
+  rejected: { bg: '#fef2f2', text: '#b91c1c', icon: 'close-circle', label: 'Payment Rejected' },
   cancelled: { bg: '#f3f4f6', text: '#6b7280', icon: 'close-circle', label: 'Cancelled' },
 };
 
@@ -267,6 +293,9 @@ export default function BillDetailsScreen() {
 
   const expectsWaterBreakdown =
     Number(bill.water || 0) > 0 || (bill.billing_type || '').toLowerCase() === 'water';
+  const utilityDeadlines = Object.entries(bill.utility_deadlines || {})
+    .filter(([, deadline]) => deadline?.billReleaseDate && deadline?.finalDueDate);
+  const hasRentCharge = Number(bill.rent || 0) > 0;
 
   const moveInFinancials = bill.move_in_financials || bill.moveInFinancials || null;
   // Charge items
@@ -353,16 +382,41 @@ export default function BillDetailsScreen() {
               <Text style={styles.headerGridLabel}>Period</Text>
               <Text style={styles.headerGridValue}>{bill.billing_period || '\u2014'}</Text>
             </View>
-            <View style={styles.headerGridItem}>
-              <Text style={styles.headerGridLabel}>Released</Text>
-              <Text style={styles.headerGridValue}>{shortDate(bill.release_date || bill.created_at)}</Text>
-            </View>
-            <View style={styles.headerGridItem}>
-              <Text style={styles.headerGridLabel}>Due Date</Text>
-              <Text style={styles.headerGridValue}>{shortDate(bill.due_date)}</Text>
-            </View>
+            {(hasRentCharge || (!(expectsElectricityBreakdown || expectsWaterBreakdown) && utilityDeadlines.length === 0)) && <>
+              <View style={styles.headerGridItem}>
+                <Text style={styles.headerGridLabel}>Released</Text>
+                <Text style={styles.headerGridValue}>{shortDate(bill.release_date || bill.created_at)}</Text>
+              </View>
+              <View style={styles.headerGridItem}>
+                <Text style={styles.headerGridLabel}>Due Date</Text>
+                <Text style={styles.headerGridValue}>{shortDate(bill.due_date)}</Text>
+              </View>
+            </>}
           </View>
         </View>
+
+        {utilityDeadlines.map(([utility, deadline]) => (
+          <View key={utility} style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name={utility === 'electricity' ? 'flash' : 'water'} size={16} color={utility === 'electricity' ? '#b45309' : '#0284c7'} />
+              <Text style={styles.sectionTitle}>{utility === 'electricity' ? 'Electricity' : 'Water'} Billing Schedule</Text>
+            </View>
+            <View style={styles.headerGrid}>
+              <View style={styles.headerGridItem}><Text style={styles.headerGridLabel}>Reading Date</Text><Text style={styles.headerGridValue}>{shortDate(deadline.meterReadingDate)}</Text></View>
+              <View style={styles.headerGridItem}><Text style={styles.headerGridLabel}>Released</Text><Text style={styles.headerGridValue}>{shortDate(deadline.billReleaseDate)}</Text></View>
+              <View style={styles.headerGridItem}><Text style={styles.headerGridLabel}>Due Date</Text><Text style={styles.headerGridValue}>{shortDate(deadline.finalDueDate)}</Text></View>
+            </View>
+          </View>
+        ))}
+        {(expectsElectricityBreakdown || expectsWaterBreakdown) && utilityDeadlines.length === 0 ? (
+          <View style={styles.sectionCard}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="information-circle-outline" size={17} color={colors.primary} />
+              <Text style={styles.sectionTitle}>Utility Billing Schedule</Text>
+            </View>
+            <Text style={{ color: colors.textSecondary }}>Your utility bill has not been released yet.</Text>
+          </View>
+        ) : null}
 
         {/* ── Billing Summary Table ── */}
         <View style={styles.sectionCard}>
@@ -610,7 +664,7 @@ export default function BillDetailsScreen() {
               {bill.payment_method && (
                 <View style={styles.paymentInfoRow}>
                   <Text style={styles.paymentInfoLabel}>Method</Text>
-                  <Text style={styles.paymentInfoValue}>{bill.payment_method === 'paymongo' ? 'PayMongo' : bill.payment_method}</Text>
+                  <Text style={styles.paymentInfoValue}>{paymentMethodLabel(bill.payment_method, bill.payment_channel)}</Text>
                 </View>
               )}
             </View>

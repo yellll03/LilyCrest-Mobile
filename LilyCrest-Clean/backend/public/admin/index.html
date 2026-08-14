@@ -1489,8 +1489,9 @@ function maintUpdateMessage(entry = {}) {
 
 function maintThreadEntries(request = {}) {
   const publicReplies = Array.isArray(request.publicReplies) ? request.publicReplies : [];
+  const tenantReplies = Array.isArray(request.tenantReplies) ? request.tenantReplies : [];
   const internalLogs = Array.isArray(request.internalLogs) ? request.internalLogs : [];
-  const explicitEntries = [...publicReplies, ...internalLogs];
+  const explicitEntries = [...publicReplies, ...tenantReplies, ...internalLogs];
   const explicitIds = new Set(explicitEntries.map(item => item.update_id || item.log_id).filter(Boolean));
   const updates = (Array.isArray(request.updates) ? request.updates : [])
     .filter(item => !explicitIds.has(item.update_id || item.log_id));
@@ -1510,7 +1511,14 @@ function maintThreadEntries(request = {}) {
       attachments: item.attachments || [],
       created_at: item.timestamp || item.created_at || item.createdAt,
     }));
+  const seen = new Set();
   return [...explicitEntries, ...updates, ...mappedHistory]
+    .filter(item => {
+      const key = item.update_id || item.log_id || item.id || `${item.type || item.event || 'entry'}:${item.created_at || item.createdAt || item.timestamp || ''}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
     .sort((a, b) => new Date(a.created_at || a.createdAt || 0) - new Date(b.created_at || b.createdAt || 0));
 }
 
@@ -1589,19 +1597,26 @@ function readFileAsDataUrl(file) {
 
 async function uploadMaintAttachment(file) {
   const data = await readFileAsDataUrl(file);
-  return apiFetch('/upload/firebase-storage', {
-    method: 'POST',
-    body: JSON.stringify({
-      allowedMimeTypes: MAINT_ALLOWED_ATTACHMENT_TYPES,
-      dataBase64: data.uri,
-      entityId: currentMaintRequestId || 'maintenance-update',
-      fileName: data.name,
-      folder: 'maintenance-admin-updates',
-      maxBytes: 10 * 1024 * 1024,
-      mimeType: data.type,
-      size: data.size,
-    }),
-  });
+  try {
+    return await apiFetch('/upload/firebase-storage', {
+      method: 'POST',
+      body: JSON.stringify({
+        allowedMimeTypes: MAINT_ALLOWED_ATTACHMENT_TYPES,
+        dataBase64: data.uri,
+        entityId: currentMaintRequestId || 'maintenance-update',
+        fileName: data.name,
+        folder: 'maintenance-admin-updates',
+        maxBytes: 10 * 1024 * 1024,
+        mimeType: data.type,
+        size: data.size,
+      }),
+    });
+  } catch (error) {
+    if (String(data.type || '').startsWith('image/')) {
+      return data;
+    }
+    throw error;
+  }
 }
 
 async function handleMaintAttachmentChange(event) {

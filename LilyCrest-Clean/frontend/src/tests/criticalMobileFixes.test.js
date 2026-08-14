@@ -26,4 +26,21 @@ describe('critical mobile fixes', () => {
     expect(source).toContain('Unable to open the branch location. Please try again.');
     expect(source).toContain("!/^https:\\/\\//i.test(destination || '')");
   });
+
+  test('bill details recognizes every canonical status the backend can return, including rejected', () => {
+    const source = read('app/bill-details.jsx');
+    expect(source).toContain("rejected: { bg: '#fef2f2', text: '#b91c1c', icon: 'close-circle', label: 'Payment Rejected' }");
+    // All 7 canonical statuses must have a STATUS_CONFIG entry so the badge
+    // never silently falls back to "Unpaid" for a bill that's actually
+    // overdue, under review, partially paid, rejected, or cancelled.
+    for (const status of ['unpaid', 'overdue', 'pending_verification', 'partially_paid', 'paid', 'rejected', 'cancelled']) {
+      expect(source).toContain(`${status}: {`);
+    }
+  });
+
+  test('bill details never presents the PayMongo gateway name as the tenant\'s payment method', () => {
+    const source = read('app/bill-details.jsx');
+    expect(source).toContain('paymentMethodLabel(bill.payment_method, bill.payment_channel)');
+    expect(source).not.toContain("bill.payment_method === 'paymongo' ? 'PayMongo'");
+  });
 });

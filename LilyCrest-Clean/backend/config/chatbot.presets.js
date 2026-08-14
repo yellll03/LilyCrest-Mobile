@@ -32,7 +32,7 @@ PERSONALITY:
 
 DORMITORY INFORMATION:
 - Name: LilyCrest Dormitory
-- Address: #7 Gil Puyat Ave. cor Marconi St. Brgy Palanan, Makati City
+- Branch name, address, and map destination must come only from the authenticated tenant branch context. Never default to a branch.
 - Contact: +63 912 345 6789 | support@lilycrest.ph
 - Admin office hours: Mon-Sat, 8:00 AM - 5:00 PM
 
@@ -43,9 +43,10 @@ ROOM TYPES & RATES:
 - All rooms include free Wi-Fi. Water is included. Electricity is billed separately (sub-metered)
 
 BILLING & PAYMENTS:
-- Rent is due on the 5th of every month
-- There is a 2-day grace period (until the 7th)
-- Late fee: ₱50 per day after the grace period, capped at ₱1,500/month
+- Regular monthly rent is due on the tenant's move-in day number
+- The first month is covered by the one-month advance; regular billing begins in month two
+- There is a 1-day grace period
+- Late fee: ₱50 per day beginning on the second day after the due date
 - Non-payment escalation: 15 days → final notice, 30 days → service restriction, 45 days → tenancy review
 - Accepted payment methods:
   * Bank Transfer: BDO (1234-5678-9012) / BPI (9876-5432-1098), account name: LilyCrest Properties Inc.
@@ -55,6 +56,10 @@ BILLING & PAYMENTS:
 - Always include room number and full name in payment references
 - After paying, upload proof of payment in the app. Verification takes 24-48 hours
 - Security deposit: 1 month rent, refundable after move-out inspection (damages/unpaid fees deducted)
+- Official Section 4 move-in rule: total due before move-in is one month advance rent plus one month security deposit
+- A reservation fee already paid is partial payment toward that combined amount
+- Remaining move-in balance equals advance rent plus security deposit minus the reservation fee already paid
+- Never allocate the reservation fee only to advance rent or only to the security deposit
 
 HOUSE RULES:
 - Quiet hours: 10:00 PM – 7:00 AM — keep noise to a minimum
@@ -74,7 +79,7 @@ HOUSE RULES:
 MOVE-IN REQUIREMENTS:
 - Valid government-issued ID
 - Signed lease agreement
-- 2 months advance rent + 1 month security deposit
+- 1 month advance rent + 1 month security deposit, less the reservation fee already paid toward their combined amount
 - Bring your own bedding and personal toiletries
 - Rental period is month-to-month; either party may terminate with 30 days written notice
 - Early termination may forfeit security deposit
@@ -131,7 +136,7 @@ const KNOWLEDGE_BASE = {
     triggers: ['due date', 'when pay', 'billing cycle', 'pay schedule', 'when is rent due', 'monthly due'],
     category: 'billing',
     priority: 'high',
-    knowledge: 'Rent due on the 5th, 2-day grace period, ₱50/day late fee after grace period, max ₱1,500/month.',
+    knowledge: "Regular rent uses the tenant's move-in day number. The first month is covered by the one-month advance, billing begins in month two, there is a 1-day grace period, and ₱50/day begins on day two after due date.",
     followups: [
       { label: 'Payment methods', prompt: 'How can I pay my rent?' },
       { label: 'Late fee details', prompt: 'What happens if I pay late?' },
@@ -151,7 +156,7 @@ const KNOWLEDGE_BASE = {
     intent: 'late_fee',
     triggers: ['late fee', 'penalty', 'overdue', 'late payment', 'missed payment'],
     category: 'billing',
-    knowledge: '₱50/day after 2-day grace period following the 5th. Max ₱1,500/month. 15 days → final notice, 30 days → service restriction, 45 days → tenancy review.',
+    knowledge: "₱50/day beginning on the second day after the tenant's move-in-day-based due date, after a 1-day grace period. Use authenticated bill data for actual penalties and do not invent a cap.",
     followups: [
       { label: 'Payment methods', prompt: 'How can I pay my rent?' },
       { label: 'Talk to admin', prompt: 'I need to discuss my billing with admin.' },
@@ -244,7 +249,7 @@ const KNOWLEDGE_BASE = {
     intent: 'move_in_requirements',
     triggers: ['move in', 'move-in', 'requirements', 'checklist', 'what to bring', 'moving in', 'new tenant'],
     category: 'onboarding',
-    knowledge: 'Valid government ID, signed lease, 2 months advance + 1 month deposit. Bring own bedding and toiletries. Month-to-month rental, 30-day notice to terminate.',
+    knowledge: 'Valid government ID and signed lease. Section 4 requires one month advance plus one month security deposit; subtract any reservation fee already paid from that combined amount. Never apply the reservation fee only to one component. Bring own bedding and toiletries.',
     followups: [
       { label: 'Room rates', prompt: 'What are the room types and prices?' },
       { label: 'Get lease contract', prompt: 'How do I get my lease agreement?' },

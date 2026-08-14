@@ -90,14 +90,7 @@ router.post('/seed', authMiddleware, seedAccessMiddleware, seedController.seedDa
 
 // Health check
 router.get('/health', (req, res) => {
-  res.json({
-    ok: true,
-    service: 'LilyCrest Mobile Backend',
-    status: 'healthy',
-    timestamp: new Date().toISOString(),
-    backend: 'Node.js/Express',
-    auth: 'Firebase-only'
-  });
+  res.json({ status: 'ok' });
 });
 
 // Root route
