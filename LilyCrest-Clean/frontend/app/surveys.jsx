@@ -9,6 +9,12 @@ import { apiService } from '../src/services/api';
 import { saveCachedSurveyDashboard } from '../src/services/surveyDrafts';
 
 const LABELS = { QUARTERLY: 'Quarterly Survey', MOVE_OUT: 'Move-Out Survey' };
+const RESPONSE_STATUS_LABELS = {
+  NOT_STARTED: 'Not Started',
+  IN_PROGRESS: 'In Progress',
+  SUBMITTED: 'Submitted',
+  EXPIRED: 'Expired',
+};
 const formatDate = (value) => value ? new Date(value).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) : 'Not available';
 
 export default function SurveysScreen() {
@@ -55,7 +61,8 @@ export default function SurveysScreen() {
           </View>
           <Text style={styles.meta}>Available: {formatDate(survey.availableFrom)} – {formatDate(survey.availableUntil)}</Text>
           <Text style={styles.meta}>Due: {formatDate(survey.availableUntil)}</Text>
-          <Text style={styles.status}>{String(survey.tenantResponseStatus).replace(/_/g, ' ')}</Text>
+          <Text style={styles.meta}>Estimated Time: 2–3 minutes</Text>
+          <Text style={styles.status}>Status: {RESPONSE_STATUS_LABELS[survey.tenantResponseStatus] || 'Unavailable'}</Text>
           <TouchableOpacity
             style={styles.button}
             onPress={() => router.push({ pathname: '/survey-form', params: { surveyId: survey.surveyId, responseStatus: survey.tenantResponseStatus } })}

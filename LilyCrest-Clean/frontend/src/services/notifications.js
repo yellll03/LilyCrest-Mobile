@@ -3,6 +3,8 @@ import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { api } from './api';
 
+const IS_DEV = typeof __DEV__ !== 'undefined' && __DEV__;
+
 // Safely lazy-load expo-notifications because push support is unavailable in Expo Go
 // on modern SDKs and can fail during module initialization.
 let Notifications = null;
@@ -96,14 +98,14 @@ export async function registerForPushNotifications({ requestPermission = false }
   initializeNotificationHandler();
 
   if (Platform.OS === 'web') {
-    console.log('[Notifications] Push notifications are not supported on web');
+    if (IS_DEV) console.log('[Notifications] Push notifications are not supported on web');
     return null;
   }
 
   try {
     const notificationsEnabled = await arePushNotificationsEnabled();
     if (!notificationsEnabled) {
-      console.log('[Notifications] Push notifications are disabled in settings');
+      if (IS_DEV) console.log('[Notifications] Push notifications are disabled in settings');
       return null;
     }
 
@@ -121,7 +123,7 @@ export async function registerForPushNotifications({ requestPermission = false }
     }
 
     if (finalStatus !== 'granted') {
-      console.log('[Notifications] Permission not granted');
+      if (IS_DEV) console.log('[Notifications] Permission not granted');
       return null;
     }
 
@@ -133,7 +135,7 @@ export async function registerForPushNotifications({ requestPermission = false }
         const expoTokenData = await Notifications.getExpoPushTokenAsync({ projectId });
         token = typeof expoTokenData?.data === 'string' ? expoTokenData.data.trim() : '';
         if (token) {
-          console.log('[Notifications] Expo push token acquired');
+          if (IS_DEV) console.log('[Notifications] Expo push token acquired');
         }
       } catch (error) {
         console.warn('[Notifications] Expo push token fetch failed, falling back to native token:', error?.message);
@@ -148,7 +150,7 @@ export async function registerForPushNotifications({ requestPermission = false }
       const tokenData = await Notifications.getDevicePushTokenAsync();
       token = typeof tokenData?.data === 'string' ? tokenData.data.trim() : '';
       if (token) {
-        console.log('[Notifications] Native push token acquired');
+        if (IS_DEV) console.log('[Notifications] Native push token acquired');
       }
     }
 
@@ -209,7 +211,7 @@ export async function savePushTokenToServer(token, options = {}) {
       headers: authTokenOverride ? { Authorization: `Bearer ${authTokenOverride}` } : undefined,
     });
     await AsyncStorage.setItem(PUSH_SYNC_SIGNATURE_KEY, nextSignature);
-    console.log('[Notifications] Token saved to server');
+    if (IS_DEV) console.log('[Notifications] Token saved to server');
   } catch (error) {
     if (suppressUnauthorized && error?.response?.status === 401) {
       return;
@@ -225,13 +227,13 @@ export function setupNotificationListeners(onNotificationReceived, onNotificatio
 
   try {
     const receivedSub = Notifications.addNotificationReceivedListener((notification) => {
-      console.log('[Notifications] Received:', notification?.request?.content?.title);
+      if (IS_DEV) console.log('[Notifications] Received:', notification?.request?.content?.title);
       if (onNotificationReceived) onNotificationReceived(notification);
     });
 
     const responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
       const data = response?.notification?.request?.content?.data || {};
-      console.log('[Notifications] Tapped, data:', data);
+      if (IS_DEV) console.log('[Notifications] Tapped, data:', data);
       if (onNotificationTapped) onNotificationTapped(data);
     });
 
@@ -299,9 +301,14 @@ export function resolveNotificationRoute(data = {}) {
   if (!data || typeof data !== 'object') return '/(tabs)/announcements';
 
   const directUrl = typeof data?.url === 'string' ? data.url.trim() : '';
+  const directSurvey = directUrl.match(/^\/surveys\/([^/?#]+)/i);
+  if (directSurvey) {
+    return { pathname: '/survey-form', params: { surveyId: decodeURIComponent(directSurvey[1]) } };
+  }
   if (directUrl.startsWith('/')) return directUrl;
 
   const billingId = data?.billing_id || data?.bill_id;
+  const surveyId = data?.surveyId || data?.survey_id;
   const explicitScreen = typeof data?.screen === 'string' ? data.screen.trim().toLowerCase() : '';
   const type = typeof data?.type === 'string' ? data.type.trim().toLowerCase() : '';
   const category = typeof data?.category === 'string' ? data.category.trim().toLowerCase() : '';
@@ -330,6 +337,11 @@ export function resolveNotificationRoute(data = {}) {
       return '/(tabs)/chatbot';
     case 'reservation':
       return '/(tabs)/home';
+    case 'survey':
+    case 'surveys':
+      return surveyId
+        ? { pathname: '/survey-form', params: { surveyId: String(surveyId) } }
+        : '/surveys';
     case 'settings':
       return '/settings';
     case 'profile':

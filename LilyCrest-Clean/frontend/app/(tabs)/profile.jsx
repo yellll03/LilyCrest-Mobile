@@ -94,6 +94,7 @@ export default function ProfileScreen() {
   const [profileError, setProfileError] = useState('');
   const [profileBanner, setProfileBanner] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [activeSurvey, setActiveSurvey] = useState(null);
   const userId = user?.user_id || null;
 
   useEffect(() => {
@@ -116,12 +117,17 @@ export default function ProfileScreen() {
 
     setProfileError('');
     try {
-      const response = await apiService.getProfile();
+      const [response, surveyResponse] = await Promise.all([
+        apiService.getProfile(),
+        apiService.getMySurveys().catch(() => null),
+      ]);
       if (isProfilePayload(response?.data)) {
         updateUser(response.data);
       } else {
         throw new Error('Invalid profile response shape');
       }
+      const surveys = Array.isArray(surveyResponse?.data?.surveys) ? surveyResponse.data.surveys : [];
+      setActiveSurvey(surveys.find((survey) => survey.status === 'ACTIVE' && ['NOT_STARTED', 'IN_PROGRESS'].includes(survey.tenantResponseStatus)) || null);
     } catch (error) {
       const status = error?.response?.status;
       if (status === 401) {
@@ -606,7 +612,7 @@ export default function ProfileScreen() {
             <View style={styles.infoCard}>
               <View style={styles.surveyHeader}>
                 <Ionicons name="chatbox-ellipses-outline" size={22} color={colors.accent} />
-                <Text style={styles.surveyTitle}>{user?.survey?.type === 'quarterly' ? 'Quarterly Survey Available' : user?.survey?.type === 'move-out' ? 'Move-out Survey Available' : 'No survey available'}</Text>
+                <Text style={styles.surveyTitle}>{activeSurvey?.surveyType === 'QUARTERLY' ? 'Quarterly Survey Available' : activeSurvey?.surveyType === 'MOVE_OUT' ? 'Move-out Survey Available' : 'No survey available'}</Text>
               </View>
               <Text style={styles.helperText}>View active surveys, save a draft, or review your submitted feedback.</Text>
               <TouchableOpacity style={styles.outlineButton} onPress={() => router.push('/surveys')}>
