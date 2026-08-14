@@ -24,6 +24,36 @@ function safeDistanceToNow(dateStr) {
   } catch (_e) { return ''; }
 }
 
+// Category values come from admin-entered free text and are inconsistently
+// cased ("Security" vs "security"), which used to produce duplicate-looking
+// filter chips for the same category (JS Set dedup is exact-string, so
+// differently-cased values never collapsed) and inconsistent chip label
+// casing (e.g. "event" next to "Security"). Every chip/filter/badge now goes
+// through this normalized key, with a fixed Title Case label for display.
+function normalizeCategoryKey(category) {
+  const trimmed = String(category || '').trim().toLowerCase();
+  return trimmed || 'general';
+}
+
+const CATEGORY_LABELS = {
+  announcement: 'Announcement',
+  billing: 'Billing',
+  maintenance: 'Maintenance',
+  assistant: 'Assistant',
+  security: 'Security',
+  reservation: 'Reservation',
+  survey: 'Survey',
+  rules: 'Rules',
+  promo: 'Promo',
+  event: 'Event',
+  general: 'General',
+};
+
+function categoryLabel(key) {
+  if (key === 'All') return 'All';
+  return CATEGORY_LABELS[key] || (key.charAt(0).toUpperCase() + key.slice(1));
+}
+
 function getAnnouncementDateValue(announcement = {}) {
   return announcement.publishedAt
     || announcement.sentAt
@@ -339,24 +369,24 @@ export default function AnnouncementsScreen() {
     [announcements, sortOrder]
   );
 
-  const categories = ['All', ...new Set(sortedAnnouncements.map((a) => a.category || 'General'))];
+  const categories = ['All', ...new Set(sortedAnnouncements.map((a) => normalizeCategoryKey(a.category)))];
 
   const filteredAnnouncements = sortedAnnouncements.filter((a) => {
-    const catMatch = !selectedCategory || selectedCategory === 'All' || (a.category || 'General') === selectedCategory;
+    const catMatch = !selectedCategory || selectedCategory === 'All' || normalizeCategoryKey(a.category) === selectedCategory;
     const urgentMatch = !urgentOnly || (a.priority || '').toLowerCase() === 'high';
     return catMatch && urgentMatch;
   });
 
   const getCategoryCount = (cat) => {
     return announcements.filter((a) => {
-      const catMatch = cat === 'All' || (a.category || 'General') === cat;
+      const catMatch = cat === 'All' || normalizeCategoryKey(a.category) === cat;
       const urgentMatch = !urgentOnly || (a.priority || '').toLowerCase() === 'high';
       return catMatch && urgentMatch;
     }).length;
   };
 
   const urgentCount = announcements.filter((a) => {
-    const catMatch = !selectedCategory || selectedCategory === 'All' || (a.category || 'General') === selectedCategory;
+    const catMatch = !selectedCategory || selectedCategory === 'All' || normalizeCategoryKey(a.category) === selectedCategory;
     return catMatch && (a.priority || '').toLowerCase() === 'high';
   }).length;
 
@@ -410,7 +440,7 @@ export default function AnnouncementsScreen() {
           <View style={styles.badgeRow}>
             <View style={[styles.categoryBadge, { backgroundColor: catColor.bg }]}>
               <Ionicons name={catColor.icon} size={10} color={catColor.text} />
-              <Text style={[styles.categoryBadgeText, { color: catColor.text }]}>{announcement.category || 'General'}</Text>
+              <Text style={[styles.categoryBadgeText, { color: catColor.text }]}>{categoryLabel(normalizeCategoryKey(announcement.category))}</Text>
             </View>
             {(announcement.priority || '').toLowerCase() === 'high' && (
               <View style={styles.urgentBadge}>
@@ -505,7 +535,7 @@ export default function AnnouncementsScreen() {
                   size={13}
                   color={isActive ? '#FFFFFF' : colors.textSecondary}
                 />
-                <Text style={[styles.chipText, isActive && styles.chipTextActive]}>{category}</Text>
+                <Text style={[styles.chipText, isActive && styles.chipTextActive]}>{categoryLabel(category)}</Text>
                 {count > 0 && (
                   <View style={[styles.chipBadge, isActive && styles.chipBadgeActive]}>
                     <Text style={[styles.chipBadgeText, isActive && styles.chipBadgeTextActive]}>{count}</Text>
@@ -598,7 +628,7 @@ export default function AnnouncementsScreen() {
                   <View style={styles.badgeRow}>
                     <View style={[styles.categoryBadge, { backgroundColor: catColor.bg }]}>
                       <Ionicons name={catColor.icon} size={10} color={catColor.text} />
-                      <Text style={[styles.categoryBadgeText, { color: catColor.text }]}>{selectedAnn.category || 'General'}</Text>
+                      <Text style={[styles.categoryBadgeText, { color: catColor.text }]}>{categoryLabel(normalizeCategoryKey(selectedAnn.category))}</Text>
                     </View>
                     {selectedAnn.priority === 'high' && (
                       <View style={styles.urgentBadge}>
