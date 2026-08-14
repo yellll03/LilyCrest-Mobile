@@ -127,7 +127,7 @@ Verified mobile service base:
 - Auth: `/api/m/auth/...`
 - Dashboard/profile/users/documents: `/api/m/...`
 - Billing/payment status: `/api/m/billing/...`, `/api/m/paymongo/...`
-- Maintenance and replies: `/api/m/maintenance/...`
+- Maintenance requests: `/api/m/maintenance/...`
 - Uploads: `/api/m/upload/firebase-storage`
 - Announcements/notifications: `/api/m/announcements`, `/api/m/notifications`
 - Lily Assistant/chat: `/api/m/chatbot/...`, `/api/m/chat/...`
@@ -158,7 +158,7 @@ Inspected source routes:
 - OTP send/verify/resend use `/api/m/auth/login/...`.
 - Tenant dashboard/profile/documents use `/api/m`.
 - Billing/payment/PayMongo status use `/api/m`.
-- Maintenance create/detail/replies/status use `/api/m`.
+- Maintenance request routes use `/api/m`.
 - Firebase Storage uploads use `/api/m/upload/firebase-storage`.
 - Notifications/announcements use `/api/m`.
 - Lily Assistant and support chat use `/api/m/chatbot` and `/api/m/chat`.

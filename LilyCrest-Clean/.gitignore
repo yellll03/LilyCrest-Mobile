@@ -55,8 +55,10 @@ logs/
 *.log
 backend/.latest-tunnel-url
 build_output*.txt
+build_command_output*.txt
 frontend/build_output*.txt
 frontend/android/build_output*.txt
+frontend/android/build_command_output*.txt
 frontend/android/build_command_output.txt
 
 # Build / dist
@@ -78,3 +80,22 @@ docs/generated/
 LILYCREST_*_MANUAL.html
 LILYCREST_*_MANUAL.pdf
 module_progress_report.html
+
+# Backup files
+*.bak
+
+# App release binaries (never versioned; distributed via EAS/store instead)
+*.apk
+/frontend/builds/
+
+# Ad-hoc device QA screenshots/evidence and agent tool logs (not source)
+/release-evidence/
+/.codex-logs/
+/device-screen*.png
+/device-window.xml
+/device-v3-screen.png
+/gradle_log.txt
+
+# Generated migration/audit evidence output (may contain real tenant data
+# dry-run snapshots; regenerate via backend/scripts, never hand-edit or commit)
+/backend/reports/
