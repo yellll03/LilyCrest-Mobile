@@ -1318,4 +1318,9 @@ module.exports = {
   forgotPassword,
   getResetPasswordPage,
   resetPassword,
+  // Exported only for direct unit testing of the getCleanUser(db, userId) ->
+  // sanitizeUserForClient(normalizeUser(...)) serialization step shared by
+  // googleSignIn/register/verifyOtp (see tests/authProfileSerialization.test.js)
+  // — not used as a route handler itself.
+  getCleanUser,
 };

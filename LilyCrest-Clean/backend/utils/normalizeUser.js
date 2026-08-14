@@ -63,7 +63,54 @@ function normalizeUser(doc) {
   return user;
 }
 
+// authMiddleware attaches the FULL Mongo user document to req.user for
+// internal use (ownership checks, identity resolution, etc). Controllers that
+// echo req.user (or a normalizeUser'd copy of it) back to the mobile client
+// must route it through this sanitizer first.
+//
+// This is an allowlist, not a denylist: only fields the tenant mobile app
+// actually reads are ever returned (confirmed against every frontend consumer
+// of GET /auth/me, GET/PUT /users/me, and the dashboard response — profile.jsx,
+// home.jsx, settings.jsx, services.jsx, document-viewer.jsx, image-viewer.jsx,
+// my-documents.jsx, survey-form.jsx, surveys.jsx, LilyAssistantScreen.jsx).
+// A denylist can only ever exclude fields this repo knows to write to the
+// `users` collection — a separate admin/web codebase writing to the same
+// MongoDB collection could add a field neither list anticipates. An allowlist
+// is safe against that by construction: an unrecognized field is simply never
+// forwarded, sensitive or not.
+const CLIENT_VISIBLE_USER_FIELDS = [
+  'user_id',
+  'email',
+  'name',
+  'firstName',
+  'lastName',
+  'phone',
+  'phoneSource',
+  'address',
+  'addressSource',
+  'username',
+  'usernameNextAllowedAt',
+  'picture',
+  'branch',
+  'contract',
+  'survey',
+  'serverTime',
+  'role',
+];
+
+function sanitizeUserForClient(user) {
+  if (!user) return user;
+  const safe = {};
+  for (const field of CLIENT_VISIBLE_USER_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(user, field)) {
+      safe[field] = user[field];
+    }
+  }
+  return safe;
+}
+
 module.exports = {
   normalizeUser,
   firstNonEmptyString,
+  sanitizeUserForClient,
 };
