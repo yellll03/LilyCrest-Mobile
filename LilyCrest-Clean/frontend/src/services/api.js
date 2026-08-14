@@ -2,7 +2,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios, { create as createAxios } from 'axios';
 import { API_BASE_URL, MOBILE_API_BASE_URL, MOBILE_HEALTH_URL } from '../config/api';
 import { getFreshIdToken } from '../config/firebase';
-import { getSessionToken, removeSessionToken, setSessionToken } from './secureCredentials';
+import { getSessionToken, isCurrentSessionRemembered, removeSessionToken, setSessionToken } from './secureCredentials';
+import { emitSessionExpired } from './sessionEvents';
 
 const IS_DEV = typeof __DEV__ !== 'undefined' && __DEV__;
 export const SERVER_STARTING_MESSAGE = 'The server is starting. Please try again in a few seconds.';
@@ -122,7 +123,30 @@ export async function checkBackendConnection() {
 
 
 const AUTH_REFRESH_URL = `${MOBILE_API_BASE_URL}/auth/google`;
+const SESSION_TEARDOWN_URL = `${MOBILE_API_BASE_URL}/auth/session-teardown`;
 let refreshSessionPromise = null;
+
+// Best-effort cleanup for a session that just died (see AuthContext's forced
+// session-expiry handler). Unlike a normal authenticated call, `expiredToken`
+// is the token that just 401'd — it only works here because the backend's
+// /auth/session-teardown route accepts a session within a short grace period
+// after expiry (see backend/middleware/auth.js:authMiddlewareRecentSession),
+// specifically so a device can disable its own push-token association even
+// when the request that discovered the expiry already failed. If the token is
+// past that grace window (or was invalidated some other way), this silently
+// fails — it must never block local logout.
+export async function teardownExpiredSession(expiredToken, pushToken) {
+  if (!expiredToken) return false;
+  try {
+    await axios.post(SESSION_TEARDOWN_URL, { push_token: pushToken || null }, {
+      headers: { Authorization: `Bearer ${expiredToken}` },
+      timeout: 8000,
+    });
+    return true;
+  } catch (_error) {
+    return false;
+  }
+}
 
 export const api = createAxios({
   baseURL: MOBILE_API_BASE_URL,
@@ -142,7 +166,9 @@ async function refreshGoogleSession() {
       const sessionToken = response?.data?.session_token || null;
 
       if (sessionToken) {
-        await setSessionToken(sessionToken);
+        // Preserve the original "Remember Me" choice — a same-run silent
+        // refresh must not upgrade a memory-only session into a durable one.
+        await setSessionToken(sessionToken, { remember: isCurrentSessionRemembered() });
       }
 
       return sessionToken;
@@ -171,12 +197,40 @@ api.interceptors.response.use(
   (response) => response,
   async (error) => {
     const originalRequest = error.config;
-    
+
+    // A deactivated account gets a 403 (not 401) from authMiddleware, which
+    // already deleted every session for this user server-side — there is
+    // nothing to refresh. Route it through the same clean-logout path as an
+    // expired session instead of leaving authStatus stuck "authenticated"
+    // until some later request happens to hit the now-deleted session and
+    // 401s. Distinguished by a stable machine-readable code (not the English
+    // detail string) so an unrelated 403 (e.g. hitting an admin-only route)
+    // is never misread as account deactivation.
+    if (error.response?.status === 403 && error.response?.data?.code === 'ACCOUNT_INACTIVE') {
+      const authHeader = originalRequest?.headers?.Authorization || originalRequest?.headers?.authorization || '';
+      const expiredToken = typeof authHeader === 'string' ? authHeader.replace(/^Bearer\s+/i, '').trim() : '';
+      try {
+        await removeSessionToken();
+        await AsyncStorage.removeItem('session_user');
+      } catch (_) {}
+      emitSessionExpired('account_inactive', { expiredToken });
+    }
+
     // Handle 401 - try to refresh session once.
     // Skip for auth endpoints (login/register) - those 401s mean wrong credentials,
     // not an expired session. Retrying them would show the wrong error.
     const isAuthEndpoint = /\/auth\/(login|register|google|forgot-password|login\/verify-otp|login\/resend-otp)/.test(originalRequest?.url || '');
-    if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint) {
+    // A request that never carried a session token in the first place has
+    // nothing to refresh — attempting refreshGoogleSession() here would pull
+    // from Firebase's own independently-persisted client session (it survives
+    // an app kill regardless of "Remember Me", see config/firebase.js's
+    // getReactNativePersistence(AsyncStorage)) and could silently mint a
+    // brand-new backend session after a cold start where "Remember Me" was
+    // off and no session should exist at all.
+    const hadSessionToken = Boolean(
+      originalRequest?.headers?.Authorization || originalRequest?.headers?.authorization,
+    );
+    if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint && hadSessionToken) {
       originalRequest._retry = true;
 
       try {
@@ -193,11 +247,26 @@ api.interceptors.response.use(
         });
       }
 
-      // Refresh failed or no Firebase user - clear session
+      // Capture the dying token before it's deleted below. Even for a
+      // genuinely TTL-expired session (the normal reason we're here),
+      // AuthContext can still use this token for one authenticated cleanup
+      // call: POST /auth/session-teardown accepts a session within a short
+      // grace period after expiry specifically for this purpose (see
+      // backend/middleware/auth.js:authMiddlewareRecentSession). This doesn't
+      // widen backend trust generally — that endpoint still validates this
+      // exact token against its own session record, and is scoped to nothing
+      // but the caller's own push-token teardown.
+      const expiredAuthHeader = originalRequest?.headers?.Authorization || originalRequest?.headers?.authorization || '';
+      const expiredToken = typeof expiredAuthHeader === 'string' ? expiredAuthHeader.replace(/^Bearer\s+/i, '').trim() : '';
+
+      // Refresh failed or no Firebase user - clear session and let AuthContext
+      // know synchronously, so a screen that's still mounted doesn't keep
+      // rendering as if authenticated until its next API call also 401s.
       try {
         await removeSessionToken();
         await AsyncStorage.removeItem('session_user');
       } catch (_) {}
+      emitSessionExpired('refresh_failed', { expiredToken });
     }
 
     error.normalized = normalizeApiError(error);
@@ -341,6 +410,7 @@ export const apiService = {
     }),
 
   // Auth
+  forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
   changePassword: (currentPassword, newPassword, options = {}) =>
     api.post('/auth/change-password', {
       current_password: currentPassword,

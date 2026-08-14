@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { Platform } from 'react-native';
 import { auth, GOOGLE_WEB_CLIENT_ID } from './firebase';
 
+const IS_DEV = typeof __DEV__ !== 'undefined' && __DEV__;
+
 let GoogleSignin;
 let statusCodes;
 if (Platform.OS !== 'web') {
@@ -88,7 +90,7 @@ export function useGoogleSignIn() {
           const tokens = await GoogleSignin.getTokens();
           idToken = tokens?.idToken;
           accessToken = tokens?.accessToken;
-          console.log('[Google] getTokens() idToken present:', !!idToken);
+          if (IS_DEV) console.log('[Google] getTokens() idToken present:', !!idToken);
         } catch (tokenErr) {
           console.warn('[Google] getTokens() failed:', tokenErr?.message);
         }
@@ -106,7 +108,7 @@ export function useGoogleSignIn() {
               accessToken = tokens?.accessToken;
             }
           }
-          console.log('[Google] signInSilently() idToken present:', !!idToken);
+          if (IS_DEV) console.log('[Google] signInSilently() idToken present:', !!idToken);
         } catch (silentErr) {
           console.warn('[Google] signInSilently() failed:', silentErr?.message);
         }

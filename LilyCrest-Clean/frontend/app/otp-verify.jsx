@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Clipboard from 'expo-clipboard';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -25,6 +26,7 @@ import {
   enableBiometricSession,
   getPendingLogin,
 } from '../src/services/secureCredentials';
+import { safeBack } from '../src/utils/navigation';
 
 const OTP_LENGTH = 6;
 const RESEND_COOLDOWN = 60; // seconds
@@ -130,6 +132,15 @@ export default function OtpVerifyScreen() {
     }
   };
 
+  const handleOtpFocus = async (index) => {
+    if (index !== 0 || digits.some(Boolean)) return;
+    const clipboardValue = await Clipboard.getStringAsync().catch(() => '');
+    const pastedCode = String(clipboardValue || '').trim();
+    if (/^\d{6}$/.test(pastedCode)) {
+      handleDigitChange(pastedCode, 0);
+    }
+  };
+
   const handleVerify = async () => {
     if (isSessionLoading) return;
     if (!otpToken) {
@@ -146,7 +157,7 @@ export default function OtpVerifyScreen() {
     setIsLoading(true);
     setError(null);
 
-    const result = await verifyLoginOtp(otpToken, code);
+    const result = await verifyLoginOtp(otpToken, code, rememberMe);
 
     if (!result.success) {
       setIsLoading(false);
@@ -249,7 +260,7 @@ export default function OtpVerifyScreen() {
         <ScrollView contentContainerStyle={styles.scroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
 
           {/* Back */}
-          <TouchableOpacity style={styles.backBtn} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.backBtn} onPress={() => safeBack(router, '/login')}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
 
@@ -280,8 +291,9 @@ export default function OtpVerifyScreen() {
                 value={digit}
                 onChangeText={(t) => handleDigitChange(t, i)}
                 onKeyPress={(e) => handleKeyPress(e, i)}
+                onFocus={() => handleOtpFocus(i)}
                 keyboardType="number-pad"
-                maxLength={OTP_LENGTH}
+                maxLength={1}
                 textContentType="oneTimeCode"
                 autoComplete="one-time-code"
                 selectTextOnFocus

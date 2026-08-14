@@ -19,7 +19,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../src/context/AuthContext';
-import { clearCredentials, hasStoredCredentials } from '../src/services/secureCredentials';
+import { clearCredentials, getSessionToken, hasStoredCredentials } from '../src/services/secureCredentials';
 
 const { width, height } = Dimensions.get('window');
 
@@ -104,7 +104,7 @@ export default function OnboardingScreen() {
 
     const maybeAutoLogin = async () => {
       hasAttemptedAutoBiometric.current = true;
-      const token = await AsyncStorage.getItem('session_token');
+      const token = await getSessionToken();
       if (!token) return;
 
       if (!cancelled) setIsAutoBiometricLoading(true);

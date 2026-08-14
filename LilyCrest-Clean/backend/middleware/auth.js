@@ -57,6 +57,55 @@ async function authMiddleware(req, res, next) {
   }
 }
 
+// A session token is normally rejected the instant it passes expires_at, which
+// means a client that just received a 401 from authMiddleware can never use
+// that same token to authenticate a follow-up "disable my push token on this
+// device" cleanup call — the server would reject it for the exact same reason.
+// This narrow variant accepts a session that expired within the last
+// TEARDOWN_GRACE_PERIOD_MS, but still requires the token to exactly match a
+// real, previously-issued session record for that user — it does not accept
+// arbitrary or guessed tokens, and it is not mounted on any route that reads
+// or mutates tenant data other than the device's own push-token association.
+// Use ONLY for narrowly-scoped, idempotent teardown actions.
+const TEARDOWN_GRACE_PERIOD_MS = 5 * 60 * 1000;
+
+async function authMiddlewareRecentSession(req, res, next) {
+  const authHeader = req.headers.authorization;
+
+  let token = null;
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    token = authHeader.substring(7);
+  }
+
+  if (!token) {
+    return res.status(401).json({ detail: 'Not authenticated' });
+  }
+
+  try {
+    const db = getDb();
+    const session = await db.collection('user_sessions').findOne({
+      session_token: token,
+      expires_at: { $gt: new Date(Date.now() - TEARDOWN_GRACE_PERIOD_MS) },
+    });
+
+    if (!session || !session.user_id) {
+      return res.status(401).json({ detail: 'Invalid or expired session' });
+    }
+
+    const user = await db.collection('users').findOne({ user_id: session.user_id });
+    if (!user) {
+      return res.status(401).json({ detail: 'User not found' });
+    }
+
+    req.user = normalizeUser(user);
+    req.session = session;
+    next();
+  } catch (error) {
+    console.error('Auth middleware (recent-session) error:', error);
+    return res.status(401).json({ detail: 'Authentication error' });
+  }
+}
+
 function adminMiddleware(req, res, next) {
   const role = (req.user?.role || '').toLowerCase();
   if (role !== 'admin' && role !== 'superadmin') {
@@ -100,4 +149,11 @@ async function optionalAuthMiddleware(req, res, next) {
   return next();
 }
 
-module.exports = { authMiddleware, adminMiddleware, optionalAuthMiddleware, isAccountActive };
+module.exports = {
+  authMiddleware,
+  adminMiddleware,
+  optionalAuthMiddleware,
+  authMiddlewareRecentSession,
+  isAccountActive,
+  TEARDOWN_GRACE_PERIOD_MS,
+};

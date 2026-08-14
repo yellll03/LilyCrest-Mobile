@@ -9,6 +9,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Platform } from 'react-native';
 
+const IS_DEV = typeof __DEV__ !== 'undefined' && __DEV__;
+
 let SecureStore = null;
 try {
   SecureStore = require('expo-secure-store');
@@ -29,6 +31,19 @@ const LEGACY_KEYS = {
 };
 
 let memoryPendingLogin = null;
+// Holds the session token for a "Remember Me" = off login. Kept only in this
+// module's memory (never SecureStore/AsyncStorage) so it is lost on app kill
+// (fresh JS engine) but survives normal backgrounding within the same run.
+let memoryOnlySessionToken = null;
+// Whether the current session was established with "Remember Me" on. A
+// silent same-run session refresh (see api.js's refreshGoogleSession) must
+// preserve this instead of defaulting to true, or it would silently promote
+// a non-remembered session into a durable one.
+let currentSessionRemembered = true;
+
+export function isCurrentSessionRemembered() {
+  return currentSessionRemembered;
+}
 
 function canUseSecureStore() {
   return Boolean(SecureStore) && Platform.OS !== 'web';
@@ -67,6 +82,7 @@ export async function migrateLegacyCredentials() {
 }
 
 export async function getSessionToken() {
+  if (memoryOnlySessionToken) return memoryOnlySessionToken;
   let token = await getSecureItem(SESSION_TOKEN_KEY).catch(() => null);
   if (token) return token;
   const legacyToken = await AsyncStorage.getItem(SESSION_TOKEN_KEY).catch(() => null);
@@ -81,9 +97,25 @@ export async function getSessionToken() {
   return token;
 }
 
-export async function setSessionToken(token) {
+export async function setSessionToken(token, { remember = true } = {}) {
   const normalized = typeof token === 'string' ? token.trim() : '';
   if (!normalized) return removeSessionToken();
+
+  currentSessionRemembered = remember;
+
+  if (!remember) {
+    // "Remember Me" is off: keep the token in memory only so the session
+    // does not survive an app kill, and make sure no durable copy lingers
+    // from a prior "Remember Me" = on login on this device.
+    memoryOnlySessionToken = normalized;
+    await Promise.all([
+      deleteSecureItem(SESSION_TOKEN_KEY),
+      AsyncStorage.removeItem(SESSION_TOKEN_KEY).catch(() => {}),
+    ]);
+    return;
+  }
+
+  memoryOnlySessionToken = null;
   if (!canUseSecureStore()) {
     await AsyncStorage.setItem(SESSION_TOKEN_KEY, normalized);
     return;
@@ -93,6 +125,8 @@ export async function setSessionToken(token) {
 }
 
 export async function removeSessionToken() {
+  memoryOnlySessionToken = null;
+  currentSessionRemembered = true;
   await Promise.all([
     deleteSecureItem(SESSION_TOKEN_KEY),
     AsyncStorage.removeItem(SESSION_TOKEN_KEY).catch(() => {}),
@@ -184,7 +218,7 @@ export async function clearCredentials(options = {}) {
         ? AsyncStorage.removeItem(BIOMETRIC_SETTING_KEY).catch(() => {})
         : Promise.resolve(),
     ]);
-    console.log('[SecureAuth] Stored biometric auth state cleared');
+    if (IS_DEV) console.log('[SecureAuth] Stored biometric auth state cleared');
   } catch (err) {
     console.warn('[SecureAuth] Failed to clear biometric auth state:', err?.message);
   }

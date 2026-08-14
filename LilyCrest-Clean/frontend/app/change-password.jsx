@@ -14,6 +14,7 @@ import {
   PASSWORD_WHITESPACE_MESSAGE,
   validateStrongPassword,
 } from '../src/utils/passwordValidation';
+import { safeBack } from '../src/utils/navigation';
 
 export default function ChangePasswordScreen() {
   const router = useRouter();
@@ -167,7 +168,7 @@ export default function ChangePasswordScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+        <TouchableOpacity style={styles.backButton} onPress={() => safeBack(router, '/login')}>
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Change Password</Text>

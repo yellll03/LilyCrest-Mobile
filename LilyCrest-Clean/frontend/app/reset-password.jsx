@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
 import { useToast } from '../src/context/ToastContext';
 import { api, getApiErrorMessage } from '../src/services/api';
+import { safeBack } from '../src/utils/navigation';
 import {
   blockPasswordWhitespaceInput,
   getStrongPasswordChecks,
@@ -148,7 +149,7 @@ export default function ResetPasswordScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
         <ScrollView contentContainerStyle={styles.scroll} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
 
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.backButton} onPress={() => safeBack(router, '/login')}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
 

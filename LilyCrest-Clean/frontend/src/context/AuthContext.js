@@ -1,9 +1,9 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Platform, Pressable, StatusBar as RNStatusBar, StyleSheet, Text, View } from 'react-native';
 import { auth, getFreshIdToken, subscribeToAuthState } from '../config/firebase';
-import { api, getApiErrorMessage } from '../services/api';
+import { api, getApiErrorMessage, teardownExpiredSession } from '../services/api';
 import { validateStrongPassword } from '../utils/passwordValidation';
 import { AUTH_MESSAGES, classifyAuthError } from '../utils/authStability';
 import { clearDocumentCache } from '../services/documentManager';
@@ -27,16 +27,18 @@ import {
   removeSessionToken,
   setSessionToken,
 } from '../services/secureCredentials';
+import { subscribeSessionExpired } from '../services/sessionEvents';
+import { useToast } from './ToastContext';
 
 const AuthContext = createContext(undefined);
 const SESSION_USER_KEY = 'session_user';
 const ANNOUNCEMENTS_LAST_SEEN_KEY = 'lilycrest_announcements_last_seen';
 const DEFAULT_NOTIFICATION_MESSAGE = 'Open LilyCrest to view the latest update.';
 
-async function persistSession(sessionToken, userData) {
+async function persistSession(sessionToken, userData, remember = true) {
   const writes = [];
   if (sessionToken) {
-    writes.push(setSessionToken(sessionToken));
+    writes.push(setSessionToken(sessionToken, { remember }));
   }
   if (userData) {
     writes.push(AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(userData)));
@@ -88,6 +90,20 @@ function isSessionPayloadShape(value) {
     && value.session_token.trim().length > 0;
 }
 
+// resolveTenantBranch (backend/services/branchLocation.service.js) can
+// transiently fail to resolve a tenant's branch (ambiguous/missing linked
+// records) and buildTenantProfile silently degrades to branch: null rather
+// than failing the whole /users/me response. Several screens independently
+// re-fetch /users/me (Profile on focus, session restore, checkAuth); without
+// this guard a transient null landing after a successful login would regress
+// a branch every screen shares through this same context — not just Profile.
+function preserveKnownBranch(prevUser, nextUser) {
+  if (!nextUser) return nextUser;
+  if (nextUser.branch != null) return nextUser;
+  if (prevUser?.branch != null) return { ...nextUser, branch: prevUser.branch };
+  return nextUser;
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [authStatus, setAuthStatus] = useState('initializing');
@@ -96,8 +112,22 @@ export function AuthProvider({ children }) {
   const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
   const [notificationBanner, setNotificationBanner] = useState(null);
   const router = useRouter();
+  const { showToast } = useToast();
   const routerRef = useRef(router);
   const authStatusRef = useRef(authStatus);
+  // Let logout/signInWithGoogle read the latest user/firebaseUser without
+  // needing them in a useCallback dependency array — same technique already
+  // used for routerRef/authStatusRef above, so those two callbacks can stay
+  // referentially stable across renders instead of being recreated whenever
+  // user/firebaseUser change (see the memoized context value below).
+  const userRef = useRef(user);
+  const firebaseUserRef = useRef(firebaseUser);
+  // Synchronous dedup guard for concurrent forced-expiry events. authStatusRef
+  // alone isn't enough — it's only updated on the next render, so several 401s
+  // resolving in the same microtask tick could all read 'authenticated' before
+  // any of them re-renders. This ref is checked-and-set synchronously, before
+  // any await, so only the first of a burst of near-simultaneous events proceeds.
+  const sessionExpiryHandlingRef = useRef(false);
   const pendingNotificationRef = useRef(null);
   const latestNotificationKeyRef = useRef('');
   const bannerHideTimerRef = useRef(null);
@@ -105,6 +135,8 @@ export function AuthProvider({ children }) {
   const bannerTranslateY = useRef(new Animated.Value(-18)).current;
   routerRef.current = router;
   authStatusRef.current = authStatus;
+  userRef.current = user;
+  firebaseUserRef.current = firebaseUser;
 
   const dismissNotificationBanner = useCallback(() => {
     if (bannerHideTimerRef.current) {
@@ -174,6 +206,67 @@ export function AuthProvider({ children }) {
     });
     return () => unsubscribe();
   }, []);
+
+  // Resets the forced-expiry dedup guard once the tenant is genuinely
+  // authenticated again, so a later real expiry is handled normally instead of
+  // being permanently suppressed by a stale "already handling" flag.
+  useEffect(() => {
+    if (authStatus === 'authenticated') {
+      sessionExpiryHandlingRef.current = false;
+    }
+  }, [authStatus]);
+
+  // The axios layer clears the session token itself (frontend/src/services/api.js)
+  // when a background 401 can't be silently refreshed. Without this, React state
+  // (authStatus/user) would stay "authenticated" until some other screen happened
+  // to make another API call — this closes that gap and tells the tenant why
+  // they're back at the login screen instead of leaving it unexplained.
+  useEffect(() => {
+    return subscribeSessionExpired(({ expiredToken, reason } = {}) => {
+      // Synchronous check-and-set: only the first of a burst of concurrent
+      // 401s (e.g. several parallel screen requests failing together) runs
+      // the cleanup below; the rest bail out here before any async work.
+      if (sessionExpiryHandlingRef.current) return;
+      if (authStatusRef.current !== 'authenticated') return;
+      sessionExpiryHandlingRef.current = true;
+
+      setUser(null);
+      setAuthStatus('unauthenticated');
+      setNotificationUnreadCount(0);
+      showToast(reason === 'account_inactive' ? {
+        type: 'warning',
+        title: 'Account deactivated',
+        message: 'Your account is no longer active. Please contact the administrator.',
+      } : {
+        type: 'warning',
+        title: 'Session expired',
+        message: 'Please log in again to continue.',
+      });
+
+      // Best-effort convergence toward the same cleanup explicit logout()
+      // performs. None of this blocks the local logout above, which has
+      // already happened synchronously — a failure here must not leave the
+      // app stuck in an authenticated-looking state.
+      (async () => {
+        try {
+          const pushToken = await getStoredPushToken().catch(() => null);
+          await Promise.allSettled([
+            clearCredentials().catch(() => {}),
+            clearDocumentCache().catch(() => {}),
+            // Uses /auth/session-teardown (a short post-expiry grace window,
+            // see backend/middleware/auth.js:authMiddlewareRecentSession)
+            // rather than the normal push-token endpoint, since the strict
+            // session check that /users/push-token relies on would just
+            // reject this same token again for a genuinely expired session.
+            teardownExpiredSession(expiredToken, pushToken).catch(() => {}),
+            auth.signOut().catch(() => {}),
+          ]);
+        } catch (_) {
+          // Best-effort only — local state is already unauthenticated regardless.
+        }
+      })();
+    });
+  }, [showToast]);
 
   useEffect(() => {
     const buildNotificationKey = (notification) => {
@@ -348,7 +441,7 @@ export function AuthProvider({ children }) {
 
         await AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(response.data)).catch(() => {});
         if (!cancelled) {
-          setUser(response.data);
+          setUser((prev) => preserveKnownBranch(prev, response.data));
           setAuthStatus('authenticated');
         }
       } catch (error) {
@@ -417,7 +510,7 @@ export function AuthProvider({ children }) {
     });
   }, [authStatus, user?.user_id]);
 
-  const loginWithEmail = async (email, password) => {
+  const loginWithEmail = useCallback(async (email, password, remember = true) => {
     try {
       const { data } = await api.post('/auth/login', {
         email,
@@ -446,7 +539,7 @@ export function AuthProvider({ children }) {
       }
 
       const { user: userData, session_token } = data;
-      await persistSession(session_token, userData);
+      await persistSession(session_token, userData, remember);
       const profile = await loadAuthoritativeTenantProfile(userData);
       await AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(profile)).catch(() => {});
       setUser(profile);
@@ -474,9 +567,9 @@ export function AuthProvider({ children }) {
         error: classified.message,
       };
     }
-  };
+  }, []);
 
-  const verifyLoginOtp = async (otpToken, otpCode) => {
+  const verifyLoginOtp = useCallback(async (otpToken, otpCode, remember = true) => {
     const normalizedToken = typeof otpToken === 'string' ? otpToken.trim() : '';
     const normalizedCode = String(otpCode ?? '').replace(/\D/g, '');
 
@@ -495,7 +588,7 @@ export function AuthProvider({ children }) {
       }
       const { user: userData, session_token } = response.data;
 
-      await persistSession(session_token, userData);
+      await persistSession(session_token, userData, remember);
       const profile = await loadAuthoritativeTenantProfile(userData);
       await AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(profile)).catch(() => {});
       setUser(profile);
@@ -507,14 +600,14 @@ export function AuthProvider({ children }) {
       const attemptsRemaining = error.response?.data?.attempts_remaining;
       return { success: false, status, error: detail || getApiErrorMessage(error, 'Invalid code. Please try again.'), attemptsRemaining };
     }
-  };
+  }, []);
 
-  const login = async (email, password) => {
+  const login = useCallback(async (email, password) => {
     const result = await loginWithEmail(email, password);
     return result.success;
-  };
+  }, [loginWithEmail]);
 
-  const registerWithEmail = async (email, password, name = '', phone = '') => {
+  const registerWithEmail = useCallback(async (email, password, name = '', phone = '') => {
     const passwordValidation = validateStrongPassword(password);
     if (!passwordValidation.valid) {
       return { success: false, error: passwordValidation.error };
@@ -542,12 +635,12 @@ export function AuthProvider({ children }) {
       }
       return { success: false, error: detail || getApiErrorMessage(error, 'Unable to create account. Please try again later.') };
     }
-  };
+  }, []);
 
-  const signInWithGoogle = async (idToken) => {
+  const signInWithGoogle = useCallback(async (idToken, remember = true) => {
     try {
       let tokenToUse = idToken;
-      if (!tokenToUse && firebaseUser) {
+      if (!tokenToUse && firebaseUserRef.current) {
         tokenToUse = await getFreshIdToken();
       }
 
@@ -578,7 +671,7 @@ export function AuthProvider({ children }) {
       }
       const { user: userData, session_token } = response.data;
 
-      await persistSession(session_token, userData);
+      await persistSession(session_token, userData, remember);
       const profile = await loadAuthoritativeTenantProfile(userData);
       await AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(profile)).catch(() => {});
       setUser(profile);
@@ -596,12 +689,12 @@ export function AuthProvider({ children }) {
       }
       return { success: false, error: getApiErrorMessage(error, 'Unable to sign in with Google. Please try again.') };
     }
-  };
+  }, []);
 
-  const logout = async () => {
+  const logout = useCallback(async () => {
     const token = await getSessionToken().catch(() => null);
     const pushToken = await getStoredPushToken().catch(() => null);
-    const logoutSyncKey = user?.user_id || 'logout';
+    const logoutSyncKey = userRef.current?.user_id || 'logout';
 
     try {
       await clearCredentials().catch(() => {});
@@ -626,9 +719,9 @@ export function AuthProvider({ children }) {
         auth.signOut().catch(() => {}),
       ]).catch(() => {});
     }
-  };
+  }, []);
 
-  const checkAuth = async () => {
+  const checkAuth = useCallback(async () => {
     try {
       const token = await getSessionToken();
       if (!token) {
@@ -646,7 +739,7 @@ export function AuthProvider({ children }) {
         throw new Error('Invalid auth/me response shape');
       }
       await AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(response.data)).catch(() => {});
-      setUser(response.data);
+      setUser((prev) => preserveKnownBranch(prev, response.data));
       setAuthStatus('authenticated');
       return { authenticated: true, restoredFromCache: false };
     } catch (error) {
@@ -664,18 +757,51 @@ export function AuthProvider({ children }) {
       setAuthStatus('unauthenticated');
       return { authenticated: false };
     }
-  };
+  }, []);
 
-  const updateUser = (data) => {
+  const updateUser = useCallback((data) => {
     setUser((prev) => {
-      const nextUser = prev ? { ...prev, ...data } : data;
+      const merged = prev ? { ...prev, ...data } : data;
+      const nextUser = preserveKnownBranch(prev, merged);
       AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(nextUser)).catch(() => {});
       return nextUser;
     });
-  };
+  }, []);
 
   const isLoading = authStatus === 'initializing' || !firebaseAuthReady;
   const authReady = authStatus !== 'initializing' && firebaseAuthReady;
+
+  // Every function above is now referentially stable across renders (wrapped
+  // in useCallback), so this memo actually skips recomputation on renders
+  // that don't touch these specific fields — e.g. an unrelated re-render of
+  // AuthProvider no longer forces every useAuth() consumer (Home, Profile,
+  // Settings, ...) to re-render too, which they previously did on every
+  // render because `value={{...}}` was a brand-new object every time,
+  // regardless of what had actually changed.
+  const contextValue = useMemo(() => ({
+    user,
+    firebaseUser,
+    firebaseAuthReady,
+    isLoading,
+    authReady,
+    authStatus,
+    login,
+    loginWithEmail,
+    verifyLoginOtp,
+    registerWithEmail,
+    logout,
+    checkAuth,
+    signInWithGoogle,
+    updateUser,
+    getFreshIdToken,
+    notificationUnreadCount,
+    hasUnreadNotifications: notificationUnreadCount > 0,
+    clearNotificationUnread,
+  }), [
+    user, firebaseUser, firebaseAuthReady, isLoading, authReady, authStatus,
+    login, loginWithEmail, verifyLoginOtp, registerWithEmail, logout, checkAuth,
+    signInWithGoogle, updateUser, notificationUnreadCount, clearNotificationUnread,
+  ]);
 
   if (isLoading) {
     return (
@@ -688,28 +814,7 @@ export function AuthProvider({ children }) {
   }
 
   return (
-    <AuthContext.Provider
-      value={{
-        user,
-        firebaseUser,
-        firebaseAuthReady,
-        isLoading,
-        authReady,
-        authStatus,
-        login,
-        loginWithEmail,
-        verifyLoginOtp,
-        registerWithEmail,
-        logout,
-        checkAuth,
-        signInWithGoogle,
-        updateUser,
-        getFreshIdToken,
-        notificationUnreadCount,
-        hasUnreadNotifications: notificationUnreadCount > 0,
-        clearNotificationUnread,
-      }}
-    >
+    <AuthContext.Provider value={contextValue}>
       <View style={styles.container}>
         {children}
         {notificationBanner ? (

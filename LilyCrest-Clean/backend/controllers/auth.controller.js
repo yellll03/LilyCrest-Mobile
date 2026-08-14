@@ -189,6 +189,15 @@ function hashAuthSecret(value) {
   return crypto.createHash('sha256').update(String(value || '')).digest('hex');
 }
 
+// Single source of truth for "is this reset token currently eligible for
+// use" — shared by the read-only status check (checkResetTokenValid) and the
+// actual claim-and-reset (resetPassword) so the two can never drift apart. A
+// status response of valid:true is only meaningful if it reflects the exact
+// same rule the real reset operation enforces.
+function resetTokenEligibilityFilter(hashedToken, asOf = new Date()) {
+  return { hashedToken, used: false, expiresAt: { $gt: asOf } };
+}
+
 function parseDateSafe(value) {
   const parsed = value instanceof Date ? value : new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed;
@@ -1001,6 +1010,24 @@ async function changePassword(req, res) {
 
 // ─── FORGOT PASSWORD ────────────────────────────────────────────────────────
 
+// Canonical production design: the email should point at the tenant-facing
+// website's own action page (e.g. https://www.lilycrest.space/auth-action),
+// which then calls this backend's POST /api/auth/reset-password to complete
+// the reset — never this backend's own hosted HTML page directly. That web
+// page lives in a separate repository this codebase does not contain, so
+// until it exists and PASSWORD_RESET_WEB_URL is configured to point at it,
+// this falls back to the backend's own hosted reset page (getResetPasswordPage
+// below), which still works today (deep-links into the app, or serves a plain
+// HTML form) but is not the target architecture.
+function buildPasswordResetLink(rawToken) {
+  const webResetUrl = String(process.env.PASSWORD_RESET_WEB_URL || '').trim().replace(/\/+$/, '');
+  if (webResetUrl) {
+    return `${webResetUrl}?token=${rawToken}`;
+  }
+  const backendUrl = (process.env.BACKEND_URL || 'https://api.lilycrest.space').replace(/\/+$/, '');
+  return `${backendUrl}/api/auth/reset-password?token=${rawToken}`;
+}
+
 async function forgotPassword(req, res) {
   // Always return same message to prevent email enumeration
   const successMsg = 'If your email is registered, you will receive a password reset link.';
@@ -1016,7 +1043,7 @@ async function forgotPassword(req, res) {
 
     if (tenantData) {
       const rawToken = crypto.randomBytes(32).toString('hex');
-      const hashedToken = crypto.createHash('sha256').update(rawToken).digest('hex');
+      const hashedToken = hashAuthSecret(rawToken);
 
       const db = getDb();
       // Look up MongoDB user_id for session invalidation later
@@ -1038,8 +1065,7 @@ async function forgotPassword(req, res) {
         createdAt: new Date(),
       });
 
-      const backendUrl = (process.env.BACKEND_URL || 'https://api.lilycrest.space').replace(/\/+$/, '');
-      const resetLink = `${backendUrl}/api/auth/reset-password?token=${rawToken}`;
+      const resetLink = buildPasswordResetLink(rawToken);
       const userName = tenantData.name || dbUser?.name || 'Tenant';
 
       sendPasswordResetEmail(normalizedEmail, userName, resetLink).catch(() => {});
@@ -1250,6 +1276,38 @@ h1{color:#1E3A5F;font-size:20px;margin-bottom:8px}p{color:#6B7280;font-size:14px
 </html>`);
 }
 
+// ─── RESET PASSWORD (POST — read-only token pre-check) ───────────────────────
+//
+// Required backend support for the canonical website's /auth-action page:
+// it can call this before rendering the "set new password" form, so an
+// expired/used link shows immediately instead of after the tenant fills in a
+// new password. Deliberately read-only (findOne, not the claiming
+// findOneAndUpdate resetPassword below) — checking status must never consume
+// the single-use token.
+//
+// POST + body (not GET + query string) deliberately — a raw single-use secret
+// in a URL query string is exposed to infrastructure/access logs, browser and
+// proxy history, and other request metadata even when the app itself never
+// logs it. The actual reset (below) already takes its token in the body; this
+// keeps the same shape.
+async function checkResetTokenValid(req, res) {
+  try {
+    const token = req.body?.token;
+    if (!token || typeof token !== 'string' || !token.trim()) {
+      return res.json({ valid: false });
+    }
+    const hashedToken = hashAuthSecret(token);
+    const db = getDb();
+    const record = await db.collection('password_reset_tokens').findOne(
+      resetTokenEligibilityFilter(hashedToken),
+    );
+    res.json({ valid: Boolean(record) });
+  } catch (error) {
+    console.error('Reset token status check error:', error);
+    res.status(500).json({ valid: false, detail: 'Failed to check reset link status.' });
+  }
+}
+
 // ─── RESET PASSWORD (POST — validate token & update Firebase password) ───────
 
 async function resetPassword(req, res) {
@@ -1264,15 +1322,11 @@ async function resetPassword(req, res) {
       return res.status(400).json({ detail: passwordErrors[0] });
     }
 
-    const hashedToken = crypto.createHash('sha256').update(token).digest('hex');
+    const hashedToken = hashAuthSecret(token);
     const db = getDb();
     const claimTime = new Date();
     const claimedRecord = await db.collection('password_reset_tokens').findOneAndUpdate(
-      {
-        hashedToken,
-        used: false,
-        expiresAt: { $gt: claimTime },
-      },
+      resetTokenEligibilityFilter(hashedToken, claimTime),
       { $set: { used: true, usedAt: claimTime } },
       { returnDocument: 'before' }
     );
@@ -1317,10 +1371,18 @@ module.exports = {
   changePassword,
   forgotPassword,
   getResetPasswordPage,
+  checkResetTokenValid,
   resetPassword,
   // Exported only for direct unit testing of the getCleanUser(db, userId) ->
   // sanitizeUserForClient(normalizeUser(...)) serialization step shared by
   // googleSignIn/register/verifyOtp (see tests/authProfileSerialization.test.js)
   // — not used as a route handler itself.
   getCleanUser,
+  // Exported only for direct unit testing of the password-reset link's
+  // production-domain guarantee (see tests/passwordResetLink.test.js).
+  buildPasswordResetLink,
+  // Exported only for direct unit testing that the status check and the
+  // actual reset share one eligibility rule (see tests/resetTokenStatus.test.js).
+  hashAuthSecret,
+  resetTokenEligibilityFilter,
 };

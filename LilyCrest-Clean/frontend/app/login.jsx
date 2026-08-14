@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Image,
@@ -28,17 +28,18 @@ import {
   hasStoredCredentials,
   savePendingLogin,
 } from '../src/services/secureCredentials';
-import { blockPasswordWhitespaceInput, validateLoginPassword } from '../src/utils/passwordValidation';
+import { safeBack } from '../src/utils/navigation';
+import { AUTH_MESSAGES, authErrorTypeForUi, normalizeEmail, validateEmail as validateAuthEmail } from '../src/utils/authStability';
+import { validateLoginPassword } from '../src/utils/passwordValidation';
 
 /* cspell:words creds prefs lilycrest wordmark */
 
 // Validation helpers
 const validateEmail = (email) => {
-  const normalized = (email || '').trim().toLowerCase();
+  const normalized = normalizeEmail(email);
   if (!normalized) return { valid: false, error: 'Email is required' };
   if (normalized.length > 254) return { valid: false, error: 'Email address is too long' };
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(normalized)) return { valid: false, error: 'Please enter a valid email address' };
+  if (!validateAuthEmail(normalized).valid) return { valid: false, error: AUTH_MESSAGES.invalidEmail };
   return { valid: true, error: '' };
 };
 
@@ -64,6 +65,7 @@ export default function LoginScreen() {
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricType, setBiometricType] = useState('Biometric');
   const [canUseBiometric, setCanUseBiometric] = useState(false);
+  const emailRequestInFlight = useRef(false);
 
   // Real-time validation
   useEffect(() => {
@@ -85,14 +87,8 @@ export default function LoginScreen() {
   }, [email, password]);
 
   const handlePasswordChange = (nextValue) => {
-    const { value, blocked } = blockPasswordWhitespaceInput(nextValue, password);
-    if (blocked) {
-      setTouched((prev) => ({ ...prev, password: true }));
-      setErrors((prev) => ({ ...prev, password: validateLoginPassword(nextValue).error }));
-      return;
-    }
-
-    setPassword(value);
+    // Passwords are opaque credentials: never trim, normalize, or otherwise alter them.
+    setPassword(nextValue);
   };
 
   // Load remember-me preference and biometric eligibility
@@ -131,6 +127,7 @@ export default function LoginScreen() {
 
 
   const handleLogin = async () => {
+    if (emailRequestInFlight.current) return;
     const emailValidation = validateEmail(email);
     const passwordValidation = validateLoginPassword(password);
 
@@ -139,13 +136,14 @@ export default function LoginScreen() {
 
     if (!emailValidation.valid || !passwordValidation.valid) return;
 
+    emailRequestInFlight.current = true;
     setIsEmailLoading(true);
     setLoginError(null);
-    const normalizedEmail = email.trim().toLowerCase();
+    const normalizedEmail = normalizeEmail(email);
     const normalizedPassword = password;
 
     try {
-      const result = await loginWithEmail(normalizedEmail, normalizedPassword);
+      const result = await loginWithEmail(normalizedEmail, normalizedPassword, rememberMe);
 
       // OTP required — credentials were valid, navigate to verification screen
       if (result.otpRequired) {
@@ -165,18 +163,18 @@ export default function LoginScreen() {
       }
 
       if (!result.success) {
-        const { status } = result;
+        const { status, errorType } = result;
         if (status === 400) {
           setLoginError({ message: result.error, type: 'credentials' });
         } else if (status === 401) {
-          setLoginError({ message: result.error, type: 'credentials' });
+          setLoginError({ message: result.error || 'Incorrect email or password.', type: 'credentials' });
         } else if (status === 403) {
           setLoginError({ message: result.error, type: 'access' });
         } else if (status === 429) {
           setLoginError({ message: result.error, type: 'ratelimit' });
-        } else if (status === 500) {
-          setLoginError({ message: result.error, type: 'network' });
-        } else if (status === 0) {
+        } else if (errorType) {
+          setLoginError({ message: result.error, type: authErrorTypeForUi(errorType) });
+        } else if (status >= 500 || status === 0) {
           setLoginError({ message: result.error, type: 'network' });
         } else {
           setLoginError({ message: result.error, type: 'credentials' });
@@ -242,8 +240,9 @@ export default function LoginScreen() {
       }
     } catch (error) {
       console.error('Login error:', error?.message || 'Unexpected error');
-      setLoginError({ message: 'An unexpected error occurred. Please try again.', type: 'network' });
+      setLoginError({ message: 'An unexpected error occurred. Please try again.', type: 'unexpected' });
     } finally {
+      emailRequestInFlight.current = false;
       setIsEmailLoading(false);
     }
   };
@@ -254,7 +253,7 @@ export default function LoginScreen() {
 
     try {
       const result = await googleSignIn();
-      const { success, cancelled, error: resultError } = result;
+      const { success, cancelled } = result;
 
       if (success) {
         // Use the idToken returned directly by Google Sign-In.
@@ -276,7 +275,7 @@ export default function LoginScreen() {
           return;
         }
 
-        const backendResult = await signInWithGoogle(idToken);
+        const backendResult = await signInWithGoogle(idToken, rememberMe);
         const { success: backendSuccess, status, error: backendError } = backendResult;
 
         if (backendSuccess) {
@@ -289,7 +288,7 @@ export default function LoginScreen() {
       } else if (cancelled) {
         // User deliberately cancelled — not an error
       } else {
-        setLoginError({ message: resultError || 'Google sign-in failed. Please try again.', type: 'credentials' });
+        setLoginError({ message: 'Google sign-in failed. Please try again.', type: 'credentials' });
       }
     } catch (error) {
       console.error('Google login error:', error?.message || 'Unexpected error');
@@ -356,7 +355,7 @@ export default function LoginScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardView}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
           {/* Back Button */}
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
+          <TouchableOpacity style={styles.backButton} onPress={() => safeBack(router, '/')}>
             <Ionicons name="arrow-back" size={24} color={colors.text} />
           </TouchableOpacity>
 
@@ -536,6 +535,13 @@ export default function LoginScreen() {
             <Ionicons name="information-circle" size={18} color={colors.accent} />
             <Text style={styles.noticeText}>Only registered tenants can access this app. Contact the admin office if you need assistance.</Text>
           </View>
+
+          {__DEV__ ? (
+            <TouchableOpacity style={styles.debugButton} onPress={() => router.push('/debug/api-health')}>
+              <Ionicons name="pulse-outline" size={17} color={colors.primary} />
+              <Text style={styles.debugButtonText}>Run API Diagnostics</Text>
+            </TouchableOpacity>
+          ) : null}
         </ScrollView>
       </KeyboardAvoidingView>
     </SafeAreaView>
@@ -632,4 +638,21 @@ const createStyles = (c, dark) => StyleSheet.create({
   googleButtonText: { color: c.text, fontSize: 15, fontWeight: '600' },
   noticeContainer: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: c.primaryLight, borderRadius: 12, padding: 16, marginTop: 24, gap: 10 },
   noticeText: { flex: 1, fontSize: 13, color: c.textSecondary, lineHeight: 18 },
+  debugButton: {
+    marginTop: 14,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    borderWidth: 1,
+    borderColor: c.border,
+    backgroundColor: c.surface,
+    borderRadius: 12,
+    paddingVertical: 12,
+  },
+  debugButtonText: {
+    fontSize: 13,
+    fontWeight: '800',
+    color: c.primary,
+  },
 });

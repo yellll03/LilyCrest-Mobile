@@ -1,9 +1,9 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { Alert } from 'react-native';
 import { MOBILE_API_BASE_URL } from '../config/api';
 import { getApiErrorMessage } from '../services/api';
+import { getSessionToken } from '../services/secureCredentials';
 
 const buildBillPdfUrl = (billId) => {
   if (!billId) return null;
@@ -19,7 +19,7 @@ export async function downloadBillPdf(billId, setBusy) {
 
   let token;
   try {
-    token = await AsyncStorage.getItem('session_token');
+    token = await getSessionToken();
   } catch (_) {
     token = null;
   }
@@ -45,7 +45,7 @@ export async function downloadBillPdf(billId, setBusy) {
       headers: { Authorization: `Bearer ${token}` },
     });
 
-    console.log('[PDF] download result status:', result?.status);
+    if (typeof __DEV__ !== 'undefined' && __DEV__) console.log('[PDF] download result status:', result?.status);
 
     if (!result?.uri) throw new Error('Download returned no URI');
 

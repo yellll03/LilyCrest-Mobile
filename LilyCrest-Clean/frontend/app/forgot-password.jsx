@@ -1,17 +1,18 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { apiService } from '../src/services/api';
 import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
 import { useToast } from '../src/context/ToastContext';
-import { api, getApiErrorMessage } from '../src/services/api';
+import { AUTH_MESSAGES, classifyAuthError, normalizeEmail, validateEmail as validateAuthEmail } from '../src/utils/authStability';
+import { safeBack } from '../src/utils/navigation';
 
 const validateEmail = (value) => {
-  const normalized = (value || '').trim().toLowerCase();
-  if (!normalized) return { valid: false, error: 'Email is required' };
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(normalized)) return { valid: false, error: 'Please enter a valid email address' };
+  const normalized = normalizeEmail(value);
+  if (!normalized) return { valid: false, error: 'Please enter your registered email.' };
+  if (!validateAuthEmail(normalized).valid) return { valid: false, error: AUTH_MESSAGES.invalidEmail };
   return { valid: true, error: '' };
 };
 
@@ -25,6 +26,7 @@ export default function ForgotPasswordScreen() {
   const [sent, setSent] = useState(false);
   const [errors, setErrors] = useState({ email: '' });
   const [touched, setTouched] = useState({ email: false });
+  const requestInFlight = useRef(false);
 
   useEffect(() => {
     if (!touched.email) return;
@@ -36,6 +38,7 @@ export default function ForgotPasswordScreen() {
   };
 
   const handleResetPassword = async () => {
+    if (requestInFlight.current) return;
     const emailValidation = validateEmail(email);
     setTouched({ email: true });
     setErrors({ email: emailValidation.error });
@@ -44,23 +47,29 @@ export default function ForgotPasswordScreen() {
       return;
     }
 
+    requestInFlight.current = true;
     setIsLoading(true);
     try {
-      await api.post('/auth/forgot-password', { email: email.trim().toLowerCase() });
+      // Routed through the backend's own reset-token flow (Resend email +
+      // production reset page) instead of Firebase's client SDK, whose
+      // action link domain is controlled by Firebase Console settings and
+      // is not guaranteed to point at our production domain.
+      await apiService.forgotPassword(normalizeEmail(email));
       setSent(true);
       showToast({
         type: 'success',
         title: 'Reset Link Sent',
-        message: 'If your email is registered, we just sent you a reset link.',
+        message: AUTH_MESSAGES.forgotSuccess,
       });
     } catch (err) {
-      const detail = err.response?.data?.detail || err.response?.data?.message;
+      const classified = classifyAuthError(err);
       showToast({
         type: 'error',
         title: 'Unable to Send Reset Link',
-        message: detail || getApiErrorMessage(err, 'Please try again in a moment.'),
+        message: classified.message || 'Please check your connection and try again.',
       });
     } finally {
+      requestInFlight.current = false;
       setIsLoading(false);
     }
   };
@@ -75,11 +84,11 @@ export default function ForgotPasswordScreen() {
           showsVerticalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
         >
-          <TouchableOpacity style={styles.backButton} onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color={colors.text} /></TouchableOpacity>
+          <TouchableOpacity style={styles.backButton} onPress={() => safeBack(router, '/login')}><Ionicons name="arrow-back" size={24} color={colors.text} /></TouchableOpacity>
           
           <View style={styles.iconContainer}><Ionicons name={sent ? 'mail-open' : 'lock-closed'} size={48} color={colors.primary} /></View>
           <Text style={styles.title}>{sent ? 'Check Your Email' : 'Forgot Password?'}</Text>
-          <Text style={styles.subtitle}>{sent ? `We've sent a password reset link to ${email}` : 'Enter your email address and we\'ll send you a link to reset your password.'}</Text>
+          <Text style={styles.subtitle}>{sent ? AUTH_MESSAGES.forgotSuccess : 'Enter your email address and we\'ll send you a link to reset your password.'}</Text>
 
           {!sent ? (
             <>
@@ -92,7 +101,7 @@ export default function ForgotPasswordScreen() {
                     placeholder="Enter your email"
                     placeholderTextColor="#9CA3AF"
                     value={email}
-                    onChangeText={(text) => setEmail((text || '').replace(/\s+/g, ''))}
+                    onChangeText={setEmail}
                     onBlur={() => setTouched((prev) => ({ ...prev, email: true }))}
                     keyboardType="email-address"
                     autoCapitalize="none"

@@ -16,9 +16,6 @@ export function blockPasswordWhitespaceInput(nextValue, previousValue = '') {
 
 export function validateLoginPassword(password = '') {
   if (!password) return { valid: false, error: 'Password is required' };
-  if (passwordContainsWhitespace(password)) {
-    return { valid: false, error: PASSWORD_WHITESPACE_MESSAGE };
-  }
   if (password.length > 128) return { valid: false, error: 'Password is too long' };
   if (password.length < 6) return { valid: false, error: 'Password must be at least 6 characters' };
   return { valid: true, error: '' };

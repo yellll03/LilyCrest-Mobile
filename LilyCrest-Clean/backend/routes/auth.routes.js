@@ -2,7 +2,7 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const authController = require('../controllers/auth.controller');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, authMiddlewareRecentSession } = require('../middleware/auth');
 
 const authLimiter = rateLimit({
 	windowMs: 15 * 60 * 1000,
@@ -19,9 +19,15 @@ router.post('/login/verify-otp', authLimiter, authController.verifyOtp);
 router.post('/login/resend-otp', authLimiter, authController.resendOtp);
 router.get('/me', authMiddleware, authController.getMe);
 router.post('/logout', authMiddleware, authController.logout);
+router.post('/session-teardown', authLimiter, authMiddlewareRecentSession, authController.sessionTeardown);
 router.post('/change-password', authLimiter, authMiddleware, authController.changePassword);
 router.post('/forgot-password', authLimiter, authController.forgotPassword);
 router.get('/reset-password', authController.getResetPasswordPage);
+// Read-only pre-check for a canonical web frontend's /auth-action page (see
+// buildPasswordResetLink in auth.controller.js) — does not consume the token.
+// POST + body, not GET + query string, so the single-use raw token is never
+// placed in a URL (infra/access logs, browser/proxy history, etc).
+router.post('/reset-password/status', authLimiter, authController.checkResetTokenValid);
 router.post('/reset-password', authLimiter, authController.resetPassword);
 
 module.exports = router;
