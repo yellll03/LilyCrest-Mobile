@@ -1,6 +1,8 @@
 /**
  * LilyCrest Email Service
- * Sends transactional emails through Resend's HTTPS API, with SMTP fallback.
+ * Sends transactional emails through Resend's HTTPS API, with a real
+ * per-send runtime fallback to SMTP when Resend is configured but a given
+ * send fails (see sendWithFallback below) — not just a config-time choice.
  *
  * Preferred env vars:
  *   RESEND_API_KEY, EMAIL_FROM
@@ -16,38 +18,47 @@ const nodemailer = require('nodemailer');
 const dns = require('node:dns');
 const axios = require('axios');
 
-// ─── TRANSPORTER (lazily created) ───────────────────────────────────────────
+// ─── TRANSPORTERS (each lazily created and memoized independently) ─────────
 
-let _transporter = null;
+let _resendTransporter = null;
+let _smtpTransporter = null;
 
-async function getTransporter() {
-  if (_transporter) return _transporter;
-
+function getResendTransporter() {
   const resendApiKey = process.env.RESEND_API_KEY;
-  if (resendApiKey) {
-    _transporter = {
-      async sendMail({ from, to, subject, html }) {
-        await axios.post(
-          'https://api.resend.com/emails',
-          {
-            from,
-            to: Array.isArray(to) ? to : [to],
-            subject,
-            html,
+  if (!resendApiKey) return null;
+  if (_resendTransporter) return _resendTransporter;
+
+  _resendTransporter = {
+    name: 'resend',
+    async sendMail({ from, to, subject, html }) {
+      await axios.post(
+        'https://api.resend.com/emails',
+        {
+          from,
+          to: Array.isArray(to) ? to : [to],
+          subject,
+          html,
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${resendApiKey}`,
+            'Content-Type': 'application/json',
           },
-          {
-            headers: {
-              Authorization: `Bearer ${resendApiKey}`,
-              'Content-Type': 'application/json',
-            },
-            timeout: 10000,
-          },
-        );
-      },
-    };
-    console.log('[Email] HTTPS email transport ready');
-    return _transporter;
-  }
+          timeout: 10000,
+        },
+      );
+    },
+  };
+  console.log('[Email] HTTPS (Resend) email transport ready');
+  return _resendTransporter;
+}
+
+// Resolved lazily (only when actually needed — i.e. Resend isn't configured,
+// or a send through it just failed) so a healthy Resend path never pays for
+// an SMTP DNS lookup. Deliberately not cached on failure: a transient DNS
+// blip must not permanently disable the fallback for the life of the process.
+async function getSmtpTransporter() {
+  if (_smtpTransporter) return _smtpTransporter;
 
   const host = process.env.SMTP_HOST;
   const port = parseInt(process.env.SMTP_PORT, 10) || 587;
@@ -55,7 +66,6 @@ async function getTransporter() {
   const pass = process.env.SMTP_PASS;
 
   if (!host || !user || !pass) {
-    console.warn('[Email] Email delivery not configured. Set RESEND_API_KEY and EMAIL_FROM.');
     return null;
   }
 
@@ -68,7 +78,7 @@ async function getTransporter() {
   }
   if (!ipv4Host) return null;
 
-  _transporter = nodemailer.createTransport({
+  const nodemailerTransport = nodemailer.createTransport({
     // Render cannot route to the Gmail IPv6 address. Keep the original
     // hostname as TLS SNI while connecting to its resolved IPv4 address.
     host: ipv4Host,
@@ -86,8 +96,45 @@ async function getTransporter() {
     },
   });
 
+  _smtpTransporter = { name: 'smtp', sendMail: (opts) => nodemailerTransport.sendMail(opts) };
   console.log(`[Email] SMTP transporter ready → ${host}:${port}`);
-  return _transporter;
+  return _smtpTransporter;
+}
+
+// Single per-send delivery path shared by every email type below: render the
+// branded HTML once (by the caller), then try the preferred transport and —
+// only if that attempt is definitively rejected by its own promise contract,
+// never on an ambiguous/successful response — try the other configured
+// transport exactly once. Never recurses or retries beyond that second
+// attempt, and never logs anything beyond an error's own message (no
+// API keys, tokens, or credentials).
+async function sendWithFallback(mailOptions, { context = 'email' } = {}) {
+  const resend = getResendTransporter();
+
+  if (resend) {
+    try {
+      await resend.sendMail(mailOptions);
+      return { delivered: true, transport: 'resend' };
+    } catch (err) {
+      console.warn(`[Email] Resend delivery failed for ${context}, attempting SMTP fallback:`, err?.message);
+    }
+  }
+
+  const smtp = await getSmtpTransporter();
+  if (!smtp) {
+    if (!resend) {
+      console.warn('[Email] Email delivery not configured. Set RESEND_API_KEY and EMAIL_FROM, or SMTP_HOST/SMTP_USER/SMTP_PASS.');
+    }
+    return { delivered: false };
+  }
+
+  try {
+    await smtp.sendMail(mailOptions);
+    return { delivered: true, transport: 'smtp', viaFallback: Boolean(resend) };
+  } catch (err) {
+    console.warn(`[Email] SMTP delivery failed for ${context}:`, err?.message);
+    return { delivered: false };
+  }
 }
 
 function senderAddress() {
@@ -250,9 +297,6 @@ function noteBox(body) {
 // ─── PASSWORD CHANGED EMAIL ─────────────────────────────────────────────────
 
 async function sendPasswordChangedEmail(toEmail, userName = 'Tenant', ip = 'Unknown') {
-  const transporter = await getTransporter();
-  if (!transporter) return false;
-
   const now = new Date();
   const timestamp = now.toLocaleString('en-PH', {
     timeZone: 'Asia/Manila',
@@ -290,27 +334,24 @@ async function sendPasswordChangedEmail(toEmail, userName = 'Tenant', ip = 'Unkn
     footerNote: 'You are receiving this email because a password change was made on your LilyCrest tenant account.',
   });
 
-  try {
-    await transporter.sendMail({
-      from: senderAddress(),
-      to: toEmail,
-      subject: 'LilyCrest Security Alert — Your Password Was Changed',
-      html,
-    });
-    console.log(`[Email] Password-changed confirmation sent to ${maskedEmail}`);
+  const result = await sendWithFallback({
+    from: senderAddress(),
+    to: toEmail,
+    subject: 'LilyCrest Security Alert — Your Password Was Changed',
+    html,
+  }, { context: 'password-changed confirmation' });
+
+  if (result.delivered) {
+    console.log(`[Email] Password-changed confirmation sent to ${maskedEmail} via ${result.transport}${result.viaFallback ? ' (fallback)' : ''}`);
     return true;
-  } catch (err) {
-    console.warn(`[Email] Failed to send password-changed email to ${maskedEmail}:`, err?.message);
-    return false;
   }
+  console.warn(`[Email] Failed to send password-changed email to ${maskedEmail}`);
+  return false;
 }
 
 // ─── LOGIN OTP EMAIL ────────────────────────────────────────────────────────
 
 async function sendLoginOtpEmail(toEmail, userName = 'Tenant', otpCode) {
-  const transporter = await getTransporter();
-  if (!transporter) return false;
-
   const maskedEmail = maskEmail(toEmail);
 
   const bodyHtml = `
@@ -342,27 +383,24 @@ async function sendLoginOtpEmail(toEmail, userName = 'Tenant', otpCode) {
     footerNote: `You are receiving this because a sign-in was attempted on the LilyCrest Tenant Portal for ${maskedEmail}.`,
   });
 
-  try {
-    await transporter.sendMail({
-      from: senderAddress(),
-      to: toEmail,
-      subject: `${otpCode} is your LilyCrest verification code`,
-      html,
-    });
-    console.log(`[Email] Login OTP sent to ${maskedEmail}`);
+  const result = await sendWithFallback({
+    from: senderAddress(),
+    to: toEmail,
+    subject: `${otpCode} is your LilyCrest verification code`,
+    html,
+  }, { context: 'login OTP' });
+
+  if (result.delivered) {
+    console.log(`[Email] Login OTP sent to ${maskedEmail} via ${result.transport}${result.viaFallback ? ' (fallback)' : ''}`);
     return true;
-  } catch (err) {
-    console.warn(`[Email] Failed to send OTP email to ${maskedEmail}:`, err?.message);
-    return false;
   }
+  console.warn(`[Email] Failed to send OTP email to ${maskedEmail}`);
+  return false;
 }
 
 // ─── PAYMENT RECEIPT EMAIL ───────────────────────────────────────────────────
 
 async function sendPaymentReceiptEmail(toEmail, userName = 'Tenant', receipt = {}) {
-  const transporter = await getTransporter();
-  if (!transporter) return false;
-
   const maskedEmail = maskEmail(toEmail);
   const billingId = receipt.billingId || 'N/A';
   const description = receipt.description || `Bill ${billingId}`;
@@ -414,27 +452,24 @@ async function sendPaymentReceiptEmail(toEmail, userName = 'Tenant', receipt = {
     footerNote: `Official receipt issued for ${maskedEmail}.`,
   });
 
-  try {
-    await transporter.sendMail({
-      from: senderAddress(),
-      to: toEmail,
-      subject: `Payment Confirmed — Bill ${billingId}`,
-      html,
-    });
-    console.log(`[Email] Payment receipt sent to ${maskedEmail} for bill ${billingId}`);
+  const result = await sendWithFallback({
+    from: senderAddress(),
+    to: toEmail,
+    subject: `Payment Confirmed — Bill ${billingId}`,
+    html,
+  }, { context: 'payment receipt' });
+
+  if (result.delivered) {
+    console.log(`[Email] Payment receipt sent to ${maskedEmail} for bill ${billingId} via ${result.transport}${result.viaFallback ? ' (fallback)' : ''}`);
     return true;
-  } catch (err) {
-    console.warn(`[Email] Failed to send payment receipt to ${maskedEmail}:`, err?.message);
-    return false;
   }
+  console.warn(`[Email] Failed to send payment receipt to ${maskedEmail}`);
+  return false;
 }
 
 // ─── PASSWORD RESET EMAIL ────────────────────────────────────────────────────
 
 async function sendPasswordResetEmail(toEmail, userName = 'Tenant', resetLink) {
-  const transporter = await getTransporter();
-  if (!transporter) return false;
-
   const maskedEmail = maskEmail(toEmail);
 
   const bodyHtml = `
@@ -469,19 +504,19 @@ async function sendPasswordResetEmail(toEmail, userName = 'Tenant', resetLink) {
     footerNote: `You are receiving this because a password reset was requested for ${maskedEmail}.`,
   });
 
-  try {
-    await transporter.sendMail({
-      from: senderAddress(),
-      to: toEmail,
-      subject: 'Reset Your LilyCrest Password',
-      html,
-    });
-    console.log(`[Email] Password reset link sent to ${maskedEmail}`);
+  const result = await sendWithFallback({
+    from: senderAddress(),
+    to: toEmail,
+    subject: 'Reset Your LilyCrest Password',
+    html,
+  }, { context: 'password reset' });
+
+  if (result.delivered) {
+    console.log(`[Email] Password reset link sent to ${maskedEmail} via ${result.transport}${result.viaFallback ? ' (fallback)' : ''}`);
     return true;
-  } catch (err) {
-    console.warn(`[Email] Failed to send password reset email to ${maskedEmail}:`, err?.message);
-    return false;
   }
+  console.warn(`[Email] Failed to send password reset email to ${maskedEmail}`);
+  return false;
 }
 
 // ─── EXPORTS ────────────────────────────────────────────────────────────────
