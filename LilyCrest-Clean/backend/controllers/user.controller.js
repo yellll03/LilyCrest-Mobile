@@ -1,7 +1,7 @@
 const { getDb } = require('../config/database');
 const { ObjectId } = require('mongodb');
 const { v4: uuidv4 } = require('uuid');
-const { normalizeUser } = require('../utils/normalizeUser');
+const { normalizeUser, sanitizeUserForClient } = require('../utils/normalizeUser');
 const { admin, resolveStorageBucket } = require('../config/firebase');
 const { resolveTenantBranch } = require('../services/branchLocation.service');
 const { extractMoveInFinancials } = require('../domain/billing/moveInFinancials');
@@ -166,8 +166,14 @@ async function buildTenantProfile(db, user) {
   // An approved reservation is authoritative; never fall back to an editable profile address.
   normalized.address = reservation ? completeAddress(reservation) : '';
   normalized.addressSource = reservation && normalized.address ? 'approved_application' : null;
-  normalized.phone = applicationPhone(reservation) || normalizePhilippinePhone(normalized.phone) || '';
-  normalized.phoneSource = applicationPhone(reservation) ? 'approved_application' : (normalized.phone ? 'verified_tenant' : null);
+  // Unlike address, phone is tenant-editable (see updateMe's allowedFields).
+  // The tenant's own saved phone must win once set; the approved application's
+  // phone is only a hydration fallback for tenants who haven't set one yet —
+  // otherwise every profile fetch after a phone edit would silently revert
+  // to the original application value.
+  const tenantPhone = normalizePhilippinePhone(normalized.phone);
+  normalized.phone = tenantPhone || applicationPhone(reservation) || '';
+  normalized.phoneSource = tenantPhone ? 'verified_tenant' : (applicationPhone(reservation) ? 'approved_application' : null);
   const lastUsernameChangedAt = user.lastUsernameChangedAt ? new Date(user.lastUsernameChangedAt) : null;
   normalized.usernameNextAllowedAt = lastUsernameChangedAt && !Number.isNaN(lastUsernameChangedAt.getTime())
     ? new Date(lastUsernameChangedAt.getTime() + USERNAME_COOLDOWN_MS).toISOString()
@@ -201,10 +207,7 @@ async function buildTenantProfile(db, user) {
     moveInFinancials,
   } : null;
   normalized.survey = null;
-  // Keep the database identifier available only while resolving owned records.
-  // It must never be exposed by the public profile response.
-  delete normalized._id;
-  return normalized;
+  return sanitizeUserForClient(normalized);
 }
 
 // Get current user profile
@@ -678,7 +681,14 @@ async function getUserDocuments(req, res) {
     // Mobile-uploaded documents (strip file_data for listing)
     const uploadedDocs = (user?.uploaded_documents || []).map(({ file_data, ...rest }) => rest);
 
-    // Reservation documents (from the web admin reservation flow)
+    // Reservation documents (from the web admin reservation flow). The
+    // tenant's Lease Contract itself is intentionally NOT listed here: it is
+    // owned by Capstone-Website's Contract model/mobileContractRoutes.js
+    // (GET /api/m/contracts/current, see useTenantContract.js) and rendered
+    // on the dedicated Contract screen. `generatedContracts` in this backend
+    // is a separate, QA-only record (see publishTenantTestContract) — never
+    // surfacing it here avoids showing a second, non-authoritative "Lease
+    // Contract" entry alongside the real one.
     let reservationDocs = [];
     const mongoId = user?._id;
     if (mongoId) {
@@ -687,14 +697,6 @@ async function getUserDocuments(req, res) {
         { sort: { createdAt: -1 } }
       );
       reservationDocs = buildReservationDocs(reservation);
-      const generatedContract = await findTenantVisibleContract(db, { _id: mongoId, user_id: req.user.user_id });
-      const contractDocument = tenantContractDocument(generatedContract);
-      if (contractDocument) {
-        reservationDocs = [
-          ...reservationDocs.filter((document) => document.type !== 'lease_contract' && !document.doc_id?.endsWith('_contract')),
-          contractDocument,
-        ];
-      }
     }
 
     // Reservation docs first (submitted during onboarding), then user-uploaded docs
@@ -941,6 +943,79 @@ function normalizePushTokenEntry(entry) {
   };
 }
 
+// Core push-token upsert/disable logic, shared by the normal authenticated
+// save-token endpoint and the recently-expired-session teardown endpoint
+// (see sessionTeardown in auth.controller.js) so there is exactly one place
+// that decides how a device's push-token association is stored per user.
+async function persistPushTokenForUser(db, userId, { rawPushToken = '', notificationsEnabled = true, provider = null, devicePlatform = null } = {}) {
+  const now = new Date();
+
+  const user = await db.collection('users').findOne(
+    { user_id: userId },
+    {
+      projection: {
+        push_token: 1,
+        push_provider: 1,
+        push_platform: 1,
+        push_token_updated: 1,
+        push_tokens: 1,
+      },
+    }
+  );
+
+  const existingEntries = [];
+  if (Array.isArray(user?.push_tokens)) {
+    existingEntries.push(...user.push_tokens.map(normalizePushTokenEntry));
+  }
+  if (user?.push_token) {
+    existingEntries.push(normalizePushTokenEntry({
+      token: user.push_token,
+      provider: user.push_provider,
+      platform: user.push_platform,
+      updated_at: user.push_token_updated,
+      enabled: true,
+    }));
+  }
+
+  const filteredEntries = existingEntries
+    .filter(Boolean)
+    .filter((entry) => entry.token !== rawPushToken);
+
+  if (rawPushToken) {
+    filteredEntries.unshift({
+      token: rawPushToken,
+      provider,
+      platform: devicePlatform,
+      enabled: notificationsEnabled,
+      updated_at: now,
+    });
+  }
+
+  const seen = new Set();
+  const nextPushTokens = filteredEntries.filter((entry) => {
+    if (!entry?.token || seen.has(entry.token)) return false;
+    seen.add(entry.token);
+    return true;
+  });
+
+  const latestEnabledEntry = nextPushTokens.find((entry) => entry.enabled !== false) || null;
+
+  await db.collection('users').updateOne(
+    { user_id: userId },
+    {
+      $set: {
+        push_tokens: nextPushTokens,
+        push_token: latestEnabledEntry?.token || null,
+        push_provider: latestEnabledEntry?.provider || null,
+        push_platform: latestEnabledEntry?.platform || null,
+        push_token_updated: now,
+      },
+    }
+  );
+
+  return { tokenSaved: Boolean(rawPushToken && notificationsEnabled) };
+}
+
 // Save push notification token
 async function savePushToken(req, res) {
   try {
@@ -949,79 +1024,19 @@ async function savePushToken(req, res) {
     const provider = typeof req.body?.provider === 'string' ? req.body.provider.trim().toLowerCase() : null;
     const devicePlatform = typeof req.body?.device_platform === 'string' ? req.body.device_platform.trim().toLowerCase() : null;
     const db = getDb();
-    const now = new Date();
 
     if (!rawPushToken && notificationsEnabled) {
       return res.status(400).json({ detail: 'push_token is required when notifications are enabled.' });
     }
 
-    const user = await db.collection('users').findOne(
-      { user_id: req.user.user_id },
-      {
-        projection: {
-          push_token: 1,
-          push_provider: 1,
-          push_platform: 1,
-          push_token_updated: 1,
-          push_tokens: 1,
-        },
-      }
-    );
-
-    const existingEntries = [];
-    if (Array.isArray(user?.push_tokens)) {
-      existingEntries.push(...user.push_tokens.map(normalizePushTokenEntry));
-    }
-    if (user?.push_token) {
-      existingEntries.push(normalizePushTokenEntry({
-        token: user.push_token,
-        provider: user.push_provider,
-        platform: user.push_platform,
-        updated_at: user.push_token_updated,
-        enabled: true,
-      }));
-    }
-
-    const filteredEntries = existingEntries
-      .filter(Boolean)
-      .filter((entry) => entry.token !== rawPushToken);
-
-    if (rawPushToken) {
-      filteredEntries.unshift({
-        token: rawPushToken,
-        provider,
-        platform: devicePlatform,
-        enabled: notificationsEnabled,
-        updated_at: now,
-      });
-    }
-
-    const seen = new Set();
-    const nextPushTokens = filteredEntries.filter((entry) => {
-      if (!entry?.token || seen.has(entry.token)) return false;
-      seen.add(entry.token);
-      return true;
+    const { tokenSaved } = await persistPushTokenForUser(db, req.user.user_id, {
+      rawPushToken, notificationsEnabled, provider, devicePlatform,
     });
-
-    const latestEnabledEntry = nextPushTokens.find((entry) => entry.enabled !== false) || null;
-
-    await db.collection('users').updateOne(
-      { user_id: req.user.user_id },
-      {
-        $set: {
-          push_tokens: nextPushTokens,
-          push_token: latestEnabledEntry?.token || null,
-          push_provider: latestEnabledEntry?.provider || null,
-          push_platform: latestEnabledEntry?.platform || null,
-          push_token_updated: now,
-        },
-      }
-    );
 
     res.json({
       status: 'ok',
       notifications_enabled: notificationsEnabled,
-      token_saved: Boolean(rawPushToken && notificationsEnabled),
+      token_saved: tokenSaved,
     });
   } catch (error) {
     console.error('Save push token error:', error);
@@ -1047,6 +1062,7 @@ module.exports = {
   getMe,
   updateMe,
   savePushToken,
+  persistPushTokenForUser,
   uploadDocument,
   getUserDocuments,
   getDocumentFile,

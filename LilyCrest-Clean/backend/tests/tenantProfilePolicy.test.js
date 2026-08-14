@@ -3,6 +3,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const { __test } = require('../controllers/user.controller');
+const { sanitizeUserForClient } = require('../utils/normalizeUser');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -32,8 +33,15 @@ test('username cooldown uses server timestamp and allows exactly seven days', ()
 test('profile keeps Mongo identity for ownership lookup but never returns it', () => {
   const source = fs.readFileSync(path.join(__dirname, '../controllers/user.controller.js'), 'utf8');
   assert.match(source, /findOne\(\{ user_id: req\.user\.user_id \}\)/);
-  assert.match(source, /delete normalized\._id/);
+  assert.match(source, /sanitizeUserForClient\(normalized\)/);
   assert.doesNotMatch(source, /user_id: req\.user\.user_id \},\s*\{ projection: \{ _id: 0 \}/);
+
+  // The profile response is routed through the shared sanitizer, which strips
+  // _id (and other sensitive/internal fields) regardless of how buildTenantProfile
+  // constructed its output — this is the actual guarantee this test protects.
+  const safe = sanitizeUserForClient({ _id: 'mongo-id', user_id: 'user_1', name: 'Tenant' });
+  assert.equal(safe._id, undefined);
+  assert.equal(safe.user_id, 'user_1');
 });
 
 test('production moveIn lifecycle counts as an approved current application', () => {
