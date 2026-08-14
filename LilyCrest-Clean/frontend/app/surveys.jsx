@@ -26,17 +26,24 @@ export default function SurveysScreen() {
   const [surveys, setSurveys] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [unavailable, setUnavailable] = useState(false);
 
   const load = useCallback(async () => {
     try {
       setError('');
+      setUnavailable(false);
       const response = await apiService.getMySurveys();
       const items = Array.isArray(response.data?.surveys) ? response.data.surveys : [];
       setSurveys(items);
       if (tenantKey) await saveCachedSurveyDashboard(tenantKey, items);
-    } catch (_err) {
+    } catch (err) {
       setSurveys([]);
-      setError('Unable to load surveys right now.');
+      // A 404 here means the survey feature itself isn't offered by the
+      // backend right now (not a transient network/server failure) - retrying
+      // can never succeed, so show a calm "not available" state instead of
+      // the alarming error card with a Retry button that would only ever fail.
+      if (err?.response?.status === 404) setUnavailable(true);
+      else setError('Unable to load surveys right now.');
     } finally { setLoading(false); }
   }, [tenantKey]);
   useFocusEffect(useCallback(() => { setLoading(true); load(); }, [load]));
@@ -82,7 +89,13 @@ export default function SurveysScreen() {
       </View>
       {loading ? <View style={styles.center}><ActivityIndicator color={colors.accent} /><Text style={styles.helper}>Loading surveys…</Text></View> : (
         <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}>
-          {error ? (
+          {unavailable ? (
+            <View style={styles.empty}>
+              <Ionicons name="chatbox-ellipses-outline" size={40} color={colors.textMuted} />
+              <Text style={styles.title}>Surveys are not available at this time.</Text>
+              <Text style={styles.helper}>Check back later, or contact the admin office if you have feedback to share now.</Text>
+            </View>
+          ) : error ? (
             <View style={styles.errorState}>
               <Ionicons name="cloud-offline-outline" size={40} color="#B91C1C" />
               <Text style={styles.error}>{error}</Text>
