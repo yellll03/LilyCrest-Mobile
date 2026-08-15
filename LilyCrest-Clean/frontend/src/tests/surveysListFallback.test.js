@@ -8,8 +8,10 @@
 import { render, waitFor } from '@testing-library/react-native';
 import SurveysScreen from '../../app/surveys';
 
+jest.mock('../config/features', () => ({ SURVEY_FEEDBACK_ENABLED: true }));
+
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ back: jest.fn(), push: jest.fn() }),
+  useRouter: () => ({ back: jest.fn(), push: jest.fn(), replace: jest.fn() }),
   useFocusEffect: (cb) => { const React = require('react'); React.useEffect(cb, []); },
 }));
 

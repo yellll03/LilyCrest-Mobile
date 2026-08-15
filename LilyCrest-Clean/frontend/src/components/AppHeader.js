@@ -1,7 +1,6 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useMemo, useRef, useState } from 'react';
 import {
   Animated,
   Dimensions,
@@ -20,7 +19,6 @@ import { useTheme, useThemedStyles } from '../context/ThemeContext';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const SHEET_MAX_HEIGHT = Math.round(SCREEN_HEIGHT * 0.70);
-const ANNOUNCEMENTS_LAST_SEEN_KEY = 'lilycrest_announcements_last_seen';
 
 function getTimestamp(notification = {}) {
   return notification?.created_at
@@ -50,14 +48,8 @@ function formatRelativeTimestamp(value) {
   }
 }
 
-function isNotificationUnread(notification = {}, lastSeenAt) {
-  if (typeof notification?.read === 'boolean') return !notification.read;
-  if (typeof notification?.is_read === 'boolean') return !notification.is_read;
-  if (typeof notification?.unread === 'boolean') return notification.unread;
-  const timestamp = getTimestamp(notification);
-  if (!timestamp || !lastSeenAt) return false;
-  const createdAt = new Date(timestamp);
-  return !Number.isNaN(createdAt.getTime()) && createdAt > lastSeenAt;
+function isNotificationUnread(notification = {}) {
+  return notification?.read !== true;
 }
 
 function getCategoryMeta(notification = {}) {
@@ -90,49 +82,36 @@ function getCategoryMeta(notification = {}) {
   return { bg: '#EEF2FF', color: '#4F46E5', icon: 'megaphone-outline' };
 }
 
-export default function AppHeader({ recentNotifications = [] }) {
+export default function AppHeader() {
   const router = useRouter();
   const { isDarkMode } = useTheme();
-  const { notificationUnreadCount, hasUnreadNotifications, clearNotificationUnread } = useAuth();
+  const {
+    notifications, notificationUnreadCount, hasUnreadNotifications,
+    markNotificationRead, clearNotificationUnread, refreshNotifications,
+  } = useAuth();
   const [isModalVisible, setIsModalVisible] = useState(false);
-  const [lastSeenAt, setLastSeenAt] = useState(null);
 
   const translateY = useRef(new Animated.Value(SCREEN_HEIGHT)).current;
   const backdropOpacity = useRef(new Animated.Value(0)).current;
 
   const badgeLabel = notificationUnreadCount > 9 ? '9+' : String(notificationUnreadCount);
 
+  // notifications is the same shared, backend-authoritative list the tab
+  // badge and this sheet's own unread badge derive their counts from — no
+  // separate local read-state tracking here anymore.
   const previewNotifications = useMemo(() => {
-    if (!Array.isArray(recentNotifications)) return [];
-    return [...recentNotifications]
+    if (!Array.isArray(notifications)) return [];
+    return [...notifications]
       .sort((a, b) => {
         const aTime = getTimestamp(a) ? new Date(getTimestamp(a)).getTime() : 0;
         const bTime = getTimestamp(b) ? new Date(getTimestamp(b)).getTime() : 0;
         return bTime - aTime;
       })
       .slice(0, 8);
-  }, [recentNotifications]);
+  }, [notifications]);
 
-  const unreadCount = useMemo(
-    () => previewNotifications.filter(n => isNotificationUnread(n, lastSeenAt)).length,
-    [previewNotifications, lastSeenAt]
-  );
-
-  const loadLastSeen = useCallback(async () => {
-    try {
-      const value = await AsyncStorage.getItem(ANNOUNCEMENTS_LAST_SEEN_KEY);
-      setLastSeenAt(value ? new Date(value) : null);
-    } catch (_error) {
-      setLastSeenAt(null);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadLastSeen();
-  }, [loadLastSeen]);
-
-  const openSheet = useCallback(async () => {
-    await loadLastSeen();
+  const openSheet = useCallback(() => {
+    refreshNotifications();
     setIsModalVisible(true);
     Animated.parallel([
       Animated.spring(translateY, {
@@ -147,7 +126,7 @@ export default function AppHeader({ recentNotifications = [] }) {
         useNativeDriver: true,
       }),
     ]).start();
-  }, [loadLastSeen, translateY, backdropOpacity]);
+  }, [refreshNotifications, translateY, backdropOpacity]);
 
   const closeSheet = useCallback(() => {
     Animated.parallel([
@@ -173,6 +152,13 @@ export default function AppHeader({ recentNotifications = [] }) {
     closeSheet();
     setTimeout(() => router.push('/(tabs)/announcements'), 270);
   }, [closeSheet, router]);
+
+  const handleNotificationPress = useCallback((notification) => {
+    if (notification?.notification_id && markNotificationRead) {
+      markNotificationRead(notification.notification_id).catch(() => {});
+    }
+    viewAllNotifications();
+  }, [markNotificationRead, viewAllNotifications]);
 
   const styles = useThemedStyles((c, dark) =>
     StyleSheet.create({
@@ -494,13 +480,13 @@ export default function AppHeader({ recentNotifications = [] }) {
             <View style={styles.sheetHeader}>
               <View style={styles.sheetTitleRow}>
                 <Text style={styles.sheetTitle}>Notifications</Text>
-                {unreadCount > 0 && (
+                {notificationUnreadCount > 0 && (
                   <View style={styles.unreadBadge}>
-                    <Text style={styles.unreadBadgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                    <Text style={styles.unreadBadgeText}>{notificationUnreadCount > 9 ? '9+' : notificationUnreadCount}</Text>
                   </View>
                 )}
               </View>
-              {unreadCount > 0 && (
+              {notificationUnreadCount > 0 && (
                 <>
                   <TouchableOpacity
                     onPress={handleMarkAllRead}
@@ -537,18 +523,18 @@ export default function AppHeader({ recentNotifications = [] }) {
             >
               {previewNotifications.length > 0 ? (
                 previewNotifications.map((notification, index) => {
-                  const unread = isNotificationUnread(notification, lastSeenAt);
+                  const unread = isNotificationUnread(notification);
                   const timestamp = getTimestamp(notification);
                   const { bg, color, icon } = getCategoryMeta(notification);
                   const isLast = index === previewNotifications.length - 1;
 
                   return (
                     <View
-                      key={`${notification?.announcement_id || notification?.id || notification?.title || 'n'}-${index}`}
+                      key={`${notification?.notification_id || notification?.announcement_id || notification?.id || notification?.title || 'n'}-${index}`}
                     >
                       <TouchableOpacity
                         style={[styles.notificationItem, unread && styles.notificationItemUnread]}
-                        onPress={viewAllNotifications}
+                        onPress={() => handleNotificationPress(notification)}
                         activeOpacity={0.7}
                       >
                         {/* Category icon with optional unread dot overlay */}

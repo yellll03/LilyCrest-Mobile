@@ -553,7 +553,7 @@ async function resendOtp(req, res) {
 
   const expiry = parseDateSafe(record?.expires_at);
   if (!record || !expiry || new Date() > expiry) {
-    return res.status(400).json({ detail: 'Session expired. Please log in again.' });
+    return res.status(400).json({ code: 'OTP_SESSION_EXPIRED', detail: 'Session expired. Please log in again.' });
   }
 
   const newCode = generateOtpCode();

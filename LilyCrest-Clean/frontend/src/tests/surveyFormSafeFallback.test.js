@@ -8,6 +8,8 @@
 import { render, waitFor } from '@testing-library/react-native';
 import SurveyFormScreen from '../../app/survey-form';
 
+jest.mock('../config/features', () => ({ SURVEY_FEEDBACK_ENABLED: true }));
+
 jest.mock('expo-router', () => ({
   useRouter: () => ({ back: jest.fn(), replace: jest.fn(), push: jest.fn() }),
   useLocalSearchParams: () => ({ surveyId: 'survey-1', responseStatus: undefined }),

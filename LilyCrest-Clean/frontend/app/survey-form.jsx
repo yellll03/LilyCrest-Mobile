@@ -8,6 +8,7 @@ import { useTheme } from '../src/context/ThemeContext';
 import { apiService, isNetworkOrColdStartError } from '../src/services/api';
 import { answersObjectToArray, clearSurveyDraft, loadCachedSurvey, loadSurveyDraft, saveCachedSurvey, saveSurveyDraftLocal } from '../src/services/surveyDrafts';
 import { firstInvalidQuestionId, safeSurveyErrorMessage, toAnswerObject, validateSurveyAnswers, visibleSurveyQuestions } from '../src/utils/surveyForm';
+import { SURVEY_FEEDBACK_ENABLED } from '../src/config/features';
 
 const CHOICE_LABELS = {
   YES: 'Yes', NO: 'No', MAYBE: 'Maybe', CONTRACT_COMPLETED: 'Contract completed',
@@ -91,6 +92,14 @@ export default function SurveyFormScreen() {
     const timer = setTimeout(() => saveSurveyDraftLocal(tenantKey, surveyId, answers).catch(() => {}), 400);
     return () => clearTimeout(timer);
   }, [answers, readOnly, surveyId, tenantKey]);
+
+  useEffect(() => {
+    // Defense in depth: notification payloads/deep links captured before the
+    // feature was hidden could still point here.
+    if (!SURVEY_FEEDBACK_ENABLED) router.replace('/(tabs)/profile');
+  }, [router]);
+
+  if (!SURVEY_FEEDBACK_ENABLED) return null;
 
   const setAnswer = (questionId, value) => {
     setAnswers((current) => ({ ...current, [questionId]: value }));

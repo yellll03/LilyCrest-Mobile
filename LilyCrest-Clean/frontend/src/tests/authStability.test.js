@@ -2,6 +2,7 @@
 import {
   AUTH_MESSAGES,
   classifyAuthError,
+  classifyChangePasswordError,
   createRequestLock,
   authErrorTypeForUi,
   validateLoginInput,
@@ -73,5 +74,70 @@ describe('authentication stability', () => {
   test('forgot-password success message is enumeration safe', () => {
     expect(AUTH_MESSAGES.forgotSuccess)
       .toBe('If an account exists for this email, a password reset link has been sent.');
+  });
+});
+
+describe('change password error classification (regression)', () => {
+  // Regression: change-password.jsx used to read error.response?.data?.detail
+  // and data.errors directly, trusting whatever the backend sent for ANY
+  // status code. classifyChangePasswordError now decides what's safe to show
+  // per status, so a future backend change to an unvetted error path can't
+  // reach the tenant as raw implementation text.
+
+  test('401 always means the current password was wrong — never trusts backend wording for this status', () => {
+    const result = classifyChangePasswordError({
+      response: { status: 401, data: { detail: 'Firebase: INVALID_LOGIN_CREDENTIALS raw provider error' } },
+    });
+    expect(result.type).toBe('credentials');
+    expect(result.message).toBe(AUTH_MESSAGES.wrongCurrentPassword);
+    expect(result.message).not.toMatch(/Firebase/i);
+  });
+
+  test('400 with a single curated backend detail is shown verbatim (backend validation stays authoritative)', () => {
+    const result = classifyChangePasswordError({
+      response: { status: 400, data: { detail: 'New password must be different from your current password' } },
+    });
+    expect(result.type).toBe('validation');
+    expect(result.message).toBe('New password must be different from your current password');
+  });
+
+  test('400 with multiple validation errors joins them for display', () => {
+    const result = classifyChangePasswordError({
+      response: {
+        status: 400,
+        data: {
+          detail: 'Password must contain at least one uppercase letter',
+          errors: [
+            'Password must contain at least one uppercase letter',
+            'Password must contain at least one number',
+          ],
+        },
+      },
+    });
+    expect(result.type).toBe('validation');
+    expect(result.message).toBe('Password must contain at least one uppercase letter\nPassword must contain at least one number');
+  });
+
+  test('400 with no detail at all falls back to a safe generic message', () => {
+    const result = classifyChangePasswordError({ response: { status: 400, data: {} } });
+    expect(result.message).toBe(AUTH_MESSAGES.passwordChangeUnexpected);
+  });
+
+  test('429 maps to the shared rate-limit message', () => {
+    expect(classifyChangePasswordError({ response: { status: 429 } }).type).toBe('rate-limit');
+  });
+
+  test('offline/timeout/server failures use the same safe network messages as login', () => {
+    expect(classifyChangePasswordError({ request: {}, message: 'Network Error' }).type).toBe('offline');
+    expect(classifyChangePasswordError({ code: 'ECONNABORTED', message: 'timeout of 15000ms exceeded' }).type).toBe('timeout');
+    expect(classifyChangePasswordError({ response: { status: 503 } }).type).toBe('server');
+  });
+
+  test('an unrecognized/unvetted status never leaks its raw detail text', () => {
+    const result = classifyChangePasswordError({
+      response: { status: 500, data: { detail: 'MongoServerError: E11000 duplicate key at collection users' } },
+    });
+    expect(result.message).toBe(AUTH_MESSAGES.passwordChangeUnexpected);
+    expect(result.message).not.toMatch(/Mongo|E11000|collection/i);
   });
 });

@@ -63,10 +63,23 @@ describe('tenant survey mobile validation and visibility', () => {
   });
 });
 
-describe('survey notification navigation', () => {
-  it('opens the correct survey form from a survey URL or survey ID', () => {
-    expect(resolveNotificationRoute({ url: '/surveys/survey_q3' })).toEqual({ pathname: '/survey-form', params: { surveyId: 'survey_q3' } });
-    expect(resolveNotificationRoute({ type: 'survey', surveyId: 'move-out-1' })).toEqual({ pathname: '/survey-form', params: { surveyId: 'move-out-1' } });
+describe('survey notification navigation — feature hidden for deployment testing', () => {
+  it('never routes a survey notification into the (hidden) survey screens', () => {
+    expect(resolveNotificationRoute({ url: '/surveys/survey_q3' })).toBe('/(tabs)/announcements');
+    expect(resolveNotificationRoute({ type: 'survey', surveyId: 'move-out-1' })).toBe('/(tabs)/announcements');
+    expect(resolveNotificationRoute({ type: 'surveys' })).toBe('/(tabs)/announcements');
+  });
+});
+
+describe('survey notification navigation — feature re-enabled', () => {
+  beforeEach(() => jest.resetModules());
+
+  it('opens the correct survey form from a survey URL or survey ID once SURVEY_FEEDBACK_ENABLED is flipped back on', () => {
+    jest.doMock('../config/features', () => ({ SURVEY_FEEDBACK_ENABLED: true }));
+    jest.doMock('../config/firebase', () => ({ getFreshIdToken: jest.fn() }));
+    const { resolveNotificationRoute: resolveWhenEnabled } = require('../services/notifications');
+    expect(resolveWhenEnabled({ url: '/surveys/survey_q3' })).toEqual({ pathname: '/survey-form', params: { surveyId: 'survey_q3' } });
+    expect(resolveWhenEnabled({ type: 'survey', surveyId: 'move-out-1' })).toEqual({ pathname: '/survey-form', params: { surveyId: 'move-out-1' } });
   });
 });
 

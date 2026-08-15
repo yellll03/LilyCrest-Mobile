@@ -545,7 +545,7 @@ export default function HomeScreen() {
       setDashboardData({ ...dashboard, billing: billingItems, maintenance: mItems, notifications: notifItems });
       setBillingHistory(billingItems);
     } catch (error) {
-      console.error('Dashboard fetch error:', error);
+      console.error('Dashboard fetch error:', error?.message || error);
       if (latestDashboardRequestRef.current !== requestId) return;
       setLoadError(getApiErrorMessage(error, 'Unable to load dashboard. Pull to retry.'));
     } finally {
@@ -604,7 +604,7 @@ export default function HomeScreen() {
   if (!authReady || isLoading) {
     return (
       <View style={styles.container}>
-        <AppHeader recentNotifications={notifications} />
+        <AppHeader />
         <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
           <SkeletonCard height={56} colors={colors} />
           <SkeletonCard height={88} colors={colors} />
@@ -618,7 +618,7 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      <AppHeader recentNotifications={notifications} />
+      <AppHeader />
       {loadError ? (
         <View style={styles.errorBanner}>
           <Ionicons name="warning" size={16} color="#b91c1c" />

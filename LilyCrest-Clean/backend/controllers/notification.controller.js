@@ -1,5 +1,6 @@
 const { getDb } = require('../config/database');
 const { sanitizeStoredNotification, normalizePriority } = require('../services/notificationService');
+const { isAnnouncementVisibleForBranch, resolveRequesterBranchCode } = require('./announcement.controller');
 
 function normalizeString(value) {
   return typeof value === 'string' ? value.trim() : '';
@@ -121,12 +122,17 @@ async function getMyNotifications(req, res) {
       ],
     };
 
-    const announcements = await db.collection('announcements')
+    // Reuse the exact branch-visibility rule /announcements applies — without
+    // this, a branch-restricted announcement that's correctly hidden from
+    // GET /announcements would still leak through here as a "notification".
+    const requesterBranchCode = await resolveRequesterBranchCode(db, req.user);
+    const announcements = (await db.collection('announcements')
       .find({ $and: [activeFilter, notArchivedFilter, visibilityFilter] })
       .sort({ created_at: -1, createdAt: -1 })
       .limit(80)
       .toArray()
-      .catch(() => []);
+      .catch(() => []))
+      .filter((doc) => isAnnouncementVisibleForBranch(doc, requesterBranchCode));
 
     const mergedByKey = new Map();
     const [readReceipts, readState] = await Promise.all([

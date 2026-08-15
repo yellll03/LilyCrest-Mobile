@@ -10,6 +10,7 @@ import { useAlert } from '../../src/context/AlertContext';
 import { apiService, getApiErrorMessage } from '../../src/services/api';
 import { useTenantContract } from '../../src/hooks/useTenantContract';
 import { buildContractSummary } from '../../src/utils/contractPresentation';
+import { SURVEY_FEEDBACK_ENABLED } from '../../src/config/features';
 
 const NAME_MAX = 60;
 const USERNAME_MAX = 30;
@@ -31,24 +32,6 @@ const validateName = (name) => {
   if (name.trim().length > NAME_MAX) return { valid: false, error: `Name must be at most ${NAME_MAX} characters` };
   if (!/^[a-zA-ZÀ-ÿñÑ\s.\-']+$/.test(name.trim())) return { valid: false, error: 'Name can only contain letters, spaces, hyphens, and periods' };
   return { valid: true, error: '' };
-};
-
-// Mirrors the backend's authoritative tenant-eligibility predicate
-// (server/mobile/security/mobileAuthCore.js evaluateTenant) so this badge
-// never claims a status the service-access gates would disagree with.
-const getTenancyStatus = (user) => {
-  const role = String(user?.role || '').toLowerCase();
-  const tenantStatus = String(user?.tenantStatus || user?.tenant_status || '').toLowerCase();
-  if (role === 'tenant' && tenantStatus === 'active') {
-    return { label: 'Active Tenant', tone: 'active' };
-  }
-  if (role === 'tenant') {
-    return { label: 'Pending Move-in', tone: 'pending' };
-  }
-  if (role === 'applicant') {
-    return { label: 'Applicant', tone: 'pending' };
-  }
-  return { label: 'Account', tone: 'pending' };
 };
 
 const validateUsername = (username) => {
@@ -78,7 +61,6 @@ export default function ProfileScreen() {
   const router = useRouter();
   const { colors, isDarkMode } = useTheme();
   const { showAlert } = useAlert();
-  const tenancyStatus = getTenancyStatus(user);
   const [isEditing, setIsEditing] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [formData, setFormData] = useState({
@@ -119,7 +101,7 @@ export default function ProfileScreen() {
     try {
       const [response, surveyResponse] = await Promise.all([
         apiService.getProfile(),
-        apiService.getMySurveys().catch(() => null),
+        SURVEY_FEEDBACK_ENABLED ? apiService.getMySurveys().catch(() => null) : Promise.resolve(null),
       ]);
       if (isProfilePayload(response?.data)) {
         updateUser(response.data);
@@ -414,14 +396,6 @@ export default function ProfileScreen() {
           <Text style={styles.userName}>{user?.name || 'User'}</Text>
           {user?.username ? <Text style={styles.userHandle}>@{user.username}</Text> : null}
           <Text style={styles.userEmail}>{user?.email || ''}</Text>
-          <View style={styles.statusContainer}>
-            <View style={styles.statusBadge}>
-              <View style={[styles.statusDot, tenancyStatus.tone === 'pending' && styles.statusDotPending]} />
-              <Text style={[styles.statusText, tenancyStatus.tone === 'pending' && styles.statusTextPending]}>
-                {tenancyStatus.label}
-              </Text>
-            </View>
-          </View>
         </View>
 
         {isEditing ? (
@@ -607,19 +581,21 @@ export default function ProfileScreen() {
             </View>
           </View>
 
-          <View style={styles.infoSection}>
-            <Text style={styles.menuGroupLabel}>FEEDBACK &amp; SURVEY</Text>
-            <View style={styles.infoCard}>
-              <View style={styles.surveyHeader}>
-                <Ionicons name="chatbox-ellipses-outline" size={22} color={colors.accent} />
-                <Text style={styles.surveyTitle}>{activeSurvey?.surveyType === 'QUARTERLY' ? 'Quarterly Survey Available' : activeSurvey?.surveyType === 'MOVE_OUT' ? 'Move-out Survey Available' : 'No survey available'}</Text>
+          {SURVEY_FEEDBACK_ENABLED ? (
+            <View style={styles.infoSection}>
+              <Text style={styles.menuGroupLabel}>FEEDBACK &amp; SURVEY</Text>
+              <View style={styles.infoCard}>
+                <View style={styles.surveyHeader}>
+                  <Ionicons name="chatbox-ellipses-outline" size={22} color={colors.accent} />
+                  <Text style={styles.surveyTitle}>{activeSurvey?.surveyType === 'QUARTERLY' ? 'Quarterly Survey Available' : activeSurvey?.surveyType === 'MOVE_OUT' ? 'Move-out Survey Available' : 'No survey available'}</Text>
+                </View>
+                <Text style={styles.helperText}>View active surveys, save a draft, or review your submitted feedback.</Text>
+                <TouchableOpacity style={styles.outlineButton} onPress={() => router.push('/surveys')}>
+                  <Text style={styles.outlineButtonText}>Open Survey Dashboard</Text>
+                </TouchableOpacity>
               </View>
-              <Text style={styles.helperText}>View active surveys, save a draft, or review your submitted feedback.</Text>
-              <TouchableOpacity style={styles.outlineButton} onPress={() => router.push('/surveys')}>
-                <Text style={styles.outlineButtonText}>Open Survey Dashboard</Text>
-              </TouchableOpacity>
             </View>
-          </View>
+          ) : null}
 
           <View style={styles.menuContainer}>
             {menuGroups.slice(2).map((group) => (
@@ -802,20 +778,6 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   userName: { fontSize: 20, fontWeight: '700', color: colors.text, marginBottom: 3 },
   userHandle: { fontSize: 14, color: colors.accent, marginBottom: 4, fontWeight: '600' },
   userEmail: { fontSize: 13, color: colors.textSecondary, marginBottom: 14 },
-  statusContainer: { flexDirection: 'row', alignItems: 'center' },
-  statusBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: isDarkMode ? 'rgba(34,197,94,0.18)' : '#DCFCE7',
-    paddingVertical: 6,
-    paddingHorizontal: 14,
-    borderRadius: 20,
-    gap: 6,
-  },
-  statusDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#22C55E' },
-  statusText: { fontSize: 13, fontWeight: '600', color: isDarkMode ? '#4ade80' : '#166534' },
-  statusDotPending: { backgroundColor: '#f59e0b' },
-  statusTextPending: { color: isDarkMode ? '#fbbf24' : '#92400e' },
 
   menuContainer: { gap: 4 },
   menuGroupWrapper: { marginHorizontal: 20, marginBottom: 8 },

@@ -82,6 +82,17 @@ export default function ApiHealthDebugScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    // This screen dumps live API base URLs, auth-token presence, and raw
+    // response bodies. It must never be reachable in a production build,
+    // regardless of how the route is entered (deep link, direct URL, stale
+    // notification) — the login-screen entry button being __DEV__-gated is
+    // not enough on its own since Expo Router still registers the route.
+    if (!__DEV__) router.replace('/login');
+  }, [router]);
+
+  if (!__DEV__) return null;
+
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>

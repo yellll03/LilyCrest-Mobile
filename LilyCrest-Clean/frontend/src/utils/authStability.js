@@ -14,6 +14,8 @@ export const AUTH_MESSAGES = Object.freeze({
   otpDeliveryUnavailable: 'Unable to send verification code right now. Please try again.',
   unexpected: 'Something went wrong. Please try again.',
   forgotSuccess: 'If an account exists for this email, a password reset link has been sent.',
+  wrongCurrentPassword: 'Your current password is incorrect.',
+  passwordChangeUnexpected: 'Failed to change password. Please try again.',
 });
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -68,6 +70,42 @@ export function classifyAuthError(error) {
     return { type: 'server', status, message: AUTH_MESSAGES.backendUnavailable };
   }
   return { type: 'unexpected', status: status || 0, message: AUTH_MESSAGES.unexpected };
+}
+
+// Change Password has its own contract with the backend (see
+// backend/controllers/auth.controller.js changePassword) that classifyAuthError
+// doesn't fit: a 401 there means "current password is wrong", not "invalid
+// login credentials", and 400 covers several distinct, backend-curated
+// validation messages (weak password, same-as-current, missing fields) that
+// are safe and useful to show verbatim — unlike an arbitrary/unvetted error
+// path, which must never reach the tenant as raw backend text.
+export function classifyChangePasswordError(error) {
+  const base = classifyAuthError(error);
+  if (['offline', 'timeout', 'server', 'rate-limit'].includes(base.type)) {
+    return { type: base.type, message: base.message };
+  }
+
+  const status = error?.response?.status;
+  const data = error?.response?.data;
+
+  if (status === 401) {
+    return { type: 'credentials', message: AUTH_MESSAGES.wrongCurrentPassword };
+  }
+
+  if (status === 400) {
+    if (Array.isArray(data?.errors) && data.errors.length > 1) {
+      return { type: 'validation', message: data.errors.join('\n') };
+    }
+    // This endpoint's 400 `detail` values are all backend-curated,
+    // tenant-safe strings (required fields, password rules, same-as-current,
+    // no linked Firebase account) — never a raw exception message.
+    if (typeof data?.detail === 'string' && data.detail.trim()) {
+      return { type: 'validation', message: data.detail.trim() };
+    }
+    return { type: 'validation', message: AUTH_MESSAGES.passwordChangeUnexpected };
+  }
+
+  return { type: 'unexpected', message: AUTH_MESSAGES.passwordChangeUnexpected };
 }
 
 export function createRequestLock() {

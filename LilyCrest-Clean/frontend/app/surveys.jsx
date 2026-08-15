@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../src/context/ThemeContext';
 import { useAuth } from '../src/context/AuthContext';
 import { apiService } from '../src/services/api';
 import { saveCachedSurveyDashboard } from '../src/services/surveyDrafts';
+import { SURVEY_FEEDBACK_ENABLED } from '../src/config/features';
 
 const LABELS = { QUARTERLY: 'Quarterly Survey', MOVE_OUT: 'Move-Out Survey' };
 const RESPONSE_STATUS_LABELS = {
@@ -47,6 +48,15 @@ export default function SurveysScreen() {
     } finally { setLoading(false); }
   }, [tenantKey]);
   useFocusEffect(useCallback(() => { setLoading(true); load(); }, [load]));
+
+  useEffect(() => {
+    // Defense in depth: the menu entry point is hidden, but a stale deep
+    // link/notification or direct URL could still land here while the
+    // feature is disabled for deployment testing.
+    if (!SURVEY_FEEDBACK_ENABLED) router.replace('/(tabs)/profile');
+  }, [router]);
+
+  if (!SURVEY_FEEDBACK_ENABLED) return null;
 
   const available = surveys.filter((item) => item.tenantResponseStatus === 'NOT_STARTED' && item.status === 'ACTIVE');
   const inProgress = surveys.filter((item) => item.tenantResponseStatus === 'IN_PROGRESS' && item.status === 'ACTIVE');

@@ -14,6 +14,7 @@ import {
   PASSWORD_WHITESPACE_MESSAGE,
   validateStrongPassword,
 } from '../src/utils/passwordValidation';
+import { classifyChangePasswordError } from '../src/utils/authStability';
 import { safeBack } from '../src/utils/navigation';
 
 export default function ChangePasswordScreen() {
@@ -126,23 +127,12 @@ export default function ChangePasswordScreen() {
         }],
       });
     } catch (error) {
-      const data = error.response?.data;
-      const message = data?.detail || 'Failed to change password. Please try again.';
-      
-      // Show all validation errors if the backend returned multiple
-      if (data?.errors && data.errors.length > 1) {
-        showAlert({
-          title: 'Validation Error',
-          message: data.errors.join('\n'),
-          type: 'warning',
-        });
-      } else {
-        showAlert({
-          title: 'Error',
-          message,
-          type: 'error',
-        });
-      }
+      const { type, message } = classifyChangePasswordError(error);
+      showAlert({
+        title: type === 'validation' ? 'Validation Error' : 'Error',
+        message,
+        type: type === 'validation' ? 'warning' : 'error',
+      });
     } finally {
       setIsLoading(false);
     }

@@ -13,6 +13,9 @@ import { safeBack } from '../src/utils/navigation';
 
 // Helpers
 function safeCurrency(amount) {
+  // null/undefined means "not yet computed by billing", not a real zero balance \u2014
+  // showing the same "\u20b10.00" for both would misleadingly imply a paid-up/zero bill.
+  if (amount === null || amount === undefined || amount === '') return 'Not available';
   const n = Number(amount);
   if (!Number.isFinite(n) || n <= 0) return '\u20b10.00';
   return `\u20b1${n.toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;

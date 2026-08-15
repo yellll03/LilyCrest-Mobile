@@ -312,7 +312,7 @@ export default function AnnouncementsScreen() {
       setAnnouncements(Array.isArray(response.data) ? response.data : []);
       setFetchError(null);
     } catch (error) {
-      console.error('Fetch announcements error:', error);
+      console.error('Fetch announcements error:', error?.message || error);
       if (!silent) setFetchError(getApiErrorMessage(error, 'Unable to load notifications. Pull down to refresh.'));
     } finally {
       setIsLoading(false);

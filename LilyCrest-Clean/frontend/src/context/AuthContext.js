@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useRouter } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, Platform, Pressable, StatusBar as RNStatusBar, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, Animated, AppState, Platform, Pressable, StatusBar as RNStatusBar, StyleSheet, Text, View } from 'react-native';
 import { auth, getFreshIdToken, subscribeToAuthState } from '../config/firebase';
 import { api, getApiErrorMessage, teardownExpiredSession } from '../services/api';
 import { validateStrongPassword } from '../utils/passwordValidation';
@@ -32,7 +32,6 @@ import { useToast } from './ToastContext';
 
 const AuthContext = createContext(undefined);
 const SESSION_USER_KEY = 'session_user';
-const ANNOUNCEMENTS_LAST_SEEN_KEY = 'lilycrest_announcements_last_seen';
 const DEFAULT_NOTIFICATION_MESSAGE = 'Open LilyCrest to view the latest update.';
 
 async function persistSession(sessionToken, userData, remember = true) {
@@ -109,6 +108,15 @@ export function AuthProvider({ children }) {
   const [authStatus, setAuthStatus] = useState('initializing');
   const [firebaseUser, setFirebaseUser] = useState(null);
   const [firebaseAuthReady, setFirebaseAuthReady] = useState(false);
+  // Single source of truth for every notification UI surface (tab badge,
+  // header bell badge, notification sheet). All three used to derive their
+  // own unread count independently — two from a client-local AsyncStorage
+  // "last seen" timestamp compared against different data sources, one from
+  // this same count. The backend already persists real per-notification read
+  // state (see GET /notifications `read` field, backed by the
+  // notification_reads/notification_read_state collections), so this is now
+  // the only place that fetches it and every consumer reads from here.
+  const [notifications, setNotifications] = useState([]);
   const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
   const [notificationBanner, setNotificationBanner] = useState(null);
   const router = useRouter();
@@ -122,6 +130,7 @@ export function AuthProvider({ children }) {
   // user/firebaseUser change (see the memoized context value below).
   const userRef = useRef(user);
   const firebaseUserRef = useRef(firebaseUser);
+  const notificationsRef = useRef(notifications);
   // Synchronous dedup guard for concurrent forced-expiry events. authStatusRef
   // alone isn't enough — it's only updated on the next render, so several 401s
   // resolving in the same microtask tick could all read 'authenticated' before
@@ -137,6 +146,7 @@ export function AuthProvider({ children }) {
   authStatusRef.current = authStatus;
   userRef.current = user;
   firebaseUserRef.current = firebaseUser;
+  notificationsRef.current = notifications;
 
   const dismissNotificationBanner = useCallback(() => {
     if (bannerHideTimerRef.current) {
@@ -162,15 +172,70 @@ export function AuthProvider({ children }) {
     });
   }, [bannerOpacity, bannerTranslateY]);
 
-  const markNotificationsUnread = useCallback((count = 1) => {
-    const increment = Number.isFinite(count) ? Math.max(1, count) : 1;
-    setNotificationUnreadCount((prev) => prev + increment);
+  const refreshNotifications = useCallback(async () => {
+    if (authStatusRef.current !== 'authenticated' || !userRef.current?.user_id) return;
+    try {
+      const response = await api.get('/notifications');
+      const items = Array.isArray(response?.data) ? response.data : [];
+      const nextUnreadCount = items.filter((item) => !item?.read).length;
+      // Skip the state update entirely when nothing actually changed (e.g. an
+      // empty list refetched as still-empty) — avoids replacing an array with
+      // an equal-but-new reference and triggering a pointless re-render on
+      // every 60s poll tick / foreground refresh for a tenant with no notifications.
+      setNotifications((prev) => (
+        prev.length === items.length && prev.every((item, i) => item?.notification_id === items[i]?.notification_id && item?.read === items[i]?.read)
+          ? prev
+          : items
+      ));
+      setNotificationUnreadCount((prev) => (prev === nextUnreadCount ? prev : nextUnreadCount));
+    } catch (error) {
+      if (error?.response?.status === 401) {
+        await clearPersistedSession();
+        setUser(null);
+        setAuthStatus('unauthenticated');
+        setNotifications([]);
+        setNotificationUnreadCount(0);
+      }
+      // Any other failure (offline, 5xx) is transient — leave the existing
+      // list/count as-is rather than wiping a working badge.
+    }
+  }, []);
+
+  const markNotificationRead = useCallback(async (notificationId) => {
+    if (!notificationId) return;
+    const previous = notificationsRef.current;
+    const target = previous.find((item) => item?.notification_id === notificationId);
+    if (!target || target.read) return;
+
+    setNotifications(previous.map((item) => (
+      item.notification_id === notificationId ? { ...item, read: true } : item
+    )));
+    setNotificationUnreadCount((count) => Math.max(0, count - 1));
+
+    try {
+      await api.patch(`/notifications/${encodeURIComponent(notificationId)}/read`);
+    } catch (_error) {
+      // Roll back to the exact pre-optimistic snapshot on failure so a
+      // network blip can't silently leave the UI out of sync with the server.
+      setNotifications(previous);
+      setNotificationUnreadCount((count) => count + 1);
+    }
   }, []);
 
   const clearNotificationUnread = useCallback(async () => {
-    await api.patch('/notifications/read-all');
+    const previous = notificationsRef.current;
+    const previousUnreadCount = previous.filter((item) => !item?.read).length;
+    if (previousUnreadCount === 0) return;
+
+    setNotifications(previous.map((item) => ({ ...item, read: true })));
     setNotificationUnreadCount(0);
-    await AsyncStorage.setItem(ANNOUNCEMENTS_LAST_SEEN_KEY, new Date().toISOString()).catch(() => {});
+
+    try {
+      await api.patch('/notifications/read-all');
+    } catch (_error) {
+      setNotifications(previous);
+      setNotificationUnreadCount(previousUnreadCount);
+    }
   }, []);
 
   const navigateFromNotification = useCallback(async (data) => {
@@ -232,6 +297,7 @@ export function AuthProvider({ children }) {
 
       setUser(null);
       setAuthStatus('unauthenticated');
+      setNotifications([]);
       setNotificationUnreadCount(0);
       showToast(reason === 'account_inactive' ? {
         type: 'warning',
@@ -289,7 +355,11 @@ export function AuthProvider({ children }) {
         if (!nextKey || latestNotificationKeyRef.current === nextKey) return;
 
         latestNotificationKeyRef.current = nextKey;
-        markNotificationsUnread(1);
+        // Refetch rather than blindly incrementing a local counter — this
+        // notification may already exist server-side (or not be a
+        // notification-list item at all), so re-syncing with the backend
+        // keeps the shared unread state accurate instead of drifting.
+        refreshNotifications();
         setNotificationBanner({
           key: nextKey,
           title,
@@ -306,7 +376,7 @@ export function AuthProvider({ children }) {
     return () => {
       if (cleanup) cleanup();
     };
-  }, [handleNotificationTap, markNotificationsUnread]);
+  }, [handleNotificationTap, refreshNotifications]);
 
   useEffect(() => {
     if (!notificationBanner) return undefined;
@@ -368,51 +438,29 @@ export function AuthProvider({ children }) {
     handleNotificationTap(pendingNotificationRef.current);
   }, [authStatus, handleNotificationTap, user?.user_id]);
 
+  // Initial load + 60s poll while authenticated. Matches the cadence the old
+  // per-surface tab-badge poller used, now feeding the one shared state.
   useEffect(() => {
     if (authStatus !== 'authenticated' || !user?.user_id) {
+      setNotifications([]);
       setNotificationUnreadCount(0);
       return undefined;
     }
 
-    let cancelled = false;
+    refreshNotifications();
+    const interval = setInterval(refreshNotifications, 60000);
+    return () => clearInterval(interval);
+  }, [authStatus, user?.user_id, refreshNotifications]);
 
-    (async () => {
-      try {
-        const [response, lastSeenRaw] = await Promise.all([
-          api.get('/notifications'),
-          AsyncStorage.getItem(ANNOUNCEMENTS_LAST_SEEN_KEY),
-        ]);
-
-        if (cancelled) return;
-
-        const announcements = Array.isArray(response?.data) ? response.data : [];
-        const lastSeen = lastSeenRaw ? new Date(lastSeenRaw) : new Date(0);
-        const unreadCount = announcements.filter((item) => {
-          const createdAt = item?.created_at ? new Date(item.created_at) : new Date(0);
-          return createdAt > lastSeen;
-        }).length;
-
-        // TODO: replace this client-side fallback with a backend unread-count endpoint when available.
-        setNotificationUnreadCount(unreadCount);
-      } catch (error) {
-        if (error?.response?.status === 401) {
-          await clearPersistedSession();
-          if (!cancelled) {
-            setUser(null);
-            setAuthStatus('unauthenticated');
-          }
-          return;
-        }
-        if (!cancelled) {
-          setNotificationUnreadCount((prev) => prev);
-        }
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [authStatus, user?.user_id]);
+  // Refetch whenever the app returns to the foreground, so a notification
+  // read/received while backgrounded (or on another device) is reflected
+  // without waiting for the next 60s poll tick.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') refreshNotifications();
+    });
+    return () => subscription.remove();
+  }, [refreshNotifications]);
 
   useEffect(() => {
     if (!firebaseAuthReady) return undefined;
@@ -702,6 +750,7 @@ export function AuthProvider({ children }) {
       await clearDocumentCache().catch(() => {});
       setUser(null);
       setAuthStatus('unauthenticated');
+      setNotifications([]);
       setNotificationUnreadCount(0);
     } finally {
       Promise.allSettled([
@@ -794,13 +843,17 @@ export function AuthProvider({ children }) {
     signInWithGoogle,
     updateUser,
     getFreshIdToken,
+    notifications,
     notificationUnreadCount,
     hasUnreadNotifications: notificationUnreadCount > 0,
+    markNotificationRead,
     clearNotificationUnread,
+    refreshNotifications,
   }), [
     user, firebaseUser, firebaseAuthReady, isLoading, authReady, authStatus,
     login, loginWithEmail, verifyLoginOtp, registerWithEmail, logout, checkAuth,
-    signInWithGoogle, updateUser, notificationUnreadCount, clearNotificationUnread,
+    signInWithGoogle, updateUser, notifications, notificationUnreadCount,
+    markNotificationRead, clearNotificationUnread, refreshNotifications,
   ]);
 
   if (isLoading) {

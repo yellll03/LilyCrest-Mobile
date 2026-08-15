@@ -66,6 +66,8 @@ export default function LoginScreen() {
   const [biometricType, setBiometricType] = useState('Biometric');
   const [canUseBiometric, setCanUseBiometric] = useState(false);
   const emailRequestInFlight = useRef(false);
+  const googleRequestInFlight = useRef(false);
+  const biometricRequestInFlight = useRef(false);
 
   // Real-time validation
   useEffect(() => {
@@ -248,6 +250,8 @@ export default function LoginScreen() {
   };
 
   const handleGoogleLogin = async () => {
+    if (googleRequestInFlight.current) return;
+    googleRequestInFlight.current = true;
     setIsGoogleLoading(true);
     setLoginError(null);
 
@@ -294,17 +298,20 @@ export default function LoginScreen() {
       console.error('Google login error:', error?.message || 'Unexpected error');
       setLoginError({ message: 'Google sign-in failed. Please try again or use email/password.', type: 'network' });
     } finally {
+      googleRequestInFlight.current = false;
       setIsGoogleLoading(false);
     }
   };
 
   const handleBiometricLogin = async () => {
+    if (biometricRequestInFlight.current) return;
     setLoginError(null);
     if (!canUseBiometric) {
       setLoginError({ message: 'For your security, please log in again.', type: 'access' });
       return;
     }
 
+    biometricRequestInFlight.current = true;
     setIsBiometricLoading(true);
     try {
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
@@ -339,6 +346,7 @@ export default function LoginScreen() {
       console.error('Biometric login error:', error?.message || 'Unexpected error');
       setLoginError({ message: 'Biometric sign-in failed. Please use email or Google.', type: 'network' });
     } finally {
+      biometricRequestInFlight.current = false;
       setIsBiometricLoading(false);
     }
   };

@@ -240,8 +240,7 @@ export default function OtpVerifyScreen() {
       });
       setTimeout(() => inputRefs.current[0]?.focus(), 100);
     } catch (err) {
-      const detail = err?.response?.data?.detail;
-      if (detail?.includes('expired') || detail?.includes('Session')) {
+      if (err?.response?.data?.code === 'OTP_SESSION_EXPIRED') {
         setError('Your session has expired. Please log in again.');
       } else {
         setError(getApiErrorMessage(err, 'Failed to resend code. Please try again.'));

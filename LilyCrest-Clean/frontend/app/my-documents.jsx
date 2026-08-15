@@ -383,7 +383,7 @@ export default function MyDocumentsScreen() {
         }
       }
     } catch (error) {
-      console.error('Download error:', error);
+      console.error('Download error:', error?.message || error);
       showToast({ type: 'error', title: 'Download Failed', message: getApiErrorMessage(error, 'Failed to download document. Please try again.') });
     } finally {
       setDownloading(null);
@@ -449,7 +449,7 @@ export default function MyDocumentsScreen() {
         message: `${uploadMessage} It will be reviewed by the admin.`,
       });
     } catch (error) {
-      console.error('Upload error:', error);
+      console.error('Upload error:', error?.message || error);
       setUploadStatus('Upload failed, please retry');
       showToast({
         type: 'error',
@@ -476,7 +476,7 @@ export default function MyDocumentsScreen() {
         message: 'Successfully deleted the document.',
       });
     } catch (error) {
-      console.error('Delete error:', error);
+      console.error('Delete error:', error?.message || error);
       showToast({
         type: 'error',
         title: 'Delete Failed',
@@ -507,7 +507,7 @@ export default function MyDocumentsScreen() {
         });
       }
     } catch (error) {
-      console.error('View doc error:', error);
+      console.error('View doc error:', error?.message || error);
       showAlert({ title: 'Error', message: getApiErrorMessage(error, 'Failed to load document.'), type: 'error' });
     }
   };

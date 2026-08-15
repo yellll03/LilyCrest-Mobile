@@ -1,63 +1,9 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
-import { Tabs, usePathname } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Tabs } from 'expo-router';
+import { useEffect, useMemo, useRef } from 'react';
 import { Animated, Platform, StyleSheet, Text, View } from 'react-native';
 import { useAuth } from '../../src/context/AuthContext';
 import { useTheme } from '../../src/context/ThemeContext';
-import { apiService } from '../../src/services/api';
-
-const LAST_SEEN_KEY = 'lilycrest_announcements_last_seen';
-
-function useUnreadAnnouncementCount() {
-  const [unreadCount, setUnreadCount] = useState(0);
-  const pathname = usePathname();
-  const { authReady, authStatus } = useAuth();
-
-  const refresh = useCallback(async () => {
-    if (!authReady || authStatus !== 'authenticated') {
-      setUnreadCount(0);
-      return;
-    }
-
-    try {
-      const [resp, lastSeenStr] = await Promise.all([
-        apiService.getAnnouncements(),
-        AsyncStorage.getItem(LAST_SEEN_KEY),
-      ]);
-      const announcements = resp?.data || [];
-      const lastSeen = lastSeenStr ? new Date(lastSeenStr) : new Date(0);
-      const count = announcements.filter((a) => {
-        const created = a.created_at ? new Date(a.created_at) : new Date(0);
-        return created > lastSeen;
-      }).length;
-      setUnreadCount(count);
-    } catch (_) {
-      // silently ignore — badge is non-critical
-    }
-  }, [authReady, authStatus]);
-
-  // Clear badge when the user opens the announcements tab
-  useEffect(() => {
-    if (pathname === '/announcements') {
-      AsyncStorage.setItem(LAST_SEEN_KEY, new Date().toISOString()).catch(() => {});
-      setUnreadCount(0);
-    }
-  }, [pathname]);
-
-  // Poll for new announcements every 60 s
-  useEffect(() => {
-    if (!authReady || authStatus !== 'authenticated') {
-      setUnreadCount(0);
-      return undefined;
-    }
-    refresh();
-    const interval = setInterval(refresh, 60000);
-    return () => clearInterval(interval);
-  }, [authReady, authStatus, refresh]);
-
-  return unreadCount;
-}
 
 // Animated Tab Icon Component
 function AnimatedTabIcon({ focused, iconName, focusedIconName, label, colors, styles, badgeCount = 0 }) {
@@ -150,7 +96,7 @@ function HomeTabIcon({ focused, colors, styles }) {
 export default function TabLayout() {
   const { colors, isDarkMode } = useTheme();
   const styles = useMemo(() => createStyles(colors, isDarkMode), [colors, isDarkMode]);
-  const unreadAnnouncements = useUnreadAnnouncementCount();
+  const { notificationUnreadCount } = useAuth();
 
   return (
     <Tabs
@@ -191,7 +137,7 @@ export default function TabLayout() {
               label="News"
               colors={colors}
               styles={styles}
-              badgeCount={unreadAnnouncements}
+              badgeCount={notificationUnreadCount}
             />
           ),
         }}

@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
 import { Platform } from 'react-native';
 import { api } from './api';
+import { SURVEY_FEEDBACK_ENABLED } from '../config/features';
 
 const IS_DEV = typeof __DEV__ !== 'undefined' && __DEV__;
 
@@ -303,9 +304,11 @@ export function resolveNotificationRoute(data = {}) {
   const directUrl = typeof data?.url === 'string' ? data.url.trim() : '';
   const directSurvey = directUrl.match(/^\/surveys\/([^/?#]+)/i);
   if (directSurvey) {
-    return { pathname: '/survey-form', params: { surveyId: decodeURIComponent(directSurvey[1]) } };
+    return SURVEY_FEEDBACK_ENABLED
+      ? { pathname: '/survey-form', params: { surveyId: decodeURIComponent(directSurvey[1]) } }
+      : '/(tabs)/announcements';
   }
-  if (directUrl.startsWith('/')) return directUrl;
+  if (directUrl.startsWith('/') && !/^\/surveys?(\/|$)/i.test(directUrl)) return directUrl;
 
   const billingId = data?.billing_id || data?.bill_id;
   const surveyId = data?.surveyId || data?.survey_id;
@@ -339,6 +342,7 @@ export function resolveNotificationRoute(data = {}) {
       return '/(tabs)/home';
     case 'survey':
     case 'surveys':
+      if (!SURVEY_FEEDBACK_ENABLED) return '/(tabs)/announcements';
       return surveyId
         ? { pathname: '/survey-form', params: { surveyId: String(surveyId) } }
         : '/surveys';
