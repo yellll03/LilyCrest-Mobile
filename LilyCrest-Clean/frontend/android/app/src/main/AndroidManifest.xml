@@ -1,12 +1,26 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
   <uses-permission android:name="android.permission.INTERNET"/>
-  <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
   <uses-permission android:name="android.permission.RECORD_AUDIO"/>
-  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
   <uses-permission android:name="android.permission.USE_BIOMETRIC"/>
   <uses-permission android:name="android.permission.USE_FINGERPRINT"/>
   <uses-permission android:name="android.permission.VIBRATE"/>
-  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE"/>
+  <!--
+    SYSTEM_ALERT_WINDOW, READ_EXTERNAL_STORAGE, WRITE_EXTERNAL_STORAGE: not
+    required by any tenant-facing feature. Attachment/document upload uses
+    expo-image-picker and expo-document-picker's scoped/SAF pickers, which
+    need neither. These three came from react-native-blob-util's legacy
+    "Android 5.0 manual linking" README snippet (blob-util is pulled in only
+    transitively, as a react-native-pdf dependency, for downloading/caching
+    remote PDFs — that usage needs none of these). Because blob-util's own
+    library manifest still declares them unconditionally, Gradle's manifest
+    merger would re-add them at build time even after removing the
+    <uses-permission> lines above, so they are explicitly suppressed here
+    instead. SYSTEM_ALERT_WINDOW in particular is a sensitive
+    Play-Store-reviewed permission with no legitimate use in this app.
+  -->
+  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" tools:node="remove"/>
+  <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" tools:node="remove"/>
+  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" tools:node="remove"/>
   <queries>
     <intent>
       <action android:name="android.intent.action.VIEW"/>

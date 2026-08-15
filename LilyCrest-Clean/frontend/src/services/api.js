@@ -308,7 +308,6 @@ export const apiService = {
   getLatestBilling: () => api.get('/billing/me/latest'),
   getBillingById: (billingId) => api.get(`/billing/${billingId}`),
   submitPaymentProof: (billingId, proof) => api.post(`/billing/${billingId}/payment-proof`, { proof }),
-  updateBilling: (billingId, data) => api.put(`/billing/${billingId}`, data),
 
   // PayMongo
   createPaymongoCheckout: (billingId) => api.post('/paymongo/checkout', { billingId }),
@@ -380,11 +379,6 @@ export const apiService = {
   createTicket: (data) => api.post('/tickets', data),
   respondToTicket: (ticketId, data) => api.post(`/tickets/${ticketId}/respond`, data),
   updateTicketStatus: (ticketId, status) => api.put(`/tickets/${ticketId}/status`, { status }),
-
-  // Admin Ticket Management
-  adminGetAllTickets: (status) => api.get('/tickets/admin/all', { params: { status } }),
-  adminReplyToTicket: (ticketId, message) => api.post(`/tickets/admin/${ticketId}/reply`, { message }),
-  adminUpdateTicketStatus: (ticketId, status) => api.put(`/tickets/admin/${ticketId}/status`, { status }),
 
   // Human support chat - synced with the web admin panel in real-time.
   // Uses /api/m/chat/... endpoints (mobile bridge in Capstone server) which
