@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Crypto from 'expo-crypto';
 import { format } from 'date-fns';
 import { Link, useFocusEffect } from 'expo-router';
 import * as FileSystem from 'expo-file-system/legacy';
@@ -197,6 +198,9 @@ const RESOLUTION_ESTIMATES = {
 
 const STATUS_STEPS = ['pending', 'viewed', 'in_progress', 'assigned', 'scheduled', 'resolved'];
 const MIN_DESCRIPTION_LENGTH = 10;
+// Mirrors backend/controllers/maintenance.controller.js DESCRIPTION_MAX.
+// Frontend enforcement here is UX only — the backend remains authoritative.
+const MAX_DESCRIPTION_LENGTH = 1000;
 const ACTIVE_STATUSES = ['pending', 'viewed', 'in_progress', 'assigned', 'scheduled'];
 const RESOLVED_STATUSES = ['completed', 'resolved', 'rejected'];
 const CLOSED_REPLY_STATUSES = ['cancelled', 'rejected'];
@@ -340,6 +344,8 @@ export default function ServicesScreen() {
     bannerError: { backgroundColor: '#fef2f2', borderColor: '#fecaca' },
     bannerWarning: { backgroundColor: '#fffbeb', borderColor: '#fde68a' },
     fieldError: { color: '#b91c1c', fontSize: 12, marginBottom: 10 },
+    descriptionCounter: { alignSelf: 'flex-end', fontSize: 11, color: colors.textMuted, marginTop: 4, marginBottom: 6 },
+    descriptionCounterOver: { color: '#b91c1c', fontWeight: '600' },
     confirmOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center' },
     confirmCard: { width: '84%', backgroundColor: c.surface, borderRadius: 16, padding: 20, gap: 10, ...Platform.select({ ios: { shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 12, shadowOffset: { width: 0, height: 8 } }, android: { elevation: 10 } }) },
     confirmTitle: { fontSize: 17, fontWeight: '700', color: c.text },
@@ -390,12 +396,28 @@ export default function ServicesScreen() {
   // Search
   const [searchQuery, setSearchQuery] = useState('');
   const bannerTimerRef = useRef(null);
+  // Idempotency key for the current submission attempt. Minted once and
+  // reused across retries (e.g. a timed-out request the tenant resubmits by
+  // tapping Submit again) so the backend can recognize it as the same
+  // attempt rather than creating a duplicate ticket. Cleared on success or
+  // when the form is reset/discarded, so the next distinct submission gets
+  // a fresh key.
+  const submissionRequestIdRef = useRef(null);
   const userId = user?.user_id || user?.id || null;
   const isDirty = useMemo(() => Boolean(selectedType) || description.trim().length > 0 || attachments.length > 0, [attachments.length, description, selectedType]);
-  const createFormErrors = useMemo(() => ({
-    type: selectedType ? '' : 'Please select a service type',
-    description: description.trim().length < MIN_DESCRIPTION_LENGTH ? `Please describe your concern (min ${MIN_DESCRIPTION_LENGTH} characters)` : '',
-  }), [description, selectedType]);
+  const createFormErrors = useMemo(() => {
+    const trimmedLength = description.trim().length;
+    let descriptionError = '';
+    if (trimmedLength < MIN_DESCRIPTION_LENGTH) {
+      descriptionError = `Please describe your concern (min ${MIN_DESCRIPTION_LENGTH} characters)`;
+    } else if (trimmedLength > MAX_DESCRIPTION_LENGTH) {
+      descriptionError = `Description must be ${MAX_DESCRIPTION_LENGTH} characters or fewer`;
+    }
+    return {
+      type: selectedType ? '' : 'Please select a service type',
+      description: descriptionError,
+    };
+  }, [description, selectedType]);
   const isCreateFormValid = !createFormErrors.type && !createFormErrors.description;
 
   const showBannerMessage = useCallback((type, text, { withToast = true } = {}) => {
@@ -553,11 +575,15 @@ export default function ServicesScreen() {
       if (uploadedAttachments.length) {
         setAttachmentUploadStatus('Attachment uploaded');
       }
+      if (!submissionRequestIdRef.current) {
+        submissionRequestIdRef.current = Crypto.randomUUID();
+      }
       const payload = {
         request_type: selectedType,
         description: description.trim(),
         urgency: selectedUrgency,
         attachments: uploadedAttachments.map(toStoredAttachmentMetadata),
+        client_request_id: submissionRequestIdRef.current,
       };
       await apiService.createMaintenance(payload);
       showBannerMessage('success', 'Maintenance request submitted successfully.');
@@ -584,6 +610,7 @@ export default function ServicesScreen() {
     setFieldTouched({ type: false, description: false });
     setFieldErrors({ type: '', description: '' });
     setHasAttemptedSubmit(false);
+    submissionRequestIdRef.current = null;
   };
 
   const discardAndClose = () => {
@@ -1113,12 +1140,21 @@ export default function ServicesScreen() {
                   multiline
                   numberOfLines={4}
                   textAlignVertical="top"
+                  maxLength={MAX_DESCRIPTION_LENGTH}
                   value={description}
                   onChangeText={(val) => {
                     setDescription(val);
                   }}
                   onBlur={() => setFieldTouched((prev) => ({ ...prev, description: true }))}
                 />
+                <Text
+                  style={[
+                    styles.descriptionCounter,
+                    description.length > MAX_DESCRIPTION_LENGTH && styles.descriptionCounterOver,
+                  ]}
+                >
+                  {description.length} / {MAX_DESCRIPTION_LENGTH}
+                </Text>
                 {fieldErrors.description ? <Text style={styles.fieldError}>{fieldErrors.description}</Text> : null}
                 <Text style={styles.modalSectionTitle}>Add Attachments (optional)</Text>
                 <View style={styles.uploadPanel}>

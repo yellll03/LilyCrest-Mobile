@@ -330,6 +330,17 @@ async function startServer() {
       await maintenance.createIndex({ userId: 1, status: 1, createdAt: -1 }, { name: `${collectionName}_userId_status_createdAt` });
       await maintenance.createIndex({ user_id: 1, lastActivityAt: -1 }, { name: `${collectionName}_user_last_activity` });
       await maintenance.createIndex({ userId: 1, lastActivityAt: -1 }, { name: `${collectionName}_userId_last_activity` });
+      // Submission idempotency: a client-generated request id, scoped to the
+      // submitting tenant, so a network-retry of the exact same submission
+      // can't create a second ticket. Sparse + unique so requests without a
+      // client_request_id (older app builds) are unaffected, and the
+      // uniqueness is enforced atomically by MongoDB even under a
+      // near-simultaneous double-submit race — see maintenance.controller.js
+      // createMaintenance().
+      await maintenance.createIndex(
+        { user_id: 1, client_request_id: 1 },
+        { unique: true, sparse: true, name: `${collectionName}_user_client_request_id` }
+      );
     }
 
     // TTL index: auto-expire OTP records after expires_at

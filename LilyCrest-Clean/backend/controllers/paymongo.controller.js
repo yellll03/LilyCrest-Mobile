@@ -85,6 +85,27 @@ function getCheckoutSessionPaymentState(session = {}) {
   };
 }
 
+// Raw PayMongo payment_intent/session statuses collapsed into the small,
+// stable enum the tenant app actually needs to render a distinct UI state
+// for. The mobile UI previously only distinguished "paid" from everything
+// else, so a declined card and a merely-slow verification looked identical
+// ("still processing"). Backend/PayMongo remains the authority — this is
+// purely a display-status normalization, not a new source of truth.
+function normalizeCheckoutStatusForClient({ paymentConfirmed, paymentStatus, sessionStatus }) {
+  if (paymentConfirmed) return 'paid';
+
+  const FAILED_STATUSES = new Set(['failed', 'payment_failed', 'declined']);
+  if (FAILED_STATUSES.has(paymentStatus)) return 'failed';
+
+  const CANCELLED_STATUSES = new Set(['cancelled', 'canceled', 'voided']);
+  if (CANCELLED_STATUSES.has(paymentStatus) || sessionStatus === 'expired') return 'cancelled';
+
+  const PENDING_STATUSES = new Set(['pending', 'awaiting_payment_method', 'awaiting_next_action', 'processing']);
+  if (PENDING_STATUSES.has(paymentStatus) || sessionStatus === 'active') return 'pending';
+
+  return 'unknown';
+}
+
 function parsePaymongoTimestamp(value) {
   if (!value && value !== 0) return null;
 
@@ -847,9 +868,14 @@ async function getCheckoutStatus(req, res) {
     const payments = reconciliation.payments;
 
     const paymentConfirmed = reconciliation.paymentConfirmed;
+    const sessionStatus = reconciliation.sessionStatus;
+    const normalizedStatus = normalizeCheckoutStatusForClient({ paymentConfirmed, paymentStatus, sessionStatus });
 
     res.json({
-      status: paymentStatus,
+      // Normalized enum the client should branch its UI on: paid | pending | failed | cancelled | unknown.
+      status: normalizedStatus,
+      // Raw PayMongo status, kept for diagnostics only — not for UI branching.
+      raw_status: paymentStatus,
       paid: paymentConfirmed,
       payments_count: payments.length,
       checkout_url: session?.attributes?.checkout_url,
@@ -1108,6 +1134,7 @@ module.exports = {
   fetchCheckoutSessionRecord,
   getCheckoutSessionPaymentDate,
   getCheckoutSessionPaymentState,
+  normalizeCheckoutStatusForClient,
   getCheckoutStatus,
   handleWebhook,
   registerWebhook,

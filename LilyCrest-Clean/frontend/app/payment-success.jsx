@@ -7,6 +7,42 @@ import { useTheme } from '../src/context/ThemeContext';
 import { apiService } from '../src/services/api';
 import { emitBillingRefresh } from '../src/services/billingState';
 
+// Backend now returns a normalized status enum (paymongo.controller.js
+// normalizeCheckoutStatusForClient) instead of leaving the client to
+// interpret PayMongo's raw payment_intent/session strings. 'outcome' here is
+// the resolved, final UI state this screen renders — distinct from
+// 'isVerifying', which just tracks whether polling is still in progress.
+const OUTCOME_COPY = {
+  paid: {
+    icon: 'checkmark-circle',
+    iconColor: '#22C55E',
+    iconBg: { light: '#f0fdf4', dark: 'rgba(34,197,94,0.16)' },
+    title: 'Payment Successful!',
+    subtitle: 'Your payment has been processed successfully. It will be reflected in your billing shortly.',
+  },
+  failed: {
+    icon: 'close-circle',
+    iconColor: '#EF4444',
+    iconBg: { light: '#fef2f2', dark: 'rgba(239,68,68,0.16)' },
+    title: 'Payment Failed',
+    subtitle: 'Your payment was not completed. No successful payment was recorded — please try again.',
+  },
+  cancelled: {
+    icon: 'remove-circle',
+    iconColor: '#6B7280',
+    iconBg: { light: '#f3f4f6', dark: 'rgba(107,114,128,0.2)' },
+    title: 'Payment Cancelled',
+    subtitle: 'This payment was cancelled before it completed. No charge was made.',
+  },
+  pending: {
+    icon: 'time',
+    iconColor: '#F59E0B',
+    iconBg: { light: '#fffbeb', dark: 'rgba(245,158,11,0.16)' },
+    title: 'Verifying Payment',
+    subtitle: 'Your payment is still being verified. This can take a moment for some payment methods.',
+  },
+};
+
 export default function PaymentSuccessScreen() {
   const router = useRouter();
   const { billing_id, checkout_id } = useLocalSearchParams();
@@ -14,6 +50,10 @@ export default function PaymentSuccessScreen() {
   const { colors, isDarkMode } = useTheme();
   const styles = useMemo(() => createStyles(colors, isDarkMode), [colors, isDarkMode]);
   const [isVerifying, setIsVerifying] = useState(Boolean(checkoutId));
+  // 'pending' is the safe default: never assume success before the backend
+  // confirms it, and never assume failure while verification is still in
+  // flight.
+  const [outcome, setOutcome] = useState('pending');
   const [verifyMessage, setVerifyMessage] = useState(
     checkoutId
       ? 'Finalizing your payment...'
@@ -45,9 +85,9 @@ export default function PaymentSuccessScreen() {
           const response = await apiService.getPaymongoCheckoutStatus(checkoutId);
           const payload = response?.data || {};
           const status = String(payload.status || '').toLowerCase();
-          const paid = Boolean(payload.paid) || status === 'paid' || status === 'succeeded';
 
-          if (paid) {
+          if (status === 'paid') {
+            setOutcome('paid');
             setVerifyMessage('Payment confirmed. Redirecting to billing...');
             setIsVerifying(false);
             emitBillingRefresh('payment_success');
@@ -56,6 +96,18 @@ export default function PaymentSuccessScreen() {
                 router.replace('/(tabs)/billing');
               }
             }, 1200);
+            return;
+          }
+
+          // Failed/cancelled are final, backend-confirmed outcomes — stop
+          // polling immediately rather than waiting out the full 60s and
+          // implying the payment might still complete on its own.
+          if (status === 'failed' || status === 'cancelled') {
+            setOutcome(status);
+            setIsVerifying(false);
+            setVerifyMessage(status === 'failed'
+              ? 'Payment was not completed.'
+              : 'Payment was cancelled.');
             return;
           }
 
@@ -89,16 +141,17 @@ export default function PaymentSuccessScreen() {
     };
   }, [checkoutId, router]);
 
+  const copy = OUTCOME_COPY[outcome] || OUTCOME_COPY.pending;
+  const isFailedOrCancelled = outcome === 'failed' || outcome === 'cancelled';
+
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.content}>
-        <View style={styles.iconCircle}>
-          <Ionicons name="checkmark-circle" size={64} color="#22C55E" />
+        <View style={[styles.iconCircle, { backgroundColor: isDarkMode ? copy.iconBg.dark : copy.iconBg.light }]}>
+          <Ionicons name={copy.icon} size={64} color={copy.iconColor} />
         </View>
-        <Text style={styles.title}>Payment Successful!</Text>
-        <Text style={styles.subtitle}>
-          Your payment has been processed successfully. It will be reflected in your billing shortly.
-        </Text>
+        <Text style={styles.title}>{copy.title}</Text>
+        <Text style={styles.subtitle}>{copy.subtitle}</Text>
         <View style={styles.verifyRow}>
           {isVerifying ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name="information-circle-outline" size={16} color={colors.textSecondary} />}
           <Text style={styles.verifyText}>{verifyMessage}</Text>
@@ -107,10 +160,26 @@ export default function PaymentSuccessScreen() {
           <Text style={styles.ref}>Bill ID: {billing_id}</Text>
         )}
 
-        <Pressable style={styles.primaryBtn} onPress={() => { emitBillingRefresh('payment_success'); router.replace('/(tabs)/billing'); }}>
-          <Ionicons name="receipt-outline" size={18} color="#fff" />
-          <Text style={styles.primaryBtnText}>View Billing</Text>
-        </Pressable>
+        {isFailedOrCancelled ? (
+          <Pressable
+            style={styles.primaryBtn}
+            onPress={() => {
+              if (billing_id) {
+                router.replace({ pathname: '/payment', params: { billId: billing_id } });
+              } else {
+                router.replace('/(tabs)/billing');
+              }
+            }}
+          >
+            <Ionicons name="refresh" size={18} color="#fff" />
+            <Text style={styles.primaryBtnText}>Try Again</Text>
+          </Pressable>
+        ) : (
+          <Pressable style={styles.primaryBtn} onPress={() => { emitBillingRefresh('payment_success'); router.replace('/(tabs)/billing'); }}>
+            <Ionicons name="receipt-outline" size={18} color="#fff" />
+            <Text style={styles.primaryBtnText}>View Billing</Text>
+          </Pressable>
+        )}
 
         <Pressable style={styles.secondaryBtn} onPress={() => { emitBillingRefresh('payment_success'); router.replace('/(tabs)/home'); }}>
           <Text style={styles.secondaryBtnText}>Go to Home</Text>
@@ -127,7 +196,6 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
   },
   iconCircle: {
     width: 100, height: 100, borderRadius: 50,
-    backgroundColor: '#f0fdf4',
     justifyContent: 'center', alignItems: 'center', marginBottom: 8,
   },
   title: { fontSize: 24, fontWeight: '800', color: c.text },

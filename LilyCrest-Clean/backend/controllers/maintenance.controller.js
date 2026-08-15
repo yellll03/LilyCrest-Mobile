@@ -1392,6 +1392,17 @@ async function confirmMaintenanceResolved(req, res) {
 }
 
 // Create maintenance request
+// Client-generated idempotency key: a UUID (or similar opaque token) the
+// mobile app mints once per submission attempt and resends unchanged on
+// retry. Loose format check only — this is a dedupe key, not a security
+// boundary, so it just needs to be a reasonably-bounded opaque string.
+const CLIENT_REQUEST_ID_PATTERN = /^[a-zA-Z0-9_-]{8,100}$/;
+
+function normalizeClientRequestId(raw) {
+  const value = typeof raw === 'string' ? raw.trim() : '';
+  return CLIENT_REQUEST_ID_PATTERN.test(value) ? value : null;
+}
+
 async function createMaintenance(req, res) {
   try {
     const db = getDb();
@@ -1405,10 +1416,25 @@ async function createMaintenance(req, res) {
       ? req.body.urgency.trim().toLowerCase()
       : 'normal';
     const attachmentsRaw = req.body?.attachments;
+    const clientRequestId = normalizeClientRequestId(req.body?.client_request_id);
 
     const fieldErrors = validateMaintenanceFields({ requestType, description, urgency: urgencyRaw });
     if (Object.keys(fieldErrors).length) {
       return res.status(400).json({ detail: 'Validation failed.', errors: fieldErrors });
+    }
+
+    // Fast path: this exact submission (same tenant + same client-generated
+    // key) already succeeded — hand back the original ticket instead of
+    // re-validating/re-inserting. Closes the "timeout after the server
+    // already committed, tenant retries, duplicate ticket" scenario.
+    if (clientRequestId) {
+      const existing = await db.collection(PRIMARY_COLLECTION).findOne({
+        user_id: req.user.user_id,
+        client_request_id: clientRequestId,
+      });
+      if (existing) {
+        return res.status(200).json(buildTenantRequestResponse(existing, { includeThread: true }));
+      }
     }
 
     const urgency = urgencyRaw;
@@ -1439,6 +1465,7 @@ async function createMaintenance(req, res) {
       {
         request_id: `maint_${uuidv4().replace(/-/g, '').substring(0, 12)}`,
         user_id: req.user.user_id,
+        ...(clientRequestId ? { client_request_id: clientRequestId } : {}),
         ...(req.user._id ? { userId: asObjectId(req.user._id) || req.user._id } : {}),
         request_type: requestType.toLowerCase(),
         description,
@@ -1484,7 +1511,25 @@ async function createMaintenance(req, res) {
       req.user,
     );
 
-    await db.collection(PRIMARY_COLLECTION).insertOne(newRequest);
+    try {
+      await db.collection(PRIMARY_COLLECTION).insertOne(newRequest);
+    } catch (insertError) {
+      // Two near-simultaneous submits with the same (user_id, client_request_id)
+      // both pass the findOne check above before either has inserted — the
+      // unique index (server.js) is what actually prevents a duplicate ticket
+      // in that race, surfacing here as a duplicate-key error on the loser.
+      // Treat it the same as the fast-path hit: return the winner's ticket.
+      if (insertError?.code === 11000 && clientRequestId) {
+        const winner = await db.collection(PRIMARY_COLLECTION).findOne({
+          user_id: req.user.user_id,
+          client_request_id: clientRequestId,
+        });
+        if (winner) {
+          return res.status(200).json(buildTenantRequestResponse(winner, { includeThread: true }));
+        }
+      }
+      throw insertError;
+    }
     res.status(201).json(buildTenantRequestResponse(newRequest, { includeThread: true }));
   } catch (error) {
     console.error('Create maintenance error:', error);
