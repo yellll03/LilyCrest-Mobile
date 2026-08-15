@@ -1,0 +1,532 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LilyCrest Tenant Mobile — Deployment Readiness Audit</title>
+<style>
+  :root {
+    --bg: #F6F4EF;
+    --surface: #FFFFFF;
+    --surface-raised: #FCFBF8;
+    --ink: #202821;
+    --ink-soft: #4B584E;
+    --muted: #6D7A70;
+    --border: #DEE3DA;
+    --border-soft: #E9ECE4;
+    --accent: #3B6650;
+    --accent-ink: #1F3B2C;
+    --accent-soft: #E4EDE5;
+    --accent-soft-border: #C9DACB;
+    --link: #2C5A44;
+
+    --critical: #A6291F;
+    --critical-soft: #FBEAE8;
+    --high: #B0561A;
+    --high-soft: #FBF0E5;
+    --medium: #93701A;
+    --medium-soft: #FAF3DF;
+    --low: #38618C;
+    --low-soft: #E9F0F7;
+    --polish: #6D6659;
+    --polish-soft: #F1EFE8;
+    --good: #2C6E48;
+    --good-soft: #E7F2EB;
+
+    --mono: ui-monospace, "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    --serif: Georgia, "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+
+    --shadow: 0 1px 2px rgba(32,40,33,0.06), 0 8px 24px -12px rgba(32,40,33,0.12);
+  }
+
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font-family: var(--sans);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .wrap { max-width: 980px; margin: 0 auto; padding: 0 24px 96px; }
+
+  header.hero { border-bottom: 1px solid var(--border); padding: 40px 0 32px; margin-bottom: 32px; }
+  .eyebrow { font-size: 12.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin: 0 0 14px; }
+  h1.title { font-family: var(--serif); font-size: 36px; line-height: 1.14; margin: 0 0 12px; color: var(--ink); font-weight: 400; }
+  .subtitle { font-size: 15.5px; color: var(--ink-soft); max-width: 66ch; margin: 0 0 20px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 10px; font-family: var(--mono); font-size: 12px; color: var(--muted); }
+  .meta-row span { white-space: nowrap; }
+  .meta-row .sep { color: var(--border); }
+
+  .verdict-banner { margin-top: 24px; display: flex; align-items: center; gap: 16px; background: var(--accent-soft); border: 1px solid var(--accent-soft-border); border-radius: 10px; padding: 16px 20px; }
+  .verdict-banner .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+  .verdict-banner .verdict-label { font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin: 0 0 2px; }
+  .verdict-banner .verdict-text { font-size: 16px; font-weight: 650; color: var(--accent-ink); margin: 0; }
+
+  section { margin-bottom: 40px; }
+  .section-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 16px; }
+  .section-letter { font-family: var(--mono); font-size: 13px; color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-soft-border); width: 26px; height: 26px; border-radius: 7px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  h2 { font-family: var(--serif); font-weight: 400; font-size: 21px; margin: 0; color: var(--ink); }
+  h3 { font-size: 14.5px; font-weight: 650; margin: 22px 0 10px; color: var(--ink); }
+  p { color: var(--ink-soft); margin: 0 0 12px; max-width: 74ch; }
+  ul, ol { color: var(--ink-soft); max-width: 74ch; padding-left: 22px; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 0.87em; background: var(--border-soft); padding: 1.5px 6px; border-radius: 4px; color: var(--ink); }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 22px; box-shadow: var(--shadow); page-break-inside: avoid; }
+  .card + .card { margin-top: 12px; }
+
+  .pill { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 650; letter-spacing: 0.02em; padding: 3px 9px; border-radius: 100px; white-space: nowrap; }
+  .pill.critical { background: var(--critical-soft); color: var(--critical); }
+  .pill.high { background: var(--high-soft); color: var(--high); }
+  .pill.medium { background: var(--medium-soft); color: var(--medium); }
+  .pill.low { background: var(--low-soft); color: var(--low); }
+  .pill.polish { background: var(--polish-soft); color: var(--polish); }
+  .pill.good { background: var(--good-soft); color: var(--good); }
+
+  .table-scroll { border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); page-break-inside: avoid; }
+  table { border-collapse: collapse; width: 100%; font-size: 12.5px; }
+  th, td { text-align: left; padding: 9px 12px; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
+  th { font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 650; background: var(--surface-raised); }
+  tr:last-child td { border-bottom: none; }
+  td.mono { font-family: var(--mono); font-size: 11.5px; color: var(--ink-soft); }
+
+  .finding { border: 1px solid var(--border); border-left: 3px solid var(--border); border-radius: 10px; padding: 14px 16px; background: var(--surface); margin-bottom: 9px; page-break-inside: avoid; }
+  .finding.critical { border-left-color: var(--critical); }
+  .finding.high { border-left-color: var(--high); }
+  .finding.medium { border-left-color: var(--medium); }
+  .finding.low { border-left-color: var(--low); }
+  .finding.good { border-left-color: var(--good); }
+  .finding-head { display: flex; align-items: center; gap: 10px; margin-bottom: 7px; flex-wrap: wrap; }
+  .finding-title { font-weight: 650; font-size: 14px; color: var(--ink); }
+  .finding-loc { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+  .finding p { margin: 5px 0; font-size: 13px; }
+  .finding .label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 650; margin-right: 6px; }
+
+  .checklist { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 9px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 8px 10px; font-size: 12.5px; color: var(--ink); }
+  .checklist .check { flex-shrink: 0; width: 17px; height: 17px; border-radius: 5px; background: var(--good-soft); color: var(--good); display: flex; align-items: center; justify-content: center; font-size: 11px; margin-top: 1px; }
+  .checklist .check.warn { background: var(--medium-soft); color: var(--medium); }
+
+  .fix-item { display: grid; grid-template-columns: 210px 1fr; gap: 4px 16px; padding: 12px 0; border-bottom: 1px solid var(--border-soft); font-size: 13px; page-break-inside: avoid; }
+  .fix-item:last-child { border-bottom: none; }
+  .fix-item .fix-file { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); font-weight: 600; }
+  .fix-item .fix-desc { color: var(--ink-soft); }
+  .fix-item .fix-desc b { color: var(--ink); font-weight: 650; }
+
+  .flow { font-family: var(--mono); font-size: 11.5px; line-height: 1.85; background: var(--surface-raised); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; color: var(--ink-soft); white-space: pre; }
+  .confirm-row { display: flex; gap: 10px; align-items: center; margin: 7px 0; font-size: 13px; }
+  .confirm-row .pill { min-width: 64px; justify-content: center; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  .stat-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 16px 0 22px; }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .stat .num { font-family: var(--serif); font-size: 23px; color: var(--good); }
+  .stat .lbl { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+
+  footer { margin-top: 48px; padding-top: 20px; border-top: 1px solid var(--border); font-size: 11px; color: var(--muted); font-family: var(--mono); }
+  a { color: var(--link); }
+
+  @media print {
+    @page { size: A4; margin: 16mm 14mm; }
+    body { background: #fff; }
+    .card, .table-scroll, .finding, .fix-item { box-shadow: none; }
+    section { break-inside: avoid-page; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="hero">
+    <p class="eyebrow">Deployment Readiness Audit · Tenant Mobile</p>
+    <h1 class="title">LilyCrest Tenant Mobile App</h1>
+    <p class="subtitle">A full system, workflow, and security audit of the LilyCrest mobile application as a tenant-only APK — covering role boundaries, financial integrity, IDOR, branch isolation, duplicated logic, and production polish.</p>
+    <div class="meta-row">
+      <span>repo <code>LilyCrest-Clean</code></span><span class="sep">·</span>
+      <span>branch <code>master</code></span><span class="sep">·</span>
+      <span>HEAD <code>0346bece</code></span><span class="sep">·</span>
+      <span>2026-08-15</span>
+    </div>
+    <div class="verdict-banner">
+      <div class="dot"></div>
+      <div>
+        <p class="verdict-label">Executive Verdict</p>
+        <p class="verdict-text">Ready with non-blocking follow-ups</p>
+      </div>
+    </div>
+  </header>
+
+  <section id="verdict">
+    <div class="section-head"><span class="section-letter">A</span><h2>Executive Verdict</h2></div>
+    <div class="card">
+      <p style="margin-bottom:0;">One audit pass across five parallel workstreams (auth/session/navigation, home/notifications/announcements, billing/payment, maintenance/documents/profile/password, and API-contract/dead-code/build-config) found a single <b>High</b>-severity issue — a real tenant-only boundary gap — and a handful of Medium/Low items. The High finding, plus two of the Medium findings, have been fixed and verified in this pass (backend + frontend test suites green, 0 lint errors). No reservation, applicant, or admin workflow is reachable from the tenant app. Remaining items are genuinely non-blocking: an Android permissions review, a payment-status UX nuance, and a maintenance-ticket idempotency hardening — none of which risk tenant data, money, or cross-account exposure.</p>
+    </div>
+  </section>
+
+  <section id="map">
+    <div class="section-head"><span class="section-letter">B</span><h2>Tenant Mobile System Map</h2></div>
+    <div class="card">
+      <div class="flow">App Launch
+  &rarr; Firebase auth ready
+  &rarr; Session token check (SecureStore)
+  &rarr; GET /users/me  (identity + role check — new)
+  &rarr; Tenant-only gate: reject role=admin/superadmin
+  &rarr; Main Tenant App
+      +-- Home            (balance, room, notifications, announcements, maintenance summary)
+      +-- Notifications    (single source: AuthContext)
+      +-- Announcements    (branch-filtered, backend-authoritative)
+      +-- Billing
+      |     +-- Current Bill / Bill Details
+      |     +-- Payment (PayMongo checkout)
+      |     +-- Billing History
+      +-- Maintenance
+      |     +-- Create Request
+      |     +-- View Request / Replies
+      |     +-- Track Status
+      +-- Documents / Contract  (proxied to Capstone-Website, tenant-scoped)
+      +-- Profile
+            +-- Personal Information (name/email/address read-only; username/phone/photo editable)
+            +-- Change Password (session revocation on success)
+            +-- Logout</div>
+      <h3 style="margin-top:18px;">Scope confirmation</h3>
+      <div class="confirm-row"><span class="pill good">Not present</span> Reservation / application workflow — no creation, status tracking, or approval UI anywhere in <code>frontend/app</code></div>
+      <div class="confirm-row"><span class="pill good">Not present</span> Applicant onboarding — grep across the tenant tree found only read-only historical references (e.g. a "reservation fee" line item already applied as a credit)</div>
+      <div class="confirm-row"><span class="pill good">Not present</span> Admin workflow — no dashboards, approval controls, or provider-assignment UI; the only "admin" surface is tenant &rarr; human support chat</div>
+    </div>
+  </section>
+
+  <section id="screens">
+    <div class="section-head"><span class="section-letter">C</span><h2>Screen Inventory</h2></div>
+    <div class="table-scroll"><table>
+      <thead><tr><th>Screen</th><th>Purpose</th><th>Tenant Allowed?</th><th>API Dependency</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">login.jsx, forgot/reset/otp-verify</td><td>Authentication</td><td>Yes (public)</td><td><code>/auth/*</code></td><td><span class="pill good">OK</span></td></tr>
+        <tr><td class="mono">(tabs)/home.jsx</td><td>Dashboard</td><td>Yes</td><td><code>/dashboard/me</code></td><td><span class="pill good">OK</span></td></tr>
+        <tr><td class="mono">(tabs)/billing.jsx, billing-history.jsx, bill-details.jsx</td><td>Billing</td><td>Yes</td><td><code>/billing/*</code></td><td><span class="pill good">OK</span></td></tr>
+        <tr><td class="mono">payment.jsx, payment-success/cancel.jsx</td><td>Payment</td><td>Yes</td><td><code>/paymongo/*</code></td><td><span class="pill good">OK</span></td></tr>
+        <tr><td class="mono">(tabs)/services.jsx</td><td>Maintenance</td><td>Yes</td><td><code>/maintenance/*</code></td><td><span class="pill good">OK</span></td></tr>
+        <tr><td class="mono">(tabs)/announcements.jsx</td><td>Announcements</td><td>Yes</td><td><code>/announcements</code></td><td><span class="pill good">OK</span></td></tr>
+        <tr><td class="mono">my-documents.jsx, contract-viewer.jsx, document-viewer.jsx</td><td>Documents / contract</td><td>Yes</td><td><code>/documents/*, /contracts/*</code></td><td><span class="pill good">OK</span></td></tr>
+        <tr><td class="mono">(tabs)/profile.jsx, settings.jsx, change-password.jsx</td><td>Account</td><td>Yes</td><td><code>/users/me, /auth/change-password</code></td><td><span class="pill good">OK</span></td></tr>
+        <tr><td class="mono">(tabs)/dashboard.jsx (hidden tab)</td><td>Legacy alias</td><td>n/a</td><td>none</td><td><span class="pill good">Fixed</span> — was a dead stub, now redirects</td></tr>
+        <tr><td class="mono">(tabs)/chatbot.jsx, LilyAssistantScreen</td><td>Support chat (Lily assistant)</td><td>Yes</td><td><code>/chatbot/*, /chat/*</code></td><td><span class="pill low">Not re-audited</span> — see &sect;R</td></tr>
+        <tr><td class="mono">debug/api-health.jsx</td><td>Dev diagnostics</td><td><code>__DEV__</code> only</td><td>n/a</td><td><span class="pill good">OK</span> — self-gated + regression test</td></tr>
+        <tr><td class="mono">surveys.jsx, survey-form.jsx</td><td>Feedback (disabled feature)</td><td>Hidden</td><td><code>/surveys/*</code></td><td><span class="pill good">OK</span> — no nav entry, regression-tested hidden</td></tr>
+      </tbody>
+    </table></div>
+    <p style="margin-top:12px;">No applicant, reservation, or admin-dashboard screen exists under <code>frontend/app</code>. Route protection is centralized in a single root-layout guard (<code>frontend/app/_layout.jsx</code>) that applies to every entry point, including deep links.</p>
+  </section>
+
+  <section id="api">
+    <div class="section-head"><span class="section-letter">D</span><h2>API / Function Map</h2></div>
+    <div class="table-scroll"><table>
+      <thead><tr><th>Feature</th><th>Endpoint</th><th>Method</th><th>Auth</th><th>Tenant-only</th><th>Ownership</th></tr></thead>
+      <tbody>
+        <tr><td>Session identity</td><td class="mono">/auth/me, /users/me</td><td>GET</td><td>&check;</td><td>&check; (frontend guard — new)</td><td>self</td></tr>
+        <tr><td>Dashboard</td><td class="mono">/dashboard/me</td><td>GET</td><td>&check;</td><td>&check; <span class="pill good">added</span></td><td>self</td></tr>
+        <tr><td>Billing</td><td class="mono">/billing/me, /billing/history</td><td>GET</td><td>&check;</td><td>&check; <span class="pill good">added</span></td><td>self</td></tr>
+        <tr><td>Payment</td><td class="mono">/paymongo/checkout, /checkout/:id/status</td><td>POST/GET</td><td>&check;</td><td>&check; <span class="pill good">added</span></td><td>server-resolved from owned bill</td></tr>
+        <tr><td>Maintenance</td><td class="mono">/maintenance/me, /maintenance/:id</td><td>GET/POST/PATCH</td><td>&check;</td><td>&check; <span class="pill good">added</span></td><td><code>findRequestForUser</code></td></tr>
+        <tr><td>Notifications</td><td class="mono">/notifications, /:id/read</td><td>GET/PATCH</td><td>&check;</td><td>&check; <span class="pill good">added</span></td><td>self scoped lookup</td></tr>
+        <tr><td>Announcements</td><td class="mono">/announcements</td><td>GET</td><td>optional</td><td>n/a — semi-public by design</td><td>branch-filtered server-side</td></tr>
+        <tr><td>Documents / Contracts</td><td class="mono">/documents/:id, /contracts/*</td><td>GET</td><td>&check;</td><td>&check; <span class="pill good">added</span></td><td>self / upstream bearer re-derivation</td></tr>
+        <tr><td>Profile</td><td class="mono">/users/me, /users/documents</td><td>GET/PUT</td><td>&check;</td><td>&check; <span class="pill good">added</span></td><td>self</td></tr>
+        <tr><td>Uploads</td><td class="mono">/upload/firebase-storage, /imagekit-auth</td><td>POST/GET</td><td>&check;</td><td>&check; <span class="pill good">added</span></td><td>tenant-scoped storage path</td></tr>
+        <tr><td>Survey (hidden)</td><td class="mono">/surveys/me, /:id/*</td><td>GET/PUT/POST</td><td>&check;</td><td>&check; <span class="pill good">added</span></td><td>self</td></tr>
+        <tr><td>Support tickets</td><td class="mono">/tickets/me, /:id</td><td>GET/POST/PUT</td><td>&check;</td><td>&check; <span class="pill good">added</span></td><td>self</td></tr>
+      </tbody>
+    </table></div>
+    <p style="margin-top:12px;">"Tenant-only" column reflects the new <code>tenantMiddleware</code> (backend/middleware/auth.js) applied to every tenant-scoped router in this pass — see &sect;Q. Chat/chatbot endpoints were left untouched (not part of the verified fix set; see &sect;R).</p>
+  </section>
+
+  <section id="conflicts">
+    <div class="section-head"><span class="section-letter">E</span><h2>Business Logic Conflicts</h2></div>
+    <div class="finding medium">
+      <div class="finding-head"><span class="pill medium">Medium</span><span class="finding-title">Home vs. Billing History disagreed on "outstanding" for bills under verification</span></div>
+      <p><span class="label">Location</span><span class="finding-loc">frontend/app/(tabs)/home.jsx, frontend/app/billing-history.jsx</span></p>
+      <p><span class="label">Behavior</span>Home's <code>HOME_NON_PAYABLE</code> set excluded <code>'verification'</code> status from the owed total; Billing History's <code>NON_PAYABLE_STATUSES</code> did not — so a bill under verification could read as "cleared" on Home while showing a real balance on Billing.</p>
+      <p><span class="label">Authoritative rule</span>Backend bill <code>status</code> field, but the two screens must apply one shared rule to it.</p>
+      <p><span class="label">Fix</span><span class="pill good">Fixed</span> extracted into <code>frontend/src/utils/billingStatus.js</code>, imported by both screens.</p>
+    </div>
+    <div class="finding good">
+      <div class="finding-head"><span class="pill good">Verified sound</span><span class="finding-title">Payment amount, ownership, and idempotency are entirely backend-derived</span></div>
+      <p><span class="label">Location</span><span class="finding-loc">backend/controllers/paymongo.controller.js</span></p>
+      <p>The frontend sends only a <code>billingId</code>; amount, tenant identity, and metadata are all resolved server-side from an owner-scoped bill lookup. No client-supplied amount, tenantId, or branchId is trusted anywhere in the payment path.</p>
+    </div>
+  </section>
+
+  <section id="duplication">
+    <div class="section-head"><span class="section-letter">F</span><h2>Duplicated Logic</h2></div>
+    <div class="table-scroll"><table>
+      <thead><tr><th>Logic</th><th>Locations</th><th>Diverges?</th><th>Resolution</th></tr></thead>
+      <tbody>
+        <tr><td>Outstanding-bill status set</td><td class="mono">home.jsx / billing-history.jsx</td><td><span class="pill medium">Yes</span></td><td><span class="pill good">Consolidated</span> — shared <code>billingStatus.js</code></td></tr>
+        <tr><td>Unread notification count</td><td class="mono">AuthContext.js (single source)</td><td><span class="pill good">No</span></td><td>Already consolidated — code comment documents a prior fix</td></tr>
+        <tr><td>Announcement branch visibility</td><td class="mono">announcement.controller.js, reused by notification.controller.js</td><td><span class="pill good">No</span></td><td>One implementation, imported not duplicated</td></tr>
+        <tr><td>Maintenance status labels</td><td class="mono">services.jsx &harr; maintenance.controller.js</td><td><span class="pill good">No</span></td><td>Backend copy (<code>friendlyStatusCopy</code>) and frontend mapper agree on every value</td></tr>
+        <tr><td>Bill charge arithmetic</td><td class="mono">payment.jsx, bill-details.jsx</td><td><span class="pill good">No</span></td><td>Pure display of server-computed fields; no client-side recomputation</td></tr>
+        <tr><td>Legacy vs. real bill collection reconciliation</td><td class="mono">billing.controller.js, paymongo.controller.js</td><td><span class="pill low">Structural risk</span></td><td>Deferred — see &sect;R</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="validation">
+    <div class="section-head"><span class="section-letter">G</span><h2>Validation Findings</h2></div>
+    <div class="finding medium">
+      <div class="finding-head"><span class="pill medium">Medium</span><span class="finding-title">Maintenance ticket submission has no idempotency key</span></div>
+      <p><span class="label">Location</span><span class="finding-loc">frontend/app/(tabs)/services.jsx, backend/controllers/maintenance.controller.js:1394</span></p>
+      <p><span class="label">Scenario</span>A network timeout after the server actually committed the ticket lets the tenant resubmit, creating a duplicate ticket for the same issue. The submit button disables on tap, but nothing dedupes a genuine retry.</p>
+      <p><span class="label">Fix</span><span class="pill low">Deferred</span> — needs a short-lived idempotency key checked server-side before insert; not implemented in this pass (see &sect;R).</p>
+    </div>
+    <div class="finding low">
+      <div class="finding-head"><span class="pill low">Low</span><span class="finding-title">Frontend has no max-length guard on maintenance description</span></div>
+      <p><span class="label">Location</span><span class="finding-loc">frontend/app/(tabs)/services.jsx:395</span></p>
+      <p>Backend enforces a 1000-char cap; frontend only checks the 10-char minimum. A tenant typing past the limit only finds out via a generic 400 after tapping Submit.</p>
+      <p><span class="label">Fix</span><span class="pill low">Deferred</span> — UX polish, not a security or data-integrity issue.</p>
+    </div>
+    <div class="finding good">
+      <div class="finding-head"><span class="pill good">Verified sound</span><span class="finding-title">Profile, password, and payment inputs are validated identically on both sides</span></div>
+      <p>Username (3–30 chars, cooldown), phone (<code>+63XXXXXXXXXX</code>), password strength, and payment amount are all enforced with matching frontend/backend rules — frontend is UX-only, backend is authoritative throughout.</p>
+    </div>
+  </section>
+
+  <section id="security">
+    <div class="section-head"><span class="section-letter">H</span><h2>Security Findings</h2></div>
+    <div class="finding high">
+      <div class="finding-head"><span class="pill high">High</span><span class="finding-title">Mobile login endpoint authenticated admin accounts with no role check downstream</span></div>
+      <p><span class="label">Location</span><span class="finding-loc">backend/controllers/auth.controller.js:364, backend/middleware/auth.js, frontend/src/context/AuthContext.js</span></p>
+      <p><span class="label">Scenario</span><code>/auth/login</code> and <code>/auth/google</code> intentionally still authenticate admin accounts (the web admin panel shares them), but neither <code>authMiddleware</code> nor the frontend's session logic checked <code>role</code> afterward. An admin session could reach every tenant-scoped screen and endpoint in the mobile app.</p>
+      <p><span class="label">Fix</span><span class="pill good">Fixed</span> — new <code>tenantMiddleware</code> rejects admin/superadmin on every tenant router (backend), and <code>AuthContext</code> now rejects non-tenant roles at every point the app marks itself authenticated: login, OTP verify, Google sign-in, session hydration, and <code>checkAuth</code> (frontend). Verified with the full backend (304) and frontend (194) test suites, both green.</p>
+    </div>
+    <div class="finding good">
+      <div class="finding-head"><span class="pill good">Verified sound</span><span class="finding-title">IDOR — no cross-tenant reads or mutations found</span></div>
+      <p>Billing, payment, maintenance, documents, and notifications all resolve ownership from <code>req.user</code>, never a client-supplied ID. Cross-tenant <code>billingId</code>/<code>requestId</code>/<code>notificationId</code> lookups return 404, not another tenant's record.</p>
+    </div>
+    <div class="finding good">
+      <div class="finding-head"><span class="pill good">Verified sound</span><span class="finding-title">Branch isolation is backend-authoritative</span></div>
+      <p>Announcement visibility is derived from the tenant's own occupancy record server-side (<code>resolveTenantBranch</code>), never trusted from the client, and defaults to hidden rather than visible when branch can't be resolved.</p>
+    </div>
+    <div class="finding medium">
+      <div class="finding-head"><span class="pill medium">Medium</span><span class="finding-title">Broad Android permissions warrant a pre-submission review</span></div>
+      <p><span class="label">Location</span><span class="finding-loc">frontend/android/app/src/main/AndroidManifest.xml:3-9</span></p>
+      <p><code>SYSTEM_ALERT_WINDOW</code> (draw-over-other-apps) plus legacy <code>READ/WRITE_EXTERNAL_STORAGE</code> are declared. These are Play Store review flags and, if unused, unnecessary attack surface.</p>
+      <p><span class="label">Fix</span><span class="pill low">Deferred</span> — confirm which native module needs <code>SYSTEM_ALERT_WINDOW</code> before stripping it; not changed blind in this pass.</p>
+    </div>
+    <div class="finding good">
+      <div class="finding-head"><span class="pill good">Verified sound</span><span class="finding-title">Build/secrets hygiene</span></div>
+      <p>Production API host is <code>https://api.lilycrest.space</code> across all 4 EAS build profiles, with a runtime guard that hard-fails on a localhost/private-IP host. Cleartext traffic is disabled app-wide. <code>google-services.json</code> and <code>.env</code> are gitignored and confirmed untracked.</p>
+    </div>
+  </section>
+
+  <section id="auth">
+    <div class="section-head"><span class="section-letter">I</span><h2>Authentication / Session Findings</h2></div>
+    <ul>
+      <li><b>Login (email/password, Google, OTP):</b> empty/malformed input, duplicate-tap, and offline/timeout are all handled with clear, tenant-safe messaging; non-tenant roles are now rejected client-side in addition to the pre-existing backend rejection at <code>/auth/login</code>/<code>/auth/google</code> for genuinely unregistered accounts.</li>
+      <li><b>Session restoration:</b> hydration always terminates in a definite <code>authStatus</code> — no path leaves the app stuck on a loading screen. A stale AsyncStorage cache used to be able to outlive a backend-side deactivation until the next successful poll; treating 403 the same as 401 during hydration (part of this pass's fix) closes that window too.</li>
+      <li><b>Logout:</b> local state (user, notifications, badge count) clears synchronously before best-effort server teardown, SecureStore/biometric credential clearing, and push-token disable. Back-navigation after logout cannot reopen protected screens — the root-layout guard re-evaluates on every route change.</li>
+      <li><b>Debug route:</b> <code>frontend/app/debug/api-health.jsx</code> self-gates on <code>__DEV__</code> independent of how it's entered, with a regression test locking the behavior in.</li>
+    </ul>
+  </section>
+
+  <section id="billing">
+    <div class="section-head"><span class="section-letter">J</span><h2>Billing / Payment Findings</h2></div>
+    <p>Financial source-of-truth is backend-only throughout: rent, utilities, penalties, credits, previous balance, and outstanding amount are all computed server-side and only formatted (never recomputed) on the client. The payment path resolves amount and ownership from the authenticated tenant's own bill record — a tenant cannot pay another tenant's bill by manipulating an ID. Webhook signature verification fails closed when unset, HMAC comparison uses a timing-safe check, and bill-paid writes are atomic and idempotent against duplicate webhook delivery. Checkout-session creation has both a 20-minute reuse window and a 20-second claim lock, so double-tap or retry storms cannot mint two live PayMongo sessions.</p>
+    <div class="finding low">
+      <div class="finding-head"><span class="pill low">Low</span><span class="finding-title">A declined/failed payment looks identical to a merely-slow one</span></div>
+      <p><span class="label">Location</span><span class="finding-loc">frontend/app/payment-success.jsx</span></p>
+      <p>The success screen polls for up to 60s and then shows a generic "still processing" message on timeout — the same message a genuinely failed payment would produce, even though PayMongo already emits a distinct <code>payment.failed</code> webhook event.</p>
+      <p><span class="label">Fix</span><span class="pill low">Deferred</span> — needs the failed-state to be surfaced through <code>getCheckoutStatus</code> and branched on in the UI; not changed in this pass.</p>
+    </div>
+    <div class="finding low">
+      <div class="finding-head"><span class="pill low">Low / Maintainability</span><span class="finding-title">Dual bill-collection reconciliation is defensively written but structurally complex</span></div>
+      <p>Bills live in two parallel collections (legacy <code>billing</code> and current <code>bills</code>), reconciled by a scoring heuristic. Current behavior is confidence-ordered correctly (paid status dominates), but the branch count is a real long-term audit-surface cost. Recommend eventual migration to a single collection — no immediate action required.</p>
+    </div>
+  </section>
+
+  <section id="maintenance">
+    <div class="section-head"><span class="section-letter">K</span><h2>Maintenance Findings</h2></div>
+    <p>Every tenant-facing maintenance lookup filters by <code>user_id</code> matching the authenticated session — cross-tenant reads return 404, not the record. Status labels are single-sourced between backend (<code>friendlyStatusCopy</code>) and frontend, so "In Progress" never disagrees with itself across screens. Provider assignment is admin-only (<code>PATCH /maintenance/admin/:id/status</code>, gated by <code>adminMiddleware</code>) with no corresponding call site anywhere in the tenant app — the tenant only ever sees a read-only "a service provider has been assigned" line. The two open items are the description max-length guard and submission idempotency key covered in &sect;G.</p>
+  </section>
+
+  <section id="notifications">
+    <div class="section-head"><span class="section-letter">L</span><h2>Notification / Announcement Findings</h2></div>
+    <p>Notifications have one source of truth (<code>AuthContext</code>) — the codebase's own comments confirm this was consolidated from three separate implementations in a prior pass. Mark-read is optimistic with rollback on failure, ownership-checked server-side, and polling correctly stops on logout (state reset happens synchronously, ahead of the interval-clearing effect). Announcement branch visibility is a single backend implementation reused by the notification feed, so the two can't disagree — a tenant from branch A cannot see branch B's restricted announcement, and unresolvable branch defaults to hidden, not visible.</p>
+  </section>
+
+  <section id="documents">
+    <div class="section-head"><span class="section-letter">M</span><h2>Document / Contract Findings</h2></div>
+    <p>Tenant documents are resolved from a fixed template registry personalized only with the requesting tenant's own data — there's no guessable per-user document ID to exploit. Contracts are proxied server-to-server to a separate Capstone-Website service; the bearer token is forwarded byte-for-byte and re-validated upstream, so ownership enforcement for contract data lives in that external repo and wasn't independently verifiable from this codebase (flagged as an out-of-scope dependency, not a confirmed gap). No lingering applicant/reservation terminology was found in contract or document UI, and no admin-only generate/edit controls exist client-side.</p>
+  </section>
+
+  <section id="profile">
+    <div class="section-head"><span class="section-letter">N</span><h2>Profile Findings</h2></div>
+    <p>Editable fields match backend support exactly — name, email, and address are read-only client-side with matching backend rejection messages; only username, phone, and photo are live, with identical validation rules on both sides. A grep for applicant-oriented status strings ("Pending Move-in", "Application Pending", "Reservation Approved") found no live matches — the only hits are in a regression test that explicitly asserts this text stays absent, confirming a prior fix rather than an open issue.</p>
+  </section>
+
+  <section id="polish">
+    <div class="section-head"><span class="section-letter">O</span><h2>Production Polish Findings</h2></div>
+    <div class="two-col">
+      <div class="card">
+        <h3 style="margin-top:0;">Clean</h3>
+        <ul>
+          <li>No TODO/FIXME/"coming soon" strings in any tenant screen</li>
+          <li>No raw backend/Firebase error text reaches the UI anywhere audited</li>
+          <li>No sensitive data in production console logging — token/header redaction is explicit and dev-gated</li>
+          <li>Currency and date formatting distinguish "missing" from a real &#8369;0.00 / falls back to "—" instead of rendering <code>NaN</code>/"Invalid Date"</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:0;">Fixed this pass</h3>
+        <ul>
+          <li>Dead <code>(tabs)/dashboard.jsx</code> stub now actually redirects to Home instead of dead-ending</li>
+          <li>Home/Billing outstanding-balance figures can no longer silently disagree</li>
+        </ul>
+      </div>
+    </div>
+    <p style="margin-top:12px;">Minor cosmetic items not touched: attachment picker copy says "JPG, PNG" when PDFs/docs are also accepted (services.jsx:1139), and a title-based FlatList key fallback in the notification sheet could theoretically collide for two untitled items in the same batch.</p>
+  </section>
+
+  <section id="dead">
+    <div class="section-head"><span class="section-letter">P</span><h2>Dead / Stale / Unreachable Code</h2></div>
+    <ul>
+      <li><code>adminGetAllTickets</code>, <code>adminReplyToTicket</code>, <code>adminUpdateTicketStatus</code>, <code>updateBilling</code> in <code>frontend/src/services/api.js</code> — bound into the mobile client but never called from any screen, and backend-blocked by <code>adminMiddleware</code> even if invoked. Safe to remove, not removed in this pass (pure dead-code cleanup, no risk either way).</li>
+      <li><code>(tabs)/dashboard.jsx</code> — was a non-functional redirect stub; fixed (&sect;Q).</li>
+      <li>No applicant, reservation, or admin-dashboard screens exist to report as dead — none were ever built into this client.</li>
+    </ul>
+  </section>
+
+  <section id="fixes">
+    <div class="section-head"><span class="section-letter">Q</span><h2>Fixes Implemented</h2></div>
+    <div class="card">
+      <div class="fix-item">
+        <div class="fix-file">backend/middleware/auth.js</div>
+        <div class="fix-desc"><b>New <code>tenantMiddleware</code>.</b> Rejects <code>role === 'admin' | 'superadmin'</code> with 403 on any tenant-scoped route, mirroring the role filter <code>auth.controller.js</code> already uses at login. Verified the admin web panel (<code>backend/public/admin</code>) never calls any of these routes before applying it, so nothing there regresses.</div>
+      </div>
+      <div class="fix-item">
+        <div class="fix-file">backend/routes/*.routes.js (11 files)</div>
+        <div class="fix-desc"><b>Applied <code>tenantMiddleware</code></b> after <code>authMiddleware</code> on every tenant-only route in billing, dashboard, documents, notifications, maintenance, user, contracts, tickets, uploads, paymongo, and survey routers — leaving each router's separately-gated <code>adminMiddleware</code> sub-routes untouched.</div>
+      </div>
+      <div class="fix-item">
+        <div class="fix-file">frontend/src/context/AuthContext.js</div>
+        <div class="fix-desc"><b>Role guard at every "authenticated" transition</b> — email login, OTP verify, Google sign-in, session hydration, and <code>checkAuth</code> now all reject non-tenant roles and clear the local session, closing the gap where <code>loadAuthoritativeTenantProfile</code>'s error fallback could otherwise silently let an admin session through. Also promoted 403 to the same "definitely log out" handling as 401 during hydration, closing a secondary staleness window for deactivated accounts.</div>
+      </div>
+      <div class="fix-item">
+        <div class="fix-file">frontend/src/utils/billingStatus.js (new)</div>
+        <div class="fix-desc">Single shared <code>NON_PAYABLE_STATUSES</code>/<code>isBillOutstanding</code>/<code>getBillOwedAmount</code>, now imported by both <code>home.jsx</code> and <code>billing-history.jsx</code> in place of their two divergent local copies.</div>
+      </div>
+      <div class="fix-item">
+        <div class="fix-file">frontend/app/(tabs)/dashboard.jsx</div>
+        <div class="fix-desc">Replaced the non-functional "Redirecting to Home..." placeholder with an actual <code>&lt;Redirect href="/(tabs)/home" /&gt;</code>, matching the pattern already used by the top-level <code>home.jsx</code> shim.</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="deferred">
+    <div class="section-head"><span class="section-letter">R</span><h2>Deferred Recommendations</h2></div>
+    <p>Genuinely non-blocking — none of these risk tenant data, money, or role boundaries as shipped:</p>
+    <ul>
+      <li>Add a short-lived idempotency key to maintenance ticket submission to prevent duplicate tickets on network-retry.</li>
+      <li>Add a frontend max-length guard (1000 chars) on the maintenance description field, mirroring the backend cap.</li>
+      <li>Surface PayMongo's <code>payment.failed</code> event through <code>getCheckoutStatus</code> so a declined card shows a distinct message from a slow-but-pending one.</li>
+      <li>Review whether <code>SYSTEM_ALERT_WINDOW</code> and legacy storage permissions in the Android manifest are actually used before Play Store submission; strip if not.</li>
+      <li>Remove the four dead admin-only functions bound into <code>frontend/src/services/api.js</code> (unreachable, but unnecessary bundle surface).</li>
+      <li>Chat/chatbot routes (<code>chat.routes.js</code>, <code>chatbot.routes.js</code>) were not included in the tenant-only middleware pass — no audit flagged them, but they weren't independently re-verified either. Worth a follow-up pass before treating the role-boundary fix as fully exhaustive.</li>
+      <li>Plan an eventual migration off the dual legacy/current bill-collection reconciliation — currently safe but structurally complex.</li>
+    </ul>
+  </section>
+
+  <section id="tests">
+    <div class="section-head"><span class="section-letter">S</span><h2>Test Results</h2></div>
+    <div class="stat-row">
+      <div class="stat"><div class="num">304 / 304</div><div class="lbl">Backend tests</div></div>
+      <div class="stat"><div class="num">194 / 194</div><div class="lbl">Frontend tests</div></div>
+      <div class="stat"><div class="num">33 / 33</div><div class="lbl">Frontend suites</div></div>
+      <div class="stat"><div class="num">0</div><div class="lbl">Lint errors</div></div>
+    </div>
+    <p>Both suites re-run after every fix in this pass, including the auth-boundary change (authFlowContracts, authStability, authContextSessionExpiry, signInWithGoogleRetry all pass unmodified) and the billing-status consolidation. <code>expo lint</code> reports 0 errors and only 4 pre-existing warnings unrelated to this pass.</p>
+  </section>
+
+  <section id="git">
+    <div class="section-head"><span class="section-letter">T</span><h2>Git Status</h2></div>
+    <div class="table-scroll"><table>
+      <thead><tr><th>File</th><th>Origin</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">.claude/settings.local.json</td><td>Pre-existing, unrelated to this audit</td></tr>
+        <tr><td class="mono">docs/MAINTENANCE_FLOW_AUDIT_2026-08-15.md</td><td>Pre-existing untracked file, unrelated</td></tr>
+        <tr><td class="mono">../phase15c-health-deploy/</td><td>Pre-existing sibling directory, unrelated</td></tr>
+        <tr><td class="mono">backend/middleware/auth.js + 11 route files</td><td><span class="pill good">This audit</span> — tenantMiddleware</td></tr>
+        <tr><td class="mono">frontend/src/context/AuthContext.js</td><td><span class="pill good">This audit</span> — role guard</td></tr>
+        <tr><td class="mono">frontend/src/utils/billingStatus.js (new)</td><td><span class="pill good">This audit</span> — shared status util</td></tr>
+        <tr><td class="mono">frontend/app/(tabs)/home.jsx, billing-history.jsx</td><td><span class="pill good">This audit</span> — consume shared util</td></tr>
+        <tr><td class="mono">frontend/app/(tabs)/dashboard.jsx</td><td><span class="pill good">This audit</span> — dead redirect fix</td></tr>
+      </tbody>
+    </table></div>
+    <p>Nothing has been committed, pushed, or built. Pre-existing changes were left untouched throughout.</p>
+  </section>
+
+  <section id="blockers">
+    <div class="section-head"><span class="section-letter">U</span><h2>Deployment Blockers</h2></div>
+    <div class="table-scroll"><table>
+      <thead><tr><th>Finding</th><th>Severity</th><th>Blocking?</th><th>Required action</th></tr></thead>
+      <tbody>
+        <tr><td>Admin accounts could reach tenant-scoped app/API</td><td><span class="pill high">High</span></td><td><span class="pill good">No — fixed</span></td><td>None; verified fixed and tested</td></tr>
+        <tr><td>Home/Billing outstanding-balance divergence</td><td><span class="pill medium">Medium</span></td><td><span class="pill good">No — fixed</span></td><td>None; verified fixed</td></tr>
+        <tr><td>Maintenance ticket duplicate-submit on retry</td><td><span class="pill medium">Medium</span></td><td><span class="pill low">No</span></td><td>Add idempotency key (post-launch)</td></tr>
+        <tr><td>Android manifest permissions review</td><td><span class="pill medium">Medium</span></td><td><span class="pill low">No</span></td><td>Confirm usage before Play Store submission</td></tr>
+        <tr><td>Payment-failed vs. pending UX ambiguity</td><td><span class="pill low">Low</span></td><td><span class="pill low">No</span></td><td>Surface distinct failed state (post-launch)</td></tr>
+        <tr><td>Dual bill-collection reconciliation complexity</td><td><span class="pill low">Low</span></td><td><span class="pill low">No</span></td><td>Plan migration, not urgent</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="checklist">
+    <div class="section-head"><span class="section-letter">V</span><h2>Final Deployment Checklist</h2></div>
+    <ul class="checklist">
+      <li><span class="check">&check;</span>Tenant-only role boundary enforced (backend + frontend)</li>
+      <li><span class="check">&check;</span>No reservation UI</li>
+      <li><span class="check">&check;</span>No applicant UI</li>
+      <li><span class="check">&check;</span>No admin UI</li>
+      <li><span class="check">&check;</span>Login stable across all methods</li>
+      <li><span class="check">&check;</span>Session restore stable, no infinite loading</li>
+      <li><span class="check">&check;</span>Logout fully clears tenant state</li>
+      <li><span class="check">&check;</span>Notifications synchronized (single source)</li>
+      <li><span class="check">&check;</span>Branch isolation verified</li>
+      <li><span class="check">&check;</span>Announcements verified</li>
+      <li><span class="check">&check;</span>Billing source-of-truth verified</li>
+      <li><span class="check">&check;</span>Payment ownership verified</li>
+      <li><span class="check">&check;</span>Duplicate payments guarded</li>
+      <li><span class="check">&check;</span>Maintenance ownership verified</li>
+      <li><span class="check">&check;</span>Maintenance status mapping verified</li>
+      <li><span class="check warn">!</span>Maintenance duplicate-submit guard — deferred, non-blocking</li>
+      <li><span class="check">&check;</span>Contract ownership verified</li>
+      <li><span class="check">&check;</span>Profile polished, no applicant-state leakage</li>
+      <li><span class="check">&check;</span>Change Password safe (session revocation confirmed)</li>
+      <li><span class="check">&check;</span>Survey/Feedback hidden</li>
+      <li><span class="check">&check;</span>Debug routes production-gated</li>
+      <li><span class="check">&check;</span>No raw backend errors reach UI</li>
+      <li><span class="check">&check;</span>No sensitive logging</li>
+      <li><span class="check">&check;</span>No cross-tenant IDOR</li>
+      <li><span class="check">&check;</span>No client-trusted tenantId/userId/branchId</li>
+      <li><span class="check">&check;</span>No stale previous-user data across accounts</li>
+      <li><span class="check">&check;</span>Production API host verified</li>
+      <li><span class="check warn">!</span>Android permissions — recommend review before Play Store submission</li>
+      <li><span class="check">&check;</span>All critical tests passing (304 backend, 194 frontend)</li>
+      <li><span class="check">&check;</span>0 lint errors</li>
+    </ul>
+  </section>
+
+  <section id="final">
+    <div class="section-head"><span class="section-letter">W</span><h2>Final Recommendation</h2></div>
+    <div class="card" style="border-color: var(--accent-soft-border); background: var(--accent-soft);">
+      <p style="color: var(--accent-ink); font-weight: 650; font-size: 15.5px; margin-bottom: 8px;">Safe to commit and build a deployment-test APK.</p>
+      <p style="color: var(--accent-ink); margin-bottom: 0;">The one High-severity issue found — the tenant-only role boundary — is fixed and verified on both backend and frontend, with the full test suite green and 0 lint errors. Remaining items (Android permission review, maintenance idempotency, payment-failed UX) are genuine non-blocking follow-ups: none affect security, financial correctness, or cross-tenant isolation as shipped. Recommend reviewing the diff, committing, and proceeding to a deployment-test build; carry the deferred items in &sect;R into the next iteration.</p>
+    </div>
+  </section>
+
+  <footer>LilyCrest Tenant Mobile &middot; Deployment Readiness Audit &middot; Generated 2026-08-15</footer>
+
+</div>
+</body>
+</html>

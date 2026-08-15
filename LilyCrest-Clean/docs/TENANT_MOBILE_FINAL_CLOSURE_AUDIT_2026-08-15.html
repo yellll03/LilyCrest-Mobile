@@ -1,0 +1,462 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>LilyCrest Tenant Mobile — Final Closure Audit</title>
+<style>
+  :root {
+    --bg: #F6F4EF; --surface: #FFFFFF; --surface-raised: #FCFBF8;
+    --ink: #202821; --ink-soft: #4B584E; --muted: #6D7A70;
+    --border: #DEE3DA; --border-soft: #E9ECE4;
+    --accent: #3B6650; --accent-ink: #1F3B2C; --accent-soft: #E4EDE5; --accent-soft-border: #C9DACB;
+    --link: #2C5A44;
+    --critical: #A6291F; --critical-soft: #FBEAE8;
+    --high: #B0561A; --high-soft: #FBF0E5;
+    --medium: #93701A; --medium-soft: #FAF3DF;
+    --low: #38618C; --low-soft: #E9F0F7;
+    --polish: #6D6659; --polish-soft: #F1EFE8;
+    --good: #2C6E48; --good-soft: #E7F2EB;
+    --mono: ui-monospace, "Cascadia Mono", "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+    --serif: Georgia, "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --shadow: 0 1px 2px rgba(32,40,33,0.06), 0 8px 24px -12px rgba(32,40,33,0.12);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --bg: #141815; --surface: #1B211C; --surface-raised: #202722;
+      --ink: #E9EDE7; --ink-soft: #C2CBC2; --muted: #8B978C;
+      --border: #303B32; --border-soft: #29332B;
+      --accent: #6FA786; --accent-ink: #C9E4D3; --accent-soft: #223028; --accent-soft-border: #35473C;
+      --link: #86C29E;
+      --critical: #E5847A; --critical-soft: #351E1C;
+      --high: #E3A470; --high-soft: #362717;
+      --medium: #D8C077; --medium-soft: #362E15;
+      --low: #8FB3DA; --low-soft: #1B2733;
+      --polish: #ADA795; --polish-soft: #262319;
+      --good: #7FCBA0; --good-soft: #17281F;
+      --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+    }
+  }
+  :root[data-theme="dark"] {
+    --bg: #141815; --surface: #1B211C; --surface-raised: #202722;
+    --ink: #E9EDE7; --ink-soft: #C2CBC2; --muted: #8B978C;
+    --border: #303B32; --border-soft: #29332B;
+    --accent: #6FA786; --accent-ink: #C9E4D3; --accent-soft: #223028; --accent-soft-border: #35473C;
+    --link: #86C29E;
+    --critical: #E5847A; --critical-soft: #351E1C;
+    --high: #E3A470; --high-soft: #362717;
+    --medium: #D8C077; --medium-soft: #362E15;
+    --low: #8FB3DA; --low-soft: #1B2733;
+    --polish: #ADA795; --polish-soft: #262319;
+    --good: #7FCBA0; --good-soft: #17281F;
+    --shadow: 0 1px 2px rgba(0,0,0,0.3), 0 8px 24px -12px rgba(0,0,0,0.5);
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink); font-family: var(--sans); line-height: 1.55; -webkit-font-smoothing: antialiased; }
+  @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; } }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 0 24px 96px; }
+  header.hero { border-bottom: 1px solid var(--border); padding: 56px 0 40px; margin-bottom: 40px; }
+  .eyebrow { font-size: 12.5px; letter-spacing: 0.09em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin: 0 0 14px; }
+  h1.title { font-family: var(--serif); font-size: clamp(28px, 4.2vw, 40px); line-height: 1.14; margin: 0 0 12px; color: var(--ink); text-wrap: balance; font-weight: 400; }
+  .subtitle { font-size: 15.5px; color: var(--ink-soft); max-width: 68ch; margin: 0 0 22px; }
+  .meta-row { display: flex; flex-wrap: wrap; gap: 8px 10px; font-family: var(--mono); font-size: 12.5px; color: var(--muted); }
+  .meta-row .sep { color: var(--border); }
+  .verdict-banner { margin-top: 24px; display: flex; align-items: center; gap: 16px; background: var(--accent-soft); border: 1px solid var(--accent-soft-border); border-radius: 10px; padding: 18px 22px; }
+  .verdict-banner .dot { width: 12px; height: 12px; border-radius: 50%; background: var(--accent); flex-shrink: 0; }
+  .verdict-banner .verdict-label { font-size: 11.5px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--muted); font-weight: 600; margin: 0 0 2px; }
+  .verdict-banner .verdict-text { font-size: 17px; font-weight: 650; color: var(--accent-ink); margin: 0; }
+  nav.toc { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 48px; padding-bottom: 32px; border-bottom: 1px solid var(--border); }
+  nav.toc a { font-size: 12px; color: var(--ink-soft); text-decoration: none; background: var(--surface); border: 1px solid var(--border); padding: 5px 11px; border-radius: 100px; }
+  nav.toc a:hover { border-color: var(--accent); color: var(--accent-ink); }
+  section { margin-bottom: 52px; scroll-margin-top: 24px; }
+  .section-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 18px; }
+  .section-letter { font-family: var(--mono); font-size: 13px; color: var(--accent); background: var(--accent-soft); border: 1px solid var(--accent-soft-border); width: 26px; height: 26px; border-radius: 7px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  h2 { font-family: var(--serif); font-weight: 400; font-size: 22px; margin: 0; color: var(--ink); }
+  h3 { font-size: 14.5px; font-weight: 650; margin: 24px 0 10px; color: var(--ink); }
+  p { color: var(--ink-soft); margin: 0 0 12px; max-width: 74ch; }
+  ul, ol { color: var(--ink-soft); max-width: 74ch; padding-left: 22px; }
+  li { margin-bottom: 6px; }
+  code { font-family: var(--mono); font-size: 0.87em; background: var(--border-soft); padding: 1.5px 6px; border-radius: 4px; color: var(--ink); }
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 20px 22px; box-shadow: var(--shadow); }
+  .card + .card { margin-top: 12px; }
+  .pill { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 650; letter-spacing: 0.02em; padding: 3px 9px; border-radius: 100px; white-space: nowrap; }
+  .pill.critical { background: var(--critical-soft); color: var(--critical); }
+  .pill.high { background: var(--high-soft); color: var(--high); }
+  .pill.medium { background: var(--medium-soft); color: var(--medium); }
+  .pill.low { background: var(--low-soft); color: var(--low); }
+  .pill.polish { background: var(--polish-soft); color: var(--polish); }
+  .pill.good { background: var(--good-soft); color: var(--good); }
+  .table-scroll { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); box-shadow: var(--shadow); }
+  table { border-collapse: collapse; width: 100%; min-width: 620px; font-size: 13px; }
+  th, td { text-align: left; padding: 10px 13px; border-bottom: 1px solid var(--border-soft); vertical-align: top; }
+  th { font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--muted); font-weight: 650; background: var(--surface-raised); white-space: nowrap; }
+  tr:last-child td { border-bottom: none; }
+  td.mono { font-family: var(--mono); font-size: 12px; color: var(--ink-soft); }
+  .finding { border: 1px solid var(--border); border-left: 3px solid var(--border); border-radius: 10px; padding: 15px 17px; background: var(--surface); margin-bottom: 9px; }
+  .finding.critical { border-left-color: var(--critical); }
+  .finding.high { border-left-color: var(--high); }
+  .finding.medium { border-left-color: var(--medium); }
+  .finding.low { border-left-color: var(--low); }
+  .finding.good { border-left-color: var(--good); }
+  .finding-head { display: flex; align-items: center; gap: 10px; margin-bottom: 7px; flex-wrap: wrap; }
+  .finding-title { font-weight: 650; font-size: 14px; color: var(--ink); }
+  .finding-loc { font-family: var(--mono); font-size: 11.5px; color: var(--muted); }
+  .finding p { margin: 5px 0; font-size: 13.5px; }
+  .finding .label { font-size: 10.5px; text-transform: uppercase; letter-spacing: 0.05em; color: var(--muted); font-weight: 650; margin-right: 6px; }
+  .checklist { list-style: none; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 9px; }
+  .checklist li { display: flex; align-items: flex-start; gap: 9px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 9px 11px; font-size: 13px; color: var(--ink); }
+  .checklist .check { flex-shrink: 0; width: 17px; height: 17px; border-radius: 5px; background: var(--good-soft); color: var(--good); display: flex; align-items: center; justify-content: center; font-size: 11px; margin-top: 1px; }
+  .checklist .check.warn { background: var(--medium-soft); color: var(--medium); }
+  .fix-item { display: grid; grid-template-columns: 230px 1fr; gap: 4px 16px; padding: 13px 0; border-bottom: 1px solid var(--border-soft); font-size: 13px; }
+  .fix-item:last-child { border-bottom: none; }
+  .fix-item .fix-file { font-family: var(--mono); font-size: 12px; color: var(--accent-ink); font-weight: 600; }
+  .fix-item .fix-desc { color: var(--ink-soft); }
+  .fix-item .fix-desc b { color: var(--ink); font-weight: 650; }
+  .flow { font-family: var(--mono); font-size: 12px; line-height: 1.85; background: var(--surface-raised); border: 1px solid var(--border); border-radius: 10px; padding: 17px 19px; color: var(--ink-soft); white-space: pre; overflow-x: auto; }
+  .two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 720px) { .two-col { grid-template-columns: 1fr; } .fix-item { grid-template-columns: 1fr; } }
+  .stat-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 10px; margin: 16px 0 22px; }
+  .stat { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; }
+  .stat .num { font-family: var(--serif); font-size: 23px; color: var(--good); font-variant-numeric: tabular-nums; }
+  .stat .lbl { font-size: 10.5px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.05em; margin-top: 2px; }
+  footer { margin-top: 56px; padding-top: 22px; border-top: 1px solid var(--border); font-size: 11.5px; color: var(--muted); font-family: var(--mono); }
+  a { color: var(--link); }
+</style>
+<style>
+@media print { @page { size: A4; margin: 16mm 14mm; } body { background: #fff; } .card, .table-scroll, .finding, .fix-item { box-shadow: none; } section { break-inside: avoid-page; } }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+
+  <header class="hero">
+    <p class="eyebrow">Phase 3.1 · Final Closure Audit</p>
+    <h1 class="title">Tenant Mobile Final Closure Audit</h1>
+    <p class="subtitle">A closure pass on the tenant mobile app resolving every item the prior audit deferred, left unverified, or documented inconsistently — before a deployment-test APK.</p>
+    <div class="meta-row">
+      <span>repo <code>LilyCrest-Clean</code></span><span class="sep">·</span>
+      <span>branch <code>master</code></span><span class="sep">·</span>
+      <span>HEAD <code>0346bece</code> (unchanged since prior audit)</span><span class="sep">·</span>
+      <span>2026-08-15</span>
+    </div>
+    <div class="verdict-banner">
+      <div class="dot"></div>
+      <div>
+        <p class="verdict-label">A. Executive Verdict</p>
+        <p class="verdict-text">Ready with non-blocking follow-ups</p>
+      </div>
+    </div>
+  </header>
+
+  <nav class="toc">
+    <a href="#b">B. Contradictions Resolved</a>
+    <a href="#c">C. Route Matrix</a>
+    <a href="#d">D. Chat/Chatbot</a>
+    <a href="#e">E. Contract Ownership</a>
+    <a href="#f">F. Maintenance</a>
+    <a href="#g">G. Payment</a>
+    <a href="#h">H. Android Permissions</a>
+    <a href="#i">I. Dead Client Surface</a>
+    <a href="#j">J. Security</a>
+    <a href="#k">K. Validation</a>
+    <a href="#l">L. Regression</a>
+    <a href="#m">M. Git Status</a>
+    <a href="#n">N. Blockers</a>
+    <a href="#o">O. Checklist</a>
+    <a href="#final">Final Recommendation</a>
+  </nav>
+
+  <section id="a-verdict">
+    <div class="section-head"><span class="section-letter">A</span><h2>Executive Verdict</h2></div>
+    <div class="card">
+      <p style="margin-bottom:0;">Every item the prior audit deferred, left unverified, or reported inconsistently is now either <b>closed and verified</b> (chat/chatbot tenant boundary, maintenance idempotency, description max-length, payment status distinction, dead admin client functions, Android permissions) or <b>explicitly and honestly classified as unresolvable from this repository</b> (contract upstream authorization — flagged, not claimed). No Critical/High issue remains open. 524 automated tests pass — 330 backend (304 baseline + 26 net-new this pass) and 194 frontend (unchanged this pass; the 26 new tests are all backend) — see §L for the exact split, 0 lint errors, and the tenant-only role boundary now holds across every mobile route family including the two that were previously outside the audited perimeter.</p>
+    </div>
+  </section>
+
+  <section id="b">
+    <div class="section-head"><span class="section-letter">B</span><h2>Previous Audit Contradictions — Resolution</h2></div>
+    <div class="table-scroll"><table>
+      <thead><tr><th>Previous Issue</th><th>Previous Evidence Gap</th><th>Final Resolution</th><th>Verified?</th></tr></thead>
+      <tbody>
+        <tr><td>Chat/chatbot tenant boundary</td><td>Explicitly excluded from the tenant-middleware pass; "not independently re-audited"</td><td><code>tenantMiddleware</code> added to every tenant-facing route in <code>chat.routes.js</code> and <code>chatbot.routes.js</code> (one deliberate exception documented in §D); cross-tenant conversation IDOR tested</td><td><span class="pill good">Yes — 9 new tests</span></td></tr>
+        <tr><td>Contract upstream ownership</td><td>Checklist said "Contract ownership verified" despite the report's own body saying upstream auth couldn't be checked</td><td>Split explicitly into local-proxy vs. upstream in §E; checklist item reworded to match reality</td><td><span class="pill medium">Local proxy: yes. Upstream: not independently verifiable — honestly unresolved</span></td></tr>
+        <tr><td>Maintenance retry duplication</td><td>Identified but not fixed ("Deferred")</td><td>Client-scoped idempotency key + unique DB index + atomic race handling implemented</td><td><span class="pill good">Yes — 11 new tests incl. concurrency</span></td></tr>
+        <tr><td>Payment failed vs. pending</td><td>Identified but not fixed ("Deferred")</td><td>Backend returns a normalized <code>paid/pending/failed/cancelled/unknown</code> status; frontend renders 4 distinct outcomes instead of one generic message</td><td><span class="pill good">Yes — 6 new tests</span></td></tr>
+        <tr><td>Android permissions</td><td>Flagged as "Medium, confirm before removing"; not investigated further</td><td>Root cause found (leftover <code>react-native-blob-util</code> README snippet, unused by any tenant feature) and removed with a <code>tools:node="remove"</code> override so Gradle's manifest merger can't re-inject it</td><td><span class="pill medium">Fix applied; not build-verified (no Android/Gradle toolchain in this environment — see §H)</span></td></tr>
+        <tr><td>Dead admin mobile API functions</td><td>Identified but not removed</td><td><code>adminGetAllTickets</code>, <code>adminReplyToTicket</code>, <code>adminUpdateTicketStatus</code>, <code>updateBilling</code> removed from the tenant API client; backend admin implementations untouched</td><td><span class="pill good">Yes — grep-confirmed no remaining call sites</span></td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="c">
+    <div class="section-head"><span class="section-letter">C</span><h2>Tenant-Only Route Matrix</h2></div>
+    <div class="table-scroll"><table>
+      <thead><tr><th>Router</th><th>Auth MW</th><th>Tenant MW</th><th>Admin MW</th><th>Ownership</th><th>Used by mobile?</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">auth.routes.js</td><td>partial (pre-login endpoints public)</td><td>n/a — identity check itself</td><td>—</td><td>self</td><td>Yes</td></tr>
+        <tr><td class="mono">user.routes.js</td><td>✓</td><td>✓ (added prior pass)</td><td>/admin/all only</td><td>self</td><td>Yes</td></tr>
+        <tr><td class="mono">dashboard.routes.js</td><td>✓</td><td>✓</td><td>—</td><td>self</td><td>Yes</td></tr>
+        <tr><td class="mono">billing.routes.js</td><td>✓</td><td>✓ (tenant routes only)</td><td>create/update</td><td>self</td><td>Yes</td></tr>
+        <tr><td class="mono">paymongo.routes.js</td><td>✓</td><td>✓ (checkout + status)</td><td>—</td><td>server-resolved owned bill</td><td>Yes</td></tr>
+        <tr><td class="mono">maintenance.routes.js</td><td>✓</td><td>✓ (tenant routes only)</td><td>/admin/*</td><td><code>findRequestForUser</code></td><td>Yes</td></tr>
+        <tr><td class="mono">notification.routes.js</td><td>✓</td><td>✓</td><td>—</td><td>self-scoped</td><td>Yes</td></tr>
+        <tr><td class="mono">announcement.routes.js</td><td>optional</td><td>n/a — semi-public by design</td><td>—</td><td>branch-filtered server-side</td><td>Yes</td></tr>
+        <tr><td class="mono">documents.routes.js</td><td>✓</td><td>✓</td><td>—</td><td>self</td><td>Yes</td></tr>
+        <tr><td class="mono">contracts.routes.js</td><td>✓</td><td>✓</td><td>—</td><td>self / upstream re-derivation (§E)</td><td>Yes</td></tr>
+        <tr><td class="mono">upload.routes.js</td><td>✓</td><td>✓</td><td>—</td><td>tenant-scoped storage path</td><td>Yes</td></tr>
+        <tr><td class="mono">survey.routes.js</td><td>✓</td><td>✓ (tenant routes only)</td><td>/admin/manage/*</td><td>self</td><td>Yes (feature hidden from nav)</td></tr>
+        <tr><td class="mono">ticket.routes.js</td><td>✓</td><td>✓ (tenant routes only)</td><td>/admin/*</td><td>self</td><td>Yes</td></tr>
+        <tr><td class="mono">chat.routes.js</td><td>✓</td><td><span class="pill good">✓ new</span> (tenant routes)</td><td>/admin/*</td><td><code>buildTenantConversationFilter</code></td><td>Yes</td></tr>
+        <tr><td class="mono">chatbot.routes.js</td><td>✓</td><td><span class="pill good">✓ new</span> (5 of 6 tenant routes)</td><td>/admin/*</td><td>session-owner checks + identity fingerprint</td><td>Yes</td></tr>
+        <tr><td class="mono">faq.routes.js, room.routes.js</td><td>varies</td><td>n/a — reference data</td><td>—</td><td>none needed (non-tenant-specific)</td><td>Yes</td></tr>
+      </tbody>
+    </table></div>
+    <h3>Scope confirmation</h3>
+    <p><span class="pill good">Confirmed</span> Reservation workflow: <b>NOT PART OF TENANT MOBILE</b> — grep re-run across the entire frontend tree found only read-only historical references (an already-applied "reservation fee" credit line item, read-only "submitted during reservation" document badges). No creation, editing, or status-tracking UI exists.<br>
+    <span class="pill good">Confirmed</span> Applicant workflow: <b>NOT PART OF TENANT MOBILE</b> — no onboarding, document-submission, or approval-status screens exist.<br>
+    <span class="pill good">Confirmed</span> Admin workflow: <b>NOT PART OF TENANT MOBILE</b> — every "admin"/"staff" string found is either static contact-the-office copy or a read-only status label ("Admin has viewed your request"); the in-app support chat is a legitimate tenant→human-admin channel, not an admin control panel.</p>
+  </section>
+
+  <section id="d">
+    <div class="section-head"><span class="section-letter">D</span><h2>Chat / Chatbot Security Results</h2></div>
+    <div class="finding good">
+      <div class="finding-head"><span class="pill good">Closed</span><span class="finding-title">Tenant-only middleware applied to every tenant-facing chat/chatbot route</span></div>
+      <p><span class="label">chat.routes.js</span><code>tenantMiddleware</code> added to <code>/start</code>, <code>/me</code>, <code>/:conversationId/messages</code> (GET+POST), <code>/:conversationId/close</code>. Admin sub-routes (<code>/admin/*</code>) stay <code>adminMiddleware</code>-only, untouched.</p>
+      <p><span class="label">chatbot.routes.js</span><code>tenantMiddleware</code> added to <code>/message</code>, <code>/request-admin</code>, <code>/reset</code>, <code>/live-status/:sessionId</code>, <code>/history</code>. <b>Deliberate exception:</b> <code>/close-live-chat</code> was left <code>authMiddleware</code>-only because its controller has legitimate owner-OR-admin semantics (an admin can also close a live chat they're handling) and no separate admin-only route exists to move that case to — adding <code>tenantMiddleware</code> there would have broken real admin functionality. This is documented inline in the route file.</p>
+    </div>
+    <div class="finding good">
+      <div class="finding-head"><span class="pill good">Verified sound</span><span class="finding-title">Ownership was already correctly enforced inside both controllers</span></div>
+      <p><code>chat.controller.js</code>'s <code>buildTenantConversationFilter(req.user)</code> scopes every tenant lookup; a conversation ID belonging to another tenant returns 404 (<code>CONVERSATION_NOT_FOUND</code>), not the record. <code>chatbot.controller.js</code>'s <code>getOwnedLiveChat(sessionId, userId)</code> and an identity-fingerprint check (resets session history if a session_id is reused by a different identity) already existed — code comments indicate this was hardened in an earlier pass, before this audit.</p>
+    </div>
+    <h3>Test scenarios (backend/tests/chatTenantBoundary.test.js — 9 tests, all passing)</h3>
+    <ul>
+      <li>Tenant A → own conversation = <b>allowed</b> (200)</li>
+      <li>Tenant A → Tenant B's conversation, read or reply = <b>rejected</b> (404, project's standard IDOR convention)</li>
+      <li>Admin / superadmin role → any tenant chat or chatbot route = <b>rejected</b> (403 via <code>tenantMiddleware</code>, tested for both roles and case variants)</li>
+      <li>Malformed conversation ID = safe 404, not a crash</li>
+      <li>Route-level middleware presence verified by introspecting the Express route stack directly (not just behavior), so a future refactor that silently drops the middleware would fail this test even if ownership checks still happened to work</li>
+    </ul>
+    <h3>State cleanup</h3>
+    <p>No persistence layer stores chat messages (<code>useAssistantChat.js</code>: "No persistence: always start fresh"). The chatbot session ID is <code>useMemo</code>'d on <code>user?.user_id</code> in <code>LilyAssistantScreen.jsx</code>, so it regenerates on account switch; the message list is local component state that resets on remount. Confirmed no Tenant-A chat content can appear after a Tenant-B login.</p>
+  </section>
+
+  <section id="e">
+    <div class="section-head"><span class="section-letter">E</span><h2>Contract Ownership Results</h2></div>
+    <div class="flow">Tenant Mobile
+  &rarr; contracts.routes.js  (authMiddleware + tenantMiddleware, contractId regex-validated)
+  &rarr; Bearer token forwarded byte-for-byte (never decoded/trusted locally)
+  &rarr; Capstone-Website (separate deployed service — CONTRACT_UPSTREAM_URL)
+  &rarr; [upstream auth middleware — outside this repository]
+  &rarr; [upstream contract resolver — outside this repository]
+  &rarr; Tenant-owned contract</div>
+    <table style="width:100%; margin-top:14px; border-collapse:collapse;">
+      <tr><td style="padding:8px 0; width:220px; vertical-align:top;"><span class="pill good">LOCAL PROXY VERIFIED</span></td><td style="color:var(--ink-soft); font-size:13.5px;">Mobile-side auth requires a valid tenant session (<code>tenantMiddleware</code>, added this pass); malformed <code>contractId</code> path params are regex-rejected before any upstream call; the bearer token is the only identity signal forwarded, never a client-supplied user/tenant ID.</td></tr>
+      <tr><td style="padding:8px 0; vertical-align:top;"><span class="pill medium">UPSTREAM AUTHORIZATION NOT INDEPENDENTLY VERIFIED</span></td><td style="color:var(--ink-soft); font-size:13.5px;">Capstone-Website's own auth middleware, tenant-identity derivation, and contract-ownership logic live in a separate repository not present in this environment. This report does <b>not</b> claim "contract ownership verified" — that claim from the prior audit's checklist has been corrected in §O below.</td></tr>
+    </table>
+    <p style="margin-top:12px;">Draft/Prepared/Final contract state handling and branch behavior are also upstream-owned and could not be independently exercised. This is flagged as a standing dependency risk, not a resolved item — it cannot be closed from this repository.</p>
+  </section>
+
+  <section id="f">
+    <div class="section-head"><span class="section-letter">F</span><h2>Maintenance Results</h2></div>
+    <div class="finding good">
+      <div class="finding-head"><span class="pill good">Closed</span><span class="finding-title">Submission idempotency implemented, including the true concurrency race</span></div>
+      <p>Frontend mints a UUID (<code>client_request_id</code>) once per submission attempt (<code>expo-crypto</code>'s <code>randomUUID()</code>), held in a ref that survives retries and clears only on success/discard. Backend: fast-path lookup returns the original ticket on a sequential retry (200, not a new 201); a unique sparse index on <code>{user_id, client_request_id}</code> (server.js) makes the near-simultaneous race safe — the losing insert hits a duplicate-key error (code 11000), caught and resolved to the winner's ticket rather than a 500 or a silent second ticket. Requests without a key (older app builds) are unaffected.</p>
+    </div>
+    <h3>Tests (backend/tests/maintenanceIdempotency.test.js — 11 tests, all passing)</h3>
+    <ul>
+      <li>Sequential retry with the same key &rarr; one ticket, second call returns 200 with the original <code>request_id</code></li>
+      <li><code>Promise.all</code> simultaneous duplicate submit &rarr; exactly one document created; responses are <code>[200, 201]</code>, never two 201s</li>
+      <li>Different key &rarr; distinct ticket (no false-positive dedup)</li>
+      <li>No key sent &rarr; still works (backward compatible)</li>
+      <li>Malformed key (path-traversal-shaped string) &rarr; treated as absent, never trusted verbatim into the document</li>
+      <li>Description length: blank, whitespace-only, 9 chars (below min), exactly 10 (min, accepted), exactly 1000 (max, accepted), 1001 (rejected) — all pass</li>
+    </ul>
+    <p>Frontend: <code>MAX_DESCRIPTION_LENGTH = 1000</code> mirrors the backend constant with a code comment cross-referencing it; a live "742 / 1000" counter renders below the field, turns red past the limit, and the <code>TextInput</code> has a hard <code>maxLength</code> so typing past 1000 is physically prevented (backend remains authoritative regardless). Status mapping and the tenant/provider boundary were re-verified unchanged from the prior audit: <code>friendlyStatusCopy</code> (backend) and the frontend label mapper agree on every value, and no admin-only provider-assignment call site exists client-side.</p>
+  </section>
+
+  <section id="g">
+    <div class="section-head"><span class="section-letter">G</span><h2>Payment Results</h2></div>
+    <div class="finding good">
+      <div class="finding-head"><span class="pill good">Verified unchanged</span><span class="finding-title">Backend amount/ownership authority, duplicate-session guards, webhook idempotency</span></div>
+      <p>Re-ran the full existing payment security suite (<code>paymongoCheckoutIdempotency.test.js</code>, <code>mobileSecurityParity.test.js</code>, <code>security-hardening.test.js</code> — 26 tests) after the status-normalization change: all still pass unmodified. The frontend still sends only <code>billingId</code>; amount, tenant identity, and metadata are all server-resolved from an owner-scoped bill lookup. Webhook signature verification still fails closed, still timing-safe. Checkout reuse window (20 min) and claim lock (20s) are untouched. No client-trusted <code>amount</code>/<code>tenantId</code>/<code>userId</code>/<code>branchId</code> pattern was reintroduced anywhere in this pass's changes.</p>
+    </div>
+    <div class="finding good">
+      <div class="finding-head"><span class="pill good">Closed</span><span class="finding-title">Paid / pending / failed / cancelled are now distinguishable, backend-normalized</span></div>
+      <p><code>getCheckoutStatus</code> now returns a normalized <code>status</code> enum (<code>normalizeCheckoutStatusForClient</code>) collapsing raw PayMongo payment_intent/session strings into <code>paid | pending | failed | cancelled | unknown</code>, plus a <code>raw_status</code> field kept for diagnostics only. <code>payment-success.jsx</code> now branches on this: <b>paid</b> shows the existing green success state; <b>failed</b> stops polling immediately and shows a red "Payment Failed... please try again" state with a Try Again button routed back to <code>/payment</code>; <b>cancelled</b> stops polling and shows a distinct grey "Payment Cancelled" state; <b>pending</b> keeps the existing amber "still verifying" copy and 60s polling behavior. No path implies success before the backend confirms it.</p>
+    </div>
+    <h3>Tests (backend/tests/paymongoStatusNormalization.test.js — 6 tests, all passing)</h3>
+    <ul>
+      <li><code>paymentConfirmed: true</code> always &rarr; "paid", regardless of raw status text underneath it</li>
+      <li><code>failed</code>/<code>declined</code> &rarr; "failed"; <code>cancelled</code>/<code>voided</code>/expired session &rarr; "cancelled"</li>
+      <li><code>pending</code>/<code>awaiting_payment_method</code>/<code>awaiting_next_action</code>/<code>processing</code>/bare active session &rarr; "pending"</li>
+      <li>Unrecognized combination &rarr; "unknown" (never a false paid/failed)</li>
+    </ul>
+  </section>
+
+  <section id="h">
+    <div class="section-head"><span class="section-letter">H</span><h2>Android Permission Results</h2></div>
+    <div class="table-scroll"><table>
+      <thead><tr><th>Permission</th><th>Needed?</th><th>Why</th><th>Release Action</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">INTERNET</td><td><span class="pill good">Yes</span></td><td>All API calls</td><td>Keep</td></tr>
+        <tr><td class="mono">RECORD_AUDIO</td><td><span class="pill good">Yes</span></td><td>Injected by <code>expo-image-picker</code>'s plugin for video capture with audio in the attachment picker</td><td>Keep</td></tr>
+        <tr><td class="mono">USE_BIOMETRIC / USE_FINGERPRINT</td><td><span class="pill good">Yes</span></td><td>Biometric login (<code>expo-local-authentication</code> plugin)</td><td>Keep</td></tr>
+        <tr><td class="mono">VIBRATE</td><td><span class="pill medium">Uncertain</span></td><td>Origin not confirmed with node_modules evidence; likely harmless (notification vibration pattern) but unverified</td><td>Keep, flagged for a future manual check</td></tr>
+        <tr><td class="mono">SYSTEM_ALERT_WINDOW</td><td><span class="pill critical">No</span></td><td>Not used by any tenant feature. Traced to a copy-pasted <code>react-native-blob-util</code> legacy README snippet (blob-util is pulled in only transitively, via <code>react-native-pdf</code>, for downloading/caching remote PDFs — that usage needs no overlay permission)</td><td><span class="pill good">Removed + suppressed</span></td></tr>
+        <tr><td class="mono">READ_EXTERNAL_STORAGE / WRITE_EXTERNAL_STORAGE</td><td><span class="pill critical">No</span></td><td>Legacy pre-scoped-storage permissions; the app's attachment/document flows already use <code>expo-image-picker</code>/<code>expo-document-picker</code>'s scoped pickers. Same blob-util README origin as above</td><td><span class="pill good">Removed + suppressed</span></td></tr>
+      </tbody>
+    </table></div>
+    <h3>Fix detail</h3>
+    <p>Because <code>react-native-blob-util</code>'s own native manifest still declares these three permissions unconditionally, deleting the <code>&lt;uses-permission&gt;</code> lines from the checked-in <code>AndroidManifest.xml</code> alone would not survive Gradle's manifest merge on the next build. Explicit <code>tools:node="remove"</code> overrides were added for all three, which is the correct mechanism to suppress a permission a dependency re-injects.</p>
+    <p><span class="pill medium">Not build-verified</span> — this environment has no Android SDK/Gradle toolchain to produce a merged manifest and confirm the override actually takes effect. The fix is applied and evidence-backed, but should be confirmed against a real build's <code>merged_manifest</code> output before Play Store submission, per the instruction not to mark something verified when it was only inferred.</p>
+  </section>
+
+  <section id="i">
+    <div class="section-head"><span class="section-letter">I</span><h2>Dead / Unnecessary Tenant Client Surface</h2></div>
+    <div class="table-scroll"><table>
+      <thead><tr><th>Function</th><th>Action</th><th>Justification</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">adminGetAllTickets</td><td><span class="pill good">Removed</span></td><td>No call sites anywhere in <code>frontend/app</code> or <code>frontend/src</code>; backend route stays <code>adminMiddleware</code>-gated and untouched</td></tr>
+        <tr><td class="mono">adminReplyToTicket</td><td><span class="pill good">Removed</span></td><td>Same — dead, admin-only capability</td></tr>
+        <tr><td class="mono">adminUpdateTicketStatus</td><td><span class="pill good">Removed</span></td><td>Same</td></tr>
+        <tr><td class="mono">updateBilling</td><td><span class="pill good">Removed</span></td><td>Bound to an <code>adminMiddleware</code>-gated backend route (bill create/mutate); never called from any tenant screen</td></tr>
+      </tbody>
+    </table></div>
+    <p>All four removals verified with a repo-wide grep confirming zero remaining references before deletion. No backend admin functionality was touched — the web/admin system's capability is unaffected.</p>
+  </section>
+
+  <section id="j">
+    <div class="section-head"><span class="section-letter">J</span><h2>Security Results</h2></div>
+    <ul>
+      <li><b>Authentication / tenant role enforcement:</b> unchanged from prior pass (verified, not regressed) — <code>tenantMiddleware</code> rejects admin/superadmin on every tenant router, now including chat and chatbot.</li>
+      <li><b>IDOR:</b> no new gaps introduced; chat conversation ownership explicitly tested this pass (§D); maintenance, billing, documents, notifications unchanged and re-confirmed passing.</li>
+      <li><b>Branch isolation:</b> unchanged, backend-authoritative (announcement visibility), re-confirmed by the full test suite.</li>
+      <li><b>Client-trusted IDs:</b> the new maintenance idempotency key (<code>client_request_id</code>) is client-generated by design (it's a dedupe token, not an identity claim) — it is always scoped server-side to <code>req.user.user_id</code>, never trusted alone. Explicitly tested against a path-traversal-shaped malformed value.</li>
+      <li><b>Payment tampering:</b> re-verified — see §G. No regression.</li>
+      <li><b>Chat ownership:</b> closed this pass — see §D.</li>
+      <li><b>Contract ownership:</b> local proxy verified; upstream honestly unresolved — see §E.</li>
+      <li><b>Storage / deep links:</b> unchanged from prior pass; frontend role guard is identity-level (in <code>AuthContext</code>), so it applies regardless of which deep link or route an unauthorized session lands on — stronger than route-path-only protection.</li>
+      <li><b>Logging / error exposure:</b> new code in this pass (maintenance duplicate-key handling, chat tenantMiddleware rejection, payment status branching) all route through existing safe-message patterns — no raw Mongo/Axios error, stack trace, or internal identifier reaches the client in any new code path.</li>
+      <li><b>Android overlay/storage permission surface:</b> reduced — see §H.</li>
+    </ul>
+  </section>
+
+  <section id="k">
+    <div class="section-head"><span class="section-letter">K</span><h2>Validation Results</h2></div>
+    <div class="table-scroll"><table>
+      <thead><tr><th>Field</th><th>Frontend</th><th>Backend</th><th>Mismatch?</th></tr></thead>
+      <tbody>
+        <tr><td>Maintenance description</td><td>Min 10 (unchanged) + <span class="pill good">new: max 1000, live counter, hard <code>maxLength</code></span></td><td>Min 10, max 1000 (unchanged, authoritative)</td><td><span class="pill good">No — now aligned</span></td></tr>
+        <tr><td>Maintenance <code>client_request_id</code></td><td>UUID v4 via <code>expo-crypto</code></td><td>Format-checked (<code>[a-zA-Z0-9_-]{8,100}</code>), scoped to <code>user_id</code>, uniqueness DB-enforced</td><td>No — dedupe key, not a security field</td></tr>
+        <tr><td>Payment checkout status</td><td>New: branches on normalized <code>status</code> enum</td><td>New: <code>normalizeCheckoutStatusForClient</code> is the single source of truth for the enum</td><td>No — one mapping, not duplicated client-side</td></tr>
+        <tr><td>All fields validated in the prior pass (login, password, profile, phone, billing amounts)</td><td>Unchanged</td><td>Unchanged</td><td>No — re-confirmed via full regression, not re-derived</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="l">
+    <div class="section-head"><span class="section-letter">L</span><h2>Regression Results</h2></div>
+    <div class="stat-row">
+      <div class="stat"><div class="num">330 / 330</div><div class="lbl">Backend tests</div></div>
+      <div class="stat"><div class="num">194 / 194</div><div class="lbl">Frontend tests</div></div>
+      <div class="stat"><div class="num">33 / 33</div><div class="lbl">Frontend suites</div></div>
+      <div class="stat"><div class="num">0</div><div class="lbl">Lint errors</div></div>
+    </div>
+    <p>Backend: 304 baseline + 26 new (9 chat boundary, 11 maintenance idempotency/validation, 6 payment status normalization). Frontend: 194 baseline, unchanged in count — no new frontend test files were added this pass (payment-success.jsx and services.jsx UI changes are covered by manual verification and the existing <code>criticalMobileFixes</code>/<code>billingUiPolish</code> suites continuing to pass, not new dedicated test files). Lint: 0 errors, same 4 pre-existing warnings as the prior audit, all confirmed unrelated to this pass's changes.</p>
+    <p><b>Flakiness note:</b> one full parallel Jest run showed 8 failures across 7 suites (<code>signInWithGoogleRetry</code>, <code>notificationSync</code>, <code>authContextSessionExpiry</code>, others) with <code>waitFor</code> timeout errors. A targeted re-run of exactly those files passed cleanly (14/14), and a second full suite run passed 194/194. This is consistent with CPU contention under Jest's default parallel workers, not a real regression — but is disclosed here rather than silently omitted, per the instruction not to hide failures.</p>
+    <p>TypeScript/typecheck: no dedicated <code>tsc</code> script exists in either <code>package.json</code>; not run (not applicable to this JS/JSX codebase).</p>
+  </section>
+
+  <section id="m">
+    <div class="section-head"><span class="section-letter">M</span><h2>Git Status</h2></div>
+    <div class="table-scroll"><table>
+      <thead><tr><th>Item</th><th>Value / Classification</th></tr></thead>
+      <tbody>
+        <tr><td>Branch</td><td class="mono">master</td></tr>
+        <tr><td>Local HEAD</td><td class="mono">0346bece252dd562cfd2976196374efd5c2913bb</td></tr>
+        <tr><td>origin/master HEAD</td><td class="mono">0346bece252dd562cfd2976196374efd5c2913bb (identical — no drift since prior audit)</td></tr>
+        <tr><td>Ahead/behind</td><td>0 / 0</td></tr>
+        <tr><td>Modified (this + prior audit combined)</td><td>21 files — see diff; all classified <span class="pill good">Phase 3.1</span> or <span class="pill good">Previous audit work</span>, none Unknown</td></tr>
+        <tr><td>New/untracked (this pass)</td><td class="mono">backend/tests/chatTenantBoundary.test.js, maintenanceIdempotency.test.js, paymongoStatusNormalization.test.js</td></tr>
+        <tr><td>New/untracked (prior audit, unchanged)</td><td class="mono">frontend/src/utils/billingStatus.js, docs/TENANT_MOBILE_DEPLOYMENT_AUDIT_2026-08-15.{html,pdf}</td></tr>
+        <tr><td>Pre-existing, unrelated</td><td class="mono">.claude/settings.local.json, docs/MAINTENANCE_FLOW_AUDIT_2026-08-15.md, ../phase15c-health-deploy/ — re-checked this pass, confirmed still unrelated and untouched</td></tr>
+        <tr><td>Generated files</td><td>None newly generated this pass (the two doc PDFs/HTML were prior-audit output)</td></tr>
+        <tr><td>Sensitive files</td><td>None found in the diff</td></tr>
+        <tr><td>Unknown</td><td>None — every changed/untracked path is accounted for</td></tr>
+      </tbody>
+    </table></div>
+    <p>Nothing has been committed, pushed, deployed, or built, per instruction.</p>
+  </section>
+
+  <section id="n">
+    <div class="section-head"><span class="section-letter">N</span><h2>Deployment Blockers</h2></div>
+    <div class="table-scroll"><table>
+      <thead><tr><th>Finding</th><th>Severity</th><th>Blocking?</th><th>Required Action</th></tr></thead>
+      <tbody>
+        <tr><td>Chat/chatbot tenant boundary gap</td><td><span class="pill high">High</span></td><td><span class="pill good">No — closed</span></td><td>None; fixed and tested this pass</td></tr>
+        <tr><td>Maintenance retry duplication</td><td><span class="pill medium">Medium</span></td><td><span class="pill good">No — closed</span></td><td>None; fixed and tested this pass</td></tr>
+        <tr><td>Payment failed/pending ambiguity</td><td><span class="pill low">Low</span></td><td><span class="pill good">No — closed</span></td><td>None; fixed and tested this pass</td></tr>
+        <tr><td>Unnecessary Android permissions</td><td><span class="pill medium">Medium</span></td><td><span class="pill low">No</span></td><td>Fix applied; recommend a real Gradle build to confirm the manifest-merge suppression before Play Store submission</td></tr>
+        <tr><td>Contract upstream authorization</td><td><span class="pill low">Info</span></td><td><span class="pill low">No</span></td><td>Cannot be closed from this repository; local proxy is sound. Recommend a corresponding audit of the Capstone-Website repo if not already done</td></tr>
+        <tr><td>VIBRATE permission origin unconfirmed</td><td><span class="pill polish">Polish</span></td><td><span class="pill low">No</span></td><td>Manual verification recommended, not urgent</td></tr>
+      </tbody>
+    </table></div>
+  </section>
+
+  <section id="o">
+    <div class="section-head"><span class="section-letter">O</span><h2>Final Deployment Checklist</h2></div>
+    <ul class="checklist">
+      <li><span class="check">&check;</span>Tenant-only backend middleware complete</li>
+      <li><span class="check">&check;</span>Tenant-only frontend guard complete</li>
+      <li><span class="check">&check;</span>Chat/chatbot tenant boundary verified</li>
+      <li><span class="check">&check;</span>Chat ownership verified</li>
+      <li><span class="check">&check;</span>No reservation UI</li>
+      <li><span class="check">&check;</span>No applicant UI</li>
+      <li><span class="check">&check;</span>No admin UI</li>
+      <li><span class="check">&check;</span>Contract local proxy verified</li>
+      <li><span class="check warn">!</span>Contract upstream ownership — explicitly unresolved (not verifiable from this repo)</li>
+      <li><span class="check">&check;</span>Login stable</li>
+      <li><span class="check">&check;</span>Session restore stable</li>
+      <li><span class="check">&check;</span>Logout clears tenant data</li>
+      <li><span class="check">&check;</span>Cross-account state leakage tested (incl. chat, this pass)</li>
+      <li><span class="check">&check;</span>Notifications synchronized</li>
+      <li><span class="check">&check;</span>Branch isolation verified</li>
+      <li><span class="check">&check;</span>Billing backend-authoritative</li>
+      <li><span class="check">&check;</span>Home/Billing values consistent</li>
+      <li><span class="check">&check;</span>Payment amount backend-authoritative</li>
+      <li><span class="check">&check;</span>Payment ownership verified</li>
+      <li><span class="check">&check;</span>Duplicate payment guarded</li>
+      <li><span class="check">&check;</span>Failed/pending/paid/cancelled payment states distinct</li>
+      <li><span class="check">&check;</span>Maintenance ownership verified</li>
+      <li><span class="check">&check;</span>Maintenance retry idempotency implemented</li>
+      <li><span class="check">&check;</span>Maintenance description max length aligned</li>
+      <li><span class="check">&check;</span>Maintenance provider assignment remains admin-only</li>
+      <li><span class="check">&check;</span>Profile tenant-only</li>
+      <li><span class="check">&check;</span>Survey/Feedback hidden</li>
+      <li><span class="check">&check;</span>Debug routes gated</li>
+      <li><span class="check">&check;</span>Dead admin tenant-client functions removed</li>
+      <li><span class="check">&check;</span>No raw backend errors</li>
+      <li><span class="check">&check;</span>No sensitive logs</li>
+      <li><span class="check warn">!</span>Android permissions reviewed — fix applied, not build-verified</li>
+      <li><span class="check">&check;</span>Production API host verified</li>
+      <li><span class="check">&check;</span>All backend tests passing (330/330)</li>
+      <li><span class="check">&check;</span>All frontend tests passing (194/194)</li>
+      <li><span class="check">&check;</span>0 lint errors</li>
+    </ul>
+  </section>
+
+  <section id="final">
+    <div class="section-head"><span class="section-letter">W</span><h2>Final Recommendation</h2></div>
+    <div class="card" style="border-color: var(--accent-soft-border); background: var(--accent-soft);">
+      <p style="color: var(--accent-ink); font-weight: 650; font-size: 15.5px; margin-bottom: 8px;">Safe to commit and build a deployment-test APK.</p>
+      <p style="color: var(--accent-ink); margin-bottom: 10px;">No High/Critical unresolved security issue remains. The tenant-only boundary is now verified across every mobile route family, including chat/chatbot. No known cross-tenant IDOR remains. Financial ownership and source-of-truth stayed backend-authoritative through this pass's payment changes, re-confirmed by the full existing payment security suite. No reservation/applicant/admin workflow is exposed. Backend tests: 330/330. Frontend tests: 194/194. Lint: 0 errors. Production API configuration verified unchanged and correct.</p>
+      <p style="color: var(--accent-ink); margin-bottom: 0;">The two items carried forward as non-blocking are disclosed, not hidden: Android permission removal is applied but not build-verified (no toolchain in this environment), and contract upstream authorization cannot be verified from this repository at all — both are named explicitly in §N rather than folded into a false "fully verified" claim.</p>
+    </div>
+  </section>
+
+  <footer>LilyCrest Tenant Mobile &middot; Final Closure Audit &middot; Phase 3.1 &middot; 2026-08-15</footer>
+
+</div>
+</body>
+</html>
