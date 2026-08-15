@@ -9,7 +9,7 @@ const { overlayOfficialTemplate } = require('../domain/contracts/officialTemplat
 const { createDraftRecord, publishPreReleaseRecord } = require('../domain/contracts/generatedContractRecord');
 const { calculateMoveInFinancials, RESERVATION_FEE_APPLICATION } = require('../domain/billing/moveInFinancials');
 
-const ELIGIBLE_RESERVATION_STATUS = /^(approved|confirmed|active|completed|checked_in|movein)$/i;
+const ELIGIBLE_RESERVATION_STATUS = /^(approved|confirmed|active|completed|checked_in|movein|paid)$/i;
 
 function first(...values) {
   return values.find((value) => value !== undefined && value !== null && String(value).trim() !== '');

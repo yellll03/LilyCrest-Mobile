@@ -4,7 +4,7 @@ const { ObjectId } = require('mongodb');
 const { BRANCH_LOCATION_RECORDS } = require('../config/branchLocationRecords');
 
 const ACTIVE_STAY = /^(active|current|occupied|checked_in)$/i;
-const APPROVED = /^(approved|confirmed|active|completed|executed|signed|movein)$/i;
+const APPROVED = /^(approved|confirmed|active|completed|executed|signed|movein|paid)$/i;
 
 function objectId(value) {
   try { return value && ObjectId.isValid(String(value)) ? new ObjectId(String(value)) : null; } catch (_) { return null; }

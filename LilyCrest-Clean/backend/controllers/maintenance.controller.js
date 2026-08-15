@@ -15,7 +15,7 @@ const LEGACY_COLLECTION = 'maintenancerequests';
 // Read from both so old records still appear while new records land in primary.
 const COLLECTIONS = [...new Set([PRIMARY_COLLECTION, LEGACY_COLLECTION])];
 
-const ACTIVE_RESERVATION_STATUSES = ['moveIn', 'active', 'completed', 'confirmed'];
+const ACTIVE_RESERVATION_STATUSES = ['moveIn', 'active', 'completed', 'confirmed', 'paid'];
 const VALID_URGENCIES = ['low', 'normal', 'high'];
 const VALID_REQUEST_TYPES = ['maintenance', 'plumbing', 'electrical', 'aircon', 'cleaning', 'pest', 'furniture', 'other'];
 const DESCRIPTION_MIN = 10;

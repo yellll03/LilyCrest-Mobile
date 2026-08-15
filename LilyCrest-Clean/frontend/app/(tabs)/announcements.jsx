@@ -8,6 +8,7 @@ import { useAuth } from '../../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
 import { apiService, getApiErrorMessage } from '../../src/services/api';
 import { resolveNotificationRoute } from '../../src/services/notifications';
+import { SURVEY_FEEDBACK_ENABLED } from '../../src/config/features';
 
 function safeFormat(dateStr, fmt) {
   try {
@@ -37,6 +38,7 @@ function normalizeCategoryKey(category) {
 
 const CATEGORY_LABELS = {
   announcement: 'Announcement',
+  account: 'Account',
   billing: 'Billing',
   maintenance: 'Maintenance',
   assistant: 'Assistant',
@@ -138,6 +140,7 @@ export default function AnnouncementsScreen() {
       paddingTop: 6,
       paddingBottom: 14,
       flexDirection: 'row',
+      flexWrap: 'wrap',
       alignItems: 'center',
       gap: 8,
     },
@@ -515,12 +518,7 @@ export default function AnnouncementsScreen() {
         </View>
 
         {/* ── Filter strip ── */}
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          style={styles.filterScroll}
-          contentContainerStyle={styles.filterScrollContent}
-        >
+        <View style={[styles.filterScroll, styles.filterScrollContent]}>
           {categories.map((category) => {
             const isActive = selectedCategory === category || (!selectedCategory && category === 'All');
             const count = getCategoryCount(category);
@@ -557,7 +555,7 @@ export default function AnnouncementsScreen() {
               </View>
             )}
           </TouchableOpacity>
-        </ScrollView>
+        </View>
       </View>
 
       {/* ── Content ── */}
@@ -641,7 +639,7 @@ export default function AnnouncementsScreen() {
                   {/* Full content */}
                   <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
                     <Text style={styles.modalContent}>{selectedAnn.content}</Text>
-                    {String(selectedAnn.category || selectedAnn.type || '').toLowerCase() === 'survey' ? (
+                    {SURVEY_FEEDBACK_ENABLED && String(selectedAnn.category || selectedAnn.type || '').toLowerCase() === 'survey' ? (
                       <TouchableOpacity
                         style={styles.notificationAction}
                         accessibilityRole="button"

@@ -9,9 +9,9 @@ const { extractMoveInFinancials } = require('../domain/billing/moveInFinancials'
 const firstValue = (...values) => values.find((value) => value !== undefined && value !== null && String(value).trim() !== '');
 const approvedReservationFilter = {
   $or: [
-    { status: { $regex: /^(approved|confirmed|active|completed|checked_in|movein)$/i } },
-    { applicationStatus: { $regex: /^(approved|confirmed|active|completed|checked_in|movein)$/i } },
-    { approvalStatus: { $regex: /^(approved|confirmed|active|completed|checked_in|movein)$/i } },
+    { status: { $regex: /^(approved|confirmed|active|completed|checked_in|movein|paid)$/i } },
+    { applicationStatus: { $regex: /^(approved|confirmed|active|completed|checked_in|movein|paid)$/i } },
+    { approvalStatus: { $regex: /^(approved|confirmed|active|completed|checked_in|movein|paid)$/i } },
     { isApproved: true },
   ],
 };

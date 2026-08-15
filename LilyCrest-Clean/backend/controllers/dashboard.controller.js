@@ -189,7 +189,7 @@ async function getDashboard(req, res) {
 
       // Source 3: reservations (web admin reservation flow — status moveIn/active)
       const reservation = await db.collection('reservations').findOne(
-        { userId: mongoId, status: { $in: ['moveIn', 'active', 'completed', 'confirmed'] } },
+        { userId: mongoId, status: { $in: ['moveIn', 'active', 'completed', 'confirmed', 'paid'] } },
         { sort: { createdAt: -1 } }
       );
 

@@ -180,7 +180,7 @@ async function resolveTenantContext(db, user) {
 
   if (user?._id) {
     const reservation = await db.collection('reservations').findOne(
-      { userId: user._id, status: { $in: ['moveIn', 'active', 'completed', 'payment_pending', 'confirmed'] } },
+      { userId: user._id, status: { $in: ['moveIn', 'active', 'completed', 'payment_pending', 'confirmed', 'paid'] } },
       { sort: { createdAt: -1 } }
     );
 
