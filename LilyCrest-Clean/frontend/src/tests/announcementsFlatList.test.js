@@ -68,7 +68,7 @@ describe('announcements list virtualization and behavior (regression)', () => {
   it('shows the empty state when there are no announcements', async () => {
     mockGetAnnouncements.mockResolvedValue({ data: [] });
     const { getByText } = render(<AnnouncementsScreen />);
-    await waitFor(() => expect(getByText('No notifications')).toBeTruthy());
+    await waitFor(() => expect(getByText('No notifications yet')).toBeTruthy());
   });
 
   it('shows a safe error banner instead of crashing when the fetch fails', async () => {

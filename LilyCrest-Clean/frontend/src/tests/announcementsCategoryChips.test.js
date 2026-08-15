@@ -5,7 +5,7 @@
 // happened to send (e.g. "event" lowercase next to "Security" capitalized).
 // Renders the real screen with only its data dependencies mocked.
 
-import { render, waitFor } from '@testing-library/react-native';
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import AnnouncementsScreen from '../../app/(tabs)/announcements';
 
 jest.mock('expo-router', () => ({
@@ -53,7 +53,7 @@ function announcement(overrides = {}) {
   };
 }
 
-describe('announcements category chips — case-insensitive dedup (regression)', () => {
+describe('notification filter categories — case-insensitive dedup (regression)', () => {
   beforeEach(() => jest.clearAllMocks());
 
   it('collapses differently-cased category values into a single chip', async () => {
@@ -65,11 +65,13 @@ describe('announcements category chips — case-insensitive dedup (regression)',
       ],
     });
 
-    const { getAllByText, queryAllByText } = render(<AnnouncementsScreen />);
+    const { getAllByLabelText, getAllByText, getByLabelText, queryAllByText } = render(<AnnouncementsScreen />);
     await waitFor(() => expect(getAllByText('Security note 1').length).toBeGreaterThan(0));
+    fireEvent.press(getByLabelText('Open notification filters'));
 
-    // Exactly one "Security" chip (plus badges on each of the 3 cards) —
-    // never a second "security"/"SECURITY" chip alongside it.
+    // Exactly one normalized Security filter option, never separate options
+    // for the different backend casing variants.
+    expect(getAllByLabelText(/^Security, /)).toHaveLength(1);
     expect(queryAllByText('Security').length).toBeGreaterThan(0);
     expect(queryAllByText('security').length).toBe(0);
     expect(queryAllByText('SECURITY').length).toBe(0);
@@ -80,11 +82,13 @@ describe('announcements category chips — case-insensitive dedup (regression)',
       data: [announcement({ category: 'event', title: 'Lower-cased category' })],
     });
 
-    const { getByText, getAllByText, queryAllByText } = render(<AnnouncementsScreen />);
+    const { getByLabelText, getByText, getAllByText, queryAllByText } = render(<AnnouncementsScreen />);
     await waitFor(() => expect(getByText('Lower-cased category')).toBeTruthy());
+    fireEvent.press(getByLabelText('Open notification filters'));
 
-    // "Event" appears twice by design now: the filter chip and the card's
     // own category badge both use the same normalized label.
+    expect(getByLabelText('Event, 1 notification')).toBeTruthy();
+    // The sheet option and the card badge share the normalized label.
     expect(getAllByText('Event').length).toBeGreaterThanOrEqual(2);
     expect(queryAllByText('event').length).toBe(0);
   });

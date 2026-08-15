@@ -1,14 +1,22 @@
 import { Ionicons } from '@expo/vector-icons';
 import { format, formatDistanceToNow } from 'date-fns';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, FlatList, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, FlatList, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
 import { apiService, getApiErrorMessage } from '../../src/services/api';
 import { resolveNotificationRoute } from '../../src/services/notifications';
 import { SURVEY_FEEDBACK_ENABLED } from '../../src/config/features';
+import {
+  buildNotificationFilterCounts,
+  filterNotifications,
+  getNotificationDateValue as getAnnouncementDateValue,
+  isUrgentNotification,
+  normalizeNotificationCategory as normalizeCategoryKey,
+  sortNotifications,
+} from '../../src/utils/notificationFilters';
 
 function safeFormat(dateStr, fmt) {
   try {
@@ -23,17 +31,6 @@ function safeDistanceToNow(dateStr) {
     if (isNaN(d.getTime())) return '';
     return formatDistanceToNow(d, { addSuffix: true });
   } catch (_e) { return ''; }
-}
-
-// Category values come from admin-entered free text and are inconsistently
-// cased ("Security" vs "security"), which used to produce duplicate-looking
-// filter chips for the same category (JS Set dedup is exact-string, so
-// differently-cased values never collapsed) and inconsistent chip label
-// casing (e.g. "event" next to "Security"). Every chip/filter/badge now goes
-// through this normalized key, with a fixed Title Case label for display.
-function normalizeCategoryKey(category) {
-  const trimmed = String(category || '').trim().toLowerCase();
-  return trimmed || 'general';
 }
 
 const CATEGORY_LABELS = {
@@ -52,37 +49,8 @@ const CATEGORY_LABELS = {
 };
 
 function categoryLabel(key) {
-  if (key === 'All') return 'All';
+  if (!key || key === 'all') return 'All';
   return CATEGORY_LABELS[key] || (key.charAt(0).toUpperCase() + key.slice(1));
-}
-
-function getAnnouncementDateValue(announcement = {}) {
-  return announcement.publishedAt
-    || announcement.sentAt
-    || announcement.created_at
-    || announcement.createdAt
-    || announcement.updated_at
-    || announcement.updatedAt
-    || null;
-}
-
-function getAnnouncementTimestamp(announcement = {}) {
-  const value = getAnnouncementDateValue(announcement);
-  if (!value) return null;
-  const parsed = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(parsed.getTime()) ? null : parsed.getTime();
-}
-
-function sortAnnouncements(list = [], direction = 'desc') {
-  const multiplier = direction === 'asc' ? 1 : -1;
-  return [...list].sort((left, right) => {
-    const leftTimestamp = getAnnouncementTimestamp(left);
-    const rightTimestamp = getAnnouncementTimestamp(right);
-    if (leftTimestamp === null && rightTimestamp === null) return 0;
-    if (leftTimestamp === null) return 1;
-    if (rightTimestamp === null) return -1;
-    return (leftTimestamp - rightTimestamp) * multiplier;
-  });
 }
 
 function isNew(dateStr) {
@@ -112,64 +80,29 @@ export default function AnnouncementsScreen() {
       justifyContent: 'space-between',
       alignItems: 'center',
       paddingHorizontal: 16,
-      paddingTop: 16,
-      paddingBottom: 10,
+      paddingTop: 14,
+      paddingBottom: 8,
       gap: 8,
     },
     headerLeft: { flex: 1 },
     headerTitle: { fontSize: 20, fontWeight: '800', color: c.text, letterSpacing: -0.3 },
     headerSubtitle: { fontSize: 12, color: c.textMuted, marginTop: 2 },
-    refreshBtn: {
-      width: 34, height: 34, borderRadius: 10,
-      backgroundColor: c.surfaceSecondary,
-      justifyContent: 'center', alignItems: 'center',
-    },
-
-    // ── Sort button ──
-    sortBtn: {
-      flexDirection: 'row', alignItems: 'center', gap: 4,
-      paddingVertical: 6, paddingHorizontal: 10,
-      borderRadius: 10, backgroundColor: c.surfaceSecondary,
-    },
-    sortBtnText: { fontSize: 12, fontWeight: '600', color: c.textSecondary },
-
-    // ── Filter strip ──
-    filterScroll: { backgroundColor: c.surface },
-    filterScrollContent: {
-      paddingHorizontal: 14,
-      paddingTop: 6,
-      paddingBottom: 14,
-      flexDirection: 'row',
-      flexWrap: 'wrap',
-      alignItems: 'center',
-      gap: 8,
-    },
-    chip: {
+    toolbarRow: {
       flexDirection: 'row', alignItems: 'center',
-      paddingVertical: 7, paddingHorizontal: 13,
-      borderRadius: 999, backgroundColor: c.surfaceSecondary,
-      gap: 5,
+      paddingHorizontal: 14, paddingBottom: 12, gap: 8,
     },
-    chipActive: { backgroundColor: c.accent },
-    urgentChipInactive: {
-      backgroundColor: 'transparent',
-      borderWidth: 1.5, borderColor: '#EF4444',
+    toolbarButton: {
+      flex: 1, minHeight: 42, paddingHorizontal: 8, borderRadius: 10,
+      backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: 'transparent',
+      flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 5,
     },
-    urgentChipActive: { backgroundColor: '#DC2626' },
-    chipText: { fontSize: 13, fontWeight: '600', color: c.textSecondary },
-    chipTextActive: { color: '#FFFFFF' },
-    chipTextUrgent: { color: '#EF4444' },
-    chipBadge: {
-      minWidth: 19, height: 19, borderRadius: 10,
-      backgroundColor: dark ? 'rgba(255,255,255,0.12)' : 'rgba(0,0,0,0.09)',
-      justifyContent: 'center', alignItems: 'center',
-      paddingHorizontal: 4,
+    toolbarButtonActive: {
+      backgroundColor: dark ? 'rgba(59,130,246,0.14)' : '#EFF6FF',
+      borderColor: c.accent,
     },
-    chipBadgeActive: { backgroundColor: 'rgba(255,255,255,0.25)' },
-    chipBadgeUrgent: { backgroundColor: dark ? 'rgba(239,68,68,0.22)' : '#FEE2E2' },
-    chipBadgeText: { fontSize: 11, fontWeight: '700', color: c.textSecondary },
-    chipBadgeTextActive: { color: '#FFFFFF' },
-    chipBadgeTextUrgent: { color: '#EF4444' },
+    toolbarButtonDisabled: { opacity: 0.65 },
+    toolbarButtonText: { fontSize: 12, fontWeight: '700', color: c.textSecondary },
+    toolbarButtonTextActive: { color: c.accent },
 
     readMoreBtn: { marginTop: 6, alignSelf: 'flex-start' },
     readMoreText: { fontSize: 13, fontWeight: '600', color: c.primary },
@@ -241,6 +174,8 @@ export default function AnnouncementsScreen() {
       borderRadius: 10, padding: 12, marginBottom: 10,
     },
     errorBannerText: { flex: 1, fontSize: 13, color: dark ? '#FCD34D' : '#92400E', fontWeight: '500' },
+    retryButton: { minHeight: 36, justifyContent: 'center', paddingHorizontal: 6 },
+    retryButtonText: { fontSize: 13, fontWeight: '800', color: dark ? '#FCD34D' : '#92400E' },
 
     // ── Empty state ──
     emptyState: { alignItems: 'center', paddingVertical: 56 },
@@ -252,6 +187,78 @@ export default function AnnouncementsScreen() {
     },
     emptyTitle: { fontSize: 15, fontWeight: '700', color: c.text, marginBottom: 6 },
     emptyText: { fontSize: 13, color: c.textMuted, textAlign: 'center', lineHeight: 19, paddingHorizontal: 36 },
+    emptyAction: {
+      minHeight: 44, marginTop: 14, paddingHorizontal: 18, borderRadius: 10,
+      backgroundColor: c.accent, justifyContent: 'center', alignItems: 'center',
+    },
+    emptyActionText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
+
+    // ── Filter sheet ──
+    filterModalOverlay: {
+      flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.48)',
+    },
+    filterSheet: {
+      backgroundColor: c.surface,
+      borderTopLeftRadius: 24, borderTopRightRadius: 24,
+      maxHeight: '84%', paddingTop: 10,
+      paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+      ...Platform.select({
+        default: { shadowColor: '#000', shadowOffset: { width: 0, height: -6 }, shadowOpacity: 0.16, shadowRadius: 18, elevation: 18 },
+      }),
+    },
+    filterSheetHeader: {
+      flexDirection: 'row', alignItems: 'center',
+      paddingHorizontal: 18, paddingBottom: 12,
+      borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: c.border,
+    },
+    filterSheetTitleWrap: { flex: 1 },
+    filterSheetTitle: { fontSize: 17, fontWeight: '800', color: c.text },
+    filterSheetSubtitle: { fontSize: 12, color: c.textMuted, marginTop: 2 },
+    filterCloseButton: {
+      width: 44, height: 44, borderRadius: 12,
+      backgroundColor: c.surfaceSecondary, justifyContent: 'center', alignItems: 'center',
+    },
+    filterSheetScroll: { paddingHorizontal: 18 },
+    filterSection: { paddingTop: 16 },
+    filterSectionTitle: {
+      fontSize: 12, fontWeight: '800', color: c.textMuted,
+      textTransform: 'uppercase', letterSpacing: 0.7, marginBottom: 6,
+    },
+    filterSectionHint: { fontSize: 11, color: c.textMuted, marginTop: 4, marginBottom: 2, paddingHorizontal: 10 },
+    filterOption: {
+      minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 12,
+      paddingHorizontal: 10, borderRadius: 10,
+    },
+    filterOptionSelected: { backgroundColor: dark ? 'rgba(59,130,246,0.12)' : '#EFF6FF' },
+    radioOuter: {
+      width: 20, height: 20, borderRadius: 10, borderWidth: 2,
+      borderColor: c.textMuted, justifyContent: 'center', alignItems: 'center',
+    },
+    radioOuterSelected: { borderColor: c.accent },
+    radioInner: { width: 10, height: 10, borderRadius: 5, backgroundColor: c.accent },
+    filterOptionText: { flex: 1, fontSize: 14, color: c.textSecondary, fontWeight: '600' },
+    filterOptionTextSelected: { color: c.text, fontWeight: '800' },
+    filterCount: {
+      minWidth: 28, height: 24, borderRadius: 12, paddingHorizontal: 7,
+      backgroundColor: c.surfaceSecondary, justifyContent: 'center', alignItems: 'center',
+    },
+    filterCountSelected: { backgroundColor: dark ? 'rgba(59,130,246,0.22)' : '#DBEAFE' },
+    filterCountText: { fontSize: 12, color: c.textMuted, fontWeight: '700' },
+    filterCountTextSelected: { color: c.accent },
+    filterSheetActions: {
+      flexDirection: 'row', gap: 10, paddingHorizontal: 18, paddingTop: 14,
+      borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border,
+    },
+    filterResetButton: {
+      minHeight: 46, paddingHorizontal: 22, borderRadius: 12,
+      borderWidth: 1, borderColor: c.border, justifyContent: 'center', alignItems: 'center',
+    },
+    filterResetText: { fontSize: 14, fontWeight: '800', color: c.textSecondary },
+    filterApplyButton: {
+      flex: 1, minHeight: 46, borderRadius: 12,
+      backgroundColor: c.accent, justifyContent: 'center', alignItems: 'center',
+    },
+    filterApplyText: { fontSize: 14, fontWeight: '800', color: '#FFFFFF' },
 
     // ── Detail sheet ──
     modalOverlay: {
@@ -300,24 +307,36 @@ export default function AnnouncementsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [fetchError, setFetchError] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
-  const [urgentOnly, setUrgentOnly] = useState(false);
+  const [priorityFilter, setPriorityFilter] = useState('all');
+  const [isFilterSheetVisible, setIsFilterSheetVisible] = useState(false);
+  const [draftCategory, setDraftCategory] = useState(null);
+  const [draftPriority, setDraftPriority] = useState('all');
   const [selectedAnn, setSelectedAnn] = useState(null);
   const [sortOrder, setSortOrder] = useState('newest');
   const [expandedIds, setExpandedIds] = useState(new Set());
+  const fetchInFlightRef = useRef(null);
 
-  const fetchAnnouncements = useCallback(async (silent = false) => {
+  const fetchAnnouncements = useCallback((silent = false) => {
+    if (fetchInFlightRef.current) return fetchInFlightRef.current;
     if (!silent) setFetchError(null);
-    try {
-      const response = await apiService.getAnnouncements();
-      setAnnouncements(Array.isArray(response.data) ? response.data : []);
-      setFetchError(null);
-    } catch (error) {
-      console.error('Fetch announcements error:', error?.message || error);
-      if (!silent) setFetchError(getApiErrorMessage(error, 'Unable to load notifications. Pull down to refresh.'));
-    } finally {
-      setIsLoading(false);
-      setRefreshing(false);
-    }
+
+    const request = (async () => {
+      try {
+        const response = await apiService.getAnnouncements();
+        setAnnouncements(Array.isArray(response.data) ? response.data : []);
+        setFetchError(null);
+      } catch (error) {
+        console.error('Fetch announcements error:', error?.message || error);
+        if (!silent) setFetchError(getApiErrorMessage(error, 'Unable to load notifications. Pull down to refresh.'));
+      } finally {
+        setIsLoading(false);
+        setRefreshing(false);
+        fetchInFlightRef.current = null;
+      }
+    })();
+
+    fetchInFlightRef.current = request;
+    return request;
   }, []);
 
   useEffect(() => { fetchAnnouncements(); }, [fetchAnnouncements]);
@@ -367,31 +386,47 @@ export default function AnnouncementsScreen() {
 
   const getCategoryIcon = (category) => getCategoryColor(category).icon;
 
-  const sortedAnnouncements = useMemo(
-    () => sortAnnouncements(announcements, sortOrder === 'oldest' ? 'asc' : 'desc'),
-    [announcements, sortOrder]
+  const categories = useMemo(
+    () => ['all', ...new Set(announcements.map((announcement) => normalizeCategoryKey(announcement.category)))],
+    [announcements]
   );
 
-  const categories = ['All', ...new Set(sortedAnnouncements.map((a) => normalizeCategoryKey(a.category)))];
+  const filteredAnnouncements = useMemo(
+    () => filterNotifications(announcements, { category: selectedCategory, priority: priorityFilter }),
+    [announcements, priorityFilter, selectedCategory]
+  );
 
-  const filteredAnnouncements = sortedAnnouncements.filter((a) => {
-    const catMatch = !selectedCategory || selectedCategory === 'All' || normalizeCategoryKey(a.category) === selectedCategory;
-    const urgentMatch = !urgentOnly || (a.priority || '').toLowerCase() === 'high';
-    return catMatch && urgentMatch;
-  });
+  const visibleAnnouncements = useMemo(
+    () => sortNotifications(filteredAnnouncements, sortOrder),
+    [filteredAnnouncements, sortOrder]
+  );
 
-  const getCategoryCount = (cat) => {
-    return announcements.filter((a) => {
-      const catMatch = cat === 'All' || normalizeCategoryKey(a.category) === cat;
-      const urgentMatch = !urgentOnly || (a.priority || '').toLowerCase() === 'high';
-      return catMatch && urgentMatch;
-    }).length;
-  };
+  const draftCounts = useMemo(
+    () => buildNotificationFilterCounts(announcements, { category: draftCategory, priority: draftPriority }),
+    [announcements, draftCategory, draftPriority]
+  );
 
-  const urgentCount = announcements.filter((a) => {
-    const catMatch = !selectedCategory || selectedCategory === 'All' || normalizeCategoryKey(a.category) === selectedCategory;
-    return catMatch && (a.priority || '').toLowerCase() === 'high';
-  }).length;
+  const activeFilterCount = Number(Boolean(selectedCategory)) + Number(priorityFilter !== 'all');
+  const hasActiveFilters = activeFilterCount > 0;
+
+  const openFilterSheet = useCallback(() => {
+    setDraftCategory(selectedCategory);
+    setDraftPriority(priorityFilter);
+    setIsFilterSheetVisible(true);
+  }, [priorityFilter, selectedCategory]);
+
+  const applyFilters = useCallback(() => {
+    setSelectedCategory(draftCategory);
+    setPriorityFilter(draftPriority);
+    setIsFilterSheetVisible(false);
+  }, [draftCategory, draftPriority]);
+
+  const clearFilters = useCallback(() => {
+    setSelectedCategory(null);
+    setPriorityFilter('all');
+    setDraftCategory(null);
+    setDraftPriority('all');
+  }, []);
 
   const announcementKeyExtractor = useCallback(
     (announcement) => announcement.notification_id || announcement.announcement_id || `${announcement.title}-${String(getAnnouncementDateValue(announcement) || '')}`,
@@ -412,7 +447,8 @@ export default function AnnouncementsScreen() {
     const prioColor = getPriorityColor(announcement.priority);
     const announcementDate = getAnnouncementDateValue(announcement);
     const isRecent = isNew(announcementDate);
-    const isExpanded = expandedIds.has(announcement.announcement_id);
+    const announcementId = announcement.notification_id || announcement.announcement_id;
+    const isExpanded = expandedIds.has(announcementId);
     const isLong = (announcement.content || '').length > 120;
 
     return (
@@ -420,6 +456,8 @@ export default function AnnouncementsScreen() {
         style={styles.announcementCard}
         onPress={() => setSelectedAnn(announcement)}
         activeOpacity={0.85}
+        accessibilityRole="button"
+        accessibilityLabel={`Notification: ${announcement.title || 'Untitled'}`}
       >
         {/* Left priority accent */}
         <View style={[styles.cardAccent, { backgroundColor: prioColor }]} />
@@ -445,7 +483,7 @@ export default function AnnouncementsScreen() {
               <Ionicons name={catColor.icon} size={10} color={catColor.text} />
               <Text style={[styles.categoryBadgeText, { color: catColor.text }]}>{categoryLabel(normalizeCategoryKey(announcement.category))}</Text>
             </View>
-            {(announcement.priority || '').toLowerCase() === 'high' && (
+            {isUrgentNotification(announcement) && (
               <View style={styles.urgentBadge}>
                 <Ionicons name="warning" size={10} color="#DC2626" />
                 <Text style={styles.urgentText}>Urgent</Text>
@@ -460,7 +498,7 @@ export default function AnnouncementsScreen() {
           {isLong && (
             <TouchableOpacity
               style={styles.readMoreBtn}
-              onPress={() => toggleExpanded(announcement.announcement_id)}
+              onPress={() => toggleExpanded(announcementId)}
               hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             >
               <Text style={styles.readMoreText}>{isExpanded ? 'Show less' : 'Read more'}</Text>
@@ -493,67 +531,47 @@ export default function AnnouncementsScreen() {
           <View style={styles.headerLeft}>
             <Text style={styles.headerTitle}>Notifications</Text>
             <Text style={styles.headerSubtitle}>
-              {filteredAnnouncements.length} of {announcements.length}{announcements.length !== 1 ? ' updates' : ' update'} in your inbox
+              {hasActiveFilters
+                ? `${filteredAnnouncements.length} of ${announcements.length} ${announcements.length === 1 ? 'update' : 'updates'} in your inbox`
+                : `${announcements.length} ${announcements.length === 1 ? 'update' : 'updates'} in your inbox`}
             </Text>
           </View>
+        </View>
+
+        <View style={styles.toolbarRow}>
           <TouchableOpacity
-            style={styles.sortBtn}
-            onPress={() => setSortOrder((prev) => prev === 'newest' ? 'oldest' : 'newest')}
-            accessibilityLabel="Toggle sort order"
+            style={[styles.toolbarButton, hasActiveFilters && styles.toolbarButtonActive]}
+            onPress={openFilterSheet}
+            accessibilityRole="button"
+            accessibilityLabel={`Open notification filters${activeFilterCount ? `, ${activeFilterCount} active` : ''}`}
           >
-            <Ionicons name={sortOrder === 'newest' ? 'arrow-down' : 'arrow-up'} size={13} color={colors.textSecondary} />
-            <Text style={styles.sortBtnText}>{sortOrder === 'newest' ? 'Newest' : 'Oldest'}</Text>
+            <Ionicons name="options-outline" size={16} color={hasActiveFilters ? colors.accent : colors.textSecondary} />
+            <Text style={[styles.toolbarButtonText, hasActiveFilters && styles.toolbarButtonTextActive]}>
+              Filters{activeFilterCount ? ` · ${activeFilterCount}` : ''}
+            </Text>
           </TouchableOpacity>
           <TouchableOpacity
-            style={styles.refreshBtn}
+            style={styles.toolbarButton}
+            onPress={() => setSortOrder((prev) => prev === 'newest' ? 'oldest' : 'newest')}
+            accessibilityRole="button"
+            accessibilityLabel={`Sort order: ${sortOrder === 'newest' ? 'Newest' : 'Oldest'}`}
+          >
+            <Ionicons name={sortOrder === 'newest' ? 'arrow-down' : 'arrow-up'} size={13} color={colors.textSecondary} />
+            <Text style={styles.toolbarButtonText}>{sortOrder === 'newest' ? 'Newest' : 'Oldest'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.toolbarButton, refreshing && styles.toolbarButtonDisabled]}
             onPress={() => { if (!refreshing) { setRefreshing(true); fetchAnnouncements(); } }}
             disabled={refreshing}
+            accessibilityRole="button"
             accessibilityLabel="Refresh notifications"
+            accessibilityState={{ disabled: refreshing, busy: refreshing }}
           >
             {refreshing
               ? <ActivityIndicator size={14} color={colors.primary} />
               : <Ionicons name="refresh" size={16} color={colors.textMuted} />
             }
-          </TouchableOpacity>
-        </View>
-
-        {/* ── Filter strip ── */}
-        <View style={[styles.filterScroll, styles.filterScrollContent]}>
-          {categories.map((category) => {
-            const isActive = selectedCategory === category || (!selectedCategory && category === 'All');
-            const count = getCategoryCount(category);
-            return (
-              <TouchableOpacity
-                key={category}
-                style={[styles.chip, isActive && styles.chipActive]}
-                onPress={() => { setSelectedCategory(category === 'All' ? null : category); setUrgentOnly(false); }}
-              >
-                <Ionicons
-                  name={category === 'All' ? 'apps' : getCategoryIcon(category)}
-                  size={13}
-                  color={isActive ? '#FFFFFF' : colors.textSecondary}
-                />
-                <Text style={[styles.chipText, isActive && styles.chipTextActive]}>{categoryLabel(category)}</Text>
-                {count > 0 && (
-                  <View style={[styles.chipBadge, isActive && styles.chipBadgeActive]}>
-                    <Text style={[styles.chipBadgeText, isActive && styles.chipBadgeTextActive]}>{count}</Text>
-                  </View>
-                )}
-              </TouchableOpacity>
-            );
-          })}
-
-          <TouchableOpacity
-            style={[styles.chip, urgentOnly ? styles.urgentChipActive : styles.urgentChipInactive]}
-            onPress={() => setUrgentOnly((prev) => !prev)}
-          >
-            <Ionicons name="alert-circle" size={13} color={urgentOnly ? '#FFFFFF' : '#EF4444'} />
-            <Text style={[styles.chipText, urgentOnly ? styles.chipTextActive : styles.chipTextUrgent]}>Urgent</Text>
-            {urgentCount > 0 && (
-              <View style={[styles.chipBadge, urgentOnly ? styles.chipBadgeActive : styles.chipBadgeUrgent]}>
-                <Text style={[styles.chipBadgeText, urgentOnly ? styles.chipBadgeTextActive : styles.chipBadgeTextUrgent]}>{urgentCount}</Text>
-              </View>
-            )}
+            <Text style={styles.toolbarButtonText}>{refreshing ? 'Refreshing' : 'Refresh'}</Text>
           </TouchableOpacity>
         </View>
       </View>
@@ -562,7 +580,7 @@ export default function AnnouncementsScreen() {
       <FlatList
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
-        data={filteredAnnouncements}
+        data={visibleAnnouncements}
         keyExtractor={announcementKeyExtractor}
         renderItem={renderAnnouncementItem}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
@@ -571,6 +589,14 @@ export default function AnnouncementsScreen() {
           <View style={styles.errorBanner}>
             <Ionicons name="cloud-offline-outline" size={15} color="#92400E" />
             <Text style={styles.errorBannerText}>{fetchError}</Text>
+            <TouchableOpacity
+              style={styles.retryButton}
+              onPress={() => fetchAnnouncements()}
+              accessibilityRole="button"
+              accessibilityLabel="Retry loading notifications"
+            >
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
           </View>
         ) : null}
         ListEmptyComponent={(
@@ -578,12 +604,166 @@ export default function AnnouncementsScreen() {
             <View style={styles.emptyIcon}>
               <Ionicons name="notifications-outline" size={26} color={colors.textMuted} />
             </View>
-            <Text style={styles.emptyTitle}>{fetchError ? 'Could not load notifications' : 'No notifications'}</Text>
-            <Text style={styles.emptyText}>{fetchError ? 'Check your connection and pull down to refresh.' : 'No notifications in this category yet. Pull down to refresh.'}</Text>
+            <Text style={styles.emptyTitle}>
+              {fetchError && announcements.length === 0
+                ? 'Could not load notifications'
+                : announcements.length === 0
+                  ? 'No notifications yet'
+                  : 'No notifications match these filters'}
+            </Text>
+            <Text style={styles.emptyText}>
+              {fetchError && announcements.length === 0
+                ? 'Check your connection and retry.'
+                : announcements.length === 0
+                  ? 'Updates from LilyCrest will appear here.'
+                  : 'Try another category or priority, or clear the active filters.'}
+            </Text>
+            {announcements.length > 0 && hasActiveFilters ? (
+              <TouchableOpacity
+                style={styles.emptyAction}
+                onPress={clearFilters}
+                accessibilityRole="button"
+                accessibilityLabel="Clear notification filters"
+              >
+                <Text style={styles.emptyActionText}>Clear filters</Text>
+              </TouchableOpacity>
+            ) : null}
           </View>
         )}
         ListFooterComponent={<View style={styles.bottomSpacer} />}
       />
+
+      {/* Compact filter controls expand into this modal sheet only when needed. */}
+      <Modal
+        visible={isFilterSheetVisible}
+        animationType="slide"
+        transparent
+        statusBarTranslucent
+        onRequestClose={() => setIsFilterSheetVisible(false)}
+      >
+        <View style={styles.filterModalOverlay}>
+          <Pressable
+            style={StyleSheet.absoluteFillObject}
+            onPress={() => setIsFilterSheetVisible(false)}
+            accessibilityRole="button"
+            accessibilityLabel="Close notification filters"
+          />
+          <View style={styles.filterSheet} accessibilityViewIsModal>
+            <View style={styles.dragHandle}>
+              <View style={styles.dragHandlePill} />
+            </View>
+            <View style={styles.filterSheetHeader}>
+              <View style={styles.filterSheetTitleWrap}>
+                <Text style={styles.filterSheetTitle}>Filter Notifications</Text>
+                <Text style={styles.filterSheetSubtitle}>Choose one category and priority.</Text>
+              </View>
+              <TouchableOpacity
+                style={styles.filterCloseButton}
+                onPress={() => setIsFilterSheetVisible(false)}
+                accessibilityRole="button"
+                accessibilityLabel="Close notification filters"
+              >
+                <Ionicons name="close" size={20} color={colors.textMuted} />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView
+              contentContainerStyle={styles.filterSheetScroll}
+              showsVerticalScrollIndicator={false}
+              keyboardShouldPersistTaps="handled"
+            >
+              <View style={styles.filterSection}>
+                <Text style={styles.filterSectionTitle}>Category</Text>
+                {categories.map((category) => {
+                  const selected = category === 'all' ? !draftCategory : draftCategory === category;
+                  const count = category === 'all'
+                    ? draftCounts.allCategories
+                    : (draftCounts.categories.get(category) || 0);
+                  const label = categoryLabel(category);
+                  return (
+                    <TouchableOpacity
+                      key={category}
+                      style={[styles.filterOption, selected && styles.filterOptionSelected]}
+                      onPress={() => setDraftCategory(category === 'all' ? null : category)}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected }}
+                      accessibilityLabel={`${label}, ${count} ${count === 1 ? 'notification' : 'notifications'}`}
+                    >
+                      <View style={[styles.radioOuter, selected && styles.radioOuterSelected]}>
+                        {selected ? <View style={styles.radioInner} /> : null}
+                      </View>
+                      <Ionicons
+                        name={category === 'all' ? 'apps-outline' : getCategoryIcon(category)}
+                        size={17}
+                        color={selected ? colors.accent : colors.textMuted}
+                      />
+                      <Text style={[styles.filterOptionText, selected && styles.filterOptionTextSelected]}>{label}</Text>
+                      <View style={[styles.filterCount, selected && styles.filterCountSelected]}>
+                        <Text style={[styles.filterCountText, selected && styles.filterCountTextSelected]}>{count}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+
+              <View style={styles.filterSection}>
+                <Text style={styles.filterSectionTitle}>Priority</Text>
+                {[
+                  { key: 'all', label: 'All', icon: 'layers-outline' },
+                  { key: 'urgent', label: 'Urgent', icon: 'alert-circle-outline' },
+                  { key: 'normal', label: 'Normal', icon: 'information-circle-outline' },
+                ].map((option) => {
+                  const selected = draftPriority === option.key;
+                  const count = draftCounts.priorities[option.key];
+                  return (
+                    <TouchableOpacity
+                      key={option.key}
+                      style={[styles.filterOption, selected && styles.filterOptionSelected]}
+                      onPress={() => setDraftPriority(option.key)}
+                      accessibilityRole="radio"
+                      accessibilityState={{ selected }}
+                      accessibilityLabel={`${option.label} priority, ${count} ${count === 1 ? 'notification' : 'notifications'}`}
+                    >
+                      <View style={[styles.radioOuter, selected && styles.radioOuterSelected]}>
+                        {selected ? <View style={styles.radioInner} /> : null}
+                      </View>
+                      <Ionicons
+                        name={option.icon}
+                        size={17}
+                        color={option.key === 'urgent' ? '#EF4444' : (selected ? colors.accent : colors.textMuted)}
+                      />
+                      <Text style={[styles.filterOptionText, selected && styles.filterOptionTextSelected]}>{option.label}</Text>
+                      <View style={[styles.filterCount, selected && styles.filterCountSelected]}>
+                        <Text style={[styles.filterCountText, selected && styles.filterCountTextSelected]}>{count}</Text>
+                      </View>
+                    </TouchableOpacity>
+                  );
+                })}
+                <Text style={styles.filterSectionHint}>Normal includes all non-urgent updates, including low priority.</Text>
+              </View>
+            </ScrollView>
+
+            <View style={styles.filterSheetActions}>
+              <TouchableOpacity
+                style={styles.filterResetButton}
+                onPress={() => { setDraftCategory(null); setDraftPriority('all'); }}
+                accessibilityRole="button"
+                accessibilityLabel="Reset notification filters"
+              >
+                <Text style={styles.filterResetText}>Reset</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.filterApplyButton}
+                onPress={applyFilters}
+                accessibilityRole="button"
+                accessibilityLabel="Apply notification filters"
+              >
+                <Text style={styles.filterApplyText}>Apply</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       {/* ── Detail sheet ── */}
       <Modal
@@ -628,7 +808,7 @@ export default function AnnouncementsScreen() {
                       <Ionicons name={catColor.icon} size={10} color={catColor.text} />
                       <Text style={[styles.categoryBadgeText, { color: catColor.text }]}>{categoryLabel(normalizeCategoryKey(selectedAnn.category))}</Text>
                     </View>
-                    {selectedAnn.priority === 'high' && (
+                    {isUrgentNotification(selectedAnn) && (
                       <View style={styles.urgentBadge}>
                         <Ionicons name="warning" size={10} color="#DC2626" />
                         <Text style={styles.urgentText}>Urgent</Text>
