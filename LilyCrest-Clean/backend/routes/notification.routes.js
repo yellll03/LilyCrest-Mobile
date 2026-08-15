@@ -1,10 +1,10 @@
 const express = require('express');
 const router = express.Router();
 const notificationController = require('../controllers/notification.controller');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, tenantMiddleware } = require('../middleware/auth');
 
-router.get('/', authMiddleware, notificationController.getMyNotifications);
-router.patch('/read-all', authMiddleware, notificationController.markAllNotificationsRead);
-router.patch('/:notificationId/read', authMiddleware, notificationController.markNotificationRead);
+router.get('/', authMiddleware, tenantMiddleware, notificationController.getMyNotifications);
+router.patch('/read-all', authMiddleware, tenantMiddleware, notificationController.markAllNotificationsRead);
+router.patch('/:notificationId/read', authMiddleware, tenantMiddleware, notificationController.markNotificationRead);
 
 module.exports = router;

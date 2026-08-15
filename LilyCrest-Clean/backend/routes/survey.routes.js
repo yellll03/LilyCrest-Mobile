@@ -2,15 +2,15 @@
 
 const router = require('express').Router();
 const controller = require('../controllers/survey.controller');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, tenantMiddleware } = require('../middleware/auth');
 const { surveyAdminMiddleware } = require('../middleware/surveyAccess');
 
 router.use(authMiddleware);
-router.get('/me', controller.listMine);
-router.get('/:surveyId/me', controller.getMine);
-router.put('/:surveyId/draft', controller.saveMyDraft);
-router.post('/:surveyId/submit', controller.submitMine);
-router.get('/:surveyId/response/me', controller.getMyResponse);
+router.get('/me', tenantMiddleware, controller.listMine);
+router.get('/:surveyId/me', tenantMiddleware, controller.getMine);
+router.put('/:surveyId/draft', tenantMiddleware, controller.saveMyDraft);
+router.post('/:surveyId/submit', tenantMiddleware, controller.submitMine);
+router.get('/:surveyId/response/me', tenantMiddleware, controller.getMyResponse);
 
 router.post('/admin/manage', surveyAdminMiddleware, controller.createSurvey);
 router.get('/admin/manage', surveyAdminMiddleware, controller.listAdmin);

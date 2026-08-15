@@ -26,7 +26,7 @@
 
 const router = require('express').Router();
 const axios = require('axios');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, tenantMiddleware } = require('../middleware/auth');
 
 const CONTRACT_ID_PATTERN = /^[a-f0-9]{24}$/i;
 
@@ -126,7 +126,7 @@ async function proxyStream(req, res, upstreamPath) {
   upstream.data.pipe(res);
 }
 
-router.use(authMiddleware);
+router.use(authMiddleware, tenantMiddleware);
 
 router.get('/current', (req, res) => proxyJson(req, res, '/api/m/contracts/current'));
 

@@ -1,7 +1,7 @@
 const crypto = require('crypto');
 const express = require('express');
 const rateLimit = require('express-rate-limit');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, tenantMiddleware } = require('../middleware/auth');
 const { admin, resolveStorageBucket } = require('../config/firebase');
 
 const router = express.Router();
@@ -55,7 +55,7 @@ const imagekitAuthLimiter = rateLimit({
   message: { detail: 'Too many upload token requests. Please try again shortly.' },
 });
 
-router.get('/imagekit-auth', imagekitAuthLimiter, authMiddleware, (req, res) => {
+router.get('/imagekit-auth', imagekitAuthLimiter, authMiddleware, tenantMiddleware, (req, res) => {
   if (!IMAGEKIT_PRIVATE_KEY) {
     return res.status(503).json({ detail: 'Image uploads are not configured.' });
   }
@@ -115,7 +115,7 @@ function resolveUploadMaxBytes(mimeType, requestedMaxBytes) {
     : mimeTypeCeiling;
 }
 
-router.post('/firebase-storage', authMiddleware, async (req, res) => {
+router.post('/firebase-storage', authMiddleware, tenantMiddleware, async (req, res) => {
   try {
     const mimeType = String(req.body?.mimeType || req.body?.type || '').trim().toLowerCase();
     const fileName = safeFileName(req.body?.fileName || req.body?.name, mimeType);

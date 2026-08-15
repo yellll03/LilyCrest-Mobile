@@ -1,19 +1,27 @@
 const express = require('express');
-const { authMiddleware, adminMiddleware } = require('../middleware/auth');
+const { authMiddleware, adminMiddleware, tenantMiddleware } = require('../middleware/auth');
 const chatController = require('../controllers/chat.controller');
 
 const router = express.Router();
 
 router.use(authMiddleware);
 
-router.post('/start', chatController.startConversation);
-router.get('/me', chatController.getMyConversations);
+// Tenant support-chat routes: gated by tenantMiddleware so an authenticated
+// admin/superadmin session (still valid here since /auth/login also
+// authenticates admins — see backend/middleware/auth.js) cannot use the
+// tenant-only chat surface. Ownership itself is separately enforced inside
+// the controller via buildTenantConversationFilter(req.user).
+router.post('/start', tenantMiddleware, chatController.startConversation);
+router.get('/me', tenantMiddleware, chatController.getMyConversations);
+router.get('/:conversationId/messages', tenantMiddleware, chatController.getConversationMessages);
+router.post('/:conversationId/messages', tenantMiddleware, chatController.sendTenantMessage);
+router.patch('/:conversationId/close', tenantMiddleware, chatController.closeConversation);
+
+// Admin support-chat routes: separately gated by adminMiddleware, unaffected
+// by the tenant-only restriction above.
 router.get('/admin/conversations', adminMiddleware, chatController.getAdminConversations);
 router.get('/admin/:conversationId/messages', adminMiddleware, chatController.getAdminConversationMessages);
 router.post('/admin/:conversationId/messages', adminMiddleware, chatController.sendAdminMessage);
 router.patch('/admin/:conversationId/status', adminMiddleware, chatController.updateAdminConversationStatus);
-router.get('/:conversationId/messages', chatController.getConversationMessages);
-router.post('/:conversationId/messages', chatController.sendTenantMessage);
-router.patch('/:conversationId/close', chatController.closeConversation);
 
 module.exports = router;

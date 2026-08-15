@@ -82,6 +82,18 @@ function isAuthUserShape(value) {
   return isPlainObject(value) && typeof value.user_id === 'string' && value.user_id.trim().length > 0;
 }
 
+// This app is tenant-only. /auth/login and /auth/google intentionally still
+// authenticate admin accounts (the web admin panel shares those endpoints),
+// so a valid session alone doesn't mean "this is a tenant" — every place this
+// app marks itself authenticated must also reject admin/superadmin roles,
+// mirroring backend/middleware/auth.js's tenantMiddleware.
+function isTenantRole(role) {
+  const normalized = String(role || '').trim().toLowerCase();
+  return normalized !== 'admin' && normalized !== 'superadmin';
+}
+
+const NOT_A_TENANT_MESSAGE = 'This account cannot access the tenant app. Please use the admin panel.';
+
 function isSessionPayloadShape(value) {
   return isPlainObject(value)
     && isAuthUserShape(value.user)
@@ -486,6 +498,15 @@ export function AuthProvider({ children }) {
         if (!isAuthUserShape(response.data)) {
           throw new Error('Invalid auth/me response shape');
         }
+        if (!isTenantRole(response.data.role)) {
+          await clearPersistedSession();
+          await clearCredentials({ disableBiometric: false });
+          if (!cancelled) {
+            setUser(null);
+            setAuthStatus('unauthenticated');
+          }
+          return;
+        }
 
         await AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(response.data)).catch(() => {});
         if (!cancelled) {
@@ -496,7 +517,7 @@ export function AuthProvider({ children }) {
         console.warn('Session hydration failed:', error?.message);
         const status = error?.response?.status;
 
-        if (status === 401) {
+        if (status === 401 || status === 403) {
           await clearPersistedSession();
           await clearCredentials({ disableBiometric: false });
           if (!cancelled) {
@@ -587,6 +608,10 @@ export function AuthProvider({ children }) {
       }
 
       const { user: userData, session_token } = data;
+      if (!isTenantRole(userData.role)) {
+        await clearPersistedSession();
+        return { success: false, status: 403, error: NOT_A_TENANT_MESSAGE };
+      }
       await persistSession(session_token, userData, remember);
       const profile = await loadAuthoritativeTenantProfile(userData);
       await AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(profile)).catch(() => {});
@@ -635,6 +660,10 @@ export function AuthProvider({ children }) {
         return { success: false, status: 500, error: 'Received an invalid verification response. Please try again.' };
       }
       const { user: userData, session_token } = response.data;
+      if (!isTenantRole(userData.role)) {
+        await clearPersistedSession();
+        return { success: false, status: 403, error: NOT_A_TENANT_MESSAGE };
+      }
 
       await persistSession(session_token, userData, remember);
       const profile = await loadAuthoritativeTenantProfile(userData);
@@ -718,6 +747,10 @@ export function AuthProvider({ children }) {
         return { success: false, error: 'Received an invalid Google sign-in response. Please try again.' };
       }
       const { user: userData, session_token } = response.data;
+      if (!isTenantRole(userData.role)) {
+        await clearPersistedSession();
+        return { success: false, error: NOT_A_TENANT_MESSAGE };
+      }
 
       await persistSession(session_token, userData, remember);
       const profile = await loadAuthoritativeTenantProfile(userData);
@@ -787,12 +820,19 @@ export function AuthProvider({ children }) {
       if (!isAuthUserShape(response.data)) {
         throw new Error('Invalid auth/me response shape');
       }
+      if (!isTenantRole(response.data.role)) {
+        await clearPersistedSession();
+        await clearCredentials({ disableBiometric: false });
+        setUser(null);
+        setAuthStatus('unauthenticated');
+        return { authenticated: false };
+      }
       await AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(response.data)).catch(() => {});
       setUser((prev) => preserveKnownBranch(prev, response.data));
       setAuthStatus('authenticated');
       return { authenticated: true, restoredFromCache: false };
     } catch (error) {
-      if (error?.response?.status === 401) {
+      if (error?.response?.status === 401 || error?.response?.status === 403) {
         await clearPersistedSession();
         await clearCredentials({ disableBiometric: false });
         setUser(null);

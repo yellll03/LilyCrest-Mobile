@@ -114,6 +114,23 @@ function adminMiddleware(req, res, next) {
   return next();
 }
 
+// The mobile app is tenant-only: it must never let an authenticated admin
+// account reach tenant-scoped data/actions just because they hold a valid
+// session. /auth/login and /auth/google intentionally still authenticate
+// admin accounts (the web admin panel shares that same endpoint), so the
+// tenant-only guarantee has to be enforced here, on every tenant-facing
+// route, rather than at login time. Mirrors the role check auth.controller.js
+// already uses to keep admins out of the tenant *login* path (role: {$nin:
+// ['admin','superadmin']}) — this applies the same rule to every subsequent
+// tenant request, not just the initial login.
+function tenantMiddleware(req, res, next) {
+  const role = (req.user?.role || '').toLowerCase();
+  if (role === 'admin' || role === 'superadmin') {
+    return res.status(403).json({ detail: 'This account cannot access the tenant app. Please use the admin panel.' });
+  }
+  return next();
+}
+
 // Like authMiddleware but doesn't block unauthenticated requests.
 // Attaches req.user if a valid session is found; sets req.user = null otherwise.
 async function optionalAuthMiddleware(req, res, next) {
@@ -152,6 +169,7 @@ async function optionalAuthMiddleware(req, res, next) {
 module.exports = {
   authMiddleware,
   adminMiddleware,
+  tenantMiddleware,
   optionalAuthMiddleware,
   authMiddlewareRecentSession,
   isAccountActive,

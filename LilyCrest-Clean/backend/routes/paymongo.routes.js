@@ -1,13 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const paymongoController = require('../controllers/paymongo.controller');
-const { authMiddleware } = require('../middleware/auth');
+const { authMiddleware, tenantMiddleware } = require('../middleware/auth');
 
 // Create a PayMongo checkout session (requires auth)
-router.post('/checkout', authMiddleware, paymongoController.createCheckoutSession);
+router.post('/checkout', authMiddleware, tenantMiddleware, paymongoController.createCheckoutSession);
 
 // Check checkout session status (requires auth)
-router.get('/checkout/:checkoutId/status', authMiddleware, paymongoController.getCheckoutStatus);
+router.get('/checkout/:checkoutId/status', authMiddleware, tenantMiddleware, paymongoController.getCheckoutStatus);
 
 // PayMongo webhook (NO auth — called by PayMongo servers)
 router.post('/webhook', paymongoController.handleWebhook);
