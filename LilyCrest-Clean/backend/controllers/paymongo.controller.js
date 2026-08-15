@@ -342,6 +342,21 @@ async function findRealBillByBillingId(db, billingId, mongoId, options = {}, use
   return db.collection('bills').findOne(filter, options);
 }
 
+// PayMongo Checkout Sessions charge a fixed line-item amount set when the
+// session was created, so a mismatch at settlement time means the bill's
+// expected amount moved after that (an admin edit, a penalty applied, or a
+// stale/reused session paid late) — it is not an intentional partial
+// payment. This codebase has no partial-payment settlement state machine
+// ('partially_paid' exists only as an admin-settable display value, never
+// auto-derived from an amount comparison), so instead of inventing one, an
+// underpaid settlement fails closed: payment evidence is recorded for audit
+// but the bill is NOT flipped to paid and the balance is NOT zeroed.
+function isUnderpaid(paidAmountCentavos, expectedAmount) {
+  if (!Number.isFinite(paidAmountCentavos)) return false;
+  const expectedCentavos = Math.round(Number(expectedAmount || 0) * 100);
+  return expectedCentavos > 0 && paidAmountCentavos < expectedCentavos - 1;
+}
+
 async function markLegacyBillPaidAtomic(db, filter, {
   paymentId,
   eventType,
@@ -349,8 +364,40 @@ async function markLegacyBillPaidAtomic(db, filter, {
   paymentDate,
   referenceNumber,
   paymentChannel,
+  paidAmountCentavos = null,
 } = {}) {
   const resolvedPaymentDate = paymentDate instanceof Date ? paymentDate : new Date();
+
+  if (Number.isFinite(paidAmountCentavos)) {
+    const current = await db.collection('billing').findOne(filter, {
+      projection: { remaining_amount: 1, total: 1, amount: 1, status: 1 },
+    });
+    if (current && !isPaidStatus(current.status) && isUnderpaid(paidAmountCentavos, current.remaining_amount ?? current.total ?? current.amount)) {
+      const underpaidUpdated = unwrapMongoDocument(await db.collection('billing').findOneAndUpdate(
+        { ...filter, status: { $nin: ['paid', 'settled'] } },
+        {
+          $set: {
+            payment_method: 'paymongo',
+            payment_date: resolvedPaymentDate,
+            paymongo_payment_id: paymentId || null,
+            paymongo_underpaid_amount: paidAmountCentavos / 100,
+            paymongo_underpaid_at: new Date(),
+            ...(paymentChannel ? { payment_channel: paymentChannel } : {}),
+            ...(checkoutId ? { paymongo_checkout_id: checkoutId } : {}),
+            ...(referenceNumber ? { paymongo_reference: referenceNumber } : {}),
+            ...(eventType ? { paymongo_event: eventType } : {}),
+            updated_at: new Date(),
+          },
+        },
+        { returnDocument: 'after' },
+      ));
+      if (underpaidUpdated) {
+        console.warn(`[markBillPaid] Underpaid settlement for legacy bill (paid ${paidAmountCentavos}c) — not marking paid, flagged for manual review.`);
+        return { existing: underpaidUpdated, alreadyPaid: false, matched: true, resolvedUserId: underpaidUpdated.user_id || filter.user_id || null, underpaid: true };
+      }
+    }
+  }
+
   const updated = unwrapMongoDocument(await db.collection('billing').findOneAndUpdate(
     { ...filter, status: { $nin: ['paid', 'settled'] } },
     {
@@ -389,8 +436,40 @@ async function markRealBillPaidAtomic(db, filter, userId, {
   paymentDate,
   referenceNumber,
   paymentChannel,
+  paidAmountCentavos = null,
 } = {}) {
   const resolvedPaymentDate = paymentDate instanceof Date ? paymentDate : new Date();
+
+  if (Number.isFinite(paidAmountCentavos)) {
+    const current = await db.collection('bills').findOne(filter, {
+      projection: { remainingAmount: 1, totalAmount: 1, grossAmount: 1, status: 1 },
+    });
+    if (current && !isPaidStatus(current.status) && isUnderpaid(paidAmountCentavos, current.remainingAmount ?? current.totalAmount ?? current.grossAmount)) {
+      const underpaidUpdated = unwrapMongoDocument(await db.collection('bills').findOneAndUpdate(
+        { ...filter, status: { $nin: ['paid', 'settled'] } },
+        {
+          $set: {
+            paymentMethod: 'paymongo',
+            paymentDate: resolvedPaymentDate,
+            paymongoPaymentId: paymentId || null,
+            paymongoUnderpaidAmount: paidAmountCentavos / 100,
+            paymongoUnderpaidAt: new Date(),
+            ...(paymentChannel ? { paymentChannel } : {}),
+            ...(checkoutId ? { paymongoSessionId: checkoutId } : {}),
+            ...(referenceNumber ? { paymongoReference: referenceNumber } : {}),
+            ...(eventType ? { paymongoEvent: eventType } : {}),
+            updatedAt: new Date(),
+          },
+        },
+        { returnDocument: 'after' },
+      ));
+      if (underpaidUpdated) {
+        console.warn(`[markBillPaid] Underpaid settlement for real bill (paid ${paidAmountCentavos}c) — not marking paid, flagged for manual review.`);
+        return { existing: mapRealBill(underpaidUpdated, userId), alreadyPaid: false, matched: true, resolvedUserId: userId, underpaid: true };
+      }
+    }
+  }
+
   const updated = unwrapMongoDocument(await db.collection('bills').findOneAndUpdate(
     { ...filter, status: { $nin: ['paid', 'settled'] } },
     {
@@ -485,15 +564,32 @@ async function markBillPaid(db, billingId, userId, options = {}) {
   }
 
   // Fallback: find by paymongo checkout id (handles metadata mismatch cases).
-  // This ensures payment is persisted even if the billing_id/user_id in the
-  // PayMongo metadata didn't exactly match the stored record.
+  // paymongoSessionId is written to exactly one bill, exclusively by our own
+  // createCheckoutSession — at creation time it atomically claims a single,
+  // already-ownership-verified bill (buildRealBillLookupFilter includes an
+  // owner match), so this identifier is not a weaker/looser proof than the
+  // billing_id/user_id metadata path above; it is a foreign-key-style
+  // binding we control, used here only because the metadata PayMongo echoes
+  // back can drift in formatting. The owner used for settlement is always
+  // re-derived from the bill's own stored owner field (resolveRealBillOwnerUserId),
+  // never trusted from the possibly-mismatched webhook metadata.
+  //
+  // Fail closed if this ever turns up more than one bill for the same
+  // session ID (should be impossible given the atomic claim above, but a
+  // duplicate would mean this identifier is no longer proof of one exact
+  // bill, and settling an arbitrary match from an ambiguous set is exactly
+  // the kind of wrong-bill risk this fallback exists to avoid).
   if (checkoutId) {
     try {
-      const bySession = await db.collection('bills').findOne(
+      const sessionMatches = await db.collection('bills').find(
         { paymongoSessionId: checkoutId },
         { projection: { userId: 1, tenantId: 1, user_id: 1, tenantUserId: 1, tenant_user_id: 1 } }
-      );
-      if (bySession) {
+      ).limit(2).toArray();
+
+      if (sessionMatches.length > 1) {
+        console.error(`[markBillPaid] REFUSING to settle — checkout ${checkoutId} matches more than one bill. Failing closed.`);
+      } else if (sessionMatches.length === 1) {
+        const bySession = sessionMatches[0];
         const resolvedUserId = await resolveRealBillOwnerUserId(db, bySession, userId);
         const realCheckoutResult = await markRealBillPaidAtomic(
           db,
@@ -511,14 +607,23 @@ async function markBillPaid(db, billingId, userId, options = {}) {
     }
 
     try {
-      const legacyCheckoutResult = await markLegacyBillPaidAtomic(
-        db,
+      const legacySessionMatches = await db.collection('billing').find(
         { paymongo_checkout_id: checkoutId },
-        options
-      );
-      if (legacyCheckoutResult.matched) {
-        console.log(`[markBillPaid] Bill found by checkout_id ${checkoutId}`);
-        return legacyCheckoutResult;
+        { projection: { _id: 1 } },
+      ).limit(2).toArray();
+
+      if (legacySessionMatches.length > 1) {
+        console.error(`[markBillPaid] REFUSING to settle — legacy checkout ${checkoutId} matches more than one bill. Failing closed.`);
+      } else if (legacySessionMatches.length === 1) {
+        const legacyCheckoutResult = await markLegacyBillPaidAtomic(
+          db,
+          { paymongo_checkout_id: checkoutId },
+          options
+        );
+        if (legacyCheckoutResult.matched) {
+          console.log(`[markBillPaid] Bill found by checkout_id ${checkoutId}`);
+          return legacyCheckoutResult;
+        }
       }
     } catch (err) {
       console.error(`[markBillPaid] Checkout-ID fallback error:`, err.message);
@@ -644,17 +749,26 @@ async function reconcileCheckoutSessionPayment(db, checkoutId, {
   const referenceNumber = String(resolvedSession?.attributes?.reference_number || '').trim();
   const userEmailHint = String(metadata.user_email || '').trim();
   const paymentDate = getCheckoutSessionPaymentDate(resolvedSession) || new Date();
-  const { existing, alreadyPaid, resolvedUserId } = await markBillPaid(db, billingId, userId, {
+  // PayMongo reports the actual settled Payment amount (centavos) on the
+  // Payment resource itself — this is the authoritative "what did the
+  // tenant actually pay" figure, independent of what the checkout session
+  // was originally created for. Compared against the bill's own current
+  // expected amount inside markRealBillPaidAtomic/markLegacyBillPaidAtomic
+  // before the bill is ever flipped to paid.
+  const paidAmountCentavosRaw = state.payments[0]?.attributes?.amount;
+  const paidAmountCentavos = Number.isFinite(Number(paidAmountCentavosRaw)) ? Number(paidAmountCentavosRaw) : null;
+  const { existing, alreadyPaid, resolvedUserId, underpaid } = await markBillPaid(db, billingId, userId, {
     paymentId,
     eventType,
     checkoutId,
     paymentDate,
     referenceNumber,
     paymentChannel,
+    paidAmountCentavos,
   });
   const paymentUserId = resolvedUserId || userId;
 
-  if (sendSideEffects && !alreadyPaid && existing && paymentUserId) {
+  if (sendSideEffects && !alreadyPaid && !underpaid && existing && paymentUserId) {
     notifyPaymentConfirmed(paymentUserId, { ...existing, status: 'paid' }).catch(() => {});
     sendPaymentReceiptForBill(db, {
       userId: paymentUserId,
@@ -666,11 +780,16 @@ async function reconcileCheckoutSessionPayment(db, checkoutId, {
     }).catch(() => {});
   }
 
+  if (underpaid) {
+    console.warn(`[PayMongo] Bill ${billingId} received an underpaid settlement (checkout ${checkoutId}) — left unsettled for manual review.`);
+  }
+
   return {
     session: resolvedSession,
     ...state,
     existing,
     alreadyPaid,
+    underpaid: Boolean(underpaid),
     resolvedUserId: paymentUserId,
     referenceNumber,
     paymentId,

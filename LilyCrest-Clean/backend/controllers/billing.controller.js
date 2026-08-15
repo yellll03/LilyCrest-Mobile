@@ -979,12 +979,18 @@ function mapRealBill(b, userId) {
   const waterBreakdown = b.water_breakdown && typeof b.water_breakdown === 'object'
     ? b.water_breakdown
     : (b.waterBreakdown && typeof b.waterBreakdown === 'object' ? b.waterBreakdown : undefined);
+  // NOTE: billReleaseDate/releaseDate are not written by any current bill-creation
+  // path on the `bills` collection — every real bill does carry billingCycleStart
+  // (set at creation) and dueDate, so those are the authoritative fallbacks. Without
+  // this fallback, resolveUtilityDeadline() always receives null dates and every
+  // electricity/water bill permanently displays as "not released" regardless of
+  // its actual payment/status.
   const utilityDeadline = resolveUtilityDeadline({
-    billingPeriodStart: b.billingPeriodStart ?? b.periodStart,
-    billingPeriodEnd: b.billingPeriodEnd ?? b.periodEnd,
-    meterReadingDate: b.meterReadingDate ?? b.readingDate,
-    billReleaseDate: b.billReleaseDate ?? b.releaseDate,
-    providerDueDate: b.providerDueDate ?? b.utilityProviderDueDate,
+    billingPeriodStart: b.billingPeriodStart ?? b.periodStart ?? b.billingCycleStart,
+    billingPeriodEnd: b.billingPeriodEnd ?? b.periodEnd ?? b.billingCycleEnd,
+    meterReadingDate: b.meterReadingDate ?? b.readingDate ?? b.utilityReadingDate,
+    billReleaseDate: b.billReleaseDate ?? b.releaseDate ?? b.billingCycleStart,
+    providerDueDate: b.providerDueDate ?? b.utilityProviderDueDate ?? b.dueDate,
   });
 
   // Format billing period from billingMonth ISO string → "April 2026"
@@ -1549,6 +1555,7 @@ async function downloadBillPdf(req, res) {
       if (bill.paymongo_reference) {
         infoRows.push({ label: 'Reference No.', value: normalizeLine(bill.paymongo_reference) });
       }
+      infoRows.push({ label: 'Remaining Balance', value: formatMoney(bill.remaining_amount || 0) });
     }
 
     // Charge breakdown table
@@ -1641,16 +1648,19 @@ async function downloadBillPdf(req, res) {
       ? `Billing Period: ${bill.billing_period}`
       : `Billing Period: ${formatDate(bill.created_at)} - ${formatDate(bill.due_date)}`;
 
+    const billIsPaid = isPaidBill(bill);
     const pdfBuffer = buildBrandedPdf({
       title: normalizeLine(bill.description || 'Billing Statement'),
       subtitle: billingPeriod,
-      docType: 'BILLING STATEMENT',
+      docType: billIsPaid ? 'BILLING STATEMENT - PAID' : 'BILLING STATEMENT',
       refNumber: refId,
       date: `Released: ${formatDate(bill.release_date || bill.created_at)}`,
       infoRows,
       tableRows,
       totalRow: {
-        label: moveInFinancials ? 'REMAINING MOVE-IN BALANCE' : 'TOTAL AMOUNT DUE',
+        label: moveInFinancials
+          ? 'REMAINING MOVE-IN BALANCE'
+          : (billIsPaid ? 'TOTAL PAID' : 'TOTAL AMOUNT DUE'),
         value: formatMoney(bill.total || bill.amount || 0),
       },
       breakdownSections,
@@ -1667,6 +1677,78 @@ async function downloadBillPdf(req, res) {
   }
 }
 
+// Payment receipt PDF — a distinct document from the billing statement.
+// Only ever returned for a bill with authoritative confirmed-payment
+// evidence (see isPaidBill/getEffectiveBillStatus); an unpaid bill gets a
+// 404, never a fabricated receipt. Content is deliberately narrower than
+// the statement: payment evidence only (date/method/reference/amount),
+// no charge table, no utility breakdown, no "TOTAL DUE"/payment
+// instructions — see downloadBillPdf for the statement.
+async function downloadBillReceiptPdf(req, res) {
+  try {
+    const { billingId } = req.params;
+    const db = getDb();
+    const bill = (await fetchUserBills(db, req.user, { billingId, limit: 1 }))[0];
+
+    if (!bill) {
+      return res.status(404).json({ detail: BILL_UNAVAILABLE_MESSAGE });
+    }
+
+    if (!isPaidBill(bill)) {
+      return res.status(404).json({ detail: 'No payment receipt is available for this bill yet.' });
+    }
+
+    const formatMoney = (value) => `PHP ${(Number(value || 0)).toLocaleString('en-US', { minimumFractionDigits: 2 })}`;
+    const formatDate = (value) => {
+      if (!value) return '---';
+      const d = new Date(value);
+      if (Number.isNaN(d.getTime())) return '---';
+      return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
+    };
+
+    const amountPaid = bill.total || bill.amount || 0;
+    const refId = normalizeLine(bill.reference_no || bill.reference || bill.paymongo_reference || bill.txn_id || bill.transaction_id || billingId);
+    const billingPeriod = bill.billing_period ? `Billing Period: ${bill.billing_period}` : '';
+
+    const infoRows = [
+      { label: 'Receipt No.', value: normalizeLine(`RCPT-${bill.billing_id || billingId}`) },
+      { label: 'Bill ID', value: normalizeLine(bill.billing_id || billingId) },
+      { label: 'Tenant', value: normalizeLine(req.user?.name || 'Tenant') },
+      { label: 'Billing Period', value: normalizeLine(bill.billing_period || '---') },
+      { label: 'Payment Date', value: formatDate(bill.payment_date) },
+    ];
+    if (bill.payment_method) {
+      infoRows.push({ label: 'Payment Method', value: normalizeLine(billPaymentMethodLabel(bill.payment_method, bill.payment_channel)) });
+    }
+    if (bill.paymongo_reference) {
+      infoRows.push({ label: 'Reference No.', value: normalizeLine(bill.paymongo_reference) });
+    }
+    infoRows.push(
+      { label: 'Amount Paid', value: formatMoney(amountPaid) },
+      { label: 'Applied to Bill', value: formatMoney(amountPaid) },
+      { label: 'Remaining Balance', value: formatMoney(bill.remaining_amount || 0) },
+      { label: 'Status', value: 'PAID' },
+    );
+
+    const pdfBuffer = buildBrandedPdf({
+      title: normalizeLine(bill.billing_period ? `${bill.billing_period} Payment Receipt` : 'Payment Receipt'),
+      subtitle: billingPeriod,
+      docType: 'PAYMENT RECEIPT',
+      refNumber: refId,
+      date: `Paid: ${formatDate(bill.payment_date)}`,
+      infoRows,
+    });
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Length', pdfBuffer.length);
+    res.setHeader('Content-Disposition', `attachment; filename="${billingId}-receipt.pdf"`);
+    res.setHeader('Cache-Control', 'no-cache');
+    res.end(pdfBuffer);
+  } catch (error) {
+    console.error('Download bill receipt PDF error:', error);
+    res.status(500).json({ detail: 'Failed to generate payment receipt' });
+  }
+}
 
 module.exports = {
   fetchUserBills,
@@ -1679,6 +1761,7 @@ module.exports = {
   createBilling,
   updateBilling,
   downloadBillPdf,
+  downloadBillReceiptPdf,
   // Shared utilities used by paymongo controller
   BILL_UNAVAILABLE_MESSAGE,
   getBillPaymentDate,

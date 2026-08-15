@@ -10,6 +10,13 @@ import { useTheme } from '../src/context/ThemeContext';
 import { documentErrorMessage, downloadPdf, fetchPdf, getCachedPdf, getPdfMetadata, sharePdf } from '../src/services/documentManager';
 import { safeBack } from '../src/utils/navigation';
 
+function formatFileSize(bytes) {
+  if (!bytes) return '';
+  const mb = bytes / 1024 / 1024;
+  if (mb >= 1) return `${mb.toFixed(1)} MB`;
+  return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+}
+
 export default function DocumentViewer() {
   const router = useRouter();
   const pdfRef = useRef(null);
@@ -54,7 +61,7 @@ export default function DocumentViewer() {
       <View style={[styles.header, { borderBottomColor: colors.border }]}>
         <TouchableOpacity onPress={() => safeBack(router)} accessibilityLabel="Back"><Ionicons name="arrow-back" size={25} color={colors.text} /></TouchableOpacity>
         <View style={styles.heading}><Text numberOfLines={1} style={[styles.title, { color: colors.text }]}>{title}</Text>
-          {!!uri && <Text style={[styles.meta, { color: colors.textSecondary }]}>PDF · {fileSize ? `${(fileSize / 1024 / 1024).toFixed(1)} MB · ` : ''}{pages ? `${pages} page${pages === 1 ? '' : 's'}` : 'Checking pages'}</Text>}
+          {!!uri && <Text style={[styles.meta, { color: colors.textSecondary }]}>PDF · {fileSize ? `${formatFileSize(fileSize)} · ` : ''}{pages ? `${pages} page${pages === 1 ? '' : 's'}` : 'Checking pages'}</Text>}
         </View>
         <TouchableOpacity disabled={!uri} accessibilityLabel="Download PDF" onPress={async () => { try { const saved = await downloadPdf(uri, title); Alert.alert('Download complete', `${saved.filename} was saved.`); } catch (e) { Alert.alert('Download unavailable', documentErrorMessage(e)); } }}>
           <Ionicons name="download-outline" size={24} color={uri ? colors.primary : colors.textSecondary} />
@@ -84,7 +91,7 @@ export default function DocumentViewer() {
 const styles = StyleSheet.create({
   root: { flex: 1 }, header: { minHeight: 62, borderBottomWidth: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 14 },
   heading: { flex: 1 }, title: { fontSize: 17, fontWeight: '700' }, meta: { fontSize: 12, marginTop: 2 },
-  pdf: { flex: 1, width: '100%', backgroundColor: '#30343b' }, center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, padding: 28 },
+  pdf: { flex: 1, width: '100%', backgroundColor: '#e9edf2' }, center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, padding: 28 },
   error: { textAlign: 'center', fontSize: 16, lineHeight: 23 }, retry: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10 }, retryText: { color: '#fff', fontWeight: '700' },
   controls: { position: 'absolute', bottom: 22, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 22, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 24, elevation: 5 },
 });

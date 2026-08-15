@@ -282,3 +282,27 @@ test('an already-paid bill is rejected before any PayMongo call', async () => {
     assert.equal(called, false);
   });
 });
+
+// Phase 3 end-to-end audit: a client-supplied amount must never influence
+// the PayMongo checkout line-item amount — it is always derived server-side
+// from the authoritative bill's remaining_amount.
+test('a client-supplied body amount is ignored — the checkout is always created for the bill\'s authoritative remaining_amount', async () => {
+  resetStore([makeBillDoc({ remaining_amount: 1500 })]);
+  let capturedPayload = null;
+  await withMockedAxios({
+    post: async (_url, payload) => {
+      capturedPayload = payload;
+      return { data: { data: { id: 'cs_amount_check', attributes: { checkout_url: 'https://x' } } } };
+    },
+  }, async () => {
+    const res = fakeRes();
+    // Attacker attempts to override the amount to 1 centavo via the request body.
+    await createCheckoutSession(fakeReq({ body: { billingId: BILL_ID, amount: 1 } }), res);
+    assert.equal(res.body.checkout_id, 'cs_amount_check');
+    assert.equal(
+      capturedPayload.data.attributes.line_items[0].amount,
+      150000, // PHP 1500.00 in centavos — the bill's actual remaining_amount, not the attacker's "1"
+      'checkout amount must come from the bill record, never from the request body',
+    );
+  });
+});

@@ -14,6 +14,7 @@ import {
   getBillingApiMessage,
   isBillingUnavailableMessage,
 } from '../src/services/billingState';
+import { isBillOutstanding } from '../src/utils/billingStatus';
 import { safeBack } from '../src/utils/navigation';
 
 function safeCurrency(amount) {
@@ -35,11 +36,6 @@ function safeDate(value) {
   } catch (_e) {
     return '\u2014';
   }
-}
-
-function isBillOutstanding(bill) {
-  const status = String(bill?.status || '').toLowerCase();
-  return status !== 'paid' && status !== 'settled';
 }
 
 function getBillId(bill) {

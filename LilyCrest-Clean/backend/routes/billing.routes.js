@@ -9,6 +9,7 @@ router.get('/history/paid', authMiddleware, tenantMiddleware, billingController.
 router.get('/history', authMiddleware, tenantMiddleware, billingController.getBillingHistory);
 router.get('/:billingId', authMiddleware, tenantMiddleware, billingController.getBillingById);
 router.get('/:billingId/pdf', authMiddleware, tenantMiddleware, billingController.downloadBillPdf);
+router.get('/:billingId/receipt', authMiddleware, tenantMiddleware, billingController.downloadBillReceiptPdf);
 router.post('/:billingId/payment-proof', authMiddleware, tenantMiddleware, billingController.submitPaymentProof);
 router.post('/', authMiddleware, adminMiddleware, billingController.createBilling);
 router.put('/:billingId', authMiddleware, adminMiddleware, billingController.updateBilling);

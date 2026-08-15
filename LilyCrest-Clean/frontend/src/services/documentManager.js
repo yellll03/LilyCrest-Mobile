@@ -8,6 +8,7 @@ export const MAX_PDF_BYTES = 50 * 1024 * 1024;
 
 export const documentUrl = (kind, id) => {
   if (kind === 'bill') return `${MOBILE_API_BASE_URL}/billing/${encodeURIComponent(id)}/pdf`;
+  if (kind === 'bill-receipt') return `${MOBILE_API_BASE_URL}/billing/${encodeURIComponent(id)}/receipt`;
   if (kind === 'policy') return `${MOBILE_API_BASE_URL}/documents/${encodeURIComponent(id)}`;
   if (kind === 'contract-prepared') return `${MOBILE_API_BASE_URL}/contracts/${encodeURIComponent(id)}/documents/prepared`;
   if (kind === 'contract-final') return `${MOBILE_API_BASE_URL}/contracts/${encodeURIComponent(id)}/documents/final`;

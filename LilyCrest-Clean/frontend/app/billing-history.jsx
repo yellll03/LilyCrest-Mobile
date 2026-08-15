@@ -9,7 +9,7 @@ import { useAuth } from '../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
 import { apiService, getApiErrorMessage } from '../src/services/api';
 import { subscribeBillingRefresh } from '../src/services/billingState';
-import { getBillOwedAmount, getBillStatus, isBillOutstanding } from '../src/utils/billingStatus';
+import { getBillOwedAmount, getBillPaymentDate, getBillStatus, getUtilityReleaseSchedule, isBillOutstanding } from '../src/utils/billingStatus';
 import { safeBack } from '../src/utils/navigation';
 
 // Helpers
@@ -78,23 +78,6 @@ const STATUS_FILTERS = [
 const getBillId = (bill) => bill?.billing_id || bill?.id || bill?.billingId || bill?.billId || bill?.reference_id || bill?._id;
 const PAID_STATUSES = new Set(['paid', 'settled']);
 const isPaidBillStatus = (status) => PAID_STATUSES.has(String(status || '').toLowerCase());
-const getBillPaymentDate = (bill) => bill?.payment_date || bill?.paymentDate || bill?.paidAt || bill?.paid_at || null;
-const getBillReleaseDate = (bill) => bill?.release_date || bill?.releaseDate || bill?.created_at || bill?.createdAt || null;
-function getDisplaySchedule(bill) {
-  const utilitySchedules = Object.values(bill?.utility_deadlines || {});
-  const hasUtilityCharge = Number(bill?.electricity || 0) > 0 || Number(bill?.water || 0) > 0 || utilitySchedules.length > 0;
-  const releasedUtilities = utilitySchedules
-    .filter((schedule) => schedule?.billReleaseDate && schedule?.finalDueDate)
-    .sort((left, right) => new Date(left.finalDueDate) - new Date(right.finalDueDate));
-  const hasRent = Number(bill?.rent || 0) > 0;
-  const candidates = [
-    ...releasedUtilities.map((schedule) => ({ releaseDate: schedule.billReleaseDate, dueDate: schedule.finalDueDate })),
-    ...(hasRent && (bill?.due_date || bill?.dueDate) ? [{ releaseDate: getBillReleaseDate(bill), dueDate: bill.due_date || bill.dueDate }] : []),
-  ].sort((left, right) => new Date(left.dueDate) - new Date(right.dueDate));
-  if (candidates.length) return { ...candidates[0], unreleasedUtility: false };
-  if (hasUtilityCharge) return { releaseDate: null, dueDate: null, unreleasedUtility: true };
-  return { releaseDate: getBillReleaseDate(bill), dueDate: bill?.due_date || bill?.dueDate || null, unreleasedUtility: false };
-}
 function mergeBillingLists(...lists) {
   const mergedById = new Map();
 
@@ -266,7 +249,7 @@ export default function BillingScreen() {
       const value = Number(bill.penalties ?? bill.penalty ?? bill.late_penalty ?? bill.latePenalty ?? 0);
       return sum + (Number.isFinite(value) && value > 0 ? value : 0);
     }, 0);
-    const summarySchedule = getDisplaySchedule(summaryBill);
+    const summarySchedule = getUtilityReleaseSchedule(summaryBill);
     const dueDate = summarySchedule.dueDate;
     const summaryId = getBillId(summaryBill);
     const timingApplies = summaryId && String(summaryId) === String(getBillId(currentSummary.bill) || '');
@@ -391,7 +374,7 @@ export default function BillingScreen() {
     const billId = getBillId(bill);
     const paid = isPaid(bill);
     const statusCfg = getStatusConfig(bill?.status);
-    const schedule = getDisplaySchedule(bill);
+    const schedule = getUtilityReleaseSchedule(bill);
 
     return (
       <Pressable
@@ -432,12 +415,25 @@ export default function BillingScreen() {
             disabled={!billId}
             onPress={() => {
               if (!billId) return;
-              router.push({ pathname: '/document-viewer', params: { kind: 'bill', id: String(billId), title: paid ? 'Payment Receipt' : 'Billing Statement' } });
+              router.push({ pathname: '/document-viewer', params: { kind: 'bill', id: String(billId), title: 'Billing Statement' } });
             }}
           >
             <Ionicons name="download-outline" size={14} color={colors.text} />
-            <Text style={styles.outlineBtnText}>View PDF</Text>
+            <Text style={styles.outlineBtnText}>View Statement</Text>
           </Pressable>
+          {paid && (
+            <Pressable
+              style={[styles.outlineBtn, !billId && styles.btnDisabled]}
+              disabled={!billId}
+              onPress={() => {
+                if (!billId) return;
+                router.push({ pathname: '/document-viewer', params: { kind: 'bill-receipt', id: String(billId), title: 'Payment Receipt' } });
+              }}
+            >
+              <Ionicons name="receipt-outline" size={14} color={colors.text} />
+              <Text style={styles.outlineBtnText}>View Receipt</Text>
+            </Pressable>
+          )}
           {paid && getBillPaymentDate(bill) && (
             <View style={styles.paidMeta}>
               <Ionicons name="checkmark" size={12} color="#15803d" />

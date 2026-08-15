@@ -17,6 +17,7 @@ import {
 } from '../src/services/billingState';
 import { safeBack } from '../src/utils/navigation';
 import { ensureFirebaseStorageAttachments, IMAGE_UPLOAD_MIME_TYPES, MAX_IMAGE_UPLOAD_BYTES } from '../src/services/firebaseStorageUpload';
+import { getBillPaymentDate, isBillOutstanding } from '../src/utils/billingStatus';
 
 const getBillId = (bill) => bill?.billing_id || bill?.id || bill?._id || bill?.billingId || bill?.billId || bill?.reference_id;
 
@@ -84,15 +85,6 @@ const STATUS_CONFIG = {
   rejected: { bg: '#fef2f2', text: '#b91c1c', icon: 'close-circle', label: 'Payment Rejected' },
   cancelled: { bg: '#f3f4f6', text: '#6b7280', icon: 'close-circle', label: 'Cancelled' },
 };
-
-function isBillOutstanding(bill) {
-  const status = String(bill?.status || '').toLowerCase();
-  return status !== 'paid' && status !== 'settled';
-}
-
-function getBillPaymentDate(bill) {
-  return bill?.payment_date || bill?.paymentDate || bill?.paidAt || bill?.paid_at || null;
-}
 
 function hasUsableElectricityBreakdown(bill) {
   if (!Array.isArray(bill?.electricity_breakdown) || bill.electricity_breakdown.length === 0) return false;
@@ -705,21 +697,35 @@ export default function BillDetailsScreen() {
           )}
         </View>
 
-        {/* ── Download PDF ── */}
+        {/* ── Documents ── */}
         <Pressable
           style={[styles.downloadBtn, !billIdentifier && styles.btnDisabled]}
           disabled={!billIdentifier}
           onPress={() => {
             if (!billIdentifier) {
-              showAlert({ title: 'Download Unavailable', message: 'No downloadable receipt for this bill.', type: 'warning' });
+              showAlert({ title: 'Download Unavailable', message: 'No downloadable statement for this bill.', type: 'warning' });
               return;
             }
-            router.push({ pathname: '/document-viewer', params: { kind: 'bill', id: String(billIdentifier), title: isBillOutstanding(bill) ? 'Billing Statement' : 'Payment Receipt' } });
+            router.push({ pathname: '/document-viewer', params: { kind: 'bill', id: String(billIdentifier), title: 'Billing Statement' } });
           }}
         >
           <Ionicons name="document-text-outline" size={18} color="#ffffff" />
-          <Text style={styles.downloadText}>View PDF Document</Text>
+          <Text style={styles.downloadText}>View Statement</Text>
         </Pressable>
+
+        {!isOutstanding && (
+          <Pressable
+            style={[styles.downloadBtn, styles.receiptBtn, !billIdentifier && styles.btnDisabled]}
+            disabled={!billIdentifier}
+            onPress={() => {
+              if (!billIdentifier) return;
+              router.push({ pathname: '/document-viewer', params: { kind: 'bill-receipt', id: String(billIdentifier), title: 'Payment Receipt' } });
+            }}
+          >
+            <Ionicons name="receipt-outline" size={18} color={colors.primary} />
+            <Text style={[styles.downloadText, { color: colors.primary }]}>View Receipt</Text>
+          </Pressable>
+        )}
 
         <View style={{ height: 40 }} />
       </ScrollView>
@@ -889,6 +895,7 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
     backgroundColor: c.headerBg, paddingVertical: 14, borderRadius: 14,
   },
   downloadText: { color: '#ffffff', fontWeight: '700', fontSize: 15 },
+  receiptBtn: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: c.primary, marginTop: 10 },
 
   btnDisabled: { opacity: 0.5 },
 });
