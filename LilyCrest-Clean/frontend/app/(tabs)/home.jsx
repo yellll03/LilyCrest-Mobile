@@ -18,6 +18,7 @@ import {
 } from 'react-native';
 import AppHeader from '../../src/components/AppHeader';
 import ImageLightbox from '../../src/components/ImageLightbox';
+import { getBillOwedAmount, isBillOutstanding } from '../../src/utils/billingStatus';
 import PropertyShowcase from '../../src/components/PropertyShowcase';
 import StyledModal from '../../src/components/StyledModal';
 import LilyFlowerIcon from '../../src/components/assistant/LilyFlowerIcon';
@@ -72,28 +73,6 @@ function getAssignmentContractEndDate(assignment) {
 
 function isPlainObject(value) {
   return Boolean(value) && typeof value === 'object' && !Array.isArray(value);
-}
-
-const HOME_NON_PAYABLE = new Set([
-  'paid', 'settled', 'cancelled', 'rejected', 'void',
-  'refunded', 'duplicate', 'archived', 'verification',
-]);
-
-function getBillStatus(bill) {
-  return String(bill?.status || '').toLowerCase();
-}
-
-function isBillOutstanding(bill) {
-  return !HOME_NON_PAYABLE.has(getBillStatus(bill));
-}
-
-function getBillOwedAmount(bill) {
-  const candidates = [bill?.remaining_amount, bill?.total, bill?.amount];
-  for (const value of candidates) {
-    const amount = Number(value);
-    if (Number.isFinite(amount)) return amount;
-  }
-  return 0;
 }
 
 // ── Skeleton placeholder ──

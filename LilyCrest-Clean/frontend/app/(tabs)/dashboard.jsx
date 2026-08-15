@@ -1,14 +1,6 @@
-import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { Redirect } from 'expo-router';
 
-export default function DashboardScreen() {
-  return (
-    <View style={styles.container}>
-      <Text>Dashboard - Redirecting to Home...</Text>
-    </View>
-  );
+// Redirect legacy 'dashboard' route references to the tabbed home screen
+export default function DashboardRedirect() {
+  return <Redirect href="/(tabs)/home" />;
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-});

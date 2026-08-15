@@ -9,6 +9,7 @@ import { useAuth } from '../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
 import { apiService, getApiErrorMessage } from '../src/services/api';
 import { subscribeBillingRefresh } from '../src/services/billingState';
+import { getBillOwedAmount, getBillStatus, isBillOutstanding } from '../src/utils/billingStatus';
 import { safeBack } from '../src/utils/navigation';
 
 // Helpers
@@ -75,14 +76,8 @@ const STATUS_FILTERS = [
 // Type filters removed - consolidated bills contain all charge types
 
 const getBillId = (bill) => bill?.billing_id || bill?.id || bill?.billingId || bill?.billId || bill?.reference_id || bill?._id;
-const getBillStatus = (bill) => String(bill?.status || '').toLowerCase();
 const PAID_STATUSES = new Set(['paid', 'settled']);
-const NON_PAYABLE_STATUSES = new Set([
-  'paid', 'settled', 'cancelled', 'rejected', 'void',
-  'refunded', 'duplicate', 'archived',
-]);
 const isPaidBillStatus = (status) => PAID_STATUSES.has(String(status || '').toLowerCase());
-const isBillOutstanding = (bill) => !NON_PAYABLE_STATUSES.has(getBillStatus(bill));
 const getBillPaymentDate = (bill) => bill?.payment_date || bill?.paymentDate || bill?.paidAt || bill?.paid_at || null;
 const getBillReleaseDate = (bill) => bill?.release_date || bill?.releaseDate || bill?.created_at || bill?.createdAt || null;
 function getDisplaySchedule(bill) {
@@ -100,15 +95,6 @@ function getDisplaySchedule(bill) {
   if (hasUtilityCharge) return { releaseDate: null, dueDate: null, unreleasedUtility: true };
   return { releaseDate: getBillReleaseDate(bill), dueDate: bill?.due_date || bill?.dueDate || null, unreleasedUtility: false };
 }
-const getBillOwedAmount = (bill) => {
-  const candidates = [bill?.remaining_amount, bill?.total, bill?.amount];
-  for (const value of candidates) {
-    const amount = Number(value);
-    if (Number.isFinite(amount)) return amount;
-  }
-  return 0;
-};
-
 function mergeBillingLists(...lists) {
   const mergedById = new Map();
 
