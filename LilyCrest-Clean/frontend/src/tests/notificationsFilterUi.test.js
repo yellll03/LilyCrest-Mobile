@@ -76,7 +76,7 @@ describe('Notifications screen compact filter UI', () => {
     mockClearNotificationUnread.mockResolvedValue();
   });
 
-  it('shows a compact toolbar and applies category-plus-priority filters without marking reads', async () => {
+  it('shows a compact toolbar and applies category-plus-priority filters instantly, without marking reads', async () => {
     const screen = await renderLoaded();
     expect(screen.getByLabelText('Open notification filters')).toBeTruthy();
     expect(screen.getByLabelText('Sort order: Newest')).toBeTruthy();
@@ -89,16 +89,19 @@ describe('Notifications screen compact filter UI', () => {
     openFilters(screen);
     fireEvent.press(screen.getByLabelText('Security, 2 notifications'));
     fireEvent.press(screen.getByLabelText('Urgent priority, 1 notification'));
-    fireEvent.press(screen.getByLabelText('Apply notification filters'));
 
+    // No separate Apply step — the list updates the instant each option is tapped.
     expect(screen.getByText('Security urgent')).toBeTruthy();
     expect(screen.queryByText('Security normal')).toBeNull();
     expect(screen.queryByText('General urgent')).toBeNull();
     expect(screen.getByLabelText('Open notification filters, 2 active')).toBeTruthy();
     expect(mockClearNotificationUnread).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByLabelText('Done filtering notifications'));
+    expect(screen.queryByText('Filter Notifications')).toBeNull();
   });
 
-  it('resets applied filters to All and preserves urgency as a separate count dimension', async () => {
+  it('resets filters to All instantly and preserves urgency as a separate count dimension', async () => {
     const screen = await renderLoaded();
     openFilters(screen);
 
@@ -111,12 +114,14 @@ describe('Notifications screen compact filter UI', () => {
     fireEvent.press(screen.getByLabelText('Urgent priority, 1 notification'));
     expect(screen.getByLabelText('All, 2 notifications')).toBeTruthy();
     expect(screen.getByLabelText('Security, 1 notification')).toBeTruthy();
-    fireEvent.press(screen.getByLabelText('Apply notification filters'));
+    fireEvent.press(screen.getByLabelText('Done filtering notifications'));
+    expect(screen.getByLabelText('Open notification filters, 2 active')).toBeTruthy();
 
     openFilters(screen, 2);
     fireEvent.press(screen.getByLabelText('Reset notification filters'));
-    fireEvent.press(screen.getByLabelText('Apply notification filters'));
     FIXTURE.forEach((item) => expect(screen.getByText(item.title)).toBeTruthy());
+    expect(screen.getByLabelText('All, 4 notifications')).toBeTruthy();
+    fireEvent.press(screen.getByLabelText('Done filtering notifications'));
     expect(screen.getByLabelText('Open notification filters')).toBeTruthy();
   });
 
@@ -140,7 +145,7 @@ describe('Notifications screen compact filter UI', () => {
     openFilters(screen);
     fireEvent.press(screen.getByLabelText('Event, 1 notification'));
     fireEvent.press(screen.getByLabelText('Urgent priority, 0 notifications'));
-    fireEvent.press(screen.getByLabelText('Apply notification filters'));
+    fireEvent.press(screen.getByLabelText('Done filtering notifications'));
 
     expect(screen.getByText('No notifications match these filters')).toBeTruthy();
     fireEvent.press(screen.getByLabelText('Clear notification filters'));

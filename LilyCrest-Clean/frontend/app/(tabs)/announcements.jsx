@@ -309,8 +309,6 @@ export default function AnnouncementsScreen() {
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [isFilterSheetVisible, setIsFilterSheetVisible] = useState(false);
-  const [draftCategory, setDraftCategory] = useState(null);
-  const [draftPriority, setDraftPriority] = useState('all');
   const [selectedAnn, setSelectedAnn] = useState(null);
   const [sortOrder, setSortOrder] = useState('newest');
   const [expandedIds, setExpandedIds] = useState(new Set());
@@ -401,31 +399,22 @@ export default function AnnouncementsScreen() {
     [filteredAnnouncements, sortOrder]
   );
 
-  const draftCounts = useMemo(
-    () => buildNotificationFilterCounts(announcements, { category: draftCategory, priority: draftPriority }),
-    [announcements, draftCategory, draftPriority]
+  // Counts reflect the live selection directly — filters apply the instant
+  // you tap them, so there's no separate draft state to track anymore.
+  const filterCounts = useMemo(
+    () => buildNotificationFilterCounts(announcements, { category: selectedCategory, priority: priorityFilter }),
+    [announcements, selectedCategory, priorityFilter]
   );
 
   const activeFilterCount = Number(Boolean(selectedCategory)) + Number(priorityFilter !== 'all');
   const hasActiveFilters = activeFilterCount > 0;
 
-  const openFilterSheet = useCallback(() => {
-    setDraftCategory(selectedCategory);
-    setDraftPriority(priorityFilter);
-    setIsFilterSheetVisible(true);
-  }, [priorityFilter, selectedCategory]);
-
-  const applyFilters = useCallback(() => {
-    setSelectedCategory(draftCategory);
-    setPriorityFilter(draftPriority);
-    setIsFilterSheetVisible(false);
-  }, [draftCategory, draftPriority]);
+  const openFilterSheet = useCallback(() => setIsFilterSheetVisible(true), []);
+  const closeFilterSheet = useCallback(() => setIsFilterSheetVisible(false), []);
 
   const clearFilters = useCallback(() => {
     setSelectedCategory(null);
     setPriorityFilter('all');
-    setDraftCategory(null);
-    setDraftPriority('all');
   }, []);
 
   const announcementKeyExtractor = useCallback(
@@ -639,12 +628,12 @@ export default function AnnouncementsScreen() {
         animationType="slide"
         transparent
         statusBarTranslucent
-        onRequestClose={() => setIsFilterSheetVisible(false)}
+        onRequestClose={closeFilterSheet}
       >
         <View style={styles.filterModalOverlay}>
           <Pressable
             style={StyleSheet.absoluteFillObject}
-            onPress={() => setIsFilterSheetVisible(false)}
+            onPress={closeFilterSheet}
             accessibilityRole="button"
             accessibilityLabel="Close notification filters"
           />
@@ -655,11 +644,11 @@ export default function AnnouncementsScreen() {
             <View style={styles.filterSheetHeader}>
               <View style={styles.filterSheetTitleWrap}>
                 <Text style={styles.filterSheetTitle}>Filter Notifications</Text>
-                <Text style={styles.filterSheetSubtitle}>Choose one category and priority.</Text>
+                <Text style={styles.filterSheetSubtitle}>Tap a category or priority to filter instantly.</Text>
               </View>
               <TouchableOpacity
                 style={styles.filterCloseButton}
-                onPress={() => setIsFilterSheetVisible(false)}
+                onPress={closeFilterSheet}
                 accessibilityRole="button"
                 accessibilityLabel="Close notification filters"
               >
@@ -675,16 +664,16 @@ export default function AnnouncementsScreen() {
               <View style={styles.filterSection}>
                 <Text style={styles.filterSectionTitle}>Category</Text>
                 {categories.map((category) => {
-                  const selected = category === 'all' ? !draftCategory : draftCategory === category;
+                  const selected = category === 'all' ? !selectedCategory : selectedCategory === category;
                   const count = category === 'all'
-                    ? draftCounts.allCategories
-                    : (draftCounts.categories.get(category) || 0);
+                    ? filterCounts.allCategories
+                    : (filterCounts.categories.get(category) || 0);
                   const label = categoryLabel(category);
                   return (
                     <TouchableOpacity
                       key={category}
                       style={[styles.filterOption, selected && styles.filterOptionSelected]}
-                      onPress={() => setDraftCategory(category === 'all' ? null : category)}
+                      onPress={() => setSelectedCategory(category === 'all' ? null : category)}
                       accessibilityRole="radio"
                       accessibilityState={{ selected }}
                       accessibilityLabel={`${label}, ${count} ${count === 1 ? 'notification' : 'notifications'}`}
@@ -713,13 +702,13 @@ export default function AnnouncementsScreen() {
                   { key: 'urgent', label: 'Urgent', icon: 'alert-circle-outline' },
                   { key: 'normal', label: 'Normal', icon: 'information-circle-outline' },
                 ].map((option) => {
-                  const selected = draftPriority === option.key;
-                  const count = draftCounts.priorities[option.key];
+                  const selected = priorityFilter === option.key;
+                  const count = filterCounts.priorities[option.key];
                   return (
                     <TouchableOpacity
                       key={option.key}
                       style={[styles.filterOption, selected && styles.filterOptionSelected]}
-                      onPress={() => setDraftPriority(option.key)}
+                      onPress={() => setPriorityFilter(option.key)}
                       accessibilityRole="radio"
                       accessibilityState={{ selected }}
                       accessibilityLabel={`${option.label} priority, ${count} ${count === 1 ? 'notification' : 'notifications'}`}
@@ -746,7 +735,7 @@ export default function AnnouncementsScreen() {
             <View style={styles.filterSheetActions}>
               <TouchableOpacity
                 style={styles.filterResetButton}
-                onPress={() => { setDraftCategory(null); setDraftPriority('all'); }}
+                onPress={clearFilters}
                 accessibilityRole="button"
                 accessibilityLabel="Reset notification filters"
               >
@@ -754,11 +743,11 @@ export default function AnnouncementsScreen() {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.filterApplyButton}
-                onPress={applyFilters}
+                onPress={closeFilterSheet}
                 accessibilityRole="button"
-                accessibilityLabel="Apply notification filters"
+                accessibilityLabel="Done filtering notifications"
               >
-                <Text style={styles.filterApplyText}>Apply</Text>
+                <Text style={styles.filterApplyText}>Done</Text>
               </TouchableOpacity>
             </View>
           </View>
