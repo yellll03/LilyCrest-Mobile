@@ -1099,12 +1099,28 @@ async function forgotPassword(req, res) {
 function getResetPasswordPage(req, res) {
   const { token } = req.query;
   if (!token) {
-    return res.status(400).send(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Invalid Link</title>
-<style>body{font-family:system-ui,sans-serif;display:flex;align-items:center;justify-content:center;min-height:100vh;background:#F3F4F6;padding:24px}
-.card{background:#fff;border-radius:20px;padding:40px 32px;max-width:420px;text-align:center;box-shadow:0 4px 24px rgba(0,0,0,.1)}
-h1{color:#1E3A5F;font-size:20px;margin-bottom:8px}p{color:#6B7280;font-size:14px}</style></head>
-<body><div class="card"><div style="font-size:48px;margin-bottom:16px">⚠️</div>
-<h1>Invalid Reset Link</h1><p>This link is missing a reset token. Please request a new password reset from the app.</p></div></body></html>`);
+    return res.status(400).send(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Invalid Link — LilyCrest</title>
+<style>
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{font-family:-apple-system,Roboto,"Segoe UI",sans-serif;background:#EEF2F8;
+       display:flex;align-items:center;justify-content:center;min-height:100vh;padding:24px}
+  .card{background:#fff;border-radius:6px;max-width:440px;width:100%;text-align:center;overflow:hidden;
+        box-shadow:0 2px 16px rgba(32,75,126,.12)}
+  .stripe{background:#204b7e;height:4px}
+  .header{background:#204b7e;padding:28px 32px 24px}
+  .eyebrow{margin:0 0 8px;color:#ff9000;font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase}
+  .brand{margin:0;color:#fff;font-size:22px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+  .body{padding:32px 32px 36px}
+  .icon{font-size:40px;margin-bottom:12px}
+  h1{color:#1a2744;font-size:19px;font-weight:700;margin-bottom:8px}
+  p{color:#4a5568;font-size:14px;line-height:1.6}
+</style></head>
+<body><div class="card"><div class="stripe"></div>
+<div class="header"><p class="eyebrow">Dormitory Management System</p><h2 class="brand">LilyCrest</h2></div>
+<div class="body"><div class="icon">⚠️</div>
+<h1>Invalid Reset Link</h1><p>This link is missing a reset token. Please request a new password reset from the app.</p></div></div></body></html>`);
   }
 
   const safeToken = encodeURIComponent(token);
@@ -1119,52 +1135,78 @@ h1{color:#1E3A5F;font-size:20px;margin-bottom:8px}p{color:#6B7280;font-size:14px
   <title>Reset Password — LilyCrest</title>
   <style>
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:-apple-system,Roboto,"Segoe UI",sans-serif;background:#F3F4F6;
+    body{font-family:-apple-system,Roboto,"Segoe UI",sans-serif;background:#EEF2F8;
          display:flex;flex-direction:column;align-items:center;justify-content:center;
          min-height:100vh;padding:24px}
-    .card{background:#fff;border-radius:20px;padding:40px 32px;max-width:440px;width:100%;
-          box-shadow:0 4px 24px rgba(0,0,0,.10);text-align:center}
-    .icon{font-size:48px;margin-bottom:16px}
-    h1{font-size:22px;font-weight:700;color:#1E3A5F;margin-bottom:8px}
-    .sub{font-size:14px;color:#6B7280;line-height:1.6;margin-bottom:28px}
+    .card{background:#fff;border-radius:6px;max-width:460px;width:100%;overflow:hidden;
+          box-shadow:0 2px 16px rgba(32,75,126,.12)}
+
+    /* ── brand header ── */
+    .stripe{background:#204b7e;height:4px;font-size:0;line-height:0}
+    .header{background:#204b7e;padding:32px 40px 28px;text-align:center}
+    .eyebrow{margin:0 0 8px;color:#ff9000;font-size:10px;font-weight:700;letter-spacing:3px;text-transform:uppercase}
+    .brand{margin:0;color:#fff;font-size:24px;font-weight:700;letter-spacing:1px;text-transform:uppercase}
+
+    /* ── heading bar ── */
+    .heading-bar{background:#FAFBFD;padding:24px 40px 18px;border-bottom:1px solid #E4EAF2}
+    h1{font-size:19px;font-weight:700;color:#1a2744;letter-spacing:-.2px;margin-bottom:10px}
+    .accent{width:36px;height:3px;background:#ff9000;border-radius:2px}
+    .sub{font-size:13.5px;color:#4a5568;line-height:1.6;margin-top:12px}
+
+    .content{padding:28px 40px 36px}
 
     /* ── mobile section ── */
     .mobile-section{margin-bottom:28px}
     .divider{display:flex;align-items:center;gap:12px;margin-bottom:24px}
-    .divider hr{flex:1;border:none;border-top:1px solid #E5E7EB}
+    .divider hr{flex:1;border:none;border-top:1px solid #E4EAF2}
     .divider span{font-size:12px;color:#9CA3AF;white-space:nowrap}
 
     /* ── form ── */
-    .form-label{display:block;font-size:12px;font-weight:600;color:#1E3A5F;
+    .form-label{display:block;font-size:12px;font-weight:600;color:#204b7e;
                 letter-spacing:.5px;text-align:left;margin-bottom:6px}
     .input-wrap{position:relative;margin-bottom:16px}
-    .input-wrap input{width:100%;padding:13px 44px 13px 14px;font-size:15px;color:#1F2937;
-                      border:1.5px solid #E5E7EB;border-radius:12px;background:#F8FAFC;outline:none}
-    .input-wrap input:focus{border-color:#1E3A5F}
+    .input-wrap input{width:100%;padding:13px 44px 13px 14px;font-size:15px;color:#1a2744;
+                      border:1.5px solid #E4EAF2;border-radius:6px;background:#FAFBFD;outline:none}
+    .input-wrap input:focus{border-color:#204b7e}
     .eye{position:absolute;right:12px;top:50%;transform:translateY(-50%);
          background:none;border:none;cursor:pointer;font-size:18px;line-height:1}
-    .err{background:#FEF2F2;border:1px solid #FECACA;border-radius:10px;
+    .err{border-left:4px solid #DC2626;background:#FEF2F2;border-radius:0 6px 6px 0;
          padding:10px 14px;font-size:13px;color:#B91C1C;margin-bottom:14px;text-align:left}
-    .ok{background:#F0FDF4;border:1px solid #BBF7D0;border-radius:10px;
-        padding:10px 14px;font-size:13px;color:#15803D;margin-bottom:14px;text-align:left}
+    .ok{border-left:4px solid #16A34A;background:#F0FDF4;border-radius:0 6px 6px 0;
+        padding:14px 18px;font-size:14px;color:#15803D;margin-bottom:14px;text-align:left;line-height:1.6}
 
     /* ── buttons ── */
-    .btn{display:block;width:100%;padding:15px;border-radius:13px;font-size:15px;
-         font-weight:700;text-decoration:none;border:none;cursor:pointer;text-align:center}
+    .btn{display:block;width:100%;padding:15px;border-radius:6px;font-size:14.5px;
+         font-weight:700;letter-spacing:.3px;text-decoration:none;border:none;cursor:pointer;text-align:center}
     .btn+.btn{margin-top:10px}
-    .btn-orange{background:#D4682A;color:#fff}
-    .btn-navy{background:#1E3A5F;color:#fff}
-    .btn-submit{background:#1E3A5F;color:#fff;margin-top:4px}
+    .btn-orange{background:#ff9000;color:#fff}
+    .btn-navy{background:#204b7e;color:#fff}
+    .btn-submit{background:#204b7e;color:#fff;margin-top:4px;text-transform:uppercase}
     .btn-submit:disabled{opacity:.55;cursor:not-allowed}
     .note{font-size:12px;color:#9CA3AF;margin-top:10px;line-height:1.5}
+
+    /* ── footer ── */
+    .footer{background:#FAFBFD;padding:16px 40px;border-top:1px solid #E4EAF2}
+    .footer p{margin:0;color:#9CA3AF;font-size:11.5px;line-height:1.6;text-align:center}
+    .bottom{background:#204b7e;padding:14px 40px;text-align:center}
+    .bottom p{margin:0;color:rgba(255,255,255,.5);font-size:11px;letter-spacing:.3px}
   </style>
 </head>
 <body>
 <div class="card">
-  <div class="icon">🔑</div>
-  <h1>Reset Your Password</h1>
-  <p class="sub">This link expires in <strong>15 minutes</strong> and can only be used once. Use at least 8 characters with uppercase, lowercase, a number, and a special character.</p>
+  <div class="stripe"></div>
+  <div class="header">
+    <p class="eyebrow">Dormitory Management System</p>
+    <h2 class="brand">LilyCrest</h2>
+  </div>
 
+  <div class="heading-bar">
+    <h1>Reset Your Password</h1>
+    <div class="accent"></div>
+    <p class="sub">This link expires in <strong>15 minutes</strong> and can only be used once. Use at least 8 characters with uppercase, lowercase, a number, and a special character.</p>
+  </div>
+
+  <div class="content">
   <!-- ─── Mobile: open in app ─── -->
   <div class="mobile-section" id="mobileSection" style="display:none">
     <a class="btn btn-orange" href="${prodLink}" id="openApp">Open LilyCrest App</a>
@@ -1194,12 +1236,21 @@ h1{color:#1E3A5F;font-size:20px;margin-bottom:8px}p{color:#6B7280;font-size:14px
   </div>
 
   <div id="successSection" style="display:none">
-    <div class="ok" style="text-align:center;font-size:15px">✅ Password reset successfully!<br>You can now log in with your new password.</div>
-    <p style="font-size:13px;color:#6B7280;margin-top:12px">You may close this tab.</p>
+    <div class="ok" style="text-align:center">✅ Password reset successfully!<br>You can now log in with your new password.</div>
+    <p style="font-size:13px;color:#6B7280;margin-top:12px;text-align:center">You may close this tab.</p>
+  </div>
+  </div>
+
+  <div class="footer">
+    <p>This is an automated message from LilyCrest Dormitory Management System. Please do not reply.</p>
+  </div>
+  <div class="bottom">
+    <p>&copy; <span id="year"></span> LilyCrest Dormitory. All rights reserved.</p>
   </div>
 </div>
 
 <script>
+  document.getElementById('year').textContent = new Date().getFullYear();
   var TOKEN = ${JSON.stringify(token)};
   var COMMON_PASSWORDS = ${JSON.stringify(Array.from(COMMON_PASSWORDS))};
 
