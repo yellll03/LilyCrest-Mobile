@@ -85,7 +85,11 @@ function SkeletonCard({ height = 120, colors }) {
 }
 
 export default function HomeScreen() {
-  const { user, authReady, isLoading: authLoading } = useAuth();
+  // notifications comes from AuthContext — the same canonical, dismiss/clear-
+  // aware list the header badge reads — so a dismissed/cleared item can never
+  // still surface in this screen's own quick-search results (see
+  // AuthContext.dismissNotification/clearNotifications).
+  const { user, authReady, isLoading: authLoading, notifications: authNotifications } = useAuth();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const router = useRouter();
@@ -169,7 +173,7 @@ export default function HomeScreen() {
     return 0;
   }, [maintenanceItems, maintenanceSummary, dashboardData]);
 
-  const notifications = useMemo(() => dashboardData?.notifications?.items || dashboardData?.notifications || [], [dashboardData]);
+  const notifications = useMemo(() => (Array.isArray(authNotifications) ? authNotifications : []), [authNotifications]);
   const policyItems = useMemo(() => dashboardData?.policies || dashboardData?.house_rules || [], [dashboardData]);
   const billingHeadlineTone = billingInsightPanel?.headline?.tone || 'neutral';
   const billingIsCleared = outstandingBillCount === 0 && Boolean(latestBill);
@@ -473,11 +477,12 @@ export default function HomeScreen() {
     latestDashboardRequestRef.current = requestId;
     try {
       setLoadError(null);
-      const [dashboardRes, notificationsRes, billingHistoryRes] = await Promise.all([
+      // Notifications are no longer fetched here — AuthContext already owns
+      // the canonical, dismiss/clear-aware list (see the `notifications`
+      // memo above), so a second independent fetch would just risk this
+      // screen showing a stale copy that ignores tenant dismiss/clear state.
+      const [dashboardRes, billingHistoryRes] = await Promise.all([
         apiService.getDashboard(),
-        apiService.getNotifications
-          ? apiService.getNotifications().catch(() => apiService.getAnnouncements().catch(() => ({ data: [] })))
-          : apiService.getAnnouncements().catch(() => ({ data: [] })),
         apiService.getBillingHistory
           ? apiService.getBillingHistory()
             .then((response) => ({ ...response, ok: true }))
@@ -489,7 +494,6 @@ export default function HomeScreen() {
       if (!isPlainObject(dashboard)) {
         throw new Error('Invalid dashboard response shape');
       }
-      const notificationsOrAnnouncements = Array.isArray(notificationsRes?.data) ? notificationsRes.data : [];
       const hasBillingHistoryResponse = billingHistoryRes?.ok && Array.isArray(billingHistoryRes?.data);
       const billingHistoryItems = hasBillingHistoryResponse ? billingHistoryRes.data : [];
 
@@ -508,20 +512,8 @@ export default function HomeScreen() {
             ? [{ title: 'Maintenance', description: 'Service tickets', status: `${dashboard.active_maintenance_count} active` }]
             : [];
 
-      const notifItems = Array.isArray(dashboard?.notifications?.items)
-        ? dashboard.notifications.items
-        : Array.isArray(dashboard?.notifications)
-          ? dashboard.notifications
-          : notificationsOrAnnouncements.map((item) => ({
-            title: item.title,
-            body: item.content || item.description,
-            type: item.category || 'announcement',
-            category: item.category || 'announcement',
-            created_at: item.created_at,
-          }));
-
       if (latestDashboardRequestRef.current !== requestId) return;
-      setDashboardData({ ...dashboard, billing: billingItems, maintenance: mItems, notifications: notifItems });
+      setDashboardData({ ...dashboard, billing: billingItems, maintenance: mItems });
       setBillingHistory(billingItems);
     } catch (error) {
       console.error('Dashboard fetch error:', error?.message || error);
