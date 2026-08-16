@@ -5,6 +5,7 @@ const { normalizeUser, sanitizeUserForClient } = require('../utils/normalizeUser
 const { admin, resolveStorageBucket } = require('../config/firebase');
 const { resolveTenantBranch } = require('../services/branchLocation.service');
 const { extractMoveInFinancials } = require('../domain/billing/moveInFinancials');
+const { authorizeTenantStorageObject } = require('../services/documentStorageAuthorization.service');
 
 const firstValue = (...values) => values.find((value) => value !== undefined && value !== null && String(value).trim() !== '');
 const approvedReservationFilter = {
@@ -254,6 +255,28 @@ const ALLOWED_DOCUMENT_MIME_TYPES = new Set([
   'image/heif',
   'application/pdf',
 ]);
+
+// Validates a downloaded buffer's magic bytes against a declared/expected
+// content type. Shared between the storagePath (Firebase Admin) and
+// file_url (upstream fetch) read paths — a declared image/jpeg backed by
+// non-JPEG bytes (or vice versa) is rejected rather than served, and a
+// PDF-only path never wrongly demands PDF magic bytes from an uploaded
+// image document.
+function matchesDeclaredFileType(buffer, contentType) {
+  const normalized = String(contentType || '').toLowerCase();
+  const isPdf = buffer.subarray(0, 5).toString() === '%PDF-';
+  const isJpeg = buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
+  const isPng = buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
+  const isWebp = buffer.subarray(0, 4).toString() === 'RIFF' && buffer.subarray(8, 12).toString() === 'WEBP';
+  if (normalized === 'application/pdf') return isPdf;
+  if (normalized === 'image/jpeg' || normalized === 'image/jpg') return isJpeg;
+  if (normalized === 'image/png') return isPng;
+  if (normalized === 'image/webp') return isWebp;
+  // No specific magic-byte signature is checked for other declared image
+  // types (gif/bmp/heic/heif) — fall back to accepting them, matching prior
+  // behavior for those types.
+  return normalized.startsWith('image/');
+}
 
 function usernameCooldownState(lastUsernameChangedAt, now = new Date()) {
   const lastChanged = lastUsernameChangedAt ? new Date(lastUsernameChangedAt) : null;
@@ -534,6 +557,20 @@ async function uploadDocument(req, res) {
     const metadata = normalizeUploadedDocumentMetadata(req.body);
     if (metadata.error) {
       return res.status(400).json({ detail: metadata.error });
+    }
+
+    // Prove the submitted storagePath is genuinely this tenant's own object
+    // (own upload prefix, and downloadUrl decodes to that exact bucket/path)
+    // before any privileged Firebase Admin access is ever performed against
+    // it from getDocumentContent/deleteDocument below. Fail closed.
+    const authorization = authorizeTenantStorageObject({
+      downloadUrl: metadata.value.downloadUrl,
+      storagePath: metadata.value.storagePath,
+      userId: req.user.user_id,
+      configuredBucket: resolveStorageBucket(),
+    });
+    if (!authorization.authorized) {
+      return res.status(400).json({ detail: 'Document storage location could not be verified.' });
     }
 
     const docEntry = {
@@ -821,11 +858,24 @@ async function getDocumentContent(req, res) {
     if (doc.storagePath) {
       const bucketName = resolveStorageBucket();
       if (!bucketName) return res.status(503).json({ detail: 'Document storage is not configured.' });
+      // Re-verify ownership before every privileged read, not just at
+      // registration time, so a record stored before this invariant existed
+      // (or corrupted/tampered after the fact) can never be served.
+      const authorization = authorizeTenantStorageObject({
+        downloadUrl: doc.downloadUrl,
+        storagePath: doc.storagePath,
+        userId: req.user.user_id,
+        configuredBucket: bucketName,
+      });
+      if (!authorization.authorized) {
+        return res.status(409).json({ detail: 'This document could not be verified and must be re-uploaded.' });
+      }
       const [buffer] = await admin.storage().bucket(bucketName).file(doc.storagePath).download();
-      if (!buffer.length || buffer.length > DOCUMENT_CONTENT_MAX_BYTES || buffer.subarray(0, 5).toString() !== '%PDF-') {
+      const declaredType = String(doc.mimeType || 'application/pdf').toLowerCase();
+      if (!buffer.length || buffer.length > DOCUMENT_CONTENT_MAX_BYTES || !matchesDeclaredFileType(buffer, declaredType)) {
         return res.status(422).json({ detail: 'Document file is invalid.' });
       }
-      res.setHeader('Content-Type', 'application/pdf');
+      res.setHeader('Content-Type', declaredType);
       res.setHeader('Content-Length', buffer.length);
       res.setHeader('Cache-Control', 'private, no-store');
       res.setHeader('Content-Disposition', 'inline');
@@ -841,15 +891,7 @@ async function getDocumentContent(req, res) {
       return res.status(415).json({ detail: 'Document type is not supported.' });
     }
     const buffer = Buffer.from(await upstream.arrayBuffer());
-    if (!buffer.length || buffer.length > DOCUMENT_CONTENT_MAX_BYTES) return res.status(422).json({ detail: 'Document file is invalid.' });
-    const isPdf = buffer.subarray(0, 5).toString() === '%PDF-';
-    const isJpeg = buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff;
-    const isPng = buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]));
-    const isWebp = buffer.subarray(0, 4).toString() === 'RIFF' && buffer.subarray(8, 12).toString() === 'WEBP';
-    const isImage = (contentType === 'image/jpeg' && isJpeg)
-      || (contentType === 'image/png' && isPng)
-      || (contentType === 'image/webp' && isWebp);
-    if ((contentType === 'application/pdf' && !isPdf) || (contentType.startsWith('image/') && !isImage)) {
+    if (!buffer.length || buffer.length > DOCUMENT_CONTENT_MAX_BYTES || !matchesDeclaredFileType(buffer, contentType)) {
       return res.status(422).json({ detail: 'Document file is invalid.' });
     }
     res.setHeader('Content-Type', contentType);
@@ -888,6 +930,26 @@ async function deleteDocument(req, res) {
     if (document.storagePath) {
       const bucketName = resolveStorageBucket();
       if (!bucketName) return res.status(503).json({ detail: 'Document storage is not configured.' });
+      // Re-verify ownership before every privileged delete — same invariant
+      // as getDocumentContent above.
+      const authorization = authorizeTenantStorageObject({
+        downloadUrl: document.downloadUrl,
+        storagePath: document.storagePath,
+        userId: req.user.user_id,
+        configuredBucket: bucketName,
+      });
+      if (!authorization.authorized) {
+        // The record belongs to this tenant but its stored path can't be
+        // verified (e.g. predates this invariant, or was tampered with) —
+        // never issue a privileged delete against an unverified path. Undo
+        // the pending-deletion marker and leave the record for review
+        // instead of silently discarding it.
+        await db.collection('users').updateOne(
+          { user_id: req.user.user_id, 'uploaded_documents.doc_id': docId },
+          { $unset: { 'uploaded_documents.$.deletion_pending': '', 'uploaded_documents.$.deletion_requested_at': '' } },
+        ).catch(() => {});
+        return res.status(409).json({ detail: 'This document could not be verified and must be re-uploaded.' });
+      }
       try {
         await admin.storage().bucket(bucketName).file(document.storagePath).delete({ ignoreNotFound: true });
       } catch (storageError) {
