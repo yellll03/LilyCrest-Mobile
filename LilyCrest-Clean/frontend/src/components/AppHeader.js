@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
+  Alert,
   Animated,
   Dimensions,
   Modal,
@@ -87,7 +88,8 @@ export default function AppHeader() {
   const { isDarkMode } = useTheme();
   const {
     notifications, notificationUnreadCount, hasUnreadNotifications,
-    markNotificationRead, clearNotificationUnread, refreshNotifications,
+    markNotificationRead, clearNotificationUnread, dismissNotification,
+    clearNotifications, refreshNotifications,
   } = useAuth();
   const [isModalVisible, setIsModalVisible] = useState(false);
 
@@ -159,6 +161,36 @@ export default function AppHeader() {
     }
     viewAllNotifications();
   }, [markNotificationRead, viewAllNotifications]);
+
+  // Dismiss is per-tenant hide only — for a shared announcement this never
+  // deletes/mutates the underlying document, so other tenants and admins
+  // still see it (see AuthContext.dismissNotification /
+  // mobileNotificationBridge.js dismissNotification()).
+  const handleDismiss = useCallback((notification) => {
+    if (notification?.notification_id && dismissNotification) {
+      dismissNotification(notification.notification_id).catch(() => {});
+    }
+  }, [dismissNotification]);
+
+  // "Clear" only affects what's currently visible — it's a cutoff, not a
+  // permanent hide-all, so a new notification or newly published
+  // announcement still appears afterward (see AuthContext.clearNotifications).
+  const handleClearAll = useCallback(() => {
+    Alert.alert(
+      'Clear notifications?',
+      'This will remove your current notifications from this list. New notifications will still appear.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Clear',
+          style: 'destructive',
+          onPress: () => {
+            if (clearNotifications) clearNotifications();
+          },
+        },
+      ],
+    );
+  }, [clearNotifications]);
 
   const styles = useThemedStyles((c, dark) =>
     StyleSheet.create({
@@ -398,6 +430,14 @@ export default function AppHeader() {
         backgroundColor: c.border,
         marginLeft: 61,
       },
+      itemDismissBtn: {
+        flexShrink: 0,
+        marginTop: 1,
+        padding: 2,
+      },
+      itemDismissIcon: {
+        color: c.textMuted,
+      },
 
       // ── Empty state ─────────────────────────────────────────────────────
       emptyState: {
@@ -503,6 +543,19 @@ export default function AppHeader() {
               >
                 <Text style={styles.headerActionBold}>View all</Text>
               </TouchableOpacity>
+              {previewNotifications.length > 0 && (
+                <>
+                  <View style={styles.headerSeparator} />
+                  <TouchableOpacity
+                    onPress={handleClearAll}
+                    hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+                    accessibilityRole="button"
+                    accessibilityLabel="Clear notifications"
+                  >
+                    <Text style={styles.headerAction}>Clear</Text>
+                  </TouchableOpacity>
+                </>
+              )}
               <View style={styles.headerSeparator} />
               <TouchableOpacity
                 style={styles.closeBtn}
@@ -562,6 +615,16 @@ export default function AppHeader() {
                             {notification?.body || notification?.content || notification?.description || 'Tap to view details.'}
                           </Text>
                         </View>
+
+                        <TouchableOpacity
+                          style={styles.itemDismissBtn}
+                          onPress={() => handleDismiss(notification)}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          accessibilityRole="button"
+                          accessibilityLabel="Dismiss notification"
+                        >
+                          <Ionicons name="close-circle" size={18} color={styles.itemDismissIcon.color} />
+                        </TouchableOpacity>
                       </TouchableOpacity>
                       {!isLast && <View style={styles.itemDivider} />}
                     </View>

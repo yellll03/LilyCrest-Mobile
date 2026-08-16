@@ -256,6 +256,52 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  // Dismiss (hide from this tenant's own feed only) a single notification or
+  // announcement. Server-side this is a per-tenant junction write, never a
+  // delete/mutation of a shared announcement — see mobileNotificationBridge.js
+  // dismissNotification(). Failure rolls back the optimistic removal so a
+  // network blip can't silently drop an item the server never actually hid
+  // (Notification-9: a failed dismissal must not remain permanently hidden).
+  const dismissNotification = useCallback(async (notificationId) => {
+    if (!notificationId) return;
+    const previous = notificationsRef.current;
+    const target = previous.find((item) => item?.notification_id === notificationId);
+    if (!target) return;
+
+    const wasUnread = !target.read;
+    setNotifications(previous.filter((item) => item.notification_id !== notificationId));
+    if (wasUnread) setNotificationUnreadCount((count) => Math.max(0, count - 1));
+
+    try {
+      await api.delete(`/notifications/${encodeURIComponent(notificationId)}`);
+    } catch (_error) {
+      setNotifications(previous);
+      if (wasUnread) setNotificationUnreadCount((count) => count + 1);
+    }
+  }, []);
+
+  // Clear the tenant's currently-visible feed. This is a cutoff, not a
+  // permanent hide-all — a new notification or newly published announcement
+  // that arrives after this call still appears normally (see
+  // mobileNotificationBridge.js clearNotifications()). Distinct from
+  // clearNotificationUnread() above, which only marks everything read
+  // without removing anything from the list.
+  const clearNotifications = useCallback(async () => {
+    const previous = notificationsRef.current;
+    const previousUnreadCount = previous.filter((item) => !item?.read).length;
+    if (previous.length === 0) return;
+
+    setNotifications([]);
+    setNotificationUnreadCount(0);
+
+    try {
+      await api.delete('/notifications');
+    } catch (_error) {
+      setNotifications(previous);
+      setNotificationUnreadCount(previousUnreadCount);
+    }
+  }, []);
+
   const navigateFromNotification = useCallback(async (data) => {
     const destination = resolveNotificationRoute(data);
     if (!destination || !routerRef.current) return false;
@@ -894,12 +940,14 @@ export function AuthProvider({ children }) {
     hasUnreadNotifications: notificationUnreadCount > 0,
     markNotificationRead,
     clearNotificationUnread,
+    dismissNotification,
+    clearNotifications,
     refreshNotifications,
   }), [
     user, firebaseUser, firebaseAuthReady, isLoading, authReady, authStatus,
     login, loginWithEmail, verifyLoginOtp, registerWithEmail, logout, checkAuth,
     signInWithGoogle, updateUser, notifications, notificationUnreadCount,
-    markNotificationRead, clearNotificationUnread, refreshNotifications,
+    markNotificationRead, clearNotificationUnread, dismissNotification, clearNotifications, refreshNotifications,
   ]);
 
   if (isLoading) {
