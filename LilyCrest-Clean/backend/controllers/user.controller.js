@@ -5,6 +5,7 @@ const { normalizeUser, sanitizeUserForClient } = require('../utils/normalizeUser
 const { admin, resolveStorageBucket } = require('../config/firebase');
 const { resolveTenantBranch } = require('../services/branchLocation.service');
 const { extractMoveInFinancials } = require('../domain/billing/moveInFinancials');
+const { authorizeTenantStorageObject } = require('../services/documentStorageAuthorization.service');
 
 const firstValue = (...values) => values.find((value) => value !== undefined && value !== null && String(value).trim() !== '');
 const approvedReservationFilter = {
@@ -294,7 +295,7 @@ function isApprovedProfileImageUrl(value = '') {
   }
 }
 
-function normalizeUploadedDocumentMetadata(body = {}) {
+function normalizeUploadedDocumentMetadata(body = {}, { userId } = {}) {
   const downloadUrl = sanitize(body.downloadUrl || body.file_url || body.url);
   const mimeType = sanitize(body.mimeType || body.type || '').toLowerCase();
   const originalName = sanitize(body.originalName || body.name || 'Uploaded document');
@@ -324,11 +325,28 @@ function normalizeUploadedDocumentMetadata(body = {}) {
     return { error: 'File is too large (max 5 MB).' };
   }
 
+  // MOB-P0-01: a client-provided storagePath is never authorization by
+  // itself. Prove the download URL, the submitted path, and the configured
+  // bucket all identify the exact same object under this tenant's own
+  // upload prefix before the metadata can ever be registered — otherwise a
+  // tenant could pair their own valid-looking URL with another tenant's
+  // (or any) object path and have it stored as their own document.
+  const authorization = authorizeTenantStorageObject({
+    downloadUrl,
+    storagePath,
+    userId,
+    configuredBucket: resolveStorageBucket(),
+  });
+  if (!authorization.authorized) {
+    console.warn(`[uploadDocument] rejected unauthorized storage object (reason: ${authorization.reason})`);
+    return { error: 'Document storage location could not be verified. Please re-upload the file.' };
+  }
+
   return {
     value: {
       file_url: downloadUrl,
       downloadUrl,
-      storagePath,
+      storagePath: authorization.objectPath,
       originalName,
       mimeType,
       size: Number.isFinite(size) ? size : null,
@@ -531,7 +549,7 @@ async function uploadDocument(req, res) {
 
     const docId = `doc_${uuidv4().replace(/-/g, '').substring(0, 12)}`;
     const uploadedAt = new Date();
-    const metadata = normalizeUploadedDocumentMetadata(req.body);
+    const metadata = normalizeUploadedDocumentMetadata(req.body, { userId: req.user.user_id });
     if (metadata.error) {
       return res.status(400).json({ detail: metadata.error });
     }
@@ -782,6 +800,44 @@ async function getDocumentFile(req, res) {
   }
 }
 
+// Re-proves the storage authorization invariant for already-stored metadata
+// before any privileged Firebase Admin read/delete. Metadata written before
+// MOB-P0-01 was fixed (or corrupted/tampered some other way) may not satisfy
+// it — such records must fail closed rather than be trusted just because
+// they're already attached to this tenant's user document.
+function isAuthorizedStoredDocument(doc, userId) {
+  const bucket = resolveStorageBucket();
+  const authorization = authorizeTenantStorageObject({
+    downloadUrl: doc?.downloadUrl || doc?.file_url,
+    storagePath: doc?.storagePath,
+    userId,
+    configuredBucket: bucket,
+  });
+  return authorization.authorized;
+}
+
+const CONTENT_MAGIC_BYTES = {
+  'application/pdf': (buffer) => buffer.subarray(0, 5).toString() === '%PDF-',
+  'image/jpeg': (buffer) => buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff,
+  'image/jpg': (buffer) => buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff,
+  'image/png': (buffer) => buffer.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a])),
+  'image/webp': (buffer) => buffer.subarray(0, 4).toString() === 'RIFF' && buffer.subarray(8, 12).toString() === 'WEBP',
+  'image/gif': (buffer) => buffer.subarray(0, 6).toString() === 'GIF87a' || buffer.subarray(0, 6).toString() === 'GIF89a',
+  'image/bmp': (buffer) => buffer.subarray(0, 2).toString() === 'BM',
+};
+
+// MOB-P1-11 (opportunistically resolved alongside P0-01): the storagePath
+// content branch used to require every file to start with `%PDF-` and
+// always respond `application/pdf`, even though mobile document uploads are
+// images. Validate the declared MIME against real magic bytes instead of
+// assuming PDF.
+function resolveVerifiedContentType(buffer, declaredMimeType) {
+  const mime = String(declaredMimeType || '').toLowerCase();
+  const check = CONTENT_MAGIC_BYTES[mime];
+  if (!check || !check(buffer)) return null;
+  return mime === 'image/jpg' ? 'image/jpeg' : mime;
+}
+
 async function getDocumentContent(req, res) {
   try {
     const { docId } = req.params;
@@ -819,13 +875,23 @@ async function getDocumentContent(req, res) {
     }
 
     if (doc.storagePath) {
+      // MOB-P0-01: never trust already-stored metadata just because it's
+      // attached to this tenant's record — re-prove the storage
+      // authorization invariant before any privileged Admin Storage read.
+      if (!isAuthorizedStoredDocument(doc, req.user.user_id)) {
+        return res.status(409).json({ detail: 'This document needs to be re-uploaded before it can be viewed.' });
+      }
       const bucketName = resolveStorageBucket();
       if (!bucketName) return res.status(503).json({ detail: 'Document storage is not configured.' });
       const [buffer] = await admin.storage().bucket(bucketName).file(doc.storagePath).download();
-      if (!buffer.length || buffer.length > DOCUMENT_CONTENT_MAX_BYTES || buffer.subarray(0, 5).toString() !== '%PDF-') {
+      if (!buffer.length || buffer.length > DOCUMENT_CONTENT_MAX_BYTES) {
         return res.status(422).json({ detail: 'Document file is invalid.' });
       }
-      res.setHeader('Content-Type', 'application/pdf');
+      const contentType = resolveVerifiedContentType(buffer, doc.mimeType);
+      if (!contentType) {
+        return res.status(422).json({ detail: 'Document file is invalid.' });
+      }
+      res.setHeader('Content-Type', contentType);
       res.setHeader('Content-Length', buffer.length);
       res.setHeader('Cache-Control', 'private, no-store');
       res.setHeader('Content-Disposition', 'inline');
@@ -886,6 +952,18 @@ async function deleteDocument(req, res) {
     }
 
     if (document.storagePath) {
+      // MOB-P0-01: re-prove authorization before any privileged Admin
+      // Storage delete. Unsafe/legacy metadata must fail closed — never
+      // silently delete an unverified object, and never destroy the
+      // metadata record itself so it remains available for manual
+      // review/migration rather than being lost.
+      if (!isAuthorizedStoredDocument(document, req.user.user_id)) {
+        await db.collection('users').updateOne(
+          { user_id: req.user.user_id, 'uploaded_documents.doc_id': docId },
+          { $unset: { 'uploaded_documents.$.deletion_pending': '', 'uploaded_documents.$.deletion_requested_at': '' } },
+        ).catch(() => {});
+        return res.status(409).json({ detail: 'This document could not be safely deleted. Please contact support.' });
+      }
       const bucketName = resolveStorageBucket();
       if (!bucketName) return res.status(503).json({ detail: 'Document storage is not configured.' });
       try {
@@ -1072,5 +1150,6 @@ module.exports = {
   __test: {
     completeAddress, applicationPhone, normalizePhilippinePhone, usernameCooldownState, approvedReservationFilter,
     findTenantVisibleContract, tenantContractDocument, tenantContractStatusLabel,
+    normalizeUploadedDocumentMetadata, isAuthorizedStoredDocument, resolveVerifiedContentType,
   },
 };

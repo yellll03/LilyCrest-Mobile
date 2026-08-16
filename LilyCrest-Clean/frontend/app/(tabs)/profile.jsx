@@ -574,10 +574,10 @@ export default function ProfileScreen() {
                     <Text style={styles.outlineButtonText}>View Contract</Text>
                   </TouchableOpacity>
                   {!contractSummary.canOpenPdf ? (
-                    <Text style={styles.emptyText}>Some contract details are still being finalized.</Text>
+                    <Text style={styles.emptyText}>Your contract is being prepared.</Text>
                   ) : null}
                 </>
-              ) : <Text style={styles.emptyText}>{contractError || 'No approved lease contract is available yet.'}</Text>}
+              ) : <Text style={styles.emptyText}>{contractError || 'No current contract is available.'}</Text>}
             </View>
           </View>
 

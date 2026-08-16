@@ -107,36 +107,87 @@ function isAnnouncementVisibleForBranch(doc, requesterBranchCode) {
   return normalizedBranchReference(branchRef) === requesterBranchCode;
 }
 
+function getAnnouncementPublishedAt(doc = {}) {
+  const value = doc.publishedAt || doc.publish_at || doc.publishAt;
+  if (!value) return null;
+  const parsed = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+function getAnnouncementExpiresAt(doc = {}) {
+  const value = doc.expiresAt || doc.expires_at || doc.expireAt;
+  if (!value) return null;
+  const parsed = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(parsed.getTime()) ? null : parsed;
+}
+
+// An announcement is only within its publication window once the server
+// clock has passed publishedAt, and only until (not including) expiresAt.
+// Missing publishedAt/expiresAt never blocks visibility — most existing
+// announcements predate these fields and must not suddenly disappear.
+function isAnnouncementWithinPublicationWindow(doc, now = new Date()) {
+  const publishedAt = getAnnouncementPublishedAt(doc);
+  if (publishedAt && publishedAt.getTime() > now.getTime()) return false;
+  const expiresAt = getAnnouncementExpiresAt(doc);
+  if (expiresAt && expiresAt.getTime() <= now.getTime()) return false;
+  return true;
+}
+
+// Handle both snake_case (app-created) and camelCase (admin-panel-created)
+// documents. Web admin docs may lack is_active/isActive entirely — treat
+// missing as active. Private (user_id-targeted) announcements are scoped at
+// the query level to their owner; everyone else only sees non-private ones.
+function buildAnnouncementBaseQuery(userId) {
+  const activeFilter = {
+    $or: [
+      { is_active: true },
+      { isActive: true },
+      { is_active: { $exists: false }, isActive: { $exists: false } },
+    ],
+  };
+  const notArchivedFilter = { isArchived: { $ne: true } };
+  const visibilityFilter = {
+    $or: [
+      { is_private: { $ne: true }, isPrivate: { $ne: true } },
+      ...(userId ? [{ is_private: true, user_id: userId }, { isPrivate: true, userId }] : []),
+    ],
+  };
+  return { $and: [activeFilter, notArchivedFilter, visibilityFilter] };
+}
+
+// The single canonical announcement-visibility predicate. Every surface
+// that exposes announcement content to a tenant or feeds it to the AI
+// assistant — News, the merged notification feed, mark-read, and the
+// chatbot's Gemini context — must resolve visibility through this one
+// function. Before this (MOB-P0-02), the chatbot queried `{is_active:true}`
+// directly with no owner/branch/publish/expiry filter at all, disclosing
+// private and other-branch announcement content to the wrong tenant and to
+// Gemini. `fetchCap` bounds the raw DB read (0 = unbounded, matching the
+// prior News-feed behavior); `limit` bounds the final visible result after
+// branch/window filtering — callers that want "N newest visible" (e.g. the
+// chatbot's 3-item summary) should pass a `fetchCap` comfortably larger
+// than `limit` so filtering doesn't starve the result.
+async function getVisibleAnnouncementsForTenant(db, user, { limit = null, fetchCap = 0, now = new Date() } = {}) {
+  const userId = user?.user_id || null;
+  const requesterBranchCode = await resolveRequesterBranchCode(db, user);
+
+  let cursor = db.collection('announcements')
+    .find(buildAnnouncementBaseQuery(userId))
+    .sort({ created_at: -1, createdAt: -1 });
+  if (Number.isFinite(fetchCap) && fetchCap > 0) cursor = cursor.limit(fetchCap);
+
+  const docs = await cursor.toArray();
+  const visible = docs.filter((doc) => isAnnouncementVisibleForBranch(doc, requesterBranchCode)
+    && isAnnouncementWithinPublicationWindow(doc, now));
+
+  return Number.isFinite(limit) && limit >= 0 ? visible.slice(0, limit) : visible;
+}
+
 // Get all announcements
 async function getAllAnnouncements(req, res) {
   try {
     const db = getDb();
-    const userId = req.user?.user_id || null;
-    const requesterBranchCode = await resolveRequesterBranchCode(db, req.user);
-
-    // Handle both snake_case (app-created) and camelCase (admin-panel-created) documents.
-    // Web admin docs may lack is_active/isActive entirely — treat missing as active.
-    const activeFilter = {
-      $or: [
-        { is_active: true },
-        { isActive: true },
-        { is_active: { $exists: false }, isActive: { $exists: false } },
-      ],
-    };
-    // Exclude archived announcements (web admin uses isArchived)
-    const notArchivedFilter = { isArchived: { $ne: true } };
-    const visibilityFilter = {
-      $or: [
-        { is_private: { $ne: true }, isPrivate: { $ne: true } },
-        ...(userId ? [{ is_private: true, user_id: userId }, { isPrivate: true, userId }] : []),
-      ],
-    };
-
-    const announcements = (await db.collection('announcements')
-      .find({ $and: [activeFilter, notArchivedFilter, visibilityFilter] })
-      .sort({ created_at: -1, createdAt: -1 })
-      .toArray())
-      .filter((doc) => isAnnouncementVisibleForBranch(doc, requesterBranchCode));
+    const announcements = await getVisibleAnnouncementsForTenant(db, req.user);
 
     const normalizedAnnouncements = announcements.map(normalizeAnnouncement);
     const dedupedAnnouncements = [];
@@ -224,7 +275,11 @@ async function createAnnouncement(req, res) {
 module.exports = {
   getAllAnnouncements,
   createAnnouncement,
-  // exported for unit testing of branch-visibility rules in isolation
+  // Canonical visibility predicate — reused by notification.controller.js
+  // and chatbot.controller.js so every surface agrees on what's visible.
+  getVisibleAnnouncementsForTenant,
+  // exported for unit testing of branch-visibility/window rules in isolation
   isAnnouncementVisibleForBranch,
+  isAnnouncementWithinPublicationWindow,
   resolveRequesterBranchCode,
 };
