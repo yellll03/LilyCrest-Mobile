@@ -1,5 +1,6 @@
 const { ObjectId } = require('mongodb');
 const { getDb } = require('../config/database');
+const { resolveTenantBranch, normalizedBranchReference } = require('../services/branchLocation.service');
 
 // Matches chatbot.controller.js's MAX_CHAT_MESSAGE_CHARS and the single
 // client-side cap the mobile UI already applies to both the AI assistant and
@@ -178,6 +179,17 @@ async function resolveTenantContext(db, user) {
     roomBed: '',
   };
 
+  // Uses the same multi-tier lookup (current stay, active room assignment,
+  // approved contract, approved reservation) that chatbot.controller.js's
+  // general Q&A already relies on, so "Talk to Admin" can resolve a branch
+  // for every tenant whose branch the AI assistant can already resolve.
+  try {
+    const resolvedBranch = await resolveTenantBranch(db, user);
+    context.branch = resolvedBranch.branch.branchCode || context.branch;
+  } catch (_) {
+    // Fall through to the narrower reservation/bed-history lookups below.
+  }
+
   if (user?._id) {
     const reservation = await db.collection('reservations').findOne(
       { userId: user._id, status: { $in: ['moveIn', 'active', 'completed', 'payment_pending', 'confirmed', 'paid'] } },
@@ -185,13 +197,13 @@ async function resolveTenantContext(db, user) {
     );
 
     if (reservation) {
-      context.branch = sanitizeBranch(reservation.branch) || context.branch;
+      context.branch = context.branch || sanitizeBranch(reservation.branch);
       const roomDoc = reservation.roomId
         ? await db.collection('rooms').findOne({ _id: asObjectId(reservation.roomId) || reservation.roomId })
         : null;
       context.roomNumber = roomDoc?.roomNumber || reservation.roomNumber || reservation.roomName || '';
       context.roomBed = reservation.selectedBed?.position || reservation.selectedBed?.label || reservation.selectedBed?.id || '';
-      return context;
+      if (context.branch) return context;
     }
   }
 
@@ -201,14 +213,22 @@ async function resolveTenantContext(db, user) {
   );
 
   if (bedHistory) {
-    context.branch = sanitizeBranch(bedHistory.branch) || context.branch;
-    const roomDoc = bedHistory.roomId
-      ? await db.collection('rooms').findOne({ _id: asObjectId(bedHistory.roomId) || bedHistory.roomId })
-      : null;
-    context.roomNumber = roomDoc?.roomNumber || '';
-    const bed = roomDoc?.beds?.find((item) => item.id === bedHistory.bedId);
-    context.roomBed = bed?.position || bedHistory.bedId || '';
+    context.branch = context.branch || sanitizeBranch(bedHistory.branch);
+    if (!context.roomNumber) {
+      const roomDoc = bedHistory.roomId
+        ? await db.collection('rooms').findOne({ _id: asObjectId(bedHistory.roomId) || bedHistory.roomId })
+        : null;
+      context.roomNumber = roomDoc?.roomNumber || '';
+      const bed = roomDoc?.beds?.find((item) => item.id === bedHistory.bedId);
+      context.roomBed = bed?.position || bedHistory.bedId || '';
+    }
   }
+
+  // Normalize whichever tier produced context.branch (canonical branchCode,
+  // raw reservation/bed-history string, or the user's own branch field) to
+  // the same lowercase-hyphen code so it lines up with the normalized
+  // comparison used for admin-branch matching below.
+  context.branch = normalizedBranchReference(context.branch) || context.branch;
 
   if (!context.branch) {
     throw createHttpError('Unable to determine tenant branch for support chat.', 400, 'BRANCH_REQUIRED');
@@ -222,11 +242,12 @@ async function autoAssignConversation(db, conversation) {
     role: { $in: Array.from(ADMIN_ROLES) },
   }).toArray();
 
+  const conversationBranch = normalizedBranchReference(conversation.branch);
   const eligible = candidates.filter((user) => {
     const role = String(user.role || '').toLowerCase();
     if (!ADMIN_ROLES.has(role)) return false;
     if (role === 'superadmin') return true;
-    return sanitizeBranch(user.branch || user.branchId) === conversation.branch;
+    return normalizedBranchReference(user.branch || user.branchId) === conversationBranch;
   });
 
   if (!eligible.length) return conversation;
@@ -298,7 +319,7 @@ function buildAdminConversationFilter(user, requestedStatus) {
     return filter;
   }
 
-  const adminBranch = sanitizeBranch(user?.branch || user?.branchId);
+  const adminBranch = normalizedBranchReference(user?.branch || user?.branchId) || null;
   const adminObjectId = asObjectId(user?._id);
   const clauses = [];
 

@@ -5,6 +5,7 @@ const cookieParser = require('cookie-parser');
 const rateLimit = require('express-rate-limit');
 
 const path = require('path');
+const { buildAllowedOrigins, makeIsAllowedOrigin, hasBrowserOrigin } = require('./config/corsOriginPolicy');
 
 // Import configurations
 const { connectToMongo } = require('./config/database');
@@ -46,31 +47,10 @@ if (trustProxySetting !== null) {
 }
 
 const isProduction = process.env.NODE_ENV === 'production';
-const allowedOrigins = [
-  ...(process.env.CORS_ORIGINS
-    ? process.env.CORS_ORIGINS.split(',').map((origin) => origin.trim())
-    : []),
-  process.env.FRONTEND_URL,
-  process.env.WEB_BASE_URL,
-  process.env.MOBILE_APP_URL,
-  process.env.BACKEND_URL,
-].filter(Boolean);
-const uniqueAllowedOrigins = [...new Set(allowedOrigins)];
+const uniqueAllowedOrigins = buildAllowedOrigins(process.env);
 const allowLocalCors = !isProduction || /^(1|true|yes)$/i.test(String(process.env.ALLOW_LOCAL_CORS || '').trim());
 const allowMobileDevCors = !/^(0|false|no)$/i.test(String(process.env.ALLOW_MOBILE_DEV_CORS || 'true').trim());
-const privateNetworkOriginPattern = /^https?:\/\/(10\.|127\.|192\.168\.|172\.(1[6-9]|2\d|3[0-1])\.)\d+\.\d+(?::\d+)?$/;
-const localHostnameOriginPattern = /^https?:\/\/(localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/;
-const expoOriginPattern = /^exps?:\/\/(localhost|127\.0\.0\.1|\[::1\]|(?:10\.|192\.168\.|172\.(?:1[6-9]|2\d|3[0-1])\.)\d+\.\d+)(?::\d+)?$/;
-const mobileSchemeOriginPattern = /^(frontend|lilycrest):\/\/(?:localhost)?$/;
-
-function isAllowedOrigin(origin) {
-  if (!origin) return true;
-  if (uniqueAllowedOrigins.includes(origin)) return true;
-  if (expoOriginPattern.test(origin) || mobileSchemeOriginPattern.test(origin)) return true;
-  if (allowMobileDevCors && (privateNetworkOriginPattern.test(origin) || localHostnameOriginPattern.test(origin))) return true;
-  if (allowLocalCors && (privateNetworkOriginPattern.test(origin) || localHostnameOriginPattern.test(origin))) return true;
-  return false;
-}
+const isAllowedOrigin = makeIsAllowedOrigin(uniqueAllowedOrigins, { allowLocalCors, allowMobileDevCors });
 
 function oncePerRequest(middleware, flag) {
   return (req, res, next) => {
@@ -198,6 +178,21 @@ function validateEnv() {
       console.warn(`[Config] ${name} is not set. ${detail}`);
     }
   });
+
+  // The CORS allow-list can be non-empty (e.g. BACKEND_URL, or
+  // MOBILE_APP_URL's "frontend://" scheme) while still containing no actual
+  // http(s) browser origin — the exact production incident this guards
+  // against, where CORS_ORIGINS/FRONTEND_URL/WEB_BASE_URL were all blank and
+  // every browser-hosted web request was silently rejected with no warning
+  // anywhere. This is a warning, not a startup failure: local/dev deploys
+  // that intentionally run mobile-only are still allowed to boot.
+  if (isProduction && !hasBrowserOrigin(uniqueAllowedOrigins)) {
+    console.warn(
+      '[Config] No browser origin is configured for CORS (checked CORS_ORIGINS, FRONTEND_URL, '
+      + 'WEB_BASE_URL). Any browser-hosted web client will have its requests rejected by CORS '
+      + 'until one of these is set to the production web origin (e.g. https://www.lilycrest.space).'
+    );
+  }
 }
 
 async function ensureNotificationIndexes(notifications) {
