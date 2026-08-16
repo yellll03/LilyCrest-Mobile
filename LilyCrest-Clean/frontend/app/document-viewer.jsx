@@ -20,7 +20,7 @@ function formatFileSize(bytes) {
 export default function DocumentViewer() {
   const router = useRouter();
   const pdfRef = useRef(null);
-  const { kind = 'policy', id, title = 'Document' } = useLocalSearchParams();
+  const { kind = 'policy', id, title = 'Document', cacheKey } = useLocalSearchParams();
   const { user } = useAuth();
   const { colors } = useTheme();
   const [uri, setUri] = useState(null);
@@ -35,13 +35,13 @@ export default function DocumentViewer() {
   const load = useCallback(async (force = false) => {
     setLoading(true); setError(''); setProgress(0);
     try {
-      const cached = !force && await getCachedPdf(userId, kind, id);
+      const cached = !force && await getCachedPdf(userId, kind, id, cacheKey);
       if (cached) {
         setUri(cached);
         setFileSize((await getPdfMetadata(cached)).size);
       }
       else {
-        const result = await fetchPdf({ userId, kind, id, onProgress: setProgress });
+        const result = await fetchPdf({ userId, kind, id, cacheKey, onProgress: setProgress });
         setUri(result.uri);
         setFileSize(result.size || 0);
       }
@@ -51,7 +51,7 @@ export default function DocumentViewer() {
     } finally {
       setLoading(false);
     }
-  }, [id, kind, userId]);
+  }, [id, kind, userId, cacheKey]);
 
   useEffect(() => { load(); }, [load]);
   const go = (next) => { const value = Math.max(1, Math.min(pages, next)); pdfRef.current?.setPage(value); };

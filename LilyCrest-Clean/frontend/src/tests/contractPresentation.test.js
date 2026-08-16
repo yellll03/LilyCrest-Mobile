@@ -1,6 +1,7 @@
 /* global test */
 import {
   buildContractSummary,
+  contractLifecycleState,
   contractStatusLabel,
   hasAuthorizedContractPdf,
   hasFinalContractPdf,
@@ -109,5 +110,140 @@ describe('controlled contract presentation', () => {
       expect.objectContaining({ key: 'securityDeposit', value: '₱7,200.00' }),
       expect.objectContaining({ key: 'reservationFee', value: '₱2,000.00' }),
     ]));
+  });
+});
+
+// The real canonical API (Capstone-Website) returns contract.tenantDocument
+// — server/services/tenantContractDocumentResolver.js's resolved answer to
+// "which document should the tenant see right now", the same field its own
+// Web tenant page reads (web/src/features/tenant/utils/tenantContractUi.mjs).
+// These tests lock mobile's presentation rule to that field so mobile can
+// never disagree with Web about which document is current for the same
+// contract. preparedDocument/finalDocument are only a fallback for a
+// response that omits tenantDocument entirely.
+describe('canonical tenantDocument-driven presentation rule', () => {
+  test('tenantDocument final selects final regardless of prepared availability', () => {
+    const contract = {
+      preparedDocument: { available: true, currentVersion: 3 },
+      finalDocument: { available: true, publishedAt: '2026-08-01' },
+      tenantDocument: { available: true, type: 'final_notarized', isFinal: true, version: 3, publishedAt: '2026-08-01' },
+    };
+    expect(contractLifecycleState(contract)).toBe('final');
+  });
+
+  test('tenantDocument draft selects prepared even if it disagrees with the legacy final flag', () => {
+    // Regression: tenantDocument's own final-availability check is looser
+    // than finalDocument.available (no status/tenantVisible/notarization
+    // gate) — the two CAN disagree. Mobile must follow tenantDocument, the
+    // same field Web follows, not re-derive its own answer from the flags.
+    const contract = {
+      preparedDocument: { available: true, currentVersion: 1 },
+      finalDocument: { available: true, publishedAt: '2026-08-01' },
+      tenantDocument: { available: true, type: 'generated_draft', isFinal: false, version: 1 },
+    };
+    expect(contractLifecycleState(contract)).toBe('draft');
+  });
+
+  test('tenantDocument unavailable resolves to preparing even with legacy flags present', () => {
+    const contract = {
+      preparedDocument: { available: true, currentVersion: 1 },
+      finalDocument: { available: false },
+      tenantDocument: { available: false, type: null },
+    };
+    expect(contractLifecycleState(contract)).toBe('preparing');
+  });
+
+  test('falls back to preparedDocument/finalDocument flags when tenantDocument is entirely absent', () => {
+    const contract = {
+      preparedDocument: { available: true, currentVersion: 1 },
+      finalDocument: { available: true, publishedAt: '2026-08-01' },
+    };
+    expect(contractLifecycleState(contract)).toBe('final');
+  });
+
+  test('neither tenantDocument nor legacy flags available resolves to preparing', () => {
+    const contract = {
+      preparedDocument: { available: false },
+      finalDocument: { available: false },
+    };
+    expect(contractLifecycleState(contract)).toBe('preparing');
+  });
+
+  test('signedDocuments[] present in the response never affects selection', () => {
+    const withSigned = {
+      tenantDocument: { available: true, type: 'generated_draft', isFinal: false, version: 1 },
+      signedDocuments: [{ version: 1, fileName: 'signed.pdf', viewUrl: '/x' }],
+    };
+    const withoutSigned = {
+      tenantDocument: { available: true, type: 'generated_draft', isFinal: false, version: 1 },
+    };
+    expect(contractLifecycleState(withSigned)).toBe(contractLifecycleState(withoutSigned));
+    expect(contractLifecycleState(withSigned)).toBe('draft');
+  });
+
+  test('unrelated contradictory fields (e.g. status still "signed") do not override tenantDocument', () => {
+    const contract = {
+      status: 'signed',
+      displayStatus: 'Physical signing and in-person notarization are in progress.',
+      tenantDocument: { available: true, type: 'final_notarized', isFinal: true, version: 1, publishedAt: '2026-08-01' },
+    };
+    expect(contractLifecycleState(contract)).toBe('final');
+  });
+
+  test('lifecycle label and message reflect the resolved state, not raw contract.status', () => {
+    const finalSummary = buildContractSummary({
+      tenantDocument: { available: true, type: 'final_notarized', isFinal: true, version: 1, publishedAt: '2026-08-01' },
+    });
+    expect(finalSummary.lifecycleLabel).toBe('Final Notarized Contract');
+
+    const draftSummary = buildContractSummary({
+      tenantDocument: { available: true, type: 'generated_draft', isFinal: false, version: 1 },
+    });
+    expect(draftSummary.lifecycleLabel).toBe('Generated Draft — For Signing');
+
+    const preparingSummary = buildContractSummary({
+      tenantDocument: { available: false, type: null },
+    });
+    expect(preparingSummary.lifecycleLabel).toBe('Preparing Contract');
+  });
+});
+
+describe('version-aware document cache key', () => {
+  test('regenerating a prepared document changes the cache key', () => {
+    const v1 = buildContractSummary({
+      id: 'contract-1',
+      tenantDocument: { available: true, type: 'generated_draft', isFinal: false, version: 1 },
+    });
+    const v2 = buildContractSummary({
+      id: 'contract-1',
+      tenantDocument: { available: true, type: 'generated_draft', isFinal: false, version: 2 },
+    });
+    expect(v1.documentCacheKey).not.toBe(v2.documentCacheKey);
+  });
+
+  test('final replacing a draft changes the cache key even on the same contract id', () => {
+    const draft = buildContractSummary({
+      id: 'contract-1',
+      tenantDocument: { available: true, type: 'generated_draft', isFinal: false, version: 3 },
+    });
+    const final = buildContractSummary({
+      id: 'contract-1',
+      tenantDocument: { available: true, type: 'final_notarized', isFinal: true, version: 3, publishedAt: '2026-08-01' },
+    });
+    expect(draft.documentCacheKey).not.toBe(final.documentCacheKey);
+    expect(draft.documentKind).toBe('contract-prepared');
+    expect(final.documentKind).toBe('contract-final');
+  });
+
+  test('an unchanged prepared version keeps a stable cache key', () => {
+    const first = buildContractSummary({
+      id: 'contract-1',
+      tenantDocument: { available: true, type: 'generated_draft', isFinal: false, version: 1 },
+    });
+    const second = buildContractSummary({
+      id: 'contract-1',
+      tenantDocument: { available: true, type: 'generated_draft', isFinal: false, version: 1 },
+    });
+    expect(first.documentCacheKey).toBe(second.documentCacheKey);
   });
 });

@@ -2,6 +2,17 @@
 // mirrors server/services/tenantContractViewService.js's toTenantContractView
 // on the Web (Capstone-Website) backend — the same authoritative Contract
 // record the Web admin manages, not a local guess.
+//
+// contract.tenantDocument is that backend's canonical document-selection
+// resolver output (server/services/tenantContractDocumentResolver.js — "Both
+// Web and Mobile consume this single source of truth for document
+// selection"). Capstone-Website's own tenant contract page
+// (web/src/features/tenant/utils/tenantContractUi.mjs) selects its displayed
+// document by tenantDocument.type, not by independently comparing
+// preparedDocument/finalDocument availability — this file must do the same
+// so mobile and web can never disagree about which document is current for
+// the same tenant. preparedDocument/finalDocument are consulted only as a
+// fallback for a response that omits tenantDocument entirely.
 
 const BRANCH_LABELS = Object.freeze({
   'gil-puyat': 'Gil Puyat',
@@ -55,14 +66,74 @@ function formatPeso(value, locale) {
   return `₱${amount.toLocaleString(locale || 'en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 }
 
-// The prepared document is a system-generated overlay of the current
-// contract terms; the final document is the notarized scan and, once
-// published, supersedes it in relevance for the tenant (both stay linked to
-// the same Contract record — see hasFinalContractPdf/hasPreparedContractPdf).
+// Selects the single document the tenant should see right now. Reads the
+// backend's own resolved answer (contract.tenantDocument) instead of
+// re-deriving a "final overrides prepared" priority from the
+// preparedDocument/finalDocument availability flags — those two flags use a
+// different (stricter) final-availability test than the resolver does, so
+// re-deriving locally can disagree with what tenantDocument — and therefore
+// Web — actually shows for the same contract. Normalized to the same
+// document field names (currentVersion/generatedAt/publishedAt) that the
+// legacy fallback below produces, so downstream code needs no branching.
 export function preferredContractDocument(contract) {
+  const tenantDoc = contract?.tenantDocument;
+  if (tenantDoc) {
+    if (!tenantDoc.available) return null;
+    return {
+      variant: tenantDoc.isFinal || tenantDoc.type === 'final_notarized' ? 'final' : 'prepared',
+      document: {
+        currentVersion: tenantDoc.version,
+        generatedAt: tenantDoc.generatedAt,
+        publishedAt: tenantDoc.publishedAt,
+        fileName: tenantDoc.fileName,
+        fileSize: tenantDoc.fileSize,
+        viewUrl: tenantDoc.viewUrl,
+        downloadUrl: tenantDoc.downloadUrl,
+      },
+    };
+  }
+  // Legacy fallback for a response that omits tenantDocument entirely (older
+  // deployment). Never blended with tenantDocument fields above — a response
+  // that has tenantDocument always uses it exclusively.
   if (hasFinalContractPdf(contract)) return { variant: 'final', document: contract.finalDocument };
   if (hasPreparedContractPdf(contract)) return { variant: 'prepared', document: contract.preparedDocument };
   return null;
+}
+
+// Tenant-facing lifecycle derived from preferredContractDocument() above.
+// Never inspects signedDocuments[] or contract.status directly, so a
+// signed-but-not-yet-final intermediate copy can never surface as a third
+// tenant-visible stage.
+export function contractLifecycleState(contract) {
+  const preferred = preferredContractDocument(contract);
+  if (preferred?.variant === 'final') return 'final';
+  if (preferred?.variant === 'prepared') return 'draft';
+  return 'preparing';
+}
+
+const LIFECYCLE_LABELS = Object.freeze({
+  final: 'Final Notarized Contract',
+  draft: 'Generated Draft — For Signing',
+  preparing: 'Preparing Contract',
+});
+
+const LIFECYCLE_MESSAGES = Object.freeze({
+  final: 'This is the final notarized copy of your current contract.',
+  draft: 'Your generated contract is ready for review and in-person signing. The final notarized copy will replace this document once uploaded by the admin.',
+  preparing: 'Your contract is being prepared.',
+});
+
+// Cache identity for the local PDF store. Must change whenever the canonical
+// document a tenant is entitled to changes shape or version, so a stale
+// cached PDF is never shown for a newer prepared version or after final
+// publication. Only fields the canonical response already provides
+// (currentVersion, publishedAt) are used — nothing is invented.
+function contractDocumentCacheKey(contract, preferred) {
+  if (!preferred) return null;
+  const version = preferred.variant === 'final'
+    ? (preferred.document.publishedAt || 'final')
+    : (preferred.document.currentVersion || preferred.document.generatedAt || 'v1');
+  return `${contract?.id || 'current'}:${preferred.variant}:${version}`;
 }
 
 export function buildContractSummary(contract, locale) {
@@ -79,12 +150,18 @@ export function buildContractSummary(contract, locale) {
     { key: 'reservationFee', label: 'Reservation Fee', value: formatPeso(contract.reservationFeeAmount, locale) },
   ];
   const preferred = preferredContractDocument(contract);
+  const lifecycleState = contractLifecycleState(contract);
   return {
     status: contractStatusLabel(contract),
+    lifecycleState,
+    lifecycleLabel: LIFECYCLE_LABELS[lifecycleState],
+    message: LIFECYCLE_MESSAGES[lifecycleState],
     fields: fields.filter((field) => field.value),
     hasMissingDetails: fields.some((field) => !field.value),
     canOpenPdf: Boolean(preferred),
     documentVariant: preferred?.variant || null,
+    documentKind: preferred ? (preferred.variant === 'final' ? 'contract-final' : 'contract-prepared') : null,
+    documentCacheKey: contractDocumentCacheKey(contract, preferred),
     documentInfo: preferred ? [
       { label: 'Document Version', value: preferred.document.currentVersion ? String(preferred.document.currentVersion) : null },
       {

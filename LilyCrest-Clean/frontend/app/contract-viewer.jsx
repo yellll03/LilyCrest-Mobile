@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useState } from 'react';
-import { ActivityIndicator, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../src/context/ThemeContext';
 import { useTenantContract } from '../src/hooks/useTenantContract';
@@ -12,8 +12,12 @@ export default function ContractViewer() {
   const router = useRouter();
   const { colors } = useTheme();
   const [showDocumentInfo, setShowDocumentInfo] = useState(false);
-  const { contract, loading, error, reload } = useTenantContract();
+  const { contract, state, loading, refreshing, error, reload, refresh } = useTenantContract();
   const summary = buildContractSummary(contract);
+  // STALE: a refresh after a prior successful load failed transiently — the
+  // last safe presentation stays on screen with a dismissible warning
+  // instead of being replaced by an empty/error screen.
+  const showStaleWarning = state === 'STALE' && Boolean(summary);
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]}>
@@ -23,12 +27,15 @@ export default function ContractViewer() {
         </TouchableOpacity>
         <Text style={[styles.headerTitle, { color: colors.text }]}>Lease Contract</Text>
       </View>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView
+        contentContainerStyle={styles.content}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.accent} />}
+      >
         {loading ? (
           <View style={styles.empty}>
             <ActivityIndicator color={colors.accent} />
           </View>
-        ) : error ? (
+        ) : error && !summary ? (
           <View style={styles.empty}>
             <Ionicons name="cloud-offline-outline" size={58} color={colors.textSecondary} />
             <Text style={[styles.emptyTitle, { color: colors.text }]}>{error}</Text>
@@ -39,15 +46,24 @@ export default function ContractViewer() {
         ) : !summary ? (
           <View style={styles.empty}>
             <Ionicons name="document-outline" size={58} color={colors.textSecondary} />
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>No approved lease contract is available yet.</Text>
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>No current contract is available.</Text>
           </View>
         ) : (
           <>
+            {showStaleWarning ? (
+              <View style={[styles.staleWarning, { borderColor: colors.border, backgroundColor: colors.card }]}>
+                <Ionicons name="alert-circle-outline" size={18} color={colors.textSecondary} />
+                <Text style={[styles.staleWarningText, { color: colors.textSecondary }]}>{error}</Text>
+                <TouchableOpacity onPress={reload}><Text style={[styles.staleWarningRetry, { color: colors.primary }]}>Retry</Text></TouchableOpacity>
+              </View>
+            ) : null}
+
             <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
               <View style={styles.statusRow}>
                 <Ionicons name="shield-checkmark-outline" size={23} color={colors.accent} />
-                <Text style={[styles.status, { color: colors.text }]}>{summary.status}</Text>
+                <Text style={[styles.status, { color: colors.text }]}>{summary.lifecycleLabel}</Text>
               </View>
+              <Text style={[styles.lifecycleMessage, { color: colors.textSecondary }]}>{summary.message}</Text>
               {summary.fields.map((field) => (
                 <View key={field.key} style={styles.summaryField}>
                   <Text style={[styles.label, { color: colors.textSecondary }]}>{field.label}</Text>
@@ -65,14 +81,15 @@ export default function ContractViewer() {
                 onPress={() => router.push({
                   pathname: '/document-viewer',
                   params: {
-                    kind: summary.documentVariant === 'final' ? 'contract-final' : 'contract-prepared',
+                    kind: summary.documentKind,
                     id: contract.id,
+                    cacheKey: summary.documentCacheKey,
                     title: 'Lease Contract',
                   },
                 })}
               >
                 <Ionicons name="document-text-outline" size={20} color="#fff" />
-                <Text style={styles.openText}>Open Contract PDF</Text>
+                <Text style={styles.openText}>View / Download Contract</Text>
               </TouchableOpacity>
             ) : null}
 
@@ -107,6 +124,10 @@ const styles = StyleSheet.create({
   card: { borderRadius: 16, padding: 18, borderWidth: 1, gap: 17 },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   status: { fontSize: 21, fontWeight: '800' },
+  lifecycleMessage: { fontSize: 13, lineHeight: 19, marginTop: -6 },
+  staleWarning: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 14 },
+  staleWarningText: { flex: 1, fontSize: 12, lineHeight: 17 },
+  staleWarningRetry: { fontSize: 13, fontWeight: '700' },
   summaryField: { gap: 4 },
   label: { fontSize: 12, fontWeight: '600' },
   value: { fontSize: 16, lineHeight: 22, fontWeight: '700' },

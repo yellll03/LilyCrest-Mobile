@@ -55,8 +55,13 @@ async function fetchUserDocumentPdf({ userId, id, onProgress }) {
 }
 
 const safePart = (value) => String(value || 'document').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
-export const cachedDocumentPath = (userId, kind, id) =>
-  `${ROOT}${safePart(userId)}/${safePart(kind)}_${safePart(id)}.pdf`;
+// `cacheKey` defaults to `id` for document kinds with no versioning concept.
+// Contract PDFs pass a version-aware cacheKey (see contractPresentation.js's
+// documentCacheKey) so a regenerated prepared version, or a final document
+// replacing a draft, never resolves to a stale cached file under the same
+// contract id.
+export const cachedDocumentPath = (userId, kind, id, cacheKey) =>
+  `${ROOT}${safePart(userId)}/${safePart(kind)}_${safePart(cacheKey || id)}.pdf`;
 
 async function ensureParent(uri) {
   await FileSystem.makeDirectoryAsync(uri.slice(0, uri.lastIndexOf('/')), { intermediates: true });
@@ -84,8 +89,8 @@ export async function validatePdf(uri, headers = {}) {
   return info;
 }
 
-export async function getCachedPdf(userId, kind, id) {
-  const uri = cachedDocumentPath(userId, kind, id);
+export async function getCachedPdf(userId, kind, id, cacheKey) {
+  const uri = cachedDocumentPath(userId, kind, id, cacheKey);
   try {
     await validatePdf(uri);
     return uri;
@@ -94,7 +99,7 @@ export async function getCachedPdf(userId, kind, id) {
   }
 }
 
-export async function fetchPdf({ userId, kind, id, onProgress }) {
+export async function fetchPdf({ userId, kind, id, cacheKey, onProgress }) {
   if (kind === 'user') return fetchUserDocumentPdf({ userId, id, onProgress });
 
   let url = documentUrl(kind, id);
@@ -102,7 +107,7 @@ export async function fetchPdf({ userId, kind, id, onProgress }) {
   if (!url) throw new Error('INVALID_ID');
   const token = await getSessionToken();
   if (!token) throw new Error('UNAUTHENTICATED');
-  const uri = cachedDocumentPath(userId, kind, id);
+  const uri = cachedDocumentPath(userId, kind, id, cacheKey);
   await ensureParent(uri);
   const task = FileSystem.createDownloadResumable(
     url,
