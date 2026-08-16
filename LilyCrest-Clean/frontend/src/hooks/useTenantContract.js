@@ -1,8 +1,5 @@
-import { useFocusEffect } from 'expo-router';
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { AppState } from 'react-native';
+import { useCallback, useEffect, useState } from 'react';
 import { apiService } from '../services/api';
-import { currentContractFromResponse } from '../utils/contractPresentation';
 
 // Single source of truth for "my lease contract" across the app. Fetches the
 // tenant's canonical Contract record from the Web admin's authoritative
@@ -18,50 +15,28 @@ export function useTenantContract() {
   const [state, setState] = useState('LOADING');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const requestSequence = useRef(0);
-  const appState = useRef(AppState.currentState);
 
   const load = useCallback(async () => {
-    const requestId = ++requestSequence.current;
     setLoading(true);
     setError('');
     try {
       const response = await apiService.getCurrentContract();
-      if (requestId !== requestSequence.current) return;
-      const nextContract = currentContractFromResponse(response.data);
-      setContract(nextContract);
-      setState(response.data?.state || (nextContract ? 'CONTRACT_AVAILABLE' : 'NO_CURRENT_CONTRACT'));
+      setContract(response.data?.contract || null);
+      setState(response.data?.state || (response.data?.contract ? 'CONTRACT_AVAILABLE' : 'NO_PUBLISHED_CONTRACT'));
     } catch (err) {
-      if (requestId !== requestSequence.current) return;
-      const authorizationFailed = err?.response?.status === 401 || err?.response?.status === 403;
-      // Keep the last successfully authorized view visible during a transient
-      // refresh failure. It remains presentation-only; the API is still the
-      // lifecycle source of truth and the error is surfaced with Retry.
-      // Authorization failures are different: discard the prior private view.
-      if (authorizationFailed) setContract(null);
+      setContract(null);
       setState('ERROR');
       setError(
-        authorizationFailed
+        err?.response?.status === 401 || err?.response?.status === 403
           ? 'Please sign in again to view your lease contract.'
           : 'Unable to load your lease contract right now.',
       );
     } finally {
-      if (requestId === requestSequence.current) setLoading(false);
+      setLoading(false);
     }
   }, []);
 
-  useFocusEffect(useCallback(() => {
-    load();
-  }, [load]));
-
-  useEffect(() => {
-    const subscription = AppState.addEventListener('change', (nextState) => {
-      const returningToForeground = /inactive|background/.test(appState.current) && nextState === 'active';
-      appState.current = nextState;
-      if (returningToForeground) load();
-    });
-    return () => subscription.remove();
-  }, [load]);
+  useEffect(() => { load(); }, [load]);
 
   return { contract, state, loading, error, reload: load };
 }

@@ -14,45 +14,14 @@ function branchLabel(value) {
 }
 
 export function contractStatusLabel(contract) {
-  if (hasCanonicalTenantDocument(contract)) {
-    const document = contract.tenantDocument;
-    if (!document?.available) return document?.label || 'Preparing Contract';
-    if (document.label) return document.label;
-    if (document.type === 'generated_draft') return 'Generated Draft — For Signing';
-    if (document.type === 'final_notarized') return 'Final Notarized Contract';
-    return 'Contract Document Unavailable';
-  }
   return contract?.displayStatus || 'Contract Status Unavailable';
 }
 
-function hasCanonicalTenantDocument(contract) {
-  return Boolean(contract) && Object.prototype.hasOwnProperty.call(contract, 'tenantDocument');
-}
-
-// The canonical API may return tenantDocument beside contract (the preferred
-// response shape) or nested inside it. Keep that transport detail out of every
-// screen without deriving any document lifecycle state in the client.
-export function currentContractFromResponse(payload) {
-  const contract = payload?.contract;
-  if (!contract) return null;
-  if (hasCanonicalTenantDocument(contract)) return contract;
-  if (Object.prototype.hasOwnProperty.call(payload || {}, 'tenantDocument')) {
-    return { ...contract, tenantDocument: payload.tenantDocument };
-  }
-  return contract;
-}
-
 export function hasPreparedContractPdf(contract) {
-  if (hasCanonicalTenantDocument(contract)) {
-    return Boolean(contract.tenantDocument?.available && contract.tenantDocument?.type === 'generated_draft');
-  }
   return Boolean(contract?.preparedDocument?.available);
 }
 
 export function hasFinalContractPdf(contract) {
-  if (hasCanonicalTenantDocument(contract)) {
-    return Boolean(contract.tenantDocument?.available && contract.tenantDocument?.type === 'final_notarized');
-  }
   return Boolean(contract?.finalDocument?.available);
 }
 
@@ -91,31 +60,9 @@ function formatPeso(value, locale) {
 // published, supersedes it in relevance for the tenant (both stay linked to
 // the same Contract record — see hasFinalContractPdf/hasPreparedContractPdf).
 export function preferredContractDocument(contract) {
-  if (hasCanonicalTenantDocument(contract)) {
-    const document = contract.tenantDocument;
-    if (!document?.available) return null;
-    if (document.type === 'final_notarized') return { variant: 'final', source: 'canonical', document };
-    if (document.type === 'generated_draft') return { variant: 'prepared', source: 'canonical', document };
-    return null;
-  }
-
-  // Compatibility with the currently deployed canonical response. Once the
-  // upstream supplies tenantDocument, the branch above is authoritative and
-  // these legacy flags are no longer consulted.
-  if (hasFinalContractPdf(contract)) return { variant: 'final', source: 'legacy', document: contract.finalDocument };
-  if (hasPreparedContractPdf(contract)) return { variant: 'prepared', source: 'legacy', document: contract.preparedDocument };
+  if (hasFinalContractPdf(contract)) return { variant: 'final', document: contract.finalDocument };
+  if (hasPreparedContractPdf(contract)) return { variant: 'prepared', document: contract.preparedDocument };
   return null;
-}
-
-function contractDocumentCacheKey(contract, preferred) {
-  if (!preferred) return null;
-  const document = preferred.document || {};
-  const version = document.version
-    || document.currentVersion
-    || document.publishedAt
-    || document.generatedAt
-    || 'current';
-  return `${contract?.id || 'current'}:${preferred.variant}:${version}`;
 }
 
 export function buildContractSummary(contract, locale) {
@@ -132,35 +79,14 @@ export function buildContractSummary(contract, locale) {
     { key: 'reservationFee', label: 'Reservation Fee', value: formatPeso(contract.reservationFeeAmount, locale) },
   ];
   const preferred = preferredContractDocument(contract);
-  const lifecycleState = preferred?.variant === 'final'
-    ? 'final'
-    : preferred?.variant === 'prepared'
-      ? 'draft'
-      : 'preparing';
   return {
     status: contractStatusLabel(contract),
-    lifecycleState,
-    message: lifecycleState === 'final'
-      ? 'This is the final notarized copy of your current contract.'
-      : lifecycleState === 'draft'
-        ? 'Your generated contract is ready for review and in-person signing. The final notarized copy will replace this document once uploaded by the admin.'
-        : 'Your contract is being prepared.',
     fields: fields.filter((field) => field.value),
     hasMissingDetails: fields.some((field) => !field.value),
-    canOpenPdf: Boolean(preferred && (preferred.source === 'canonical' || contract.id)),
+    canOpenPdf: Boolean(preferred),
     documentVariant: preferred?.variant || null,
-    documentKind: preferred
-      ? (preferred.source === 'canonical'
-        ? 'contract-current'
-        : preferred.variant === 'final' ? 'contract-final' : 'contract-prepared')
-      : null,
-    documentCacheKey: contractDocumentCacheKey(contract, preferred),
-    documentTitle: preferred
-      ? (preferred.document?.label
-        || (preferred.variant === 'final' ? 'Final Notarized Contract' : 'Generated Draft — For Signing'))
-      : null,
     documentInfo: preferred ? [
-      { label: 'Document Version', value: (preferred.document.version || preferred.document.currentVersion) ? String(preferred.document.version || preferred.document.currentVersion) : null },
+      { label: 'Document Version', value: preferred.document.currentVersion ? String(preferred.document.currentVersion) : null },
       {
         label: preferred.variant === 'final' ? 'Published Date' : 'Generated Date',
         value: formatContractDate(preferred.variant === 'final' ? preferred.document.publishedAt : preferred.document.generatedAt, locale),

@@ -2,7 +2,6 @@
 import {
   buildContractSummary,
   contractStatusLabel,
-  currentContractFromResponse,
   hasAuthorizedContractPdf,
   hasFinalContractPdf,
   hasPreparedContractPdf,
@@ -52,7 +51,6 @@ describe('controlled contract presentation', () => {
 
   test('summary prefers the final document over the prepared one once both exist', () => {
     const summary = buildContractSummary({
-      id: '507f1f77bcf86cd799439011',
       displayStatus: 'Final Signed and Notarized Contract Available',
       preparedDocument: { available: true, currentVersion: 2, generatedAt: '2026-06-01' },
       finalDocument: { available: true, publishedAt: '2026-07-01' },
@@ -63,7 +61,6 @@ describe('controlled contract presentation', () => {
 
   test('a draft Contract still renders a visible summary — draft is not "no contract"', () => {
     const summary = buildContractSummary({
-      id: '507f1f77bcf86cd799439011',
       status: 'draft',
       displayStatus: 'Contract is being prepared.',
       preparedDocument: { available: false },
@@ -76,7 +73,6 @@ describe('controlled contract presentation', () => {
 
   test('a draft Contract with a prepared PDF already generated can be opened', () => {
     const summary = buildContractSummary({
-      id: '507f1f77bcf86cd799439011',
       status: 'draft',
       displayStatus: 'Prepared Contract Available',
       preparedDocument: { available: true, currentVersion: 1, generatedAt: '2026-08-01' },
@@ -88,7 +84,6 @@ describe('controlled contract presentation', () => {
 
   test('missing final document never fabricates final availability from status alone', () => {
     const signedContract = {
-      id: '507f1f77bcf86cd799439011',
       status: 'signed',
       displayStatus: 'Physical signing and in-person notarization are in progress.',
       preparedDocument: { available: true, currentVersion: 1 },
@@ -98,82 +93,6 @@ describe('controlled contract presentation', () => {
     const summary = buildContractSummary(signedContract);
     expect(summary.documentVariant).toBe('prepared');
     expect(summary.canOpenPdf).toBe(true);
-  });
-
-  test('normalizes a top-level canonical tenantDocument without inventing lifecycle rules', () => {
-    const tenantDocument = {
-      available: true,
-      type: 'generated_draft',
-      label: 'Generated Draft — For Signing',
-      isFinal: false,
-      version: 3,
-      generatedAt: '2026-08-16T08:00:00.000Z',
-    };
-    const contract = currentContractFromResponse({
-      contract: { id: '507f1f77bcf86cd799439011', status: 'awaiting_signatures' },
-      tenantDocument,
-    });
-
-    expect(contract.tenantDocument).toBe(tenantDocument);
-    expect(buildContractSummary(contract)).toEqual(expect.objectContaining({
-      status: 'Generated Draft — For Signing',
-      lifecycleState: 'draft',
-      canOpenPdf: true,
-      documentKind: 'contract-current',
-      documentCacheKey: '507f1f77bcf86cd799439011:prepared:3',
-    }));
-  });
-
-  test('canonical final document replaces the draft without consulting legacy flags', () => {
-    const summary = buildContractSummary({
-      id: '507f1f77bcf86cd799439011',
-      tenantDocument: {
-        available: true,
-        type: 'final_notarized',
-        label: 'Final Notarized Contract',
-        isFinal: true,
-        publishedAt: '2026-08-16T09:00:00.000Z',
-      },
-      preparedDocument: { available: true, currentVersion: 9 },
-      finalDocument: { available: false },
-    });
-
-    expect(summary).toEqual(expect.objectContaining({
-      status: 'Final Notarized Contract',
-      lifecycleState: 'final',
-      documentVariant: 'final',
-      documentKind: 'contract-current',
-    }));
-    expect(summary.documentCacheKey).toContain(':final:');
-  });
-
-  test('canonical preparing state does not fall back to an internal signed document or legacy PDF', () => {
-    const summary = buildContractSummary({
-      id: '507f1f77bcf86cd799439011',
-      tenantDocument: { available: false, type: null, label: null, isFinal: false },
-      preparedDocument: { available: true },
-      signedDocument: { available: true },
-    });
-
-    expect(summary.status).toBe('Preparing Contract');
-    expect(summary.lifecycleState).toBe('preparing');
-    expect(summary.canOpenPdf).toBe(false);
-    expect(summary.documentKind).toBeNull();
-  });
-
-  test('regenerated legacy prepared documents get a new cache key', () => {
-    const versionOne = buildContractSummary({
-      id: '507f1f77bcf86cd799439011',
-      preparedDocument: { available: true, currentVersion: 1 },
-      finalDocument: { available: false },
-    });
-    const versionTwo = buildContractSummary({
-      id: '507f1f77bcf86cd799439011',
-      preparedDocument: { available: true, currentVersion: 2 },
-      finalDocument: { available: false },
-    });
-
-    expect(versionOne.documentCacheKey).not.toBe(versionTwo.documentCacheKey);
   });
 
   test('contract summary displays the server-computed pricing snapshot', () => {

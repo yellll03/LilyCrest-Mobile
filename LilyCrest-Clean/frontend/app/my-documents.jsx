@@ -323,7 +323,7 @@ export default function MyDocumentsScreen() {
             status: tenantContract ? contractStatusLabel(tenantContract) : 'Not Available',
             description: tenantContract
               ? sourceDoc.description
-              : (contractError || 'No current contract is available.'),
+              : (contractError || 'No approved lease contract is available yet.'),
           }
         : sourceDoc;
       if (!map[doc.category]) map[doc.category] = [];

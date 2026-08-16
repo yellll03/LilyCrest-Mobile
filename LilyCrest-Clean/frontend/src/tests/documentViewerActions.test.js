@@ -5,7 +5,6 @@ const path = require('path');
 const pdfViewer = fs.readFileSync(path.resolve(__dirname, '../../app/document-viewer.jsx'), 'utf8');
 const imageViewer = fs.readFileSync(path.resolve(__dirname, '../../app/image-viewer.jsx'), 'utf8');
 const imageManager = fs.readFileSync(path.resolve(__dirname, '../services/imageDocumentManager.js'), 'utf8');
-const documentManager = fs.readFileSync(path.resolve(__dirname, '../services/documentManager.js'), 'utf8');
 
 describe('authenticated document viewer actions', () => {
   test('PDF viewer exposes download, print, share, paging, and retry', () => {
@@ -24,12 +23,5 @@ describe('authenticated document viewer actions', () => {
     expect(imageViewer).toContain('Print image');
     expect(imageViewer).toContain('Share image');
     expect(imageViewer).toContain('load(true)');
-  });
-
-  test('canonical current Contract stream is authenticated and version-aware in cache', () => {
-    expect(documentManager).toContain('/contracts/current/document');
-    expect(documentManager).toContain('Authorization: `Bearer ${token}`');
-    expect(documentManager).toContain('cacheKey = id');
-    expect(pdfViewer).toContain('cacheKey');
   });
 });
