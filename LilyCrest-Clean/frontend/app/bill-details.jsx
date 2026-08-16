@@ -17,7 +17,7 @@ import {
 } from '../src/services/billingState';
 import { safeBack } from '../src/utils/navigation';
 import { ensureFirebaseStorageAttachments, IMAGE_UPLOAD_MIME_TYPES, MAX_IMAGE_UPLOAD_BYTES } from '../src/services/firebaseStorageUpload';
-import { getBillPaymentDate, isBillOutstanding } from '../src/utils/billingStatus';
+import { getBillPaymentDate, getUtilityReleaseSchedule, isBillOutstanding } from '../src/utils/billingStatus';
 
 const getBillId = (bill) => bill?.billing_id || bill?.id || bill?._id || bill?.billingId || bill?.billId || bill?.reference_id;
 
@@ -85,23 +85,6 @@ const STATUS_CONFIG = {
   rejected: { bg: '#fef2f2', text: '#b91c1c', icon: 'close-circle', label: 'Payment Rejected' },
   cancelled: { bg: '#f3f4f6', text: '#6b7280', icon: 'close-circle', label: 'Cancelled' },
 };
-
-function hasUsableElectricityBreakdown(bill) {
-  if (!Array.isArray(bill?.electricity_breakdown) || bill.electricity_breakdown.length === 0) return false;
-
-  return bill.electricity_breakdown.every((seg) => {
-    const hasOccupants = Number.isFinite(Number(seg?.occupants))
-      || (Array.isArray(seg?.active_tenants) && seg.active_tenants.length > 0);
-    const hasDates = Boolean(seg?.reading_date_from || seg?.period_start)
-      && Boolean(seg?.reading_date_to || seg?.period_end);
-    const hasReadings = Number.isFinite(Number(seg?.reading_from))
-      && Number.isFinite(Number(seg?.reading_to));
-    const hasRate = Number.isFinite(Number(seg?.rate));
-    const hasShare = Number.isFinite(Number(seg?.share_per_tenant));
-
-    return hasOccupants && hasDates && hasReadings && hasRate && hasShare;
-  });
-}
 
 export default function BillDetailsScreen() {
   const router = useRouter();
@@ -282,15 +265,12 @@ export default function BillDetailsScreen() {
   const statusCfg = STATUS_CONFIG[statusKey] || STATUS_CONFIG.unpaid;
   const isOutstanding = isBillOutstanding(bill);
   const totalAmount = bill.total || bill.amount || 0;
-  const expectsElectricityBreakdown =
-    Number(bill.electricity || 0) > 0 || (bill.billing_type || '').toLowerCase() === 'electricity';
-  const usableElectricityBreakdown = hasUsableElectricityBreakdown(bill);
-
-  const expectsWaterBreakdown =
-    Number(bill.water || 0) > 0 || (bill.billing_type || '').toLowerCase() === 'water';
+  // Single source of truth for release/due state — matches Billing History
+  // and Home so the same bill never shows a contradictory release state
+  // depending on which screen rendered it (see billingStatus.js).
+  const releaseSchedule = getUtilityReleaseSchedule(bill);
   const utilityDeadlines = Object.entries(bill.utility_deadlines || {})
     .filter(([, deadline]) => deadline?.billReleaseDate && deadline?.finalDueDate);
-  const hasRentCharge = Number(bill.rent || 0) > 0;
 
   const moveInFinancials = bill.move_in_financials || bill.moveInFinancials || null;
   // Charge items
@@ -307,10 +287,17 @@ export default function BillDetailsScreen() {
     if (bill.water) charges.push({ label: 'Water', amount: bill.water, icon: 'water', color: '#0284c7' });
     if (bill.penalties) charges.push({ label: 'Penalty', amount: bill.penalties, icon: 'warning', color: '#b91c1c' });
   }
-  // Include extra line items if present
-  if (!moveInFinancials && Array.isArray(bill.items)) {
-    bill.items.forEach((item) => {
-      const label = item.label || item.description || 'Charge';
+  // Include extra line items if present. The canonical bridge returns these
+  // as bill.additional_charges: [{ name, amount }] (see mobileBillingBridge.js
+  // toMobileBill()); bill.items is kept as a fallback for any older/legacy
+  // response shape so a genuine adjustment never silently disappears from
+  // the breakdown.
+  if (!moveInFinancials) {
+    const extraItems = Array.isArray(bill.additional_charges) ? bill.additional_charges
+      : Array.isArray(bill.items) ? bill.items
+      : [];
+    extraItems.forEach((item) => {
+      const label = item.name || item.label || item.description || 'Charge';
       if (charges.find((charge) => charge.label === label)) return;
       const typeIcons = { rent: 'home', electricity: 'flash', water: 'water', penalty: 'warning' };
       const typeColors = { rent: '#1d4ed8', electricity: '#b45309', water: '#0284c7', penalty: '#b91c1c' };
@@ -377,14 +364,14 @@ export default function BillDetailsScreen() {
               <Text style={styles.headerGridLabel}>Period</Text>
               <Text style={styles.headerGridValue}>{bill.billing_period || '\u2014'}</Text>
             </View>
-            {(hasRentCharge || (!(expectsElectricityBreakdown || expectsWaterBreakdown) && utilityDeadlines.length === 0)) && <>
+            {!releaseSchedule.unreleasedUtility && <>
               <View style={styles.headerGridItem}>
                 <Text style={styles.headerGridLabel}>Released</Text>
-                <Text style={styles.headerGridValue}>{shortDate(bill.release_date || bill.created_at)}</Text>
+                <Text style={styles.headerGridValue}>{shortDate(releaseSchedule.releaseDate)}</Text>
               </View>
               <View style={styles.headerGridItem}>
                 <Text style={styles.headerGridLabel}>Due Date</Text>
-                <Text style={styles.headerGridValue}>{shortDate(bill.due_date)}</Text>
+                <Text style={styles.headerGridValue}>{shortDate(releaseSchedule.dueDate || bill.due_date)}</Text>
               </View>
             </>}
           </View>
@@ -403,7 +390,7 @@ export default function BillDetailsScreen() {
             </View>
           </View>
         ))}
-        {(expectsElectricityBreakdown || expectsWaterBreakdown) && utilityDeadlines.length === 0 ? (
+        {releaseSchedule.unreleasedUtility ? (
           <View style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
               <Ionicons name="information-circle-outline" size={17} color={colors.primary} />
@@ -446,8 +433,12 @@ export default function BillDetailsScreen() {
           )}
         </View>
 
-        {/* ── Electricity Computation Breakdown ── */}
-        {usableElectricityBreakdown && (
+        {/* ── Electricity Computation Breakdown ──
+            Only renders when the backend genuinely supplies a segmented
+            reading breakdown; the flat Billing Summary above already shows
+            the authoritative electricity total either way, so there is
+            nothing to flag as "unavailable" when this segment is absent. */}
+        {Array.isArray(bill.electricity_breakdown) && bill.electricity_breakdown.length > 0 && (
           <View style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
               <Ionicons name="flash" size={16} color="#b45309" />
@@ -539,7 +530,7 @@ export default function BillDetailsScreen() {
                   <View key={idx} style={styles.elecSummaryRow}>
                     <View style={{ flex: 1 }}>
                       <Text style={styles.elecSummaryLabel}>
-                        {dateFrom} \u2013 {dateTo} ({occ} occupants)
+                        {dateFrom} {"\u2013"} {dateTo} ({occ} {occ === 1 ? "occupant" : "occupants"})
                       </Text>
                     </View>
                     <Text style={styles.elecSummaryAmount}>
@@ -576,26 +567,9 @@ export default function BillDetailsScreen() {
             </View>
           </View>
         )}
-        {!usableElectricityBreakdown && expectsElectricityBreakdown && (
-          <View style={styles.sectionCard}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="flash" size={16} color="#b45309" />
-              <Text style={styles.sectionTitle}>Electricity Breakdown</Text>
-            </View>
-            <Text style={styles.sharingPolicy}>Breakdown unavailable.</Text>
-          </View>
-        )}
-
-        {/* ── Water Breakdown ── */}
-        {expectsWaterBreakdown && !bill.water_breakdown && (
-          <View style={styles.sectionCard}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="water" size={16} color="#0284c7" />
-              <Text style={styles.sectionTitle}>Water Breakdown</Text>
-            </View>
-            <Text style={styles.sharingPolicy}>Breakdown unavailable.</Text>
-          </View>
-        )}
+        {/* ── Water Breakdown ── only when the backend supplies segmented
+            meter-reading detail; otherwise the flat Billing Summary total
+            already covers it. */}
         {bill.water_breakdown && (
           <View style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
@@ -778,11 +752,11 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
   sectionTitle: { fontSize: 15, fontWeight: '800', color: c.text },
 
   // Summary Table
-  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
-  summaryLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4, gap: 8 },
+  summaryLeft: { flex: 1, flexShrink: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
   summaryDot: { width: 4, height: 4, borderRadius: 2 },
-  summaryLabel: { fontSize: 14, color: c.textSecondary, fontWeight: '600' },
-  summaryValue: { fontSize: 14, fontWeight: '700', color: c.text },
+  summaryLabel: { flexShrink: 1, fontSize: 14, color: c.textSecondary, fontWeight: '600' },
+  summaryValue: { flexShrink: 0, fontSize: 14, fontWeight: '700', color: c.text },
   totalDivider: { height: 1.5, backgroundColor: c.border, marginVertical: 6 },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
   totalLabel: { fontSize: 14, fontWeight: '800', color: c.text },

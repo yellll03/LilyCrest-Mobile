@@ -36,8 +36,14 @@ function getBillPaymentDate(bill) {
   return bill?.payment_date || bill?.paymentDate || bill?.paidAt || bill?.paid_at || null;
 }
 
+// bill.created_at/createdAt is when the database record was written, not
+// when the bill was released/sent to the tenant (see canonical
+// mobileBillingBridge.js toMobileBill(): release_date is the immutable
+// Bill.releasedAt lifecycle timestamp). Falling back to created_at would
+// show a release date that was never actually recorded — if the bill
+// carries no real release timestamp, the honest answer is null.
 function getBillReleaseDate(bill) {
-  return bill?.release_date || bill?.releaseDate || bill?.created_at || bill?.createdAt || null;
+  return bill?.release_date || bill?.releaseDate || null;
 }
 
 // Resolves a single "release/due" schedule for a bill from its authoritative
