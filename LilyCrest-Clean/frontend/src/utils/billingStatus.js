@@ -36,14 +36,8 @@ function getBillPaymentDate(bill) {
   return bill?.payment_date || bill?.paymentDate || bill?.paidAt || bill?.paid_at || null;
 }
 
-// bill.created_at/createdAt is when the database record was written, not
-// when the bill was released/sent to the tenant — those are different
-// lifecycle events (see backend mapRealBill()'s authoritativeReleaseDate).
-// Falling back to it here would show every screen a release date that was
-// never actually recorded. If the bill carries no real release timestamp,
-// the honest answer is null.
 function getBillReleaseDate(bill) {
-  return bill?.release_date || bill?.releaseDate || null;
+  return bill?.release_date || bill?.releaseDate || bill?.created_at || bill?.createdAt || null;
 }
 
 // Resolves a single "release/due" schedule for a bill from its authoritative

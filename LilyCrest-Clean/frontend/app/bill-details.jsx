@@ -86,25 +86,20 @@ const STATUS_CONFIG = {
   cancelled: { bg: '#f3f4f6', text: '#6b7280', icon: 'close-circle', label: 'Cancelled' },
 };
 
-// A segment is "usable" once the numbers that prove the calculation are
-// present: the meter delta, the rate applied to it, and the resulting
-// tenant share. Occupants and reading dates are display detail only — the
-// render below already falls back to "1" occupant and an em dash for a
-// missing date — so requiring them here used to blank the *entire* audit
-// trail (silently, with no error) whenever the authoritative utility-period
-// record was missing just a date, even though the tenant-facing amount was
-// fully computed and correct. Bills are transparency-critical: never hide a
-// real, computed charge breakdown over an incomplete display field.
 function hasUsableElectricityBreakdown(bill) {
   if (!Array.isArray(bill?.electricity_breakdown) || bill.electricity_breakdown.length === 0) return false;
 
   return bill.electricity_breakdown.every((seg) => {
+    const hasOccupants = Number.isFinite(Number(seg?.occupants))
+      || (Array.isArray(seg?.active_tenants) && seg.active_tenants.length > 0);
+    const hasDates = Boolean(seg?.reading_date_from || seg?.period_start)
+      && Boolean(seg?.reading_date_to || seg?.period_end);
     const hasReadings = Number.isFinite(Number(seg?.reading_from))
       && Number.isFinite(Number(seg?.reading_to));
     const hasRate = Number.isFinite(Number(seg?.rate));
     const hasShare = Number.isFinite(Number(seg?.share_per_tenant));
 
-    return hasReadings && hasRate && hasShare;
+    return hasOccupants && hasDates && hasReadings && hasRate && hasShare;
   });
 }
 
@@ -293,21 +288,8 @@ export default function BillDetailsScreen() {
 
   const expectsWaterBreakdown =
     Number(bill.water || 0) > 0 || (bill.billing_type || '').toLowerCase() === 'water';
-  // Show a utility's schedule entry as soon as ANY of its dates is known.
-  // Requiring both billReleaseDate AND finalDueDate used to blank the whole
-  // card the moment one was legitimately unavailable (e.g. a bill whose
-  // release date isn't tracked but whose due date is) even though the
-  // other date was real, authoritative data — each field already renders
-  // its own "—" fallback below, so gating on completeness only hid data
-  // that existed.
   const utilityDeadlines = Object.entries(bill.utility_deadlines || {})
-    .filter(([, deadline]) => Boolean(
-      deadline?.billingPeriodStart
-      || deadline?.billingPeriodEnd
-      || deadline?.meterReadingDate
-      || deadline?.billReleaseDate
-      || deadline?.finalDueDate
-    ));
+    .filter(([, deadline]) => deadline?.billReleaseDate && deadline?.finalDueDate);
   const hasRentCharge = Number(bill.rent || 0) > 0;
 
   const moveInFinancials = bill.move_in_financials || bill.moveInFinancials || null;
@@ -398,11 +380,7 @@ export default function BillDetailsScreen() {
             {(hasRentCharge || (!(expectsElectricityBreakdown || expectsWaterBreakdown) && utilityDeadlines.length === 0)) && <>
               <View style={styles.headerGridItem}>
                 <Text style={styles.headerGridLabel}>Released</Text>
-                {/* bill.created_at is when the database record was written,
-                    not when the bill was released/sent to the tenant — the
-                    two are different events and falling back to createdAt
-                    here would show a fabricated release date. */}
-                <Text style={styles.headerGridValue}>{shortDate(bill.release_date)}</Text>
+                <Text style={styles.headerGridValue}>{shortDate(bill.release_date || bill.created_at)}</Text>
               </View>
               <View style={styles.headerGridItem}>
                 <Text style={styles.headerGridLabel}>Due Date</Text>

@@ -532,15 +532,6 @@ function normalizeLegacyBill(bill = {}) {
   if (!normalized.bill_id && bill._id) normalized.bill_id = String(bill._id);
   if (!normalized.legacy_billing_id && fallbackId) normalized.legacy_billing_id = fallbackId;
   normalized._id = undefined;
-  // released_at (set once, at creation, by createBilling — see the comment
-  // there) is the canonical release timestamp; it takes priority over the
-  // older free-form admin-editable release_date field for bills created
-  // after this change. Older bills that predate released_at keep whatever
-  // release_date an admin explicitly supplied. Never falls back to
-  // created_at/createdAt — a missing value stays null ("—" in the UI), not
-  // fabricated. The outward field name stays release_date so every existing
-  // consumer (Bill Details, billingStatus.js, the PDF) needs no changes.
-  normalized.release_date = normalized.released_at ?? normalized.release_date ?? null;
   const moveInFinancials = extractMoveInFinancials(normalized);
   if (moveInFinancials) {
     normalized.move_in_financials = moveInFinancials;
@@ -647,93 +638,21 @@ function normalizeBillingPeriod(value, fallback = 'N/A') {
   return fallback;
 }
 
-// Mirrors frontend/app/bill-details.jsx's hasUsableElectricityBreakdown so
-// the PDF statement/receipt and the in-app screen agree on when a
-// computation breakdown is trustworthy enough to render. Only the numbers
-// that prove the calculation (meter delta, rate, resulting share) gate
-// visibility; occupants/dates are display detail with their own "---"
-// fallback in buildBillBreakdownSections, so an incomplete display field
-// must never hide an otherwise-computed, tenant-facing charge.
 function hasUsableElectricityBreakdown(bill) {
   if (!Array.isArray(bill?.electricity_breakdown) || bill.electricity_breakdown.length === 0) return false;
 
   return bill.electricity_breakdown.every((seg) => {
+    const hasOccupants = Number.isFinite(Number(seg?.occupants))
+      || (Array.isArray(seg?.active_tenants) && seg.active_tenants.length > 0);
+    const hasDates = Boolean(seg?.reading_date_from || seg?.period_start)
+      && Boolean(seg?.reading_date_to || seg?.period_end);
     const hasReadings = Number.isFinite(Number(seg?.reading_from))
       && Number.isFinite(Number(seg?.reading_to));
     const hasRate = Number.isFinite(Number(seg?.rate));
     const hasShare = Number.isFinite(Number(seg?.share_per_tenant));
 
-    return hasReadings && hasRate && hasShare;
+    return hasOccupants && hasDates && hasReadings && hasRate && hasShare;
   });
-}
-
-// Shared by both the billing statement and payment receipt PDFs so the
-// electricity/water computation table looks identical (and stays in sync)
-// wherever it appears.
-function buildBillBreakdownSections(bill, { formatMoney, shortDate }) {
-  const breakdownSections = [];
-
-  const expectsElectricityBreakdown =
-    Number(bill.electricity || 0) > 0 || (bill.billing_type || '').toLowerCase() === 'electricity';
-  const usableElectricityBreakdown = hasUsableElectricityBreakdown(bill);
-  if (usableElectricityBreakdown) {
-    breakdownSections.push({
-      heading: 'Electricity Breakdown',
-      type: 'electricity',
-      segments: bill.electricity_breakdown.map((seg) => {
-        const occupants = seg.occupants || seg.active_tenants?.length || 1;
-        const consumption = seg.consumption ?? ((seg.reading_to || 0) - (seg.reading_from || 0));
-        return {
-          occupants,
-          reading_date_from: shortDate(seg.reading_date_from || seg.period_start),
-          reading_date_to: shortDate(seg.reading_date_to || seg.period_end),
-          reading_from: seg.reading_from || 0,
-          reading_to: seg.reading_to || 0,
-          consumption: consumption.toFixed(2),
-          rate: seg.rate || 0,
-          share_per_tenant: formatMoney(seg.share_per_tenant || 0),
-        };
-      }),
-    });
-  } else if (expectsElectricityBreakdown) {
-    breakdownSections.push({
-      heading: 'Electricity Breakdown',
-      type: 'generic',
-      segments: [{
-        rows: [{ label: 'Status', value: 'Breakdown unavailable.' }],
-      }],
-    });
-  }
-
-  const expectsWaterBreakdown =
-    Number(bill.water || 0) > 0 || (bill.billing_type || '').toLowerCase() === 'water';
-  if (bill.water_breakdown) {
-    const wb = bill.water_breakdown;
-    const waterRows = [
-      { label: 'Meter Reading', value: `${wb.reading_from || 0} -> ${wb.reading_to || 0}` },
-      { label: 'Consumption', value: `${wb.consumption || 0} cu.m` },
-      { label: 'Rate', value: `PHP ${wb.rate || 0}/cu.m` },
-      { label: 'Total', value: formatMoney(wb.total || 0) },
-    ];
-    if (wb.sharing_policy) {
-      waterRows.push({ label: 'Policy', value: normalizeLine(wb.sharing_policy) });
-    }
-    breakdownSections.push({
-      heading: 'Water Computation Breakdown',
-      type: 'water',
-      segments: [{ rows: waterRows }],
-    });
-  } else if (expectsWaterBreakdown) {
-    breakdownSections.push({
-      heading: 'Water Breakdown',
-      type: 'generic',
-      segments: [{
-        rows: [{ label: 'Status', value: 'Breakdown unavailable.' }],
-      }],
-    });
-  }
-
-  return breakdownSections;
 }
 
 function normalizeUtilityType(value) {
@@ -981,25 +900,16 @@ function deriveWaterBreakdownFromUtilityRecords(records = [], bill = {}) {
 async function enrichRealBillsWithUtilityBreakdowns(db, bills = []) {
   if (!Array.isArray(bills) || bills.length === 0) return bills;
 
-  const objectIdBillIds = bills
+  const rawBillIds = bills
     .map((bill) => toObjectIdIfValid(bill?._id))
     .filter(Boolean);
 
-  if (!objectIdBillIds.length) return bills;
-
-  // tenantSummaries.billId is written by the external utility-billing system
-  // that owns the `utilityperiods` collection, not by this backend, and its
-  // exact BSON type (ObjectId vs. string) isn't guaranteed. Mongo's $in match
-  // is type-strict, so matching ObjectId form only would silently return zero
-  // periods — and thus hide every real bill's computation breakdown — the
-  // moment that producer stores billId as a string. Match both forms.
-  const stringBillIds = objectIdBillIds.map((id) => id.toHexString());
-  const candidateBillIds = [...objectIdBillIds, ...stringBillIds];
+  if (!rawBillIds.length) return bills;
 
   const utilityPeriods = await db.collection('utilityperiods')
     .find({
       isArchived: { $ne: true },
-      'tenantSummaries.billId': { $in: candidateBillIds },
+      'tenantSummaries.billId': { $in: rawBillIds },
     })
     .toArray()
     .catch(() => []);
@@ -1053,59 +963,6 @@ async function enrichRealBillsWithUtilityBreakdowns(db, bills = []) {
   });
 }
 
-// The electricity computation breakdown (mapped below from the same
-// `utilityperiods` records enrichRealBillsWithUtilityBreakdowns() already
-// fetched) is the authoritative source for when the meter was actually
-// read and what coverage window that reading applies to — it's the same
-// data the Electricity Breakdown table renders, just reused here rather
-// than recomputed. Used only as a fallback for the schedule when the bill
-// document itself carries no billingPeriodStart/End or meterReadingDate
-// (no current bill-creation path on the `bills` collection ever writes
-// those fields), so the schedule and the breakdown table can never
-// disagree, and a missing bill-level field can't blank the whole section
-// when the underlying reading data is right there.
-function electricityScheduleSpan(breakdown) {
-  if (!Array.isArray(breakdown) || !breakdown.length) return { start: null, end: null };
-  // Raw values may be Date instances (from the Mongo driver) or ISO strings;
-  // default Array.sort() stringifies, which does not sort Date objects
-  // chronologically, so sort by numeric timestamp explicitly.
-  const byTimestamp = (values) => values
-    .filter(Boolean)
-    .map((value) => ({ value, time: new Date(value).getTime() }))
-    .filter((entry) => Number.isFinite(entry.time))
-    .sort((a, b) => a.time - b.time)
-    .map((entry) => entry.value);
-
-  const starts = byTimestamp(breakdown.map((seg) => seg?.reading_date_from || seg?.period_start));
-  const ends = byTimestamp(breakdown.map((seg) => seg?.reading_date_to || seg?.period_end));
-  return { start: starts[0] || null, end: ends[ends.length - 1] || null };
-}
-
-// The tenant-facing "Release Date" must mean one thing only: the date the
-// bill was actually released/published/sent to the tenant. It is a bill
-// LIFECYCLE event, not a billing-period boundary, not a meter-reading date,
-// and not the database record's createdAt. This backend has no dedicated
-// release/publish workflow for the `bills` collection — no draft->released
-// status transition, no releasedAt/publishedAt/sentAt writer anywhere in
-// this repo (traced across billing.controller.js, paymongo.controller.js,
-// pushService.js: notifyBillCreated() fires at bill *creation*, which is
-// not proven to be the same event as "released to tenant" for the real
-// `bills` collection since nothing in this repo ever creates those
-// documents — they come from an external system). billingCycleStart was
-// previously (mis)used as the release-date fallback purely because it was
-// the one field known to reliably exist — but its own name says it marks
-// the *billing period*, not a release event, and reusing one field for two
-// meanings is exactly the bug this resolves. Only genuine release-marker
-// field names are accepted here; if none exist, the honest answer is null
-// (renders "—"), never a guess.
-function resolveAuthoritativeReleaseDate(b) {
-  return b.releasedAt ?? b.billReleasedAt ?? b.releasedDate
-    ?? b.billReleaseDate ?? b.releaseDate
-    ?? b.publishedAt ?? b.billPublishedAt
-    ?? b.sentAt ?? b.issuedAt
-    ?? null;
-}
-
 // Map a document from the real 'bills' collection to the legacy billing shape
 function mapRealBill(b, userId) {
   const c = b.charges || {};
@@ -1122,32 +979,17 @@ function mapRealBill(b, userId) {
   const waterBreakdown = b.water_breakdown && typeof b.water_breakdown === 'object'
     ? b.water_breakdown
     : (b.waterBreakdown && typeof b.waterBreakdown === 'object' ? b.waterBreakdown : undefined);
-  // billingPeriodStart/End and meterReadingDate: utilityperiods (via the
-  // already-enriched electricity_breakdown) is the authoritative source for
-  // these — see electricityScheduleSpan(). billingCycleStart is kept only
-  // as a last-resort fallback for bills with no linked utility-period data,
-  // since it is at least a period-shaped field, unlike a release timestamp.
-  // billReleaseDate: deliberately NEVER falls back to billingCycleStart,
-  // period dates, or createdAt — see resolveAuthoritativeReleaseDate above.
-  const electricitySpan = electricityScheduleSpan(electricityBreakdown);
-  const authoritativeReleaseDate = resolveAuthoritativeReleaseDate(b);
-  const electricityDeadline = resolveUtilityDeadline({
-    billingPeriodStart: b.billingPeriodStart ?? b.periodStart ?? electricitySpan.start ?? b.billingCycleStart,
-    billingPeriodEnd: b.billingPeriodEnd ?? b.periodEnd ?? electricitySpan.end ?? b.billingCycleEnd,
-    meterReadingDate: b.meterReadingDate ?? b.readingDate ?? b.utilityReadingDate ?? electricitySpan.end,
-    billReleaseDate: authoritativeReleaseDate,
-    providerDueDate: b.providerDueDate ?? b.utilityProviderDueDate ?? b.dueDate,
-  });
-  // Water has no per-segment reading dates in deriveWaterBreakdownFromUtilityRecords
-  // (only meter values), so its period/reading fields stay on bill-level
-  // fields only. Release date is a whole-bill lifecycle event (a bill is
-  // released as one document, not per utility), so it is intentionally the
-  // same authoritativeReleaseDate as electricity's — not a second guess.
-  const waterDeadline = resolveUtilityDeadline({
+  // NOTE: billReleaseDate/releaseDate are not written by any current bill-creation
+  // path on the `bills` collection — every real bill does carry billingCycleStart
+  // (set at creation) and dueDate, so those are the authoritative fallbacks. Without
+  // this fallback, resolveUtilityDeadline() always receives null dates and every
+  // electricity/water bill permanently displays as "not released" regardless of
+  // its actual payment/status.
+  const utilityDeadline = resolveUtilityDeadline({
     billingPeriodStart: b.billingPeriodStart ?? b.periodStart ?? b.billingCycleStart,
     billingPeriodEnd: b.billingPeriodEnd ?? b.periodEnd ?? b.billingCycleEnd,
     meterReadingDate: b.meterReadingDate ?? b.readingDate ?? b.utilityReadingDate,
-    billReleaseDate: authoritativeReleaseDate,
+    billReleaseDate: b.billReleaseDate ?? b.releaseDate ?? b.billingCycleStart,
     providerDueDate: b.providerDueDate ?? b.utilityProviderDueDate ?? b.dueDate,
   });
 
@@ -1163,11 +1005,7 @@ function mapRealBill(b, userId) {
     billing_period: billingPeriod,
     billing_type: 'consolidated',
     due_date: b.dueDate,
-    // Same authoritativeReleaseDate used for the utility schedule above —
-    // this is the field the header card and PDF "Released" fields read, so
-    // it must agree with the schedule card rather than presenting a second,
-    // conflicting "release date" derived from the billing cycle.
-    release_date: authoritativeReleaseDate,
+    release_date: b.billingCycleStart,
     status: effectiveStatus || b.status,
     // Individual charge fields so breakdown chips render correctly
     rent: c.rent ?? b.rent ?? 0,
@@ -1192,8 +1030,8 @@ function mapRealBill(b, userId) {
     electricity_breakdown: electricityBreakdown,
     water_breakdown: waterBreakdown,
     utility_deadlines: {
-      ...(Number(c.electricity ?? b.electricity ?? 0) > 0 ? { electricity: electricityDeadline } : {}),
-      ...(Number(c.water ?? b.water ?? 0) > 0 ? { water: waterDeadline } : {}),
+      ...(Number(c.electricity ?? b.electricity ?? 0) > 0 ? { electricity: utilityDeadline } : {}),
+      ...(Number(c.water ?? b.water ?? 0) > 0 ? { water: utilityDeadline } : {}),
     },
     created_at: b.createdAt,
     updated_at: b.updatedAt,
@@ -1469,20 +1307,6 @@ async function createBilling(req, res) {
     // Optional consolidated fields
     if (normalizedPeriod) newBill.billing_period = normalizedPeriod;
     if (releaseDate.supplied) newBill.release_date = releaseDate.value;
-    // released_at is the canonical, immutable release timestamp (Task:
-    // "Implement Authoritative Bill Release Lifecycle"). This handler is
-    // the only place in this repo that creates a legacy `billing` document,
-    // and fetchUserBills()/normalizeLegacyBill() apply no further
-    // draft/visibility gate before a tenant can see it — so, traced end to
-    // end, bill creation IS the tenant-release event for this collection.
-    // That is the specific, code-proven exception the business rule allows
-    // ("unless the architecture explicitly proves creation and release are
-    // the same operation"). An admin-supplied release_date is their
-    // explicit choice of release moment and takes priority; otherwise this
-    // defaults to server time, since insertion itself is the release.
-    // Nothing after this line may ever overwrite released_at — updateBilling
-    // does not accept it as an updatable field.
-    newBill.released_at = releaseDate.supplied ? releaseDate.value : new Date();
     Object.assign(newBill, parsedMoney);
     if (parsedItems.value.length) newBill.items = parsedItems.value;
     if (Array.isArray(electricity_breakdown) && electricity_breakdown.length) newBill.electricity_breakdown = electricity_breakdown;
@@ -1759,7 +1583,65 @@ async function downloadBillPdf(req, res) {
     }
 
     // Computation breakdown sections
-    const breakdownSections = buildBillBreakdownSections(bill, { formatMoney, shortDate });
+    const breakdownSections = [];
+    const expectsElectricityBreakdown =
+      Number(bill.electricity || 0) > 0 || (bill.billing_type || '').toLowerCase() === 'electricity';
+    const usableElectricityBreakdown = hasUsableElectricityBreakdown(bill);
+    if (usableElectricityBreakdown) {
+      breakdownSections.push({
+        heading: 'Electricity Breakdown',
+        type: 'electricity',
+        segments: bill.electricity_breakdown.map((seg) => {
+          const occupants = seg.occupants || seg.active_tenants?.length || 1;
+          const consumption = seg.consumption ?? ((seg.reading_to || 0) - (seg.reading_from || 0));
+          return {
+            occupants,
+            reading_date_from: shortDate(seg.reading_date_from || seg.period_start),
+            reading_date_to: shortDate(seg.reading_date_to || seg.period_end),
+            reading_from: seg.reading_from || 0,
+            reading_to: seg.reading_to || 0,
+            consumption: consumption.toFixed(2),
+            rate: seg.rate || 0,
+            share_per_tenant: formatMoney(seg.share_per_tenant || 0),
+          };
+        }),
+      });
+    } else if (expectsElectricityBreakdown) {
+      breakdownSections.push({
+        heading: 'Electricity Breakdown',
+        type: 'generic',
+        segments: [{
+          rows: [{ label: 'Status', value: 'Breakdown unavailable.' }],
+        }],
+      });
+    }
+    const expectsWaterBreakdown =
+      Number(bill.water || 0) > 0 || (bill.billing_type || '').toLowerCase() === 'water';
+    if (bill.water_breakdown) {
+      const wb = bill.water_breakdown;
+      const waterRows = [
+        { label: 'Meter Reading', value: `${wb.reading_from || 0} -> ${wb.reading_to || 0}` },
+        { label: 'Consumption', value: `${wb.consumption || 0} cu.m` },
+        { label: 'Rate', value: `PHP ${wb.rate || 0}/cu.m` },
+        { label: 'Total', value: formatMoney(wb.total || 0) },
+      ];
+      if (wb.sharing_policy) {
+        waterRows.push({ label: 'Policy', value: normalizeLine(wb.sharing_policy) });
+      }
+      breakdownSections.push({
+        heading: 'Water Computation Breakdown',
+        type: 'water',
+        segments: [{ rows: waterRows }],
+      });
+    } else if (expectsWaterBreakdown) {
+      breakdownSections.push({
+        heading: 'Water Breakdown',
+        type: 'generic',
+        segments: [{
+          rows: [{ label: 'Status', value: 'Breakdown unavailable.' }],
+        }],
+      });
+    }
 
     const refId = normalizeLine(bill.reference_no || bill.reference || bill.paymongo_reference || bill.txn_id || bill.transaction_id || billingId);
     const billingPeriod = bill.billing_period
@@ -1772,10 +1654,7 @@ async function downloadBillPdf(req, res) {
       subtitle: billingPeriod,
       docType: billIsPaid ? 'BILLING STATEMENT - PAID' : 'BILLING STATEMENT',
       refNumber: refId,
-      // bill.created_at is record-creation time, not the tenant-facing
-      // release event — do not fall back to it (formatDate already renders
-      // '---' for a genuinely unknown release date).
-      date: `Released: ${formatDate(bill.release_date)}`,
+      date: `Released: ${formatDate(bill.release_date || bill.created_at)}`,
       infoRows,
       tableRows,
       totalRow: {
@@ -1801,12 +1680,10 @@ async function downloadBillPdf(req, res) {
 // Payment receipt PDF — a distinct document from the billing statement.
 // Only ever returned for a bill with authoritative confirmed-payment
 // evidence (see isPaidBill/getEffectiveBillStatus); an unpaid bill gets a
-// 404, never a fabricated receipt. Content is narrower than the statement
-// (payment evidence only — no charge table, no "TOTAL DUE"/payment
-// instructions) but shares the same electricity/water computation
-// breakdown so the receipt is self-contained proof of what was paid for
-// — see downloadBillPdf for the statement and buildBillBreakdownSections
-// for the shared breakdown logic.
+// 404, never a fabricated receipt. Content is deliberately narrower than
+// the statement: payment evidence only (date/method/reference/amount),
+// no charge table, no utility breakdown, no "TOTAL DUE"/payment
+// instructions — see downloadBillPdf for the statement.
 async function downloadBillReceiptPdf(req, res) {
   try {
     const { billingId } = req.params;
@@ -1827,12 +1704,6 @@ async function downloadBillReceiptPdf(req, res) {
       const d = new Date(value);
       if (Number.isNaN(d.getTime())) return '---';
       return d.toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' });
-    };
-    const shortDate = (value) => {
-      if (!value) return '---';
-      const d = new Date(value);
-      if (Number.isNaN(d.getTime())) return '---';
-      return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     };
 
     const amountPaid = bill.total || bill.amount || 0;
@@ -1859,11 +1730,6 @@ async function downloadBillReceiptPdf(req, res) {
       { label: 'Status', value: 'PAID' },
     );
 
-    // Reusing the same computation breakdown as the statement gives the
-    // tenant a self-contained proof of what they paid for, not just that
-    // they paid.
-    const breakdownSections = buildBillBreakdownSections(bill, { formatMoney, shortDate });
-
     const pdfBuffer = buildBrandedPdf({
       title: normalizeLine(bill.billing_period ? `${bill.billing_period} Payment Receipt` : 'Payment Receipt'),
       subtitle: billingPeriod,
@@ -1871,7 +1737,6 @@ async function downloadBillReceiptPdf(req, res) {
       refNumber: refId,
       date: `Paid: ${formatDate(bill.payment_date)}`,
       infoRows,
-      breakdownSections,
     });
 
     res.setHeader('Content-Type', 'application/pdf');
