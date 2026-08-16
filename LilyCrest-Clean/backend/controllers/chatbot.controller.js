@@ -27,7 +27,6 @@ const { extractMoveInFinancials } = require('../domain/billing/moveInFinancials'
 const { normalizeUser } = require('../utils/normalizeUser');
 const { loadAttachmentParts } = require('../services/assistantAttachment.service');
 const { resolveTenantBranch } = require('../services/branchLocation.service');
-const { getVisibleAnnouncementsForTenant } = require('./announcement.controller');
 
 function sanitizeResponse(text = '') {
   const withoutFences = text.replace(/```[\s\S]*?```/g, (block) => block.replace(/```/g, ''));
@@ -1134,13 +1133,7 @@ async function sendMessage(req, res) {
     // Pull tenant context for grounded responses
     const db = getDb();
     const [announcements, bills, activeSupportConversations, tenantAccount, recentMaintenanceRequests] = await Promise.all([
-      // MOB-P0-02: this used to query { is_active: true } directly with no
-      // owner/branch/publish/expiry filter at all, so any tenant's chatbot
-      // context (and therefore the Gemini prompt) could include another
-      // tenant's private announcement, another branch's announcement, or a
-      // future/expired/archived one. Route through the same canonical
-      // predicate News and notifications use instead.
-      getVisibleAnnouncementsForTenant(db, req.user, { limit: 3, fetchCap: 50 }),
+      db.collection('announcements').find({ is_active: true }).sort({ created_at: -1 }).limit(3).toArray(),
       fetchUserBills(db, req.user, { limit: 5 }),
       db.collection('chat_conversations')
         .find({ tenantUserId: userId, status: { $in: ['open', 'in_review', 'waiting_tenant', 'resolved'] } })

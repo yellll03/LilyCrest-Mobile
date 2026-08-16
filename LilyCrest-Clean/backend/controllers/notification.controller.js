@@ -1,6 +1,6 @@
 const { getDb } = require('../config/database');
 const { sanitizeStoredNotification, normalizePriority } = require('../services/notificationService');
-const { getVisibleAnnouncementsForTenant } = require('./announcement.controller');
+const { isAnnouncementVisibleForBranch, resolveRequesterBranchCode } = require('./announcement.controller');
 
 function normalizeString(value) {
   return typeof value === 'string' ? value.trim() : '';
@@ -106,11 +106,33 @@ async function getMyNotifications(req, res) {
       .toArray()
       .catch(() => []);
 
-    // Reuse the exact canonical visibility predicate /announcements applies —
-    // without this, a branch-restricted, private, future, or expired
-    // announcement that's correctly hidden from GET /announcements would
-    // still leak through here as a "notification".
-    const announcements = await getVisibleAnnouncementsForTenant(db, req.user, { fetchCap: 80 }).catch(() => []);
+    const activeFilter = {
+      $or: [
+        { is_active: true },
+        { isActive: true },
+        { is_active: { $exists: false }, isActive: { $exists: false } },
+      ],
+    };
+    const notArchivedFilter = { isArchived: { $ne: true } };
+    const visibilityFilter = {
+      $or: [
+        { is_private: { $ne: true }, isPrivate: { $ne: true } },
+        { is_private: true, user_id: userId },
+        { isPrivate: true, userId },
+      ],
+    };
+
+    // Reuse the exact branch-visibility rule /announcements applies — without
+    // this, a branch-restricted announcement that's correctly hidden from
+    // GET /announcements would still leak through here as a "notification".
+    const requesterBranchCode = await resolveRequesterBranchCode(db, req.user);
+    const announcements = (await db.collection('announcements')
+      .find({ $and: [activeFilter, notArchivedFilter, visibilityFilter] })
+      .sort({ created_at: -1, createdAt: -1 })
+      .limit(80)
+      .toArray()
+      .catch(() => []))
+      .filter((doc) => isAnnouncementVisibleForBranch(doc, requesterBranchCode));
 
     const mergedByKey = new Map();
     const [readReceipts, readState] = await Promise.all([
@@ -165,13 +187,17 @@ async function markNotificationRead(req, res) {
     .find((item) => buildNotificationKey(item) === notificationKey || item.notification_id === notificationKey);
 
   if (!ownedNotification) {
-    // MOB-P2-04 (fixed alongside the P0-02 centralization): this fallback
-    // previously skipped branch/window visibility entirely, letting a
-    // tenant create a read receipt for an announcement they can't actually
-    // see. Reuse the same canonical predicate as everywhere else so a
-    // notificationId only resolves to an announcement the tenant is
-    // authorized to view.
-    const announcements = await getVisibleAnnouncementsForTenant(db, req.user, { fetchCap: 200 }).catch(() => []);
+    const announcements = await db.collection('announcements').find({
+      $and: [
+        { $or: [{ is_active: true }, { isActive: true }, { is_active: { $exists: false }, isActive: { $exists: false } }] },
+        { isArchived: { $ne: true } },
+        { $or: [
+          { is_private: { $ne: true }, isPrivate: { $ne: true } },
+          { is_private: true, user_id: userId },
+          { isPrivate: true, userId },
+        ] },
+      ],
+    }).limit(200).toArray();
     ownedNotification = announcements
       .map((doc) => normalizeAnnouncementNotification(doc))
       .find((item) => buildNotificationKey(item) === notificationKey || item.notification_id === notificationKey);
