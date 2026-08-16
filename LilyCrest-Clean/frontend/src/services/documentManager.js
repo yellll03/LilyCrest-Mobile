@@ -10,6 +10,7 @@ export const documentUrl = (kind, id) => {
   if (kind === 'bill') return `${MOBILE_API_BASE_URL}/billing/${encodeURIComponent(id)}/pdf`;
   if (kind === 'bill-receipt') return `${MOBILE_API_BASE_URL}/billing/${encodeURIComponent(id)}/receipt`;
   if (kind === 'policy') return `${MOBILE_API_BASE_URL}/documents/${encodeURIComponent(id)}`;
+  if (kind === 'contract-current') return `${MOBILE_API_BASE_URL}/contracts/current/document`;
   if (kind === 'contract-prepared') return `${MOBILE_API_BASE_URL}/contracts/${encodeURIComponent(id)}/documents/prepared`;
   if (kind === 'contract-final') return `${MOBILE_API_BASE_URL}/contracts/${encodeURIComponent(id)}/documents/final`;
   return null;
@@ -84,8 +85,8 @@ export async function validatePdf(uri, headers = {}) {
   return info;
 }
 
-export async function getCachedPdf(userId, kind, id) {
-  const uri = cachedDocumentPath(userId, kind, id);
+export async function getCachedPdf(userId, kind, id, cacheKey = id) {
+  const uri = cachedDocumentPath(userId, kind, cacheKey);
   try {
     await validatePdf(uri);
     return uri;
@@ -94,7 +95,7 @@ export async function getCachedPdf(userId, kind, id) {
   }
 }
 
-export async function fetchPdf({ userId, kind, id, onProgress }) {
+export async function fetchPdf({ userId, kind, id, cacheKey = id, onProgress }) {
   if (kind === 'user') return fetchUserDocumentPdf({ userId, id, onProgress });
 
   let url = documentUrl(kind, id);
@@ -102,7 +103,7 @@ export async function fetchPdf({ userId, kind, id, onProgress }) {
   if (!url) throw new Error('INVALID_ID');
   const token = await getSessionToken();
   if (!token) throw new Error('UNAUTHENTICATED');
-  const uri = cachedDocumentPath(userId, kind, id);
+  const uri = cachedDocumentPath(userId, kind, cacheKey);
   await ensureParent(uri);
   const task = FileSystem.createDownloadResumable(
     url,

@@ -16,8 +16,18 @@ describe('contract and survey display source contracts', () => {
 
   test('contract PDF button is conditional and missing values use one message', () => {
     expect(contractSource).toContain('summary.canOpenPdf ?');
+    expect(contractSource).toContain('summary.documentKind');
+    expect(contractSource).toContain('summary.documentCacheKey');
     expect(contractSource).toContain('Some contract details are still being finalized.');
     expect(contractSource).not.toContain("const value = (v) => v || 'Not available'");
+  });
+
+  test('contract screen distinguishes loading, empty, preparing, and retryable failure states', () => {
+    expect(contractSource).toContain('Loading contract...');
+    expect(contractSource).toContain('No current contract is available.');
+    expect(contractSource).toContain('summary.message');
+    expect(contractSource).toContain('Showing the last available contract details.');
+    expect(contractSource).toContain('RefreshControl');
   });
 
   test('survey error and empty states are mutually exclusive and error offers retry', () => {

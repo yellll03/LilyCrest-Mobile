@@ -197,6 +197,29 @@ test('proxyStream pipes a prepared PDF through with content-type/disposition pre
   });
 });
 
+test('proxyStream relays the canonical current-document endpoint without selecting a lifecycle variant locally', async () => {
+  let capturedUrl;
+  await withMockedAxiosGet(async (url) => {
+    capturedUrl = url;
+    return {
+      status: 200,
+      headers: { 'content-type': 'application/pdf', 'cache-control': 'private, no-store' },
+      data: Readable.from([Buffer.from('%PDF')]),
+    };
+  }, async () => {
+    const res = fakeStreamRes();
+    await proxyStream(
+      { headers: { authorization: 'Bearer tenant-token' }, query: {} },
+      res,
+      '/api/m/contracts/current/document',
+    );
+    await new Promise((resolve) => res.on('finish', resolve));
+    assert.equal(capturedUrl, 'https://api.lilycrest.space/api/m/contracts/current/document');
+    assert.equal(res._headers['cache-control'], 'private, no-store');
+    assert.equal(res._body(), '%PDF');
+  });
+});
+
 test('proxyStream normalizes an upstream 404 (no prepared document yet) to a JSON error, not a broken PDF stream', async () => {
   await withMockedAxiosGet(async () => ({
     status: 404,

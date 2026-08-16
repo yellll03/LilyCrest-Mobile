@@ -150,6 +150,8 @@ app.use([
   '/api/m/maintenance',
   '/api/announcements',
   '/api/m/announcements',
+  '/api/contracts',
+  '/api/m/contracts',
 ], noStorePrivateApiResponses);
 
 // ETag cache for public/frequently read endpoints.

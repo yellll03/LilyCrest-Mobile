@@ -130,6 +130,13 @@ router.use(authMiddleware, tenantMiddleware);
 
 router.get('/current', (req, res) => proxyJson(req, res, '/api/m/contracts/current'));
 
+// Preferred canonical stream: the upstream resolves whether the tenant should
+// receive the generated draft or final notarized document. This bridge does
+// not inspect document arrays, statuses, paths, or lifecycle rules.
+router.get('/current/document', (req, res) => (
+  proxyStream(req, res, '/api/m/contracts/current/document')
+));
+
 router.get('/:contractId/documents/prepared', (req, res) => {
   if (!CONTRACT_ID_PATTERN.test(req.params.contractId)) {
     return res.status(404).json({ detail: 'Prepared Contract is not available' });
