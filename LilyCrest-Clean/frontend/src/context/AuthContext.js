@@ -184,8 +184,12 @@ export function AuthProvider({ children }) {
     });
   }, [bannerOpacity, bannerTranslateY]);
 
+  // Returns true/false so screens that need explicit error/retry UI (e.g. the
+  // Notifications screen, which now sources its unified feed from this same
+  // context instead of polling independently) can react to a failed refresh
+  // without this function's own silent-retry polling behavior having to change.
   const refreshNotifications = useCallback(async () => {
-    if (authStatusRef.current !== 'authenticated' || !userRef.current?.user_id) return;
+    if (authStatusRef.current !== 'authenticated' || !userRef.current?.user_id) return false;
     try {
       const response = await api.get('/notifications');
       const items = Array.isArray(response?.data) ? response.data : [];
@@ -200,6 +204,7 @@ export function AuthProvider({ children }) {
           : items
       ));
       setNotificationUnreadCount((prev) => (prev === nextUnreadCount ? prev : nextUnreadCount));
+      return true;
     } catch (error) {
       if (error?.response?.status === 401) {
         await clearPersistedSession();
@@ -210,6 +215,7 @@ export function AuthProvider({ children }) {
       }
       // Any other failure (offline, 5xx) is transient — leave the existing
       // list/count as-is rather than wiping a working badge.
+      return false;
     }
   }, []);
 

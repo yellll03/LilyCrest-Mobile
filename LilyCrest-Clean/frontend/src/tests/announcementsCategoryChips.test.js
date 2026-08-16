@@ -13,9 +13,31 @@ jest.mock('expo-router', () => ({
   useFocusEffect: (cb) => { require('react').useEffect(cb, []); },
 }));
 
-jest.mock('../context/AuthContext', () => ({
-  useAuth: () => ({ clearNotificationUnread: jest.fn().mockResolvedValue() }),
-}));
+const mockClearNotificationUnread = jest.fn().mockResolvedValue();
+const mockRefreshNotifications = jest.fn();
+let mockAuthStoreState = { notifications: [] };
+let mockAuthStoreListeners = [];
+function setAuthStoreNotifications(notifications) {
+  mockAuthStoreState = { notifications };
+  mockAuthStoreListeners.forEach((listener) => listener());
+}
+
+jest.mock('../context/AuthContext', () => {
+  const React = require('react');
+  return {
+    useAuth: () => {
+      const [, forceRender] = React.useState(0);
+      React.useEffect(() => {
+        const listener = () => forceRender((tick) => tick + 1);
+        mockAuthStoreListeners.push(listener);
+        return () => { mockAuthStoreListeners = mockAuthStoreListeners.filter((l) => l !== listener); };
+      }, []);
+      const refreshNotifications = React.useCallback((...args) => mockRefreshNotifications(...args), []);
+      const clearNotificationUnread = React.useCallback((...args) => mockClearNotificationUnread(...args), []);
+      return { notifications: mockAuthStoreState.notifications, refreshNotifications, clearNotificationUnread };
+    },
+  };
+});
 
 jest.mock('../context/ThemeContext', () => ({
   useTheme: () => ({
@@ -28,13 +50,6 @@ jest.mock('../context/ThemeContext', () => ({
     background: '#fff', text: '#000', textSecondary: '#666', textMuted: '#999',
     surface: '#f5f5f5', surfaceSecondary: '#eee', border: '#ddd', accent: '#204B7E', primary: '#204B7E',
   }, false),
-}));
-
-const mockGetAnnouncements = jest.fn();
-
-jest.mock('../services/api', () => ({
-  apiService: { getAnnouncements: (...args) => mockGetAnnouncements(...args) },
-  getApiErrorMessage: (error, fallback) => fallback,
 }));
 
 jest.mock('../services/notifications', () => ({
@@ -54,15 +69,20 @@ function announcement(overrides = {}) {
 }
 
 describe('notification filter categories — case-insensitive dedup (regression)', () => {
-  beforeEach(() => jest.clearAllMocks());
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockClearNotificationUnread.mockResolvedValue();
+    setAuthStoreNotifications([]);
+  });
 
   it('collapses differently-cased category values into a single chip', async () => {
-    mockGetAnnouncements.mockResolvedValue({
-      data: [
+    mockRefreshNotifications.mockImplementation(async () => {
+      setAuthStoreNotifications([
         announcement({ category: 'Security', title: 'Security note 1' }),
         announcement({ category: 'security', title: 'Security note 2' }),
         announcement({ category: 'SECURITY', title: 'Security note 3' }),
-      ],
+      ]);
+      return true;
     });
 
     const { getAllByLabelText, getAllByText, getByLabelText, queryAllByText } = render(<AnnouncementsScreen />);
@@ -78,8 +98,9 @@ describe('notification filter categories — case-insensitive dedup (regression)
   });
 
   it('shows a consistently capitalized chip label regardless of raw backend casing', async () => {
-    mockGetAnnouncements.mockResolvedValue({
-      data: [announcement({ category: 'event', title: 'Lower-cased category' })],
+    mockRefreshNotifications.mockImplementation(async () => {
+      setAuthStoreNotifications([announcement({ category: 'event', title: 'Lower-cased category' })]);
+      return true;
     });
 
     const { getByLabelText, getByText, getAllByText, queryAllByText } = render(<AnnouncementsScreen />);

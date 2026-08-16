@@ -6,7 +6,6 @@ import { ActivityIndicator, FlatList, Modal, Platform, Pressable, RefreshControl
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
-import { apiService, getApiErrorMessage } from '../../src/services/api';
 import { resolveNotificationRoute } from '../../src/services/notifications';
 import { SURVEY_FEEDBACK_ENABLED } from '../../src/config/features';
 import {
@@ -64,7 +63,15 @@ function isNew(dateStr) {
 export default function AnnouncementsScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  const { clearNotificationUnread } = useAuth();
+  // This screen's visible list previously fetched GET /announcements
+  // independently, while the unread badge/push-routing logic elsewhere in
+  // the app polled a SEPARATE endpoint, GET /notifications — which the
+  // backend already merges (personal notifications like bill releases +
+  // visible announcements, deduplicated, sorted newest-first) into one
+  // feed. There is no client-side merge to build: the fix is to read from
+  // the same already-unified source AuthContext already owns, instead of
+  // maintaining a second, narrower fetch/store here.
+  const { notifications: feedItems, refreshNotifications, clearNotificationUnread } = useAuth();
   const styles = useThemedStyles((c, dark) => StyleSheet.create({
     container: { flex: 1, backgroundColor: c.background },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: c.background },
@@ -302,8 +309,7 @@ export default function AnnouncementsScreen() {
     bottomSpacer: { height: Platform.OS === 'ios' ? 80 : 60 },
   }));
 
-  const [announcements, setAnnouncements] = useState([]);
-  const [isLoading, setIsLoading] = useState(true);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [fetchError, setFetchError] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
@@ -314,39 +320,44 @@ export default function AnnouncementsScreen() {
   const [expandedIds, setExpandedIds] = useState(new Set());
   const fetchInFlightRef = useRef(null);
 
-  const fetchAnnouncements = useCallback((silent = false) => {
+  // Thin wrapper around the shared refreshNotifications() — this screen adds
+  // only its own loading/error/retry UI state on top; the fetch itself, the
+  // merge of personal notifications + announcements, and the unread count
+  // all remain owned by AuthContext (single source of truth).
+  const loadFeed = useCallback((silent = false) => {
     if (fetchInFlightRef.current) return fetchInFlightRef.current;
     if (!silent) setFetchError(null);
 
     const request = (async () => {
-      try {
-        const response = await apiService.getAnnouncements();
-        setAnnouncements(Array.isArray(response.data) ? response.data : []);
+      const succeeded = await refreshNotifications();
+      if (succeeded) {
         setFetchError(null);
-      } catch (error) {
-        console.error('Fetch announcements error:', error?.message || error);
-        if (!silent) setFetchError(getApiErrorMessage(error, 'Unable to load notifications. Pull down to refresh.'));
-      } finally {
-        setIsLoading(false);
-        setRefreshing(false);
-        fetchInFlightRef.current = null;
+      } else if (!silent) {
+        setFetchError('Unable to load notifications. Pull down to refresh.');
       }
+      setHasLoadedOnce(true);
+      setRefreshing(false);
+      fetchInFlightRef.current = null;
     })();
 
     fetchInFlightRef.current = request;
     return request;
-  }, []);
+  }, [refreshNotifications]);
 
-  useEffect(() => { fetchAnnouncements(); }, [fetchAnnouncements]);
+  // No local polling interval here: AuthContext already polls /notifications
+  // every 60s for as long as the tenant is authenticated (see refreshNotifications
+  // usage in AuthContext.js), independent of which screen is focused — an
+  // additional interval in this screen would just double that same request
+  // while Notifications happens to be open.
+  useEffect(() => { loadFeed(); }, [loadFeed]);
   useFocusEffect(
     useCallback(() => {
+      loadFeed(true);
       clearNotificationUnread().catch(() => {});
-      const interval = setInterval(() => { fetchAnnouncements(true); }, 60000);
-      return () => clearInterval(interval);
-    }, [clearNotificationUnread, fetchAnnouncements])
+    }, [clearNotificationUnread, loadFeed])
   );
 
-  const onRefresh = useCallback(() => { setRefreshing(true); fetchAnnouncements(); }, [fetchAnnouncements]);
+  const onRefresh = useCallback(() => { setRefreshing(true); loadFeed(); }, [loadFeed]);
 
   const getPriorityColor = (priority) => {
     switch (priority) {
@@ -385,13 +396,13 @@ export default function AnnouncementsScreen() {
   const getCategoryIcon = (category) => getCategoryColor(category).icon;
 
   const categories = useMemo(
-    () => ['all', ...new Set(announcements.map((announcement) => normalizeCategoryKey(announcement.category)))],
-    [announcements]
+    () => ['all', ...new Set(feedItems.map((item) => normalizeCategoryKey(item.category)))],
+    [feedItems]
   );
 
   const filteredAnnouncements = useMemo(
-    () => filterNotifications(announcements, { category: selectedCategory, priority: priorityFilter }),
-    [announcements, priorityFilter, selectedCategory]
+    () => filterNotifications(feedItems, { category: selectedCategory, priority: priorityFilter }),
+    [feedItems, priorityFilter, selectedCategory]
   );
 
   const visibleAnnouncements = useMemo(
@@ -402,8 +413,8 @@ export default function AnnouncementsScreen() {
   // Counts reflect the live selection directly — filters apply the instant
   // you tap them, so there's no separate draft state to track anymore.
   const filterCounts = useMemo(
-    () => buildNotificationFilterCounts(announcements, { category: selectedCategory, priority: priorityFilter }),
-    [announcements, selectedCategory, priorityFilter]
+    () => buildNotificationFilterCounts(feedItems, { category: selectedCategory, priority: priorityFilter }),
+    [feedItems, selectedCategory, priorityFilter]
   );
 
   const activeFilterCount = Number(Boolean(selectedCategory)) + Number(priorityFilter !== 'all');
@@ -510,7 +521,7 @@ export default function AnnouncementsScreen() {
     );
   }, [colors.textMuted, expandedIds, styles, toggleExpanded]);
 
-  if (isLoading) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color={colors.primary} /></View>;
+  if (!hasLoadedOnce) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color={colors.primary} /></View>;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -521,8 +532,8 @@ export default function AnnouncementsScreen() {
             <Text style={styles.headerTitle}>Notifications</Text>
             <Text style={styles.headerSubtitle}>
               {hasActiveFilters
-                ? `${filteredAnnouncements.length} of ${announcements.length} ${announcements.length === 1 ? 'update' : 'updates'} in your inbox`
-                : `${announcements.length} ${announcements.length === 1 ? 'update' : 'updates'} in your inbox`}
+                ? `${filteredAnnouncements.length} of ${feedItems.length} ${feedItems.length === 1 ? 'update' : 'updates'} in your inbox`
+                : `${feedItems.length} ${feedItems.length === 1 ? 'update' : 'updates'} in your inbox`}
             </Text>
           </View>
         </View>
@@ -550,7 +561,7 @@ export default function AnnouncementsScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.toolbarButton, refreshing && styles.toolbarButtonDisabled]}
-            onPress={() => { if (!refreshing) { setRefreshing(true); fetchAnnouncements(); } }}
+            onPress={() => { if (!refreshing) { setRefreshing(true); loadFeed(); } }}
             disabled={refreshing}
             accessibilityRole="button"
             accessibilityLabel="Refresh notifications"
@@ -580,7 +591,7 @@ export default function AnnouncementsScreen() {
             <Text style={styles.errorBannerText}>{fetchError}</Text>
             <TouchableOpacity
               style={styles.retryButton}
-              onPress={() => fetchAnnouncements()}
+              onPress={() => loadFeed()}
               accessibilityRole="button"
               accessibilityLabel="Retry loading notifications"
             >
@@ -594,20 +605,20 @@ export default function AnnouncementsScreen() {
               <Ionicons name="notifications-outline" size={26} color={colors.textMuted} />
             </View>
             <Text style={styles.emptyTitle}>
-              {fetchError && announcements.length === 0
+              {fetchError && feedItems.length === 0
                 ? 'Could not load notifications'
-                : announcements.length === 0
+                : feedItems.length === 0
                   ? 'No notifications yet'
                   : 'No notifications match these filters'}
             </Text>
             <Text style={styles.emptyText}>
-              {fetchError && announcements.length === 0
+              {fetchError && feedItems.length === 0
                 ? 'Check your connection and retry.'
-                : announcements.length === 0
+                : feedItems.length === 0
                   ? 'Updates from LilyCrest will appear here.'
                   : 'Try another category or priority, or clear the active filters.'}
             </Text>
-            {announcements.length > 0 && hasActiveFilters ? (
+            {feedItems.length > 0 && hasActiveFilters ? (
               <TouchableOpacity
                 style={styles.emptyAction}
                 onPress={clearFilters}
@@ -825,6 +836,30 @@ export default function AnnouncementsScreen() {
                         }}
                       >
                         <Text style={styles.notificationActionText}>Open Survey</Text>
+                      </TouchableOpacity>
+                    ) : null}
+                    {normalizeCategoryKey(selectedAnn.category) === 'billing' && selectedAnn.billing_id ? (
+                      <TouchableOpacity
+                        style={styles.notificationAction}
+                        accessibilityRole="button"
+                        accessibilityLabel="View bill"
+                        onPress={() => {
+                          // billing_id is server-resolved (see
+                          // services/mobileNotificationBridge.js sanitizeStoredNotification,
+                          // sourced from the canonical Notification's entityId) — never
+                          // client-supplied. resolveNotificationRoute is the same
+                          // resolver already used for OS push taps, so a personal
+                          // bill notification navigates identically whether it was
+                          // opened from a push or from this in-app list.
+                          const destination = resolveNotificationRoute({
+                            screen: 'billing',
+                            billing_id: selectedAnn.billing_id,
+                          });
+                          setSelectedAnn(null);
+                          router.push(destination);
+                        }}
+                      >
+                        <Text style={styles.notificationActionText}>View Bill</Text>
                       </TouchableOpacity>
                     ) : null}
                   </ScrollView>
