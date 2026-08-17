@@ -118,6 +118,20 @@ const chatbotLimiterOnce = oncePerRequest(chatbotLimiter, '__chatbotLimiterAppli
 app.use('/api/chatbot', chatbotLimiterOnce);
 app.use('/api/m/chatbot', chatbotLimiterOnce);
 
+// Stricter rate limit for the bulk announcement dismiss (writes up to 100
+// rows per call, so the abuse profile is different from a single-record
+// write the general apiLimiter above already covers).
+const announcementBulkLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { detail: 'Too many bulk requests. Please wait a moment.' },
+});
+const announcementBulkLimiterOnce = oncePerRequest(announcementBulkLimiter, '__announcementBulkLimiterApplied');
+app.use('/api/announcements/dismiss-bulk', announcementBulkLimiterOnce);
+app.use('/api/m/announcements/dismiss-bulk', announcementBulkLimiterOnce);
+
 // Never cache authenticated tenant/private API responses before auth has run.
 app.use([
   '/api/dashboard',

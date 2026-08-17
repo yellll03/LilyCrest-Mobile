@@ -22,7 +22,7 @@ const assert = require('node:assert/strict');
 const dbModulePath = require.resolve('../config/database');
 
 function cursor(records) {
-  return { sort() { return this; }, limit() { return this; }, async toArray() { return records; } };
+  return { sort() { return this; }, limit() { return this; }, project() { return this; }, async toArray() { return records; } };
 }
 
 const GIL_PUYAT_RESERVATION = { user_id: 'tenant-gil', branch: 'gil-puyat', status: 'approved' };

@@ -52,6 +52,10 @@ jest.mock('../context/ThemeContext', () => ({
   }, false),
 }));
 
+jest.mock('../context/ToastContext', () => ({
+  useToast: () => ({ showToast: jest.fn() }),
+}));
+
 jest.mock('../services/notifications', () => ({
   resolveNotificationRoute: jest.fn(() => '/survey-form'),
 }));

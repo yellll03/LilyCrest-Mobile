@@ -6,6 +6,7 @@ import { ActivityIndicator, FlatList, Modal, Platform, Pressable, RefreshControl
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
+import { useToast } from '../../src/context/ToastContext';
 import { resolveNotificationRoute } from '../../src/services/notifications';
 import { SURVEY_FEEDBACK_ENABLED } from '../../src/config/features';
 import {
@@ -71,7 +72,11 @@ export default function AnnouncementsScreen() {
   // feed. There is no client-side merge to build: the fix is to read from
   // the same already-unified source AuthContext already owns, instead of
   // maintaining a second, narrower fetch/store here.
-  const { notifications: feedItems, refreshNotifications, clearNotificationUnread } = useAuth();
+  const {
+    notifications: rawFeedItems, refreshNotifications, clearNotificationUnread,
+    dismissNotification, dismissAnnouncement, dismissAnnouncementsBulk,
+  } = useAuth();
+  const { showToast } = useToast();
   const styles = useThemedStyles((c, dark) => StyleSheet.create({
     container: { flex: 1, backgroundColor: c.background },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: c.background },
@@ -307,6 +312,43 @@ export default function AnnouncementsScreen() {
     },
 
     bottomSpacer: { height: Platform.OS === 'ios' ? 80 : 60 },
+
+    // ── Selection mode ──
+    selectCheckbox: {
+      width: 36, height: 36, borderRadius: 11, borderWidth: 2, borderColor: c.border,
+      justifyContent: 'center', alignItems: 'center', flexShrink: 0,
+    },
+    selectCheckboxChecked: { backgroundColor: c.accent, borderColor: c.accent },
+    selectionBar: {
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+      paddingHorizontal: 16, paddingVertical: 10, gap: 10,
+    },
+    selectionBarLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+    selectionCount: { fontSize: 15, fontWeight: '800', color: c.text },
+    selectionBarButton: { minHeight: 36, justifyContent: 'center', paddingHorizontal: 4 },
+    selectionBarButtonText: { fontSize: 13, fontWeight: '700', color: c.accent },
+    selectionDeleteButton: {
+      minHeight: 38, paddingHorizontal: 14, borderRadius: 10,
+      backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center',
+      flexDirection: 'row', gap: 6,
+    },
+    selectionDeleteButtonDisabled: { opacity: 0.5 },
+    selectionDeleteText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
+
+    // ── Undo snackbar ──
+    undoSnackbar: {
+      position: 'absolute', left: 14, right: 14, bottom: 18,
+      backgroundColor: dark ? '#1F2937' : '#111827',
+      borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16,
+      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10,
+      ...Platform.select({
+        web: { boxShadow: '0 4px 16px rgba(0,0,0,0.24)' },
+        default: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.24, shadowRadius: 10, elevation: 6 },
+      }),
+    },
+    undoSnackbarText: { color: '#F9FAFB', fontSize: 13, fontWeight: '600', flex: 1 },
+    undoSnackbarAction: { minHeight: 32, justifyContent: 'center', paddingHorizontal: 4 },
+    undoSnackbarActionText: { color: '#93C5FD', fontSize: 13, fontWeight: '800' },
   }));
 
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
@@ -319,6 +361,29 @@ export default function AnnouncementsScreen() {
   const [sortOrder, setSortOrder] = useState('newest');
   const [expandedIds, setExpandedIds] = useState(new Set());
   const fetchInFlightRef = useRef(null);
+
+  // Deleting an announcement here must hide it from THIS screen only — never
+  // from the Home bell, and never the shared `announcements` record other
+  // tenants see (see backend POST /announcements/:id/dismiss). So this is a
+  // client-side hide layered on top of AuthContext's shared feed, distinct
+  // from personal (billing/maintenance/etc.) items, which reuse the same
+  // dismissNotification() the bell uses since there's only ever one copy of
+  // those records for this tenant.
+  const [hiddenAnnouncementIds, setHiddenAnnouncementIds] = useState(() => new Set());
+  const [selectionMode, setSelectionMode] = useState(false);
+  const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [pendingDeletion, setPendingDeletion] = useState(null); // { ids: Set, items, timeoutId }
+  const pendingDeletionRef = useRef(null);
+
+  const feedItems = useMemo(
+    () => rawFeedItems.filter((item) => {
+      const id = item.notification_id || item.announcement_id;
+      if (hiddenAnnouncementIds.has(id)) return false;
+      if (pendingDeletion?.ids?.has(id)) return false;
+      return true;
+    }),
+    [rawFeedItems, hiddenAnnouncementIds, pendingDeletion]
+  );
 
   // Thin wrapper around the shared refreshNotifications() — this screen adds
   // only its own loading/error/retry UI state on top; the fetch itself, the
@@ -358,6 +423,105 @@ export default function AnnouncementsScreen() {
   );
 
   const onRefresh = useCallback(() => { setRefreshing(true); loadFeed(); }, [loadFeed]);
+
+  useEffect(() => () => {
+    if (pendingDeletionRef.current?.timeoutId) clearTimeout(pendingDeletionRef.current.timeoutId);
+  }, []);
+
+  const commitDeletion = useCallback(async (items) => {
+    const announcementIds = items
+      .filter((item) => item.type === 'announcement' && item.announcement_id)
+      .map((item) => item.announcement_id);
+    const personalIds = items
+      .filter((item) => item.type !== 'announcement')
+      .map((item) => item.notification_id)
+      .filter(Boolean);
+
+    let failedCount = 0;
+
+    if (announcementIds.length) {
+      const succeeded = announcementIds.length === 1
+        ? await dismissAnnouncement(announcementIds[0])
+        : await dismissAnnouncementsBulk(announcementIds);
+      if (succeeded) {
+        setHiddenAnnouncementIds((prev) => {
+          const next = new Set(prev);
+          announcementIds.forEach((id) => next.add(id));
+          return next;
+        });
+      } else {
+        // Leaving it out of hiddenAnnouncementIds means the item reappears
+        // (it's no longer in pendingDeletion once this resolves) instead of
+        // vanishing silently — the toast below is what tells the tenant why.
+        failedCount += announcementIds.length;
+      }
+    }
+
+    if (personalIds.length) {
+      const results = await Promise.all(personalIds.map((id) => dismissNotification(id)));
+      failedCount += results.filter((succeeded) => !succeeded).length;
+    }
+
+    if (failedCount > 0) {
+      // "Remove" here, not "Delete" — this only hides the item from the
+      // tenant's own list (per-tenant dismissal on the backend). An
+      // announcement item is never actually deleted; it stays fully intact
+      // for admin and every other tenant. See dismissAnnouncement/
+      // dismissAnnouncementsBulk in AuthContext.js.
+      showToast({
+        type: 'error',
+        title: 'Remove failed',
+        message: failedCount === items.length
+          ? "Couldn't remove — check your connection and try again."
+          : `${failedCount} of ${items.length} couldn't be removed — check your connection and try again.`,
+      });
+    }
+  }, [dismissNotification, dismissAnnouncement, dismissAnnouncementsBulk, showToast]);
+
+  const schedulePendingDeletion = useCallback((items) => {
+    const ids = new Set(items.map((item) => item.notification_id || item.announcement_id).filter(Boolean));
+    if (!ids.size) return;
+    if (pendingDeletionRef.current?.timeoutId) clearTimeout(pendingDeletionRef.current.timeoutId);
+    const timeoutId = setTimeout(() => {
+      commitDeletion(items);
+      setPendingDeletion(null);
+      pendingDeletionRef.current = null;
+    }, 5000);
+    const next = { ids, items, timeoutId };
+    pendingDeletionRef.current = next;
+    setPendingDeletion(next);
+  }, [commitDeletion]);
+
+  const undoPendingDeletion = useCallback(() => {
+    if (pendingDeletionRef.current?.timeoutId) clearTimeout(pendingDeletionRef.current.timeoutId);
+    pendingDeletionRef.current = null;
+    setPendingDeletion(null);
+  }, []);
+
+  const toggleSelected = useCallback((id) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }, []);
+
+  const enterSelectionMode = useCallback((id) => {
+    setSelectionMode(true);
+    setSelectedIds(new Set([id]));
+  }, []);
+
+  const exitSelectionMode = useCallback(() => {
+    setSelectionMode(false);
+    setSelectedIds(new Set());
+  }, []);
+
+  const deleteSelected = useCallback(() => {
+    const items = feedItems.filter((item) => selectedIds.has(item.notification_id || item.announcement_id));
+    schedulePendingDeletion(items);
+    exitSelectionMode();
+  }, [feedItems, selectedIds, schedulePendingDeletion, exitSelectionMode]);
 
   const getPriorityColor = (priority) => {
     switch (priority) {
@@ -450,11 +614,13 @@ export default function AnnouncementsScreen() {
     const announcementId = announcement.notification_id || announcement.announcement_id;
     const isExpanded = expandedIds.has(announcementId);
     const isLong = (announcement.content || '').length > 120;
+    const isSelected = selectedIds.has(announcementId);
 
     return (
       <TouchableOpacity
         style={styles.announcementCard}
-        onPress={() => setSelectedAnn(announcement)}
+        onPress={() => (selectionMode ? toggleSelected(announcementId) : setSelectedAnn(announcement))}
+        onLongPress={() => enterSelectionMode(announcementId)}
         activeOpacity={0.85}
         accessibilityRole="button"
         accessibilityLabel={`Notification: ${announcement.title || 'Untitled'}`}
@@ -465,9 +631,21 @@ export default function AnnouncementsScreen() {
         <View style={styles.cardBody}>
           {/* Icon + title row */}
           <View style={styles.cardHeader}>
-            <View style={[styles.priorityIcon, { backgroundColor: `${prioColor}14` }]}>
-              <Ionicons name={getPriorityIcon(announcement.priority)} size={16} color={prioColor} />
-            </View>
+            {selectionMode ? (
+              <TouchableOpacity
+                onPress={() => toggleSelected(announcementId)}
+                style={[styles.selectCheckbox, isSelected && styles.selectCheckboxChecked]}
+                accessibilityRole="checkbox"
+                accessibilityState={{ checked: isSelected }}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                {isSelected ? <Ionicons name="checkmark" size={14} color="#FFFFFF" /> : null}
+              </TouchableOpacity>
+            ) : (
+              <View style={[styles.priorityIcon, { backgroundColor: `${prioColor}14` }]}>
+                <Ionicons name={getPriorityIcon(announcement.priority)} size={16} color={prioColor} />
+              </View>
+            )}
             <View style={styles.titleColumn}>
               <View style={styles.titleRow}>
                 <Text style={styles.announcementTitle} numberOfLines={2}>{announcement.title}</Text>
@@ -475,6 +653,16 @@ export default function AnnouncementsScreen() {
               </View>
               <Text style={styles.announcementTime}>{safeDistanceToNow(announcementDate)}</Text>
             </View>
+            {!selectionMode && (
+              <TouchableOpacity
+                onPress={() => schedulePendingDeletion([announcement])}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityRole="button"
+                accessibilityLabel={`Remove ${announcement.title || 'notification'}`}
+              >
+                <Ionicons name="trash-outline" size={17} color={colors.textMuted} />
+              </TouchableOpacity>
+            )}
           </View>
 
           {/* Category + Urgent badges */}
@@ -519,7 +707,7 @@ export default function AnnouncementsScreen() {
         </View>
       </TouchableOpacity>
     );
-  }, [colors.textMuted, expandedIds, styles, toggleExpanded]);
+  }, [colors.textMuted, expandedIds, styles, toggleExpanded, selectionMode, selectedIds, toggleSelected, enterSelectionMode, schedulePendingDeletion]);
 
   if (!hasLoadedOnce) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color={colors.primary} /></View>;
 
@@ -527,6 +715,39 @@ export default function AnnouncementsScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       {/* ── Header ── */}
       <View style={styles.headerWrapper}>
+        {selectionMode ? (
+          <View style={styles.selectionBar}>
+            <View style={styles.selectionBarLeft}>
+              <TouchableOpacity
+                style={styles.selectionBarButton}
+                onPress={exitSelectionMode}
+                accessibilityRole="button"
+                accessibilityLabel="Cancel selection"
+              >
+                <Text style={styles.selectionBarButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <Text style={styles.selectionCount}>{selectedIds.size} selected</Text>
+              <TouchableOpacity
+                style={styles.selectionBarButton}
+                onPress={() => setSelectedIds(new Set(visibleAnnouncements.map((item) => item.notification_id || item.announcement_id)))}
+                accessibilityRole="button"
+                accessibilityLabel="Select all"
+              >
+                <Text style={styles.selectionBarButtonText}>Select all</Text>
+              </TouchableOpacity>
+            </View>
+            <TouchableOpacity
+              style={[styles.selectionDeleteButton, !selectedIds.size && styles.selectionDeleteButtonDisabled]}
+              onPress={deleteSelected}
+              disabled={!selectedIds.size}
+              accessibilityRole="button"
+              accessibilityLabel={`Remove ${selectedIds.size} selected`}
+            >
+              <Ionicons name="trash-outline" size={15} color="#FFFFFF" />
+              <Text style={styles.selectionDeleteText}>Remove</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
         <View style={styles.headerRow}>
           <View style={styles.headerLeft}>
             <Text style={styles.headerTitle}>Notifications</Text>
@@ -537,8 +758,9 @@ export default function AnnouncementsScreen() {
             </Text>
           </View>
         </View>
+        )}
 
-        <View style={styles.toolbarRow}>
+        {!selectionMode && <View style={styles.toolbarRow}>
           <TouchableOpacity
             style={[styles.toolbarButton, hasActiveFilters && styles.toolbarButtonActive]}
             onPress={openFilterSheet}
@@ -573,7 +795,7 @@ export default function AnnouncementsScreen() {
             }
             <Text style={styles.toolbarButtonText}>{refreshing ? 'Refreshing' : 'Refresh'}</Text>
           </TouchableOpacity>
-        </View>
+        </View>}
       </View>
 
       {/* ── Content ── */}
@@ -881,6 +1103,23 @@ export default function AnnouncementsScreen() {
           </View>
         </View>
       </Modal>
+
+      {/* ── Undo snackbar ── */}
+      {pendingDeletion ? (
+        <View style={styles.undoSnackbar}>
+          <Text style={styles.undoSnackbarText}>
+            {pendingDeletion.items.length === 1 ? '1 notification removed' : `${pendingDeletion.items.length} notifications removed`}
+          </Text>
+          <TouchableOpacity
+            style={styles.undoSnackbarAction}
+            onPress={undoPendingDeletion}
+            accessibilityRole="button"
+            accessibilityLabel="Undo remove"
+          >
+            <Text style={styles.undoSnackbarActionText}>Undo</Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
     </SafeAreaView>
   );
 }

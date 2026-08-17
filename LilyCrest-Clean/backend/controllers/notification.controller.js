@@ -106,6 +106,13 @@ async function getMyNotifications(req, res) {
       .toArray()
       .catch(() => []);
 
+    const [dismissals, clearedState] = await Promise.all([
+      db.collection('notification_dismissals').find({ user_id: userId }).project({ notification_key: 1 }).toArray().catch(() => []),
+      db.collection('notification_cleared_state').findOne({ user_id: userId }).catch(() => null),
+    ]);
+    const dismissedKeys = new Set(dismissals.map((entry) => normalizeString(entry.notification_key)).filter(Boolean));
+    const allClearedAt = clearedState?.all_cleared_at ? new Date(clearedState.all_cleared_at).getTime() : 0;
+
     const activeFilter = {
       $or: [
         { is_active: true },
@@ -147,6 +154,9 @@ async function getMyNotifications(req, res) {
       ...announcements.map((doc) => normalizeAnnouncementNotification(doc)),
     ]).forEach((notification) => {
       const key = buildNotificationKey(notification);
+      if (dismissedKeys.has(key)) return;
+      const notificationTimeForClear = notification.created_at ? new Date(notification.created_at).getTime() : 0;
+      if (allClearedAt > 0 && notificationTimeForClear > 0 && notificationTimeForClear <= allClearedAt) return;
       const normalizedNotification = {
         ...notification,
         priority: normalizePriority(notification.priority),
@@ -226,8 +236,71 @@ async function markAllNotificationsRead(req, res) {
   return res.json({ status: 'all_read', read_at: now });
 }
 
+// Hide a single item from this tenant's bell/notifications feed only. Never
+// deletes or mutates the source record (a personal `notifications` doc or a
+// shared `announcements` doc) — it's a per-tenant junction write, matching
+// markNotificationRead's own read-tracking pattern above. Resolving the key
+// the same way markNotificationRead does (owned stored notification first,
+// then visible announcements) so an announcement dismissed from the bell
+// never touches the announcement_dismissals collection the News tab uses —
+// those are two independent per-tenant hides over the same shared content.
+async function dismissNotification(req, res) {
+  const userId = req.user?.user_id;
+  const notificationKey = normalizeString(req.params.notificationId);
+  if (!notificationKey) return res.status(400).json({ detail: 'notificationId is required.' });
+  const db = getDb();
+  const stored = await db.collection('notifications').find({ user_id: userId }).limit(200).toArray();
+  let owned = stored
+    .map((doc) => sanitizeStoredNotification(doc))
+    .find((item) => buildNotificationKey(item) === notificationKey || item.notification_id === notificationKey);
+
+  if (!owned) {
+    const announcements = await db.collection('announcements').find({
+      $and: [
+        { $or: [{ is_active: true }, { isActive: true }, { is_active: { $exists: false }, isActive: { $exists: false } }] },
+        { isArchived: { $ne: true } },
+        { $or: [
+          { is_private: { $ne: true }, isPrivate: { $ne: true } },
+          { is_private: true, user_id: userId },
+          { isPrivate: true, userId },
+        ] },
+      ],
+    }).limit(200).toArray();
+    owned = announcements
+      .map((doc) => normalizeAnnouncementNotification(doc))
+      .find((item) => buildNotificationKey(item) === notificationKey || item.notification_id === notificationKey);
+  }
+
+  if (!owned) return res.status(404).json({ detail: 'Notification not found.' });
+  const ownedKey = buildNotificationKey(owned);
+  await db.collection('notification_dismissals').updateOne(
+    { user_id: userId, notification_key: ownedKey },
+    { $set: { dismissed_at: new Date() }, $setOnInsert: { created_at: new Date() } },
+    { upsert: true },
+  );
+  return res.json({ status: 'dismissed', notification_id: ownedKey });
+}
+
+// Cuts off the bell feed at "now" for this tenant only — a cutoff, not a
+// permanent hide-all, so anything published/created after this call still
+// appears normally on the next refresh. Never touches `announcements` or
+// `announcement_dismissals` — the News tab is unaffected.
+async function clearAllNotifications(req, res) {
+  const db = getDb();
+  const userId = req.user?.user_id;
+  const now = new Date();
+  await db.collection('notification_cleared_state').updateOne(
+    { user_id: userId },
+    { $set: { all_cleared_at: now, updated_at: now }, $setOnInsert: { created_at: now } },
+    { upsert: true },
+  );
+  return res.json({ status: 'cleared', cleared_at: now });
+}
+
 module.exports = {
   getMyNotifications,
   markNotificationRead,
   markAllNotificationsRead,
+  dismissNotification,
+  clearAllNotifications,
 };

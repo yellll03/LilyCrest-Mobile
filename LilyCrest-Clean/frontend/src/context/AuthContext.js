@@ -263,10 +263,10 @@ export function AuthProvider({ children }) {
   // network blip can't silently drop an item the server never actually hid
   // (Notification-9: a failed dismissal must not remain permanently hidden).
   const dismissNotification = useCallback(async (notificationId) => {
-    if (!notificationId) return;
+    if (!notificationId) return false;
     const previous = notificationsRef.current;
     const target = previous.find((item) => item?.notification_id === notificationId);
-    if (!target) return;
+    if (!target) return false;
 
     const wasUnread = !target.read;
     setNotifications(previous.filter((item) => item.notification_id !== notificationId));
@@ -274,9 +274,11 @@ export function AuthProvider({ children }) {
 
     try {
       await api.delete(`/notifications/${encodeURIComponent(notificationId)}`);
+      return true;
     } catch (_error) {
       setNotifications(previous);
       if (wasUnread) setNotificationUnreadCount((count) => count + 1);
+      return false;
     }
   }, []);
 
@@ -299,6 +301,36 @@ export function AuthProvider({ children }) {
     } catch (_error) {
       setNotifications(previous);
       setNotificationUnreadCount(previousUnreadCount);
+    }
+  }, []);
+
+  // Hide an announcement from the News tab only, for this tenant only — a
+  // per-tenant junction write on the backend (announcement_dismissals),
+  // never a mutation of the shared announcements collection. Deliberately
+  // does not touch `notifications` state: an announcement dismissed here
+  // must still appear in the bell (see announcements.jsx's own layered
+  // hiddenAnnouncementIds, which is what actually filters it out of this
+  // screen — this function only performs the network write).
+  const dismissAnnouncement = useCallback(async (announcementId) => {
+    if (!announcementId) return false;
+    try {
+      await api.post(`/announcements/${encodeURIComponent(announcementId)}/dismiss`);
+      return true;
+    } catch (_error) {
+      return false;
+    }
+  }, []);
+
+  // Multi-select delete for the News tab — same per-tenant hide as
+  // dismissAnnouncement, batched server-side.
+  const dismissAnnouncementsBulk = useCallback(async (announcementIds) => {
+    const ids = Array.isArray(announcementIds) ? announcementIds.filter(Boolean) : [];
+    if (!ids.length) return false;
+    try {
+      await api.post('/announcements/dismiss-bulk', { ids });
+      return true;
+    } catch (_error) {
+      return false;
     }
   }, []);
 
@@ -942,12 +974,15 @@ export function AuthProvider({ children }) {
     clearNotificationUnread,
     dismissNotification,
     clearNotifications,
+    dismissAnnouncement,
+    dismissAnnouncementsBulk,
     refreshNotifications,
   }), [
     user, firebaseUser, firebaseAuthReady, isLoading, authReady, authStatus,
     login, loginWithEmail, verifyLoginOtp, registerWithEmail, logout, checkAuth,
     signInWithGoogle, updateUser, notifications, notificationUnreadCount,
-    markNotificationRead, clearNotificationUnread, dismissNotification, clearNotifications, refreshNotifications,
+    markNotificationRead, clearNotificationUnread, dismissNotification, clearNotifications,
+    dismissAnnouncement, dismissAnnouncementsBulk, refreshNotifications,
   ]);
 
   if (isLoading) {

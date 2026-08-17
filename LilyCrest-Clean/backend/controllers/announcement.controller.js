@@ -1,5 +1,18 @@
 const { v4: uuidv4 } = require('uuid');
+const { ObjectId } = require('mongodb');
 const { getDb } = require('../config/database');
+
+// The client-visible announcement_id is either the explicit field set at
+// creation (`ann_<hex>`, see createAnnouncement) or, for older documents
+// that predate that field, normalizeAnnouncement()'s fallback to
+// `doc._id.toString()` (a raw 24-char ObjectId hex string). Dismiss lookups
+// must resolve both forms the same way the list endpoint generates them, or
+// a legacy announcement becomes permanently un-dismissible.
+function announcementIdFilter(id) {
+  const clauses = [{ announcement_id: id }];
+  if (ObjectId.isValid(id)) clauses.push({ _id: new ObjectId(id) });
+  return { $or: clauses };
+}
 const { notifyNewAnnouncement, notifyPrivateAnnouncement } = require('../services/pushService');
 const { resolveTenantBranch, normalizedBranchReference } = require('../services/branchLocation.service');
 
@@ -113,6 +126,10 @@ async function getAllAnnouncements(req, res) {
     const db = getDb();
     const userId = req.user?.user_id || null;
     const requesterBranchCode = await resolveRequesterBranchCode(db, req.user);
+    const dismissedIds = userId
+      ? new Set((await db.collection('announcement_dismissals').find({ user_id: userId }).project({ announcement_id: 1 }).toArray().catch(() => []))
+        .map((entry) => String(entry.announcement_id || '')).filter(Boolean))
+      : new Set();
 
     // Handle both snake_case (app-created) and camelCase (admin-panel-created) documents.
     // Web admin docs may lack is_active/isActive entirely — treat missing as active.
@@ -144,6 +161,7 @@ async function getAllAnnouncements(req, res) {
 
     announcements.forEach((doc, index) => {
       const normalized = normalizedAnnouncements[index];
+      if (normalized.announcement_id && dismissedIds.has(normalized.announcement_id)) return;
       const dedupKey = getAnnouncementDedupKey(doc, normalized);
       if (seen.has(dedupKey)) return;
       seen.add(dedupKey);
@@ -221,9 +239,75 @@ async function createAnnouncement(req, res) {
   }
 }
 
+// Hide one announcement from this tenant's News tab only. Writes a per-tenant
+// junction row (announcement_dismissals) — never deletes or mutates the
+// shared `announcements` document, so admin content stays intact for audit
+// and for every other tenant, and the Home bell (which tracks its own
+// separate notification_dismissals) is unaffected.
+async function dismissAnnouncement(req, res) {
+  const userId = req.user?.user_id;
+  const announcementId = String(req.params.announcementId || '').trim();
+  if (!announcementId) return res.status(400).json({ detail: 'announcementId is required.' });
+  const db = getDb();
+  const exists = await db.collection('announcements').findOne(announcementIdFilter(announcementId));
+  if (!exists) return res.status(404).json({ detail: 'Announcement not found.' });
+  await db.collection('announcement_dismissals').updateOne(
+    { user_id: userId, announcement_id: announcementId },
+    { $set: { dismissed_at: new Date() }, $setOnInsert: { created_at: new Date() } },
+    { upsert: true },
+  );
+  return res.json({ status: 'dismissed', announcement_id: announcementId });
+}
+
+// Matches both id forms getAllAnnouncements can hand back: the explicit
+// `ann_<hex>` field set at creation, or a legacy doc's raw ObjectId string.
+const ANNOUNCEMENT_ID_PATTERN = /^(ann_[a-f0-9]{1,32}|[a-f0-9]{24})$/i;
+const MAX_BULK_DISMISS_IDS = 100;
+
+// Multi-select delete for the News tab. Same per-tenant junction write as
+// dismissAnnouncement, just batched. Validates every entry up front —
+// well-formed AND actually an existing announcement — and rejects the whole
+// request on any bad id rather than silently dropping it or writing
+// dismissal rows for ids that don't exist.
+async function dismissAnnouncementsBulk(req, res) {
+  const userId = req.user?.user_id;
+  const rawIds = req.body?.ids;
+  if (!Array.isArray(rawIds) || !rawIds.length) {
+    return res.status(400).json({ detail: 'ids must be a non-empty array.' });
+  }
+  if (rawIds.length > MAX_BULK_DISMISS_IDS) {
+    return res.status(400).json({ detail: `ids must contain ${MAX_BULK_DISMISS_IDS} or fewer entries.` });
+  }
+  if (!rawIds.every((id) => typeof id === 'string' && ANNOUNCEMENT_ID_PATTERN.test(id.trim()))) {
+    return res.status(400).json({ detail: 'ids must all be valid announcement ids.' });
+  }
+  const ids = [...new Set(rawIds.map((id) => id.trim()))];
+
+  const db = getDb();
+  const existingCount = await db.collection('announcements').countDocuments({
+    $or: ids.flatMap((id) => [{ announcement_id: id }, ...(ObjectId.isValid(id) ? [{ _id: new ObjectId(id) }] : [])]),
+  });
+  if (existingCount !== ids.length) {
+    return res.status(400).json({ detail: 'One or more ids do not match an existing announcement.' });
+  }
+
+  const now = new Date();
+  const operations = ids.map((announcementId) => ({
+    updateOne: {
+      filter: { user_id: userId, announcement_id: announcementId },
+      update: { $set: { dismissed_at: now }, $setOnInsert: { created_at: now } },
+      upsert: true,
+    },
+  }));
+  await db.collection('announcement_dismissals').bulkWrite(operations);
+  return res.json({ status: 'dismissed', announcement_ids: ids });
+}
+
 module.exports = {
   getAllAnnouncements,
   createAnnouncement,
+  dismissAnnouncement,
+  dismissAnnouncementsBulk,
   // exported for unit testing of branch-visibility rules in isolation
   isAnnouncementVisibleForBranch,
   resolveRequesterBranchCode,
