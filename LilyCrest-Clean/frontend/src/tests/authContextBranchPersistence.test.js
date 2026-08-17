@@ -15,6 +15,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { ThemeProvider } from '../context/ThemeContext';
 import { ToastProvider } from '../context/ToastContext';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ replace: jest.fn(), push: jest.fn() }),
@@ -25,7 +26,7 @@ jest.mock('../config/firebase', () => ({
   auth: { signOut: jest.fn().mockResolvedValue() },
   getFreshIdToken: jest.fn().mockResolvedValue(null),
   subscribeToAuthState: (cb) => {
-    cb({ uid: 'firebase-uid' });
+    cb({ uid: 'firebase-uid', displayName: 'Stale Firebase Name', photoURL: 'https://example.test/stale-firebase.jpg' });
     return () => {};
   },
 }));
@@ -33,6 +34,8 @@ jest.mock('../config/firebase', () => ({
 jest.mock('../services/documentManager', () => ({
   clearDocumentCache: jest.fn().mockResolvedValue(),
 }));
+
+let mockSessionToken = 'valid-session-token';
 
 jest.mock('../services/notifications', () => ({
   arePushNotificationsEnabled: jest.fn().mockResolvedValue(false),
@@ -50,7 +53,7 @@ jest.mock('../services/notifications', () => ({
 
 jest.mock('../services/secureCredentials', () => ({
   clearCredentials: jest.fn().mockResolvedValue(),
-  getSessionToken: jest.fn().mockResolvedValue('valid-session-token'),
+  getSessionToken: jest.fn(() => Promise.resolve(mockSessionToken)),
   migrateLegacyCredentials: jest.fn().mockResolvedValue(),
   removeSessionToken: jest.fn().mockResolvedValue(),
   setSessionToken: jest.fn().mockResolvedValue(),
@@ -99,9 +102,72 @@ function renderAuth(onRender) {
 }
 
 describe('AuthContext branch persistence across profile refreshes (regression)', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     jest.clearAllMocks();
+    await AsyncStorage.clear();
+    mockSessionToken = 'valid-session-token';
     mockUsersMeResponse = { data: { user_id: 'tenant-a', name: 'Tenant A', branch: GOOD_BRANCH } };
+  });
+
+  it('successful hydration replaces stale AsyncStorage/default/Firebase profile values with /users/me', async () => {
+    await AsyncStorage.setItem('session_user', JSON.stringify({
+      user_id: 'tenant-a',
+      name: 'Stale Cached Name',
+      picture: 'file:///cache/stale.jpg',
+      staleOnlyField: 'must-not-survive',
+    }));
+    mockUsersMeResponse = { data: {
+      user_id: 'tenant-a',
+      name: 'Canonical Backend Name',
+      picture: 'https://example.test/canonical.jpg',
+      branch: GOOD_BRANCH,
+    } };
+    let latest;
+    renderAuth((state) => { latest = state; });
+
+    await waitFor(() => expect(latest.authStatus).toBe('authenticated'));
+    expect(latest.user.name).toBe('Canonical Backend Name');
+    expect(latest.user.picture).toBe('https://example.test/canonical.jpg');
+    expect(latest.user.staleOnlyField).toBeUndefined();
+  });
+
+  it('updateUser replaces stale cached fields when given a complete canonical profile response', async () => {
+    mockUsersMeResponse = { data: {
+      user_id: 'tenant-a', name: 'Old Canonical Name', picture: 'https://example.test/old.jpg', branch: GOOD_BRANCH,
+    } };
+    let latest;
+    renderAuth((state) => { latest = state; });
+    await waitFor(() => expect(latest.authStatus).toBe('authenticated'));
+
+    act(() => {
+      latest.updateUser({ user_id: 'tenant-a', name: 'Fresh Canonical Name', branch: GOOD_BRANCH });
+    });
+    await waitFor(() => expect(latest.user.name).toBe('Fresh Canonical Name'));
+    expect(latest.user.picture).toBeUndefined();
+  });
+
+  it('logout clears local session state and a new provider/login hydrates the saved backend profile again', async () => {
+    const savedProfile = {
+      user_id: 'tenant-a', name: 'Saved Backend Name', phone: '+639171234567',
+      picture: 'https://example.test/saved.jpg', branch: GOOD_BRANCH,
+    };
+    mockUsersMeResponse = { data: savedProfile };
+    let firstSession;
+    const firstRender = renderAuth((state) => { firstSession = state; });
+    await waitFor(() => expect(firstSession.authStatus).toBe('authenticated'));
+
+    await act(async () => { await firstSession.logout(); });
+    expect(firstSession.user).toBeNull();
+    expect(await AsyncStorage.getItem('session_user')).toBeNull();
+    firstRender.unmount();
+
+    // Simulate a newly authenticated process/session. The only profile input
+    // is a fresh /users/me response; the cache destroyed by logout is absent.
+    mockSessionToken = 'new-valid-session-token';
+    let secondSession;
+    renderAuth((state) => { secondSession = state; });
+    await waitFor(() => expect(secondSession.authStatus).toBe('authenticated'));
+    expect(secondSession.user).toEqual(savedProfile);
   });
 
   it('updateUser does not regress a known branch when a later profile fetch resolves branch: null', async () => {

@@ -904,8 +904,11 @@ export function AuthProvider({ children }) {
 
   const updateUser = useCallback((data) => {
     setUser((prev) => {
-      const merged = prev ? { ...prev, ...data } : data;
-      const nextUser = preserveKnownBranch(prev, merged);
+      // All callers pass a complete canonical /users/me response. Replace
+      // stale cached/default fields instead of merging them back over the
+      // database authority; only retain the independently resolved Branch
+      // when a transient branch lookup returns null.
+      const nextUser = preserveKnownBranch(prev, data);
       AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(nextUser)).catch(() => {});
       return nextUser;
     });
