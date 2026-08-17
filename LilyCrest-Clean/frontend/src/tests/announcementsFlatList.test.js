@@ -6,11 +6,12 @@
 // screen with only its data dependencies mocked — not a source-string
 // assertion.
 //
-// The screen's data source later moved from an independent GET
-// /announcements fetch to AuthContext's already-unified `notifications`
-// feed (see notificationsFilterUi.test.js for the fuller mock/rationale);
-// this file's mock was updated to match, keeping its own focus on
-// virtualization/empty/error/tap behavior.
+// The screen's data source is the dedicated useCanonicalAnnouncements()
+// hook (GET /announcements only — Home's notification bell stays on its own
+// AuthContext-owned /notifications feed, see homeNotificationCanonicalState.test.js).
+// This file's mock models that hook as a tiny external store so tests can
+// push new announcement lists and have the screen re-render, exactly like a
+// real hook state change would.
 
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { FlatList } from 'react-native';
@@ -21,28 +22,39 @@ jest.mock('expo-router', () => ({
   useFocusEffect: (cb) => { require('react').useEffect(cb, []); },
 }));
 
-const mockClearNotificationUnread = jest.fn().mockResolvedValue();
-const mockRefreshNotifications = jest.fn();
-let mockAuthStoreState = { notifications: [] };
-let mockAuthStoreListeners = [];
-function setAuthStoreNotifications(notifications) {
-  mockAuthStoreState = { notifications };
-  mockAuthStoreListeners.forEach((listener) => listener());
+const mockLoadAnnouncements = jest.fn();
+const mockDismissAnnouncements = jest.fn();
+let mockStoreState = { announcements: [] };
+let mockStoreListeners = [];
+function setStoreAnnouncements(announcements) {
+  mockStoreState = { announcements };
+  mockStoreListeners.forEach((listener) => listener());
 }
 
-jest.mock('../context/AuthContext', () => {
+jest.mock('../../src/hooks/useCanonicalAnnouncements', () => {
   const React = require('react');
   return {
-    useAuth: () => {
+    MAX_ANNOUNCEMENT_DISMISS_IDS: 100,
+    getCanonicalAnnouncementId: (item) => String(item?.announcement_id || '').trim(),
+    useCanonicalAnnouncements: () => {
       const [, forceRender] = React.useState(0);
       React.useEffect(() => {
         const listener = () => forceRender((tick) => tick + 1);
-        mockAuthStoreListeners.push(listener);
-        return () => { mockAuthStoreListeners = mockAuthStoreListeners.filter((l) => l !== listener); };
+        mockStoreListeners.push(listener);
+        return () => { mockStoreListeners = mockStoreListeners.filter((l) => l !== listener); };
       }, []);
-      const refreshNotifications = React.useCallback((...args) => mockRefreshNotifications(...args), []);
-      const clearNotificationUnread = React.useCallback((...args) => mockClearNotificationUnread(...args), []);
-      return { notifications: mockAuthStoreState.notifications, refreshNotifications, clearNotificationUnread };
+      const loadAnnouncements = React.useCallback((...args) => mockLoadAnnouncements(...args), []);
+      const dismissAnnouncements = React.useCallback((...args) => mockDismissAnnouncements(...args), []);
+      return {
+        announcements: mockStoreState.announcements,
+        hasLoadedOnce: mockStoreState.hasLoadedOnce ?? true,
+        refreshing: false,
+        fetchError: mockStoreState.fetchError ?? null,
+        submittingIds: new Set(),
+        dismissalInFlight: false,
+        loadAnnouncements,
+        dismissAnnouncements,
+      };
     },
   };
 });
@@ -83,31 +95,30 @@ function announcement(overrides = {}) {
 describe('announcements list virtualization and behavior (regression)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockClearNotificationUnread.mockResolvedValue();
-    setAuthStoreNotifications([]);
+    mockStoreState = { announcements: [], hasLoadedOnce: true, fetchError: null };
   });
 
   it('renders the list through FlatList, not a plain ScrollView + map', async () => {
-    mockRefreshNotifications.mockImplementation(async () => { setAuthStoreNotifications([announcement()]); return true; });
+    setStoreAnnouncements([announcement()]);
     const { UNSAFE_getByType, getByText } = render(<AnnouncementsScreen />);
     await waitFor(() => expect(getByText('Water interruption tomorrow')).toBeTruthy());
     expect(UNSAFE_getByType(FlatList)).toBeTruthy();
   });
 
   it('shows the empty state when there are no announcements', async () => {
-    mockRefreshNotifications.mockImplementation(async () => { setAuthStoreNotifications([]); return true; });
+    setStoreAnnouncements([]);
     const { getByText } = render(<AnnouncementsScreen />);
-    await waitFor(() => expect(getByText('No notifications yet')).toBeTruthy());
+    await waitFor(() => expect(getByText('No announcements yet')).toBeTruthy());
   });
 
   it('shows a safe error banner instead of crashing when the fetch fails', async () => {
-    mockRefreshNotifications.mockImplementation(async () => false);
+    mockStoreState = { announcements: [], hasLoadedOnce: true, fetchError: 'Unable to load announcements. Pull down to refresh.' };
     const { getByText } = render(<AnnouncementsScreen />);
-    await waitFor(() => expect(getByText('Could not load notifications')).toBeTruthy());
+    await waitFor(() => expect(getByText('Could not load announcements')).toBeTruthy());
   });
 
   it('tapping an announcement opens its detail sheet with the full content', async () => {
-    mockRefreshNotifications.mockImplementation(async () => { setAuthStoreNotifications([announcement({ title: 'Tap me' })]); return true; });
+    setStoreAnnouncements([announcement({ title: 'Tap me' })]);
     const { getByText, getAllByText } = render(<AnnouncementsScreen />);
     await waitFor(() => expect(getByText('Tap me')).toBeTruthy());
 

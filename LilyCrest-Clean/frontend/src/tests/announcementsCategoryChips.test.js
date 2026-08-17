@@ -3,7 +3,9 @@
 // (differently-cased but the same category) rendered as two separate chips
 // instead of one, and chip labels showed whatever raw casing the backend
 // happened to send (e.g. "event" lowercase next to "Security" capitalized).
-// Renders the real screen with only its data dependencies mocked.
+// Renders the real screen with only its data dependencies mocked — the
+// screen's data source is the dedicated useCanonicalAnnouncements() hook
+// (GET /announcements only).
 
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import AnnouncementsScreen from '../../app/(tabs)/announcements';
@@ -13,28 +15,35 @@ jest.mock('expo-router', () => ({
   useFocusEffect: (cb) => { require('react').useEffect(cb, []); },
 }));
 
-const mockClearNotificationUnread = jest.fn().mockResolvedValue();
-const mockRefreshNotifications = jest.fn();
-let mockAuthStoreState = { notifications: [] };
-let mockAuthStoreListeners = [];
-function setAuthStoreNotifications(notifications) {
-  mockAuthStoreState = { notifications };
-  mockAuthStoreListeners.forEach((listener) => listener());
+let mockStoreState = { announcements: [] };
+let mockStoreListeners = [];
+function setStoreAnnouncements(announcements) {
+  mockStoreState = { announcements };
+  mockStoreListeners.forEach((listener) => listener());
 }
 
-jest.mock('../context/AuthContext', () => {
+jest.mock('../../src/hooks/useCanonicalAnnouncements', () => {
   const React = require('react');
   return {
-    useAuth: () => {
+    MAX_ANNOUNCEMENT_DISMISS_IDS: 100,
+    getCanonicalAnnouncementId: (item) => String(item?.announcement_id || '').trim(),
+    useCanonicalAnnouncements: () => {
       const [, forceRender] = React.useState(0);
       React.useEffect(() => {
         const listener = () => forceRender((tick) => tick + 1);
-        mockAuthStoreListeners.push(listener);
-        return () => { mockAuthStoreListeners = mockAuthStoreListeners.filter((l) => l !== listener); };
+        mockStoreListeners.push(listener);
+        return () => { mockStoreListeners = mockStoreListeners.filter((l) => l !== listener); };
       }, []);
-      const refreshNotifications = React.useCallback((...args) => mockRefreshNotifications(...args), []);
-      const clearNotificationUnread = React.useCallback((...args) => mockClearNotificationUnread(...args), []);
-      return { notifications: mockAuthStoreState.notifications, refreshNotifications, clearNotificationUnread };
+      return {
+        announcements: mockStoreState.announcements,
+        hasLoadedOnce: true,
+        refreshing: false,
+        fetchError: null,
+        submittingIds: new Set(),
+        dismissalInFlight: false,
+        loadAnnouncements: jest.fn(),
+        dismissAnnouncements: jest.fn(),
+      };
     },
   };
 });
@@ -72,26 +81,22 @@ function announcement(overrides = {}) {
   };
 }
 
-describe('notification filter categories — case-insensitive dedup (regression)', () => {
+describe('announcement filter categories — case-insensitive dedup (regression)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockClearNotificationUnread.mockResolvedValue();
-    setAuthStoreNotifications([]);
+    mockStoreState = { announcements: [] };
   });
 
   it('collapses differently-cased category values into a single chip', async () => {
-    mockRefreshNotifications.mockImplementation(async () => {
-      setAuthStoreNotifications([
-        announcement({ category: 'Security', title: 'Security note 1' }),
-        announcement({ category: 'security', title: 'Security note 2' }),
-        announcement({ category: 'SECURITY', title: 'Security note 3' }),
-      ]);
-      return true;
-    });
+    setStoreAnnouncements([
+      announcement({ category: 'Security', title: 'Security note 1' }),
+      announcement({ category: 'security', title: 'Security note 2' }),
+      announcement({ category: 'SECURITY', title: 'Security note 3' }),
+    ]);
 
-    const { getAllByLabelText, getAllByText, getByLabelText, queryAllByText } = render(<AnnouncementsScreen />);
-    await waitFor(() => expect(getAllByText('Security note 1').length).toBeGreaterThan(0));
-    fireEvent.press(getByLabelText('Open notification filters'));
+    const { getAllByLabelText, getByLabelText, queryAllByText } = render(<AnnouncementsScreen />);
+    await waitFor(() => expect(getByLabelText('Announcement: Security note 1')).toBeTruthy());
+    fireEvent.press(getByLabelText('Open announcement filters'));
 
     // Exactly one normalized Security filter option, never separate options
     // for the different backend casing variants.
@@ -102,17 +107,14 @@ describe('notification filter categories — case-insensitive dedup (regression)
   });
 
   it('shows a consistently capitalized chip label regardless of raw backend casing', async () => {
-    mockRefreshNotifications.mockImplementation(async () => {
-      setAuthStoreNotifications([announcement({ category: 'event', title: 'Lower-cased category' })]);
-      return true;
-    });
+    setStoreAnnouncements([announcement({ category: 'event', title: 'Lower-cased category' })]);
 
     const { getByLabelText, getByText, getAllByText, queryAllByText } = render(<AnnouncementsScreen />);
     await waitFor(() => expect(getByText('Lower-cased category')).toBeTruthy());
-    fireEvent.press(getByLabelText('Open notification filters'));
+    fireEvent.press(getByLabelText('Open announcement filters'));
 
     // own category badge both use the same normalized label.
-    expect(getByLabelText('Event, 1 notification')).toBeTruthy();
+    expect(getByLabelText('Event, 1 announcement')).toBeTruthy();
     // The sheet option and the card badge share the normalized label.
     expect(getAllByText('Event').length).toBeGreaterThanOrEqual(2);
     expect(queryAllByText('event').length).toBe(0);

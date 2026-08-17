@@ -2,7 +2,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
 import { useEffect, useMemo, useRef } from 'react';
 import { Animated, Platform, StyleSheet, Text, View } from 'react-native';
-import { useAuth } from '../../src/context/AuthContext';
 import { useTheme } from '../../src/context/ThemeContext';
 
 // Animated Tab Icon Component
@@ -96,8 +95,6 @@ function HomeTabIcon({ focused, colors, styles }) {
 export default function TabLayout() {
   const { colors, isDarkMode } = useTheme();
   const styles = useMemo(() => createStyles(colors, isDarkMode), [colors, isDarkMode]);
-  const { notificationUnreadCount } = useAuth();
-
   return (
     <Tabs
       backBehavior="history"
@@ -137,7 +134,6 @@ export default function TabLayout() {
               label="News"
               colors={colors}
               styles={styles}
-              badgeCount={notificationUnreadCount}
             />
           ),
         }}

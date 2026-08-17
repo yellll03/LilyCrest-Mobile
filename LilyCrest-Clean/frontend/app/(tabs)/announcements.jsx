@@ -1,12 +1,16 @@
 import { Ionicons } from '@expo/vector-icons';
 import { format, formatDistanceToNow } from 'date-fns';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, AppState, FlatList, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAuth } from '../../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
 import { useToast } from '../../src/context/ToastContext';
+import {
+  getCanonicalAnnouncementId,
+  MAX_ANNOUNCEMENT_DISMISS_IDS,
+  useCanonicalAnnouncements,
+} from '../../src/hooks/useCanonicalAnnouncements';
 import { resolveNotificationRoute } from '../../src/services/notifications';
 import { SURVEY_FEEDBACK_ENABLED } from '../../src/config/features';
 import {
@@ -64,18 +68,18 @@ function isNew(dateStr) {
 export default function AnnouncementsScreen() {
   const router = useRouter();
   const { colors } = useTheme();
-  // This screen's visible list previously fetched GET /announcements
-  // independently, while the unread badge/push-routing logic elsewhere in
-  // the app polled a SEPARATE endpoint, GET /notifications — which the
-  // backend already merges (personal notifications like bill releases +
-  // visible announcements, deduplicated, sorted newest-first) into one
-  // feed. There is no client-side merge to build: the fix is to read from
-  // the same already-unified source AuthContext already owns, instead of
-  // maintaining a second, narrower fetch/store here.
+  // The News tab reads the backend's canonical announcement list. Home's
+  // notification center remains a separate AuthContext-owned collection.
   const {
-    notifications: rawFeedItems, refreshNotifications, clearNotificationUnread,
-    dismissNotification, dismissAnnouncement, dismissAnnouncementsBulk,
-  } = useAuth();
+    announcements: feedItems,
+    hasLoadedOnce,
+    refreshing,
+    fetchError,
+    submittingIds,
+    dismissalInFlight,
+    loadAnnouncements,
+    dismissAnnouncements,
+  } = useCanonicalAnnouncements();
   const { showToast } = useToast();
   const styles = useThemedStyles((c, dark) => StyleSheet.create({
     container: { flex: 1, backgroundColor: c.background },
@@ -335,177 +339,80 @@ export default function AnnouncementsScreen() {
     selectionDeleteButtonDisabled: { opacity: 0.5 },
     selectionDeleteText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
 
-    // ── Undo snackbar ──
-    undoSnackbar: {
-      position: 'absolute', left: 14, right: 14, bottom: 18,
-      backgroundColor: dark ? '#1F2937' : '#111827',
-      borderRadius: 12, paddingVertical: 12, paddingHorizontal: 16,
-      flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10,
-      ...Platform.select({
-        web: { boxShadow: '0 4px 16px rgba(0,0,0,0.24)' },
-        default: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.24, shadowRadius: 10, elevation: 6 },
-      }),
-    },
-    undoSnackbarText: { color: '#F9FAFB', fontSize: 13, fontWeight: '600', flex: 1 },
-    undoSnackbarAction: { minHeight: 32, justifyContent: 'center', paddingHorizontal: 4 },
-    undoSnackbarActionText: { color: '#93C5FD', fontSize: 13, fontWeight: '800' },
   }));
 
-  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [fetchError, setFetchError] = useState(null);
   const [selectedCategory, setSelectedCategory] = useState(null);
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [isFilterSheetVisible, setIsFilterSheetVisible] = useState(false);
   const [selectedAnn, setSelectedAnn] = useState(null);
   const [sortOrder, setSortOrder] = useState('newest');
   const [expandedIds, setExpandedIds] = useState(new Set());
-  const fetchInFlightRef = useRef(null);
 
-  // Deleting an announcement here must hide it from THIS screen only — never
-  // from the Home bell, and never the shared `announcements` record other
-  // tenants see (see backend POST /announcements/:id/dismiss). So this is a
-  // client-side hide layered on top of AuthContext's shared feed, distinct
-  // from personal (billing/maintenance/etc.) items, which reuse the same
-  // dismissNotification() the bell uses since there's only ever one copy of
-  // those records for this tenant.
-  const [hiddenAnnouncementIds, setHiddenAnnouncementIds] = useState(() => new Set());
+  // Selection contains only canonical announcement IDs. The backend owns
+  // visibility and tenant-specific persistence.
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
-  const [pendingDeletion, setPendingDeletion] = useState(null); // { ids: Set, items, timeoutId }
-  const pendingDeletionRef = useRef(null);
 
-  const feedItems = useMemo(
-    () => rawFeedItems.filter((item) => {
-      const id = item.notification_id || item.announcement_id;
-      if (hiddenAnnouncementIds.has(id)) return false;
-      if (pendingDeletion?.ids?.has(id)) return false;
-      return true;
-    }),
-    [rawFeedItems, hiddenAnnouncementIds, pendingDeletion]
-  );
-
-  // Thin wrapper around the shared refreshNotifications() — this screen adds
-  // only its own loading/error/retry UI state on top; the fetch itself, the
-  // merge of personal notifications + announcements, and the unread count
-  // all remain owned by AuthContext (single source of truth).
-  const loadFeed = useCallback((silent = false) => {
-    if (fetchInFlightRef.current) return fetchInFlightRef.current;
-    if (!silent) setFetchError(null);
-
-    const request = (async () => {
-      const succeeded = await refreshNotifications();
-      if (succeeded) {
-        setFetchError(null);
-      } else if (!silent) {
-        setFetchError('Unable to load notifications. Pull down to refresh.');
-      }
-      setHasLoadedOnce(true);
-      setRefreshing(false);
-      fetchInFlightRef.current = null;
-    })();
-
-    fetchInFlightRef.current = request;
-    return request;
-  }, [refreshNotifications]);
-
-  // No local polling interval here: AuthContext already polls /notifications
-  // every 60s for as long as the tenant is authenticated (see refreshNotifications
-  // usage in AuthContext.js), independent of which screen is focused — an
-  // additional interval in this screen would just double that same request
-  // while Notifications happens to be open.
-  useEffect(() => { loadFeed(); }, [loadFeed]);
+  // Navigation focus and foreground both reconcile with canonical server data.
   useFocusEffect(
     useCallback(() => {
-      loadFeed(true);
-      clearNotificationUnread().catch(() => {});
-    }, [clearNotificationUnread, loadFeed])
+      loadAnnouncements({ silent: true });
+    }, [loadAnnouncements])
   );
 
-  const onRefresh = useCallback(() => { setRefreshing(true); loadFeed(); }, [loadFeed]);
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active') loadAnnouncements({ silent: true });
+    });
+    return () => subscription.remove();
+  }, [loadAnnouncements]);
 
-  useEffect(() => () => {
-    if (pendingDeletionRef.current?.timeoutId) clearTimeout(pendingDeletionRef.current.timeoutId);
-  }, []);
+  const onRefresh = useCallback(
+    () => loadAnnouncements({ showRefresh: true }),
+    [loadAnnouncements],
+  );
 
-  const commitDeletion = useCallback(async (items) => {
-    const announcementIds = items
-      .filter((item) => item.type === 'announcement' && item.announcement_id)
-      .map((item) => item.announcement_id);
-    const personalIds = items
-      .filter((item) => item.type !== 'announcement')
-      .map((item) => item.notification_id)
-      .filter(Boolean);
+  const removeAnnouncements = useCallback(async (ids, { exitSelectionOnSuccess = false } = {}) => {
+    const result = await dismissAnnouncements(ids);
 
-    let failedCount = 0;
-
-    if (announcementIds.length) {
-      const succeeded = announcementIds.length === 1
-        ? await dismissAnnouncement(announcementIds[0])
-        : await dismissAnnouncementsBulk(announcementIds);
-      if (succeeded) {
-        setHiddenAnnouncementIds((prev) => {
-          const next = new Set(prev);
-          announcementIds.forEach((id) => next.add(id));
-          return next;
-        });
-      } else {
-        // Leaving it out of hiddenAnnouncementIds means the item reappears
-        // (it's no longer in pendingDeletion once this resolves) instead of
-        // vanishing silently — the toast below is what tells the tenant why.
-        failedCount += announcementIds.length;
-      }
-    }
-
-    if (personalIds.length) {
-      const results = await Promise.all(personalIds.map((id) => dismissNotification(id)));
-      failedCount += results.filter((succeeded) => !succeeded).length;
-    }
-
-    if (failedCount > 0) {
-      // "Remove" here, not "Delete" — this only hides the item from the
-      // tenant's own list (per-tenant dismissal on the backend). An
-      // announcement item is never actually deleted; it stays fully intact
-      // for admin and every other tenant. See dismissAnnouncement/
-      // dismissAnnouncementsBulk in AuthContext.js.
+    if (!result.ok) {
+      if (result.reason === 'busy' || result.reason === 'empty') return false;
       showToast({
         type: 'error',
-        title: 'Remove failed',
-        message: failedCount === items.length
-          ? "Couldn't remove — check your connection and try again."
-          : `${failedCount} of ${items.length} couldn't be removed — check your connection and try again.`,
+        title: result.reason === 'limit' ? 'Selection limit reached' : 'Remove failed',
+        message: result.reason === 'limit'
+          ? `Select up to ${MAX_ANNOUNCEMENT_DISMISS_IDS} announcements at a time.`
+          : "Couldn't remove the announcement. Check your connection and try again.",
       });
+      return false;
     }
-  }, [dismissNotification, dismissAnnouncement, dismissAnnouncementsBulk, showToast]);
 
-  const schedulePendingDeletion = useCallback((items) => {
-    const ids = new Set(items.map((item) => item.notification_id || item.announcement_id).filter(Boolean));
-    if (!ids.size) return;
-    if (pendingDeletionRef.current?.timeoutId) clearTimeout(pendingDeletionRef.current.timeoutId);
-    const timeoutId = setTimeout(() => {
-      commitDeletion(items);
-      setPendingDeletion(null);
-      pendingDeletionRef.current = null;
-    }, 5000);
-    const next = { ids, items, timeoutId };
-    pendingDeletionRef.current = next;
-    setPendingDeletion(next);
-  }, [commitDeletion]);
-
-  const undoPendingDeletion = useCallback(() => {
-    if (pendingDeletionRef.current?.timeoutId) clearTimeout(pendingDeletionRef.current.timeoutId);
-    pendingDeletionRef.current = null;
-    setPendingDeletion(null);
-  }, []);
+    if (exitSelectionOnSuccess) {
+      setSelectionMode(false);
+      setSelectedIds(new Set());
+    }
+    setSelectedAnn((current) => (
+      result.ids.includes(getCanonicalAnnouncementId(current)) ? null : current
+    ));
+    return true;
+  }, [dismissAnnouncements, showToast]);
 
   const toggleSelected = useCallback((id) => {
+    if (!selectedIds.has(id) && selectedIds.size >= MAX_ANNOUNCEMENT_DISMISS_IDS) {
+      showToast({
+        type: 'error',
+        title: 'Selection limit reached',
+        message: `Select up to ${MAX_ANNOUNCEMENT_DISMISS_IDS} announcements at a time.`,
+      });
+      return;
+    }
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
-  }, []);
+  }, [selectedIds, showToast]);
 
   const enterSelectionMode = useCallback((id) => {
     setSelectionMode(true);
@@ -518,10 +425,8 @@ export default function AnnouncementsScreen() {
   }, []);
 
   const deleteSelected = useCallback(() => {
-    const items = feedItems.filter((item) => selectedIds.has(item.notification_id || item.announcement_id));
-    schedulePendingDeletion(items);
-    exitSelectionMode();
-  }, [feedItems, selectedIds, schedulePendingDeletion, exitSelectionMode]);
+    removeAnnouncements([...selectedIds], { exitSelectionOnSuccess: true });
+  }, [removeAnnouncements, selectedIds]);
 
   const getPriorityColor = (priority) => {
     switch (priority) {
@@ -593,7 +498,7 @@ export default function AnnouncementsScreen() {
   }, []);
 
   const announcementKeyExtractor = useCallback(
-    (announcement) => announcement.notification_id || announcement.announcement_id || `${announcement.title}-${String(getAnnouncementDateValue(announcement) || '')}`,
+    (announcement) => getCanonicalAnnouncementId(announcement) || `${announcement.title}-${String(getAnnouncementDateValue(announcement) || '')}`,
     []
   );
 
@@ -611,7 +516,7 @@ export default function AnnouncementsScreen() {
     const prioColor = getPriorityColor(announcement.priority);
     const announcementDate = getAnnouncementDateValue(announcement);
     const isRecent = isNew(announcementDate);
-    const announcementId = announcement.notification_id || announcement.announcement_id;
+    const announcementId = getCanonicalAnnouncementId(announcement);
     const isExpanded = expandedIds.has(announcementId);
     const isLong = (announcement.content || '').length > 120;
     const isSelected = selectedIds.has(announcementId);
@@ -623,7 +528,7 @@ export default function AnnouncementsScreen() {
         onLongPress={() => enterSelectionMode(announcementId)}
         activeOpacity={0.85}
         accessibilityRole="button"
-        accessibilityLabel={`Notification: ${announcement.title || 'Untitled'}`}
+        accessibilityLabel={`Announcement: ${announcement.title || 'Untitled'}`}
       >
         {/* Left priority accent */}
         <View style={[styles.cardAccent, { backgroundColor: prioColor }]} />
@@ -655,12 +560,17 @@ export default function AnnouncementsScreen() {
             </View>
             {!selectionMode && (
               <TouchableOpacity
-                onPress={() => schedulePendingDeletion([announcement])}
+                onPress={() => removeAnnouncements([announcementId])}
+                disabled={dismissalInFlight}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 accessibilityRole="button"
                 accessibilityLabel={`Remove ${announcement.title || 'notification'}`}
+                accessibilityState={{ disabled: dismissalInFlight, busy: submittingIds.has(announcementId) }}
               >
-                <Ionicons name="trash-outline" size={17} color={colors.textMuted} />
+                {submittingIds.has(announcementId)
+                  ? <ActivityIndicator size={17} color={colors.textMuted} />
+                  : <Ionicons name="trash-outline" size={17} color={colors.textMuted} />
+                }
               </TouchableOpacity>
             )}
           </View>
@@ -707,7 +617,7 @@ export default function AnnouncementsScreen() {
         </View>
       </TouchableOpacity>
     );
-  }, [colors.textMuted, expandedIds, styles, toggleExpanded, selectionMode, selectedIds, toggleSelected, enterSelectionMode, schedulePendingDeletion]);
+  }, [colors.textMuted, dismissalInFlight, expandedIds, styles, toggleExpanded, selectionMode, selectedIds, toggleSelected, enterSelectionMode, removeAnnouncements, submittingIds]);
 
   if (!hasLoadedOnce) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color={colors.primary} /></View>;
 
@@ -729,7 +639,13 @@ export default function AnnouncementsScreen() {
               <Text style={styles.selectionCount}>{selectedIds.size} selected</Text>
               <TouchableOpacity
                 style={styles.selectionBarButton}
-                onPress={() => setSelectedIds(new Set(visibleAnnouncements.map((item) => item.notification_id || item.announcement_id)))}
+                onPress={() => setSelectedIds(new Set(
+                  visibleAnnouncements
+                    .map(getCanonicalAnnouncementId)
+                    .filter(Boolean)
+                    .slice(0, MAX_ANNOUNCEMENT_DISMISS_IDS),
+                ))}
+                disabled={dismissalInFlight}
                 accessibilityRole="button"
                 accessibilityLabel="Select all"
               >
@@ -737,24 +653,28 @@ export default function AnnouncementsScreen() {
               </TouchableOpacity>
             </View>
             <TouchableOpacity
-              style={[styles.selectionDeleteButton, !selectedIds.size && styles.selectionDeleteButtonDisabled]}
+              style={[styles.selectionDeleteButton, (!selectedIds.size || dismissalInFlight) && styles.selectionDeleteButtonDisabled]}
               onPress={deleteSelected}
-              disabled={!selectedIds.size}
+              disabled={!selectedIds.size || dismissalInFlight}
               accessibilityRole="button"
               accessibilityLabel={`Remove ${selectedIds.size} selected`}
+              accessibilityState={{ disabled: !selectedIds.size || dismissalInFlight, busy: dismissalInFlight }}
             >
-              <Ionicons name="trash-outline" size={15} color="#FFFFFF" />
-              <Text style={styles.selectionDeleteText}>Remove</Text>
+              {dismissalInFlight
+                ? <ActivityIndicator size={15} color="#FFFFFF" />
+                : <Ionicons name="trash-outline" size={15} color="#FFFFFF" />
+              }
+              <Text style={styles.selectionDeleteText}>{dismissalInFlight ? 'Removing' : 'Remove'}</Text>
             </TouchableOpacity>
           </View>
         ) : (
         <View style={styles.headerRow}>
           <View style={styles.headerLeft}>
-            <Text style={styles.headerTitle}>Notifications</Text>
+            <Text style={styles.headerTitle}>Announcements</Text>
             <Text style={styles.headerSubtitle}>
               {hasActiveFilters
-                ? `${filteredAnnouncements.length} of ${feedItems.length} ${feedItems.length === 1 ? 'update' : 'updates'} in your inbox`
-                : `${feedItems.length} ${feedItems.length === 1 ? 'update' : 'updates'} in your inbox`}
+                ? `${filteredAnnouncements.length} of ${feedItems.length} ${feedItems.length === 1 ? 'announcement' : 'announcements'}`
+                : `${feedItems.length} ${feedItems.length === 1 ? 'announcement' : 'announcements'}`}
             </Text>
           </View>
         </View>
@@ -765,7 +685,7 @@ export default function AnnouncementsScreen() {
             style={[styles.toolbarButton, hasActiveFilters && styles.toolbarButtonActive]}
             onPress={openFilterSheet}
             accessibilityRole="button"
-            accessibilityLabel={`Open notification filters${activeFilterCount ? `, ${activeFilterCount} active` : ''}`}
+            accessibilityLabel={`Open announcement filters${activeFilterCount ? `, ${activeFilterCount} active` : ''}`}
           >
             <Ionicons name="options-outline" size={16} color={hasActiveFilters ? colors.accent : colors.textSecondary} />
             <Text style={[styles.toolbarButtonText, hasActiveFilters && styles.toolbarButtonTextActive]}>
@@ -783,10 +703,10 @@ export default function AnnouncementsScreen() {
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.toolbarButton, refreshing && styles.toolbarButtonDisabled]}
-            onPress={() => { if (!refreshing) { setRefreshing(true); loadFeed(); } }}
+            onPress={() => { if (!refreshing) loadAnnouncements({ showRefresh: true }); }}
             disabled={refreshing}
             accessibilityRole="button"
-            accessibilityLabel="Refresh notifications"
+            accessibilityLabel="Refresh announcements"
             accessibilityState={{ disabled: refreshing, busy: refreshing }}
           >
             {refreshing
@@ -813,9 +733,9 @@ export default function AnnouncementsScreen() {
             <Text style={styles.errorBannerText}>{fetchError}</Text>
             <TouchableOpacity
               style={styles.retryButton}
-              onPress={() => loadFeed()}
+              onPress={() => loadAnnouncements()}
               accessibilityRole="button"
-              accessibilityLabel="Retry loading notifications"
+              accessibilityLabel="Retry loading announcements"
             >
               <Text style={styles.retryButtonText}>Retry</Text>
             </TouchableOpacity>
@@ -824,20 +744,20 @@ export default function AnnouncementsScreen() {
         ListEmptyComponent={(
           <View style={styles.emptyState}>
             <View style={styles.emptyIcon}>
-              <Ionicons name="notifications-outline" size={26} color={colors.textMuted} />
+              <Ionicons name="megaphone-outline" size={26} color={colors.textMuted} />
             </View>
             <Text style={styles.emptyTitle}>
               {fetchError && feedItems.length === 0
-                ? 'Could not load notifications'
+                ? 'Could not load announcements'
                 : feedItems.length === 0
-                  ? 'No notifications yet'
-                  : 'No notifications match these filters'}
+                  ? 'No announcements yet'
+                  : 'No announcements match these filters'}
             </Text>
             <Text style={styles.emptyText}>
               {fetchError && feedItems.length === 0
                 ? 'Check your connection and retry.'
                 : feedItems.length === 0
-                  ? 'Updates from LilyCrest will appear here.'
+                  ? 'News and announcements from LilyCrest will appear here.'
                   : 'Try another category or priority, or clear the active filters.'}
             </Text>
             {feedItems.length > 0 && hasActiveFilters ? (
@@ -845,7 +765,7 @@ export default function AnnouncementsScreen() {
                 style={styles.emptyAction}
                 onPress={clearFilters}
                 accessibilityRole="button"
-                accessibilityLabel="Clear notification filters"
+                accessibilityLabel="Clear announcement filters"
               >
                 <Text style={styles.emptyActionText}>Clear filters</Text>
               </TouchableOpacity>
@@ -868,7 +788,7 @@ export default function AnnouncementsScreen() {
             style={StyleSheet.absoluteFillObject}
             onPress={closeFilterSheet}
             accessibilityRole="button"
-            accessibilityLabel="Close notification filters"
+            accessibilityLabel="Close announcement filters"
           />
           <View style={styles.filterSheet} accessibilityViewIsModal>
             <View style={styles.dragHandle}>
@@ -876,14 +796,14 @@ export default function AnnouncementsScreen() {
             </View>
             <View style={styles.filterSheetHeader}>
               <View style={styles.filterSheetTitleWrap}>
-                <Text style={styles.filterSheetTitle}>Filter Notifications</Text>
+                <Text style={styles.filterSheetTitle}>Filter Announcements</Text>
                 <Text style={styles.filterSheetSubtitle}>Tap a category or priority to filter instantly.</Text>
               </View>
               <TouchableOpacity
                 style={styles.filterCloseButton}
                 onPress={closeFilterSheet}
                 accessibilityRole="button"
-                accessibilityLabel="Close notification filters"
+                accessibilityLabel="Close announcement filters"
               >
                 <Ionicons name="close" size={20} color={colors.textMuted} />
               </TouchableOpacity>
@@ -909,7 +829,7 @@ export default function AnnouncementsScreen() {
                       onPress={() => setSelectedCategory(category === 'all' ? null : category)}
                       accessibilityRole="radio"
                       accessibilityState={{ selected }}
-                      accessibilityLabel={`${label}, ${count} ${count === 1 ? 'notification' : 'notifications'}`}
+                      accessibilityLabel={`${label}, ${count} ${count === 1 ? 'announcement' : 'announcements'}`}
                     >
                       <View style={[styles.radioOuter, selected && styles.radioOuterSelected]}>
                         {selected ? <View style={styles.radioInner} /> : null}
@@ -944,7 +864,7 @@ export default function AnnouncementsScreen() {
                       onPress={() => setPriorityFilter(option.key)}
                       accessibilityRole="radio"
                       accessibilityState={{ selected }}
-                      accessibilityLabel={`${option.label} priority, ${count} ${count === 1 ? 'notification' : 'notifications'}`}
+                      accessibilityLabel={`${option.label} priority, ${count} ${count === 1 ? 'announcement' : 'announcements'}`}
                     >
                       <View style={[styles.radioOuter, selected && styles.radioOuterSelected]}>
                         {selected ? <View style={styles.radioInner} /> : null}
@@ -970,7 +890,7 @@ export default function AnnouncementsScreen() {
                 style={styles.filterResetButton}
                 onPress={clearFilters}
                 accessibilityRole="button"
-                accessibilityLabel="Reset notification filters"
+                accessibilityLabel="Reset announcement filters"
               >
                 <Text style={styles.filterResetText}>Reset</Text>
               </TouchableOpacity>
@@ -978,7 +898,7 @@ export default function AnnouncementsScreen() {
                 style={styles.filterApplyButton}
                 onPress={closeFilterSheet}
                 accessibilityRole="button"
-                accessibilityLabel="Done filtering notifications"
+                accessibilityLabel="Done filtering announcements"
               >
                 <Text style={styles.filterApplyText}>Done</Text>
               </TouchableOpacity>
@@ -1104,22 +1024,6 @@ export default function AnnouncementsScreen() {
         </View>
       </Modal>
 
-      {/* ── Undo snackbar ── */}
-      {pendingDeletion ? (
-        <View style={styles.undoSnackbar}>
-          <Text style={styles.undoSnackbarText}>
-            {pendingDeletion.items.length === 1 ? '1 notification removed' : `${pendingDeletion.items.length} notifications removed`}
-          </Text>
-          <TouchableOpacity
-            style={styles.undoSnackbarAction}
-            onPress={undoPendingDeletion}
-            accessibilityRole="button"
-            accessibilityLabel="Undo remove"
-          >
-            <Text style={styles.undoSnackbarActionText}>Undo</Text>
-          </TouchableOpacity>
-        </View>
-      ) : null}
     </SafeAreaView>
   );
 }

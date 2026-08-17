@@ -304,36 +304,6 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  // Hide an announcement from the News tab only, for this tenant only — a
-  // per-tenant junction write on the backend (announcement_dismissals),
-  // never a mutation of the shared announcements collection. Deliberately
-  // does not touch `notifications` state: an announcement dismissed here
-  // must still appear in the bell (see announcements.jsx's own layered
-  // hiddenAnnouncementIds, which is what actually filters it out of this
-  // screen — this function only performs the network write).
-  const dismissAnnouncement = useCallback(async (announcementId) => {
-    if (!announcementId) return false;
-    try {
-      await api.post(`/announcements/${encodeURIComponent(announcementId)}/dismiss`);
-      return true;
-    } catch (_error) {
-      return false;
-    }
-  }, []);
-
-  // Multi-select delete for the News tab — same per-tenant hide as
-  // dismissAnnouncement, batched server-side.
-  const dismissAnnouncementsBulk = useCallback(async (announcementIds) => {
-    const ids = Array.isArray(announcementIds) ? announcementIds.filter(Boolean) : [];
-    if (!ids.length) return false;
-    try {
-      await api.post('/announcements/dismiss-bulk', { ids });
-      return true;
-    } catch (_error) {
-      return false;
-    }
-  }, []);
-
   const navigateFromNotification = useCallback(async (data) => {
     const destination = resolveNotificationRoute(data);
     if (!destination || !routerRef.current) return false;
@@ -974,15 +944,13 @@ export function AuthProvider({ children }) {
     clearNotificationUnread,
     dismissNotification,
     clearNotifications,
-    dismissAnnouncement,
-    dismissAnnouncementsBulk,
     refreshNotifications,
   }), [
     user, firebaseUser, firebaseAuthReady, isLoading, authReady, authStatus,
     login, loginWithEmail, verifyLoginOtp, registerWithEmail, logout, checkAuth,
     signInWithGoogle, updateUser, notifications, notificationUnreadCount,
     markNotificationRead, clearNotificationUnread, dismissNotification, clearNotifications,
-    dismissAnnouncement, dismissAnnouncementsBulk, refreshNotifications,
+    refreshNotifications,
   ]);
 
   if (isLoading) {

@@ -333,6 +333,10 @@ export const apiService = {
   
   // Announcements
   getAnnouncements: () => api.get('/announcements'),
+  dismissAnnouncement: (announcementId) =>
+    api.post(`/announcements/${encodeURIComponent(announcementId)}/dismiss`),
+  dismissAnnouncementsBulk: (announcementIds) =>
+    api.post('/announcements/dismiss-bulk', { ids: announcementIds }),
   getNotifications: () => api.get('/notifications'),
   markNotificationRead: (notificationId) => api.patch(`/notifications/${encodeURIComponent(notificationId)}/read`),
   markAllNotificationsRead: () => api.patch('/notifications/read-all'),
