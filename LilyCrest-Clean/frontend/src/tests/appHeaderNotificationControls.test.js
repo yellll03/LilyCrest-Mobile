@@ -16,6 +16,10 @@ jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn() }),
 }));
 
+jest.mock('../services/notifications', () => ({
+  resolveNotificationRoute: jest.fn(() => '/(tabs)/billing'),
+}));
+
 const mockDismissNotification = jest.fn().mockResolvedValue();
 const mockClearNotifications = jest.fn().mockResolvedValue();
 const mockMarkNotificationRead = jest.fn().mockResolvedValue();

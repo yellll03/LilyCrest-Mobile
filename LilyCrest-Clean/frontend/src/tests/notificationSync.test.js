@@ -114,6 +114,29 @@ describe('notification sync — single source of truth (regression)', () => {
     expect(latest.notifications).toHaveLength(2);
   });
 
+  it('counts canonical Phase 2 module events from the shared backend feed in the Home badge', async () => {
+    const phase2Events = [
+      { notification_id: 'contract-1', type: 'contract_document_ready', read: false },
+      { notification_id: 'chat-1', type: 'chat_reply', read: false },
+      { notification_id: 'bill-1', type: 'bill_generated', read: false },
+      { notification_id: 'maintenance-1', type: 'maintenance_update', read: false },
+    ];
+    mockGet.mockImplementation((url) => {
+      if (url === '/users/me') return Promise.resolve({ data: { user_id: 'tenant-a', name: 'Tenant A', email: 'a@example.com' } });
+      if (url === '/notifications') return Promise.resolve({ data: phase2Events });
+      return Promise.resolve({ data: {} });
+    });
+
+    renderAuth(capture);
+    await waitFor(() => expect(latest.notificationUnreadCount).toBe(4));
+    expect(latest.notifications.map((item) => item.type)).toEqual([
+      'contract_document_ready',
+      'chat_reply',
+      'bill_generated',
+      'maintenance_update',
+    ]);
+  });
+
   it('markNotificationRead optimistically marks the row read and calls the per-item backend endpoint', async () => {
     renderAuth(capture);
     await waitFor(() => expect(latest.notificationUnreadCount).toBe(1));
