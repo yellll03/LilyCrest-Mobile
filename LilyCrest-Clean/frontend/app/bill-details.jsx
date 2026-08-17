@@ -680,7 +680,14 @@ export default function BillDetailsScreen() {
               showAlert({ title: 'Download Unavailable', message: 'No downloadable statement for this bill.', type: 'warning' });
               return;
             }
-            router.push({ pathname: '/document-viewer', params: { kind: 'bill', id: String(billIdentifier), title: 'Billing Statement' } });
+            router.push({
+              pathname: '/document-viewer',
+              // cacheKey includes statement_version (bumped server-side on every
+              // regeneration — see backend resolveStatementVersion()) so a
+              // statement that changed since it was last cached (e.g. a utility
+              // charge just posted) is never served stale from disk.
+              params: { kind: 'bill', id: String(billIdentifier), title: 'Billing Statement', cacheKey: `${billIdentifier}_v${bill?.statement_version || 'v1'}` },
+            });
           }}
         >
           <Ionicons name="document-text-outline" size={18} color="#ffffff" />
@@ -693,7 +700,10 @@ export default function BillDetailsScreen() {
             disabled={!billIdentifier}
             onPress={() => {
               if (!billIdentifier) return;
-              router.push({ pathname: '/document-viewer', params: { kind: 'bill-receipt', id: String(billIdentifier), title: 'Payment Receipt' } });
+              router.push({
+                pathname: '/document-viewer',
+                params: { kind: 'bill-receipt', id: String(billIdentifier), title: 'Payment Receipt', cacheKey: `${billIdentifier}_receipt_v${bill?.statement_version || 'v1'}` },
+              });
             }}
           >
             <Ionicons name="receipt-outline" size={18} color={colors.primary} />

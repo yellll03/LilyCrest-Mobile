@@ -415,7 +415,10 @@ export default function BillingScreen() {
             disabled={!billId}
             onPress={() => {
               if (!billId) return;
-              router.push({ pathname: '/document-viewer', params: { kind: 'bill', id: String(billId), title: 'Billing Statement' } });
+              router.push({
+                pathname: '/document-viewer',
+                params: { kind: 'bill', id: String(billId), title: 'Billing Statement', cacheKey: `${billId}_v${bill?.statement_version || 'v1'}` },
+              });
             }}
           >
             <Ionicons name="download-outline" size={14} color={colors.text} />
@@ -427,7 +430,10 @@ export default function BillingScreen() {
               disabled={!billId}
               onPress={() => {
                 if (!billId) return;
-                router.push({ pathname: '/document-viewer', params: { kind: 'bill-receipt', id: String(billId), title: 'Payment Receipt' } });
+                router.push({
+                  pathname: '/document-viewer',
+                  params: { kind: 'bill-receipt', id: String(billId), title: 'Payment Receipt', cacheKey: `${billId}_receipt_v${bill?.statement_version || 'v1'}` },
+                });
               }}
             >
               <Ionicons name="receipt-outline" size={14} color={colors.text} />

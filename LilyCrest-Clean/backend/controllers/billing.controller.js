@@ -532,6 +532,7 @@ function normalizeLegacyBill(bill = {}) {
   if (!normalized.bill_id && bill._id) normalized.bill_id = String(bill._id);
   if (!normalized.legacy_billing_id && fallbackId) normalized.legacy_billing_id = fallbackId;
   normalized._id = undefined;
+  normalized.statement_version = resolveStatementVersion(normalized.updated_at, normalized.created_at);
   const moveInFinancials = extractMoveInFinancials(normalized);
   if (moveInFinancials) {
     normalized.move_in_financials = moveInFinancials;
@@ -963,6 +964,20 @@ async function enrichRealBillsWithUtilityBreakdowns(db, bills = []) {
   });
 }
 
+// A monotonically increasing cache-busting token for the statement PDF —
+// the client keys its on-disk PDF cache on this (see
+// frontend/src/services/documentManager.js's cacheKey param) instead of just
+// billing_id, so a regenerated statement (e.g. a utility charge posting
+// after the tenant already opened this bill) is never served stale from
+// disk. updated_at/updatedAt is bumped on every write to the bill record
+// (see updateBilling below), so it's already a correct version signal —
+// falls back to the creation timestamp for a bill that was never updated.
+function resolveStatementVersion(updatedAt, createdAt) {
+  const value = updatedAt || createdAt;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? String(value || 'v1') : date.getTime();
+}
+
 // Map a document from the real 'bills' collection to the legacy billing shape
 function mapRealBill(b, userId) {
   const c = b.charges || {};
@@ -1035,6 +1050,7 @@ function mapRealBill(b, userId) {
     },
     created_at: b.createdAt,
     updated_at: b.updatedAt,
+    statement_version: resolveStatementVersion(b.updatedAt, b.createdAt),
     isArchived: b.isArchived ?? false,
     isHidden: b.isHidden ?? b.hidden ?? false,
     isDeleted: b.isDeleted ?? false,
@@ -1388,18 +1404,43 @@ async function updateBilling(req, res) {
     if (Array.isArray(electricity_breakdown)) updates.electricity_breakdown = electricity_breakdown;
     if (water_breakdown && typeof water_breakdown === 'object') updates.water_breakdown = water_breakdown;
 
-    // Recompute total if itemized fields were updated
+    // Recompute total if itemized fields were updated. Bills live in either
+    // the legacy `billing` collection or the real `bills` collection (see
+    // fetchUserBills/mapRealBill) — this used to look up `existing` only in
+    // `billing`, so a charge edit on a bill that lives exclusively in
+    // `bills` 404'd immediately here, before ever reaching the `bills`
+    // fallback further down. Look up whichever collection actually has it.
+    let existingForRecompute = null;
     if (rent !== undefined || electricity !== undefined || water !== undefined || penalties !== undefined || items !== undefined) {
       const legacyFilter = isAdmin
         ? { billing_id: billingId }
         : { billing_id: billingId, user_id: req.user.user_id };
-      const existing = await db.collection('billing').findOne(legacyFilter);
-      if (!existing) return res.status(404).json({ detail: 'Bill not found' });
-      const r = updates.rent ?? existing.rent ?? 0;
-      const e = updates.electricity ?? existing.electricity ?? 0;
-      const w = updates.water ?? existing.water ?? 0;
-      const p = updates.penalties ?? existing.penalties ?? 0;
-      const extraItems = updates.items ?? existing.items ?? [];
+      existingForRecompute = await db.collection('billing').findOne(legacyFilter);
+      if (!existingForRecompute) {
+        const objectId = ObjectId.isValid(billingId) ? new ObjectId(billingId) : null;
+        if (objectId) {
+          const realFilter = isAdmin
+            ? { _id: objectId }
+            : { _id: objectId, $or: buildBillingOwnerFilters(req.user) };
+          const realDoc = await db.collection('bills').findOne(realFilter);
+          if (realDoc) {
+            const charges = realDoc.charges || {};
+            existingForRecompute = {
+              rent: charges.rent ?? realDoc.rent,
+              electricity: charges.electricity ?? realDoc.electricity,
+              water: charges.water ?? realDoc.water,
+              penalties: charges.penalty ?? realDoc.penalties,
+              items: realDoc.items,
+            };
+          }
+        }
+      }
+      if (!existingForRecompute) return res.status(404).json({ detail: 'Bill not found' });
+      const r = updates.rent ?? existingForRecompute.rent ?? 0;
+      const e = updates.electricity ?? existingForRecompute.electricity ?? 0;
+      const w = updates.water ?? existingForRecompute.water ?? 0;
+      const p = updates.penalties ?? existingForRecompute.penalties ?? 0;
+      const extraItems = updates.items ?? existingForRecompute.items ?? [];
       const itemsTotal = Array.isArray(extraItems) ? extraItems.reduce((s, i) => s + (Number(i.amount) || 0), 0) : 0;
       const computed = Number(r) + Number(e) + Number(w) + Number(p) + itemsTotal;
       updates.total = computed;
@@ -1475,6 +1516,11 @@ async function updateBilling(req, res) {
     }
 
     // Map snake_case fields to the camelCase schema used by the 'bills' collection.
+    // Must mirror every PDF-visible field `updates` can carry — a field
+    // written here only for `billing` (legacy) but silently dropped for
+    // `bills` (real) means a real bill's admin edit both fails to change
+    // what the tenant sees AND, moot as it is once actually blocked, would
+    // never have bumped updatedAt for cache-invalidation purposes either.
     const billsUpdates = { updatedAt: new Date() };
     if (updates.status) {
       billsUpdates.status = updates.status;
@@ -1486,6 +1532,23 @@ async function updateBilling(req, res) {
     if (updates.payment_method) billsUpdates.paymentMethod = updates.payment_method;
     if (updates.payment_date) billsUpdates.paymentDate = new Date(updates.payment_date);
     if (updates.notes) billsUpdates.notes = updates.notes;
+    if (updates.description) billsUpdates.description = updates.description;
+    if (updates.billing_period) billsUpdates.billingMonth = updates.billing_period;
+    if (updates.release_date) billsUpdates.billingCycleStart = updates.release_date;
+    for (const field of ['rent', 'electricity', 'water', 'penalties']) {
+      if (updates[field] === undefined) continue;
+      billsUpdates[`charges.${field === 'penalties' ? 'penalty' : field}`] = updates[field];
+    }
+    if (updates.items !== undefined) billsUpdates.items = updates.items;
+    if (updates.electricity_breakdown !== undefined) billsUpdates.electricity_breakdown = updates.electricity_breakdown;
+    if (updates.water_breakdown !== undefined) billsUpdates.water_breakdown = updates.water_breakdown;
+    if (updates.total !== undefined) {
+      billsUpdates.totalAmount = updates.total;
+      billsUpdates.grossAmount = updates.total;
+      billsUpdates.remainingAmount = updates.status === 'paid' ? 0 : updates.total;
+    }
+    if (updates.paid_amount !== undefined) billsUpdates.paidAmount = updates.paid_amount;
+    if (updates.remaining_amount !== undefined) billsUpdates.remainingAmount = updates.remaining_amount;
 
     const billsResult = await db.collection('bills').findOneAndUpdate(
       { _id: objId },
