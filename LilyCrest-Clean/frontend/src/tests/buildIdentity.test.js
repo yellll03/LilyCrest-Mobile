@@ -14,8 +14,8 @@ describe('Android release identity', () => {
 
     expect(expoVersion).toBe(nativeVersion);
     expect(expoVersionCode).toBe(nativeVersionCode);
-    expect(nativeVersion).toBe('1.1.10');
-    expect(nativeVersionCode).toBe(12);
+    expect(nativeVersion).toBe('1.1.11');
+    expect(nativeVersionCode).toBe(13);
   });
 
   it('keeps the production application ID unchanged', () => {
