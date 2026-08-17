@@ -41,7 +41,7 @@ describe('Change Password reachability and contract', () => {
     const source = read('app/change-password.jsx');
     expect(source).toContain("if (!password) return 'Current password is required'");
     expect(source).toContain('validateStrongPassword(newPassword');
-    expect(source).toContain("'New password must be different from your current password'");
+    expect(source).toContain("'Your new password must be different from your current password.'");
     expect(source).toContain("'Passwords do not match'");
   });
 
@@ -51,6 +51,23 @@ describe('Change Password reachability and contract', () => {
     const apiSource = read('src/services/api.js');
     expect(apiSource).toContain("changePassword: (currentPassword, newPassword, options = {}) =>");
     expect(apiSource).toContain("api.post('/auth/change-password'");
+  });
+
+  test('current password is preserved while whitespace is blocked only for new credentials', () => {
+    const source = read('app/change-password.jsx');
+    expect(source).toContain("if (field === 'current') {");
+    expect(source).toContain('setCurrentPassword(value);');
+    expect(source).not.toMatch(/validateCurrentPassword[\s\S]{0,180}\/\\s\/\.test\(password\)/);
+    expect(source).toContain('blockPasswordWhitespaceInput(value, currentValue)');
+    expect(source).not.toContain('>No spaces</Text>');
+  });
+
+  test('change-password has a synchronous duplicate-submit guard', () => {
+    const source = read('app/change-password.jsx');
+    expect(source).toContain('const submitInFlight = useRef(false);');
+    expect(source).toContain('if (submitInFlight.current) return;');
+    expect(source).toContain('submitInFlight.current = true;');
+    expect(source).toContain('submitInFlight.current = false;');
   });
 
   test('a successful change clears biometric credentials and forces sign-out back to /login', () => {

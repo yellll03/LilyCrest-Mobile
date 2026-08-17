@@ -1,6 +1,8 @@
-export const PASSWORD_WHITESPACE_MESSAGE = 'Password must not contain spaces.';
+export const NEW_PASSWORD_MIN_LENGTH = 8;
+export const NEW_PASSWORD_MAX_LENGTH = 128;
+export const PASSWORD_WHITESPACE_MESSAGE = 'Password must not contain whitespace.';
 
-const SPECIAL_CHARACTER_REGEX = /[!@#$%^&*()\-_=+\[\]{};:'",.<>?/\\|`~]/;
+const SPECIAL_CHARACTER_REGEX = /[^A-Za-z0-9\s]/;
 
 export function passwordContainsWhitespace(password = '') {
   return /\s/.test(password);
@@ -16,15 +18,14 @@ export function blockPasswordWhitespaceInput(nextValue, previousValue = '') {
 
 export function validateLoginPassword(password = '') {
   if (!password) return { valid: false, error: 'Password is required' };
-  if (password.length > 128) return { valid: false, error: 'Password is too long' };
-  if (password.length < 6) return { valid: false, error: 'Password must be at least 6 characters' };
   return { valid: true, error: '' };
 }
 
 export function getStrongPasswordChecks(password = '') {
   return {
     noWhitespace: !passwordContainsWhitespace(password),
-    length: password.length >= 8,
+    length: password.length >= NEW_PASSWORD_MIN_LENGTH,
+    maxLength: password.length <= NEW_PASSWORD_MAX_LENGTH,
     uppercase: /[A-Z]/.test(password),
     lowercase: /[a-z]/.test(password),
     number: /[0-9]/.test(password),
@@ -40,7 +41,10 @@ export function validateStrongPassword(password = '', { requiredMessage = 'Passw
     return { valid: false, error: PASSWORD_WHITESPACE_MESSAGE, checks };
   }
   if (!checks.length) {
-    return { valid: false, error: 'Password must be at least 8 characters', checks };
+    return { valid: false, error: `Password must be at least ${NEW_PASSWORD_MIN_LENGTH} characters`, checks };
+  }
+  if (!checks.maxLength) {
+    return { valid: false, error: `Password must be at most ${NEW_PASSWORD_MAX_LENGTH} characters`, checks };
   }
   if (!checks.uppercase) {
     return { valid: false, error: 'Password must contain at least one uppercase letter', checks };

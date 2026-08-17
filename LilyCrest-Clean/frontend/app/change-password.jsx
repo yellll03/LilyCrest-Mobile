@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../src/context/AuthContext';
@@ -11,6 +11,7 @@ import { clearCredentials } from '../src/services/secureCredentials';
 import {
   blockPasswordWhitespaceInput,
   getStrongPasswordChecks,
+  NEW_PASSWORD_MAX_LENGTH,
   PASSWORD_WHITESPACE_MESSAGE,
   validateStrongPassword,
 } from '../src/utils/passwordValidation';
@@ -31,6 +32,7 @@ export default function ChangePasswordScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({ current: false, new: false, confirm: false });
+  const submitInFlight = useRef(false);
 
   const passwordChecks = useMemo(() => getStrongPasswordChecks(newPassword), [newPassword]);
   const isPasswordValid = validateStrongPassword(newPassword, { requiredMessage: 'New password is required' }).valid;
@@ -40,7 +42,6 @@ export default function ChangePasswordScreen() {
 
   const validateCurrentPassword = (password) => {
     if (!password) return 'Current password is required';
-    if (/\s/.test(password)) return PASSWORD_WHITESPACE_MESSAGE;
     return '';
   };
 
@@ -54,7 +55,7 @@ export default function ChangePasswordScreen() {
     if (touched.new) {
       if (!newPassword) nextErrors.new = 'New password is required';
       else if (!isPasswordValid) nextErrors.new = validateStrongPassword(newPassword, { requiredMessage: 'New password is required' }).error;
-      else if (isSameAsCurrent) nextErrors.new = 'New password must be different from your current password';
+      else if (isSameAsCurrent) nextErrors.new = 'Your new password must be different from your current password.';
       else nextErrors.new = '';
     }
 
@@ -69,6 +70,7 @@ export default function ChangePasswordScreen() {
   }, [confirmPassword, currentPassword, doPasswordsMatch, isPasswordValid, isSameAsCurrent, newPassword, touched]);
 
   const handleChangePassword = async () => {
+    if (submitInFlight.current) return;
     const nextErrors = {
       current: validateCurrentPassword(currentPassword),
       new: !newPassword
@@ -76,7 +78,7 @@ export default function ChangePasswordScreen() {
         : !isPasswordValid
           ? validateStrongPassword(newPassword, { requiredMessage: 'New password is required' }).error
           : isSameAsCurrent
-            ? 'New password must be different from your current password'
+            ? 'Your new password must be different from your current password.'
             : '',
       confirm: !confirmPassword
         ? 'Please confirm your new password'
@@ -94,6 +96,7 @@ export default function ChangePasswordScreen() {
       return;
     }
     
+    submitInFlight.current = true;
     setIsLoading(true);
     try {
       await apiService.changePassword(currentPassword, newPassword, {
@@ -134,11 +137,16 @@ export default function ChangePasswordScreen() {
         type: type === 'validation' ? 'warning' : 'error',
       });
     } finally {
+      submitInFlight.current = false;
       setIsLoading(false);
     }
   };
 
   const handlePasswordFieldChange = (field, value) => {
+    if (field === 'current') {
+      setCurrentPassword(value);
+      return;
+    }
     const currentValue = field === 'current' ? currentPassword : field === 'new' ? newPassword : confirmPassword;
     const { value: nextValue, blocked } = blockPasswordWhitespaceInput(value, currentValue);
 
@@ -148,7 +156,6 @@ export default function ChangePasswordScreen() {
       return;
     }
 
-    if (field === 'current') setCurrentPassword(nextValue);
     if (field === 'new') setNewPassword(nextValue);
     if (field === 'confirm') setConfirmPassword(nextValue);
   };
@@ -208,6 +215,7 @@ export default function ChangePasswordScreen() {
                 onChangeText={(value) => handlePasswordFieldChange('new', value)}
                 onBlur={() => setTouched((prev) => ({ ...prev, new: true }))}
                 secureTextEntry={!showNewPassword}
+                maxLength={NEW_PASSWORD_MAX_LENGTH}
               />
               <TouchableOpacity onPress={() => setShowNewPassword(!showNewPassword)}>
                 <Ionicons name={showNewPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.textMuted} />
@@ -217,10 +225,6 @@ export default function ChangePasswordScreen() {
             
             {/* Password Requirements */}
             <View style={styles.requirementsContainer}>
-              <View style={styles.requirementRow}>
-                <Ionicons name={passwordChecks.noWhitespace ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={passwordChecks.noWhitespace ? '#22C55E' : colors.textMuted} />
-                <Text style={[styles.requirementText, passwordChecks.noWhitespace && styles.requirementMet]}>No spaces</Text>
-              </View>
               <View style={styles.requirementRow}>
                 <Ionicons name={passwordChecks.length ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={passwordChecks.length ? '#22C55E' : colors.textMuted} />
                 <Text style={[styles.requirementText, passwordChecks.length && styles.requirementMet]}>At least 8 characters</Text>
@@ -257,6 +261,7 @@ export default function ChangePasswordScreen() {
                 onChangeText={(value) => handlePasswordFieldChange('confirm', value)}
                 onBlur={() => setTouched((prev) => ({ ...prev, confirm: true }))}
                 secureTextEntry={!showConfirmPassword}
+                maxLength={NEW_PASSWORD_MAX_LENGTH}
               />
               <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
                 <Ionicons name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.textMuted} />
