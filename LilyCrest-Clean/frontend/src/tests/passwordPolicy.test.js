@@ -1,3 +1,5 @@
+/* global describe, expect, test */
+
 import {
   NEW_PASSWORD_MAX_LENGTH,
   getStrongPasswordChecks,

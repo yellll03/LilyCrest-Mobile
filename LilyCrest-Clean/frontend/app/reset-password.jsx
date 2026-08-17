@@ -62,7 +62,7 @@ export default function ResetPasswordHandoffScreen() {
             ? 'This password reset link is no longer valid. Request a new link to continue.'
             : 'Password reset now uses Lilycrest’s verified web flow. We are opening it in your browser.'}
         </Text>
-        {openFailed ? <Text style={styles.error}>We couldn't open the browser. Try again below.</Text> : null}
+        {openFailed ? <Text style={styles.error}>We couldn&apos;t open the browser. Try again below.</Text> : null}
         {!invalid ? (
           <TouchableOpacity style={[styles.primaryButton, opening && styles.disabled]} onPress={openSecureReset} disabled={opening}>
             {opening ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Open Password Reset</Text>}
