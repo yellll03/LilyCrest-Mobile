@@ -1,7 +1,24 @@
+const { execSync } = require('child_process');
 const express = require('express');
 const router = express.Router();
 const seedController = require('../controllers/seed.controller');
 const { authMiddleware } = require('../middleware/auth');
+
+// Resolved once at process start, not per-request — the commit a running
+// process is serving never changes without a redeploy. Render sets
+// RENDER_GIT_COMMIT automatically; `git rev-parse` covers any other host
+// that ships the .git dir. Mirrors frontend/app.config.js's resolveGitCommit()
+// so "does the app commit descend from a given backend commit" is a plain
+// string/ancestry comparison, not a guess.
+const DEPLOYED_COMMIT = (() => {
+  if (process.env.RENDER_GIT_COMMIT) return process.env.RENDER_GIT_COMMIT.slice(0, 9);
+  try {
+    return execSync('git rev-parse --short HEAD', { cwd: __dirname }).toString().trim();
+  } catch (_error) {
+    return 'unknown';
+  }
+})();
+const DEPLOYED_AT = new Date().toISOString();
 
 // Auth routes
 const authRoutes = require('./auth.routes');
@@ -88,9 +105,17 @@ function seedAccessMiddleware(req, res, next) {
 // Seed route is development-only and admin/owner gated.
 router.post('/seed', authMiddleware, seedAccessMiddleware, seedController.seedData);
 
-// Health check
+// Health check — also the source of truth for "which commit is this backend
+// actually running", so a mismatch between this and a device's Profile
+// footer (frontend/app/(tabs)/profile.jsx) proves a deployment/build gap
+// rather than a code bug.
 router.get('/health', (req, res) => {
-  res.json({ status: 'ok' });
+  res.json({
+    status: 'ok',
+    commit: DEPLOYED_COMMIT,
+    deployedAt: DEPLOYED_AT,
+    env: process.env.NODE_ENV || 'development',
+  });
 });
 
 // Root route

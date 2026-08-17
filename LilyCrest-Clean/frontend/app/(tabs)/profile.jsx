@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useState } from 'react';
@@ -11,6 +12,23 @@ import { apiService, getApiErrorMessage } from '../../src/services/api';
 import { useTenantContract } from '../../src/hooks/useTenantContract';
 import { buildContractSummary } from '../../src/utils/contractPresentation';
 import { SURVEY_FEEDBACK_ENABLED } from '../../src/config/features';
+import { API_BASE_URL } from '../../src/config/api';
+
+const BUILD_INFO = (() => {
+  const config = Constants.expoConfig || {};
+  const version = config.version || '0.0.0';
+  const buildNumber = config.android?.versionCode ?? '?';
+  const commit = config.extra?.gitCommit || 'unknown';
+  const buildTime = config.extra?.buildTime;
+  const builtLabel = buildTime && !Number.isNaN(new Date(buildTime).getTime())
+    ? new Date(buildTime).toLocaleString('en-PH', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' })
+    : 'unknown';
+  return {
+    line1: `v${version} (build ${buildNumber}) · commit ${commit}`,
+    line2: `API: ${API_BASE_URL}`,
+    line3: `Built: ${builtLabel}`,
+  };
+})();
 
 const NAME_MAX = 60;
 const USERNAME_MAX = 30;
@@ -631,7 +649,13 @@ export default function ProfileScreen() {
             <Text style={styles.logoutText}>Sign Out</Text>
           </TouchableOpacity>
         )}
-        {!isEditing && <Text style={styles.versionText}>Version 1.0.0</Text>}
+        {!isEditing && (
+          <View style={styles.buildInfoBlock}>
+            <Text style={styles.versionText}>{BUILD_INFO.line1}</Text>
+            <Text style={styles.versionText}>{BUILD_INFO.line2}</Text>
+            <Text style={styles.versionText}>{BUILD_INFO.line3}</Text>
+          </View>
+        )}
         <View style={styles.bottomSpacer} />
       </ScrollView>
 
@@ -829,7 +853,8 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     gap: 8,
   },
   logoutText: { fontSize: 15, fontWeight: '600', color: '#EF4444' },
-  versionText: { textAlign: 'center', fontSize: 12, color: colors.textMuted, marginTop: 16 },
+  buildInfoBlock: { marginTop: 16 },
+  versionText: { textAlign: 'center', fontSize: 10, color: colors.textMuted, marginTop: 2 },
 
   editForm: {
     backgroundColor: colors.surface,

@@ -1,10 +1,29 @@
+const { execSync } = require('child_process');
+
 const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
+
+// EAS build workers set these; a local `expo start`/`eas build` also has git
+// available, so fall back to reading the checked-out commit directly. Only
+// used for the Profile screen's build-info footer (frontend/app/(tabs)/profile.jsx)
+// so a given APK can be traced back to the exact commit + moment it was built.
+function resolveGitCommit() {
+  if (process.env.EAS_BUILD_GIT_COMMIT_HASH) return process.env.EAS_BUILD_GIT_COMMIT_HASH.slice(0, 9);
+  try {
+    return execSync('git rev-parse --short HEAD', { cwd: process.cwd() }).toString().trim();
+  } catch (_error) {
+    return 'unknown';
+  }
+}
 
 module.exports = {
   expo: {
     name: 'LilyCrest',
     slug: 'frontend',
-    version: '1.1.1',
+    // Keep in sync with android/app/build.gradle's versionName — that file is
+    // the authoritative source for native Android builds (this repo commits a
+    // hand-maintained android/ folder rather than regenerating it from this
+    // file via `expo prebuild` before every build). Bump both together.
+    version: '1.1.8',
     orientation: 'default',
     icon: './assets/images/icon.png',
     scheme: 'frontend',
@@ -19,7 +38,8 @@ module.exports = {
     },
     android: {
       package: 'com.lilycrest.lilycrestdorm',
-      versionCode: 3,
+      // Keep in sync with android/app/build.gradle's versionCode (see note above).
+      versionCode: 10,
       googleServicesFile: process.env.GOOGLE_SERVICES_JSON || './google-services.json',
       config: {
         googleSignIn: {
@@ -84,6 +104,8 @@ module.exports = {
       eas: {
         projectId: '02393b94-dfb2-4544-a052-19ff85b0220f',
       },
+      gitCommit: resolveGitCommit(),
+      buildTime: new Date().toISOString(),
     },
   },
 };

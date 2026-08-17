@@ -8,6 +8,7 @@ import { AlertProvider } from '../src/context/AlertContext';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { ThemeProvider, useTheme } from '../src/context/ThemeContext';
 import { ToastProvider } from '../src/context/ToastContext';
+import { clearDocumentCacheIfStaleBuild, evictStaleDocumentCache } from '../src/services/documentManager';
 
 SplashScreen.preventAutoHideAsync();
 
@@ -62,6 +63,12 @@ function LayoutContent() {
   useEffect(() => {
     if (!isLoading) SplashScreen.hideAsync();
   }, [isLoading]);
+
+  useEffect(() => {
+    clearDocumentCacheIfStaleBuild()
+      .then(() => evictStaleDocumentCache())
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!authReady) return;
