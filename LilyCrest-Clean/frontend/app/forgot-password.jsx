@@ -50,10 +50,9 @@ export default function ForgotPasswordScreen() {
     requestInFlight.current = true;
     setIsLoading(true);
     try {
-      // Routed through the backend's own reset-token flow (Resend email +
-      // production reset page) instead of Firebase's client SDK, whose
-      // action link domain is controlled by Firebase Console settings and
-      // is not guaranteed to point at our production domain.
+      // Shared with the website: the canonical backend generates a genuine
+      // Firebase action code and sends the branded Lilycrest email. The app
+      // never creates or consumes a separate mobile reset credential.
       await apiService.forgotPassword(normalizeEmail(email));
       setSent(true);
       showToast({

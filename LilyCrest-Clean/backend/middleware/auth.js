@@ -1,5 +1,6 @@
 const { getDb } = require('../config/database');
 const { normalizeUser } = require('../utils/normalizeUser');
+const { isTenantMobileRole } = require('../utils/tenantEligibility');
 
 function isAccountActive(user = {}) {
   if (user.deleted_at || user.deletedAt || user.is_deleted === true || user.isDeleted === true) return false;
@@ -131,6 +132,16 @@ function tenantMiddleware(req, res, next) {
   return next();
 }
 
+// Password recovery/change is stricter than the older general tenant-app
+// middleware: only an authoritative tenant/resident role may mutate a mobile
+// credential. Applicant/admin/owner/staff identities fail closed.
+function tenantPasswordMiddleware(req, res, next) {
+  if (!isTenantMobileRole(req.user?.role)) {
+    return res.status(403).json({ detail: 'Tenant access is required.' });
+  }
+  return next();
+}
+
 // Like authMiddleware but doesn't block unauthenticated requests.
 // Attaches req.user if a valid session is found; sets req.user = null otherwise.
 async function optionalAuthMiddleware(req, res, next) {
@@ -170,6 +181,7 @@ module.exports = {
   authMiddleware,
   adminMiddleware,
   tenantMiddleware,
+  tenantPasswordMiddleware,
   optionalAuthMiddleware,
   authMiddlewareRecentSession,
   isAccountActive,

@@ -6,6 +6,8 @@ const { verifyFirebaseIdToken, verifyTenantInFirebase, admin } = require('../con
 const { sendPasswordResetEmail, sendPasswordChangedEmail } = require('../services/emailService');
 const { normalizeUser, sanitizeUserForClient } = require('../utils/normalizeUser');
 const { isAccountActive } = require('../middleware/auth');
+const { validateNewPassword: validateCanonicalNewPassword } = require('../utils/passwordPolicy');
+const { isTenantMobileRole } = require('../utils/tenantEligibility');
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────
 
@@ -195,7 +197,7 @@ function hashAuthSecret(value) {
 // status response of valid:true is only meaningful if it reflects the exact
 // same rule the real reset operation enforces.
 function resetTokenEligibilityFilter(hashedToken, asOf = new Date()) {
-  return { hashedToken, used: false, expiresAt: { $gt: asOf } };
+  return { hashedToken, used: false, expiresAt: { $gt: asOf }, processingId: { $exists: false } };
 }
 
 function parseDateSafe(value) {
@@ -248,14 +250,6 @@ async function login(req, res) {
   if (!isValidEmail(emailRaw)) {
     return res.status(400).json({ detail: 'Please provide a valid email address' });
   }
-  const passwordValidationErrors = validateAuthPassword(password, {
-    requiredMessage: 'Email and password are required',
-    minLength: 6,
-  });
-  if (passwordValidationErrors.length > 0) {
-    return res.status(400).json({ detail: passwordValidationErrors[0] });
-  }
-
   const apiKey = firebaseApiKey();
   if (!apiKey) {
     return res.status(500).json({ detail: 'Firebase API key not configured on backend' });
@@ -845,27 +839,16 @@ const COMMON_PASSWORDS = new Set([
 ]);
 
 function validateNewPassword(password) {
-  const errors = validateAuthPassword(password, { requiredMessage: 'New password is required' });
-  if (errors.length > 0) {
-    return errors;
-  }
-  if (!/[A-Z]/.test(password)) {
-    errors.push('Password must contain at least one uppercase letter');
-  }
-  if (!/[a-z]/.test(password)) {
-    errors.push('Password must contain at least one lowercase letter');
-  }
-  if (!/[0-9]/.test(password)) {
-    errors.push('Password must contain at least one number');
-  }
-  if (!/[!@#$%^&*()\-_=+\[\]{};:'",.<>?/\\|`~]/.test(password)) {
-    errors.push('Password must contain at least one special character (e.g. !@#$%^&*)');
-  }
-  if (COMMON_PASSWORDS.has(password.toLowerCase())) {
-    errors.push('This password is too common. Please choose a stronger one');
-  }
+  return validateCanonicalNewPassword(password);
+}
 
-  return errors;
+function firebasePasswordError(error) {
+  return String(error?.response?.data?.error?.message || error?.code || '').toUpperCase();
+}
+
+function isNetworkFailure(error) {
+  return !error?.response
+    && Boolean(error?.request || /network|timeout|timed out|econn/i.test(String(error?.message || error?.code || '')));
 }
 
 async function changePassword(req, res) {
@@ -877,13 +860,10 @@ async function changePassword(req, res) {
     const requestIp = req.ip || req.headers['x-forwarded-for'] || 'Unknown';
 
     // ── Input validation ──────────────────────────────────────────────────
-    if (!current_password || !new_password) {
+    if (typeof current_password !== 'string' || current_password.length === 0
+      || typeof new_password !== 'string' || new_password.length === 0) {
       return res.status(400).json({ detail: 'Current password and new password are required' });
     }
-    if (passwordContainsWhitespace(current_password)) {
-      return res.status(400).json({ detail: PASSWORD_WHITESPACE_MESSAGE });
-    }
-
     // Server-side complexity checks (mirrors frontend rules)
     const validationErrors = validateNewPassword(new_password);
     if (validationErrors.length > 0) {
@@ -910,11 +890,17 @@ async function changePassword(req, res) {
         { email: userEmail, password: current_password, returnSecureToken: false },
       );
     } catch (fbErr) {
-      const msg = fbErr.response?.data?.error?.message || '';
+      const msg = firebasePasswordError(fbErr);
       if (msg.includes('TOO_MANY_ATTEMPTS')) {
-        return res.status(429).json({ detail: 'Too many attempts. Please try again later.' });
+        return res.status(429).json({ code: 'RATE_LIMITED', detail: 'Too many attempts. Please wait and try again.' });
       }
-      return res.status(401).json({ detail: 'Current password is incorrect' });
+      if (msg.includes('INVALID_PASSWORD') || msg.includes('INVALID_LOGIN_CREDENTIALS')) {
+        return res.status(401).json({ code: 'CURRENT_PASSWORD_INCORRECT', detail: 'Your current password is incorrect.' });
+      }
+      if (isNetworkFailure(fbErr)) {
+        return res.status(503).json({ code: 'CURRENT_PASSWORD_VERIFICATION_UNAVAILABLE', detail: "We couldn't verify your current password. Check your connection and try again." });
+      }
+      return res.status(502).json({ code: 'PASSWORD_PROVIDER_FAILURE', detail: 'We could not verify your current password right now. Please try again.' });
     }
 
     // ── Update password in Firebase ───────────────────────────────────────
@@ -922,12 +908,28 @@ async function changePassword(req, res) {
     if (!uid) {
       return res.status(400).json({ detail: 'No Firebase account linked. Cannot change password.' });
     }
-    await admin.auth().updateUser(uid, { password: new_password });
+    try {
+      await admin.auth().updateUser(uid, { password: new_password });
+    } catch (providerError) {
+      console.error('[ChangePassword] Firebase update failed:', providerError?.code || providerError?.message);
+      return res.status(502).json({ code: 'PASSWORD_PROVIDER_FAILURE', detail: 'We could not update your password right now. Please try again.' });
+    }
 
     console.log(`[ChangePassword] ✓ Password updated for user_id=${userId} email=${maskEmail(userEmail)}`);
 
     const db = getDb();
     const changeTimestamp = new Date();
+
+    // Credential update succeeds first. Only then invalidate sessions; never
+    // strand the current user before Firebase has accepted the new password.
+    let sessionCleanupComplete = true;
+    try {
+      await db.collection('user_sessions').deleteMany({ user_id: userId });
+      console.log(`[ChangePassword] Sessions cleared for user_id=${userId}`);
+    } catch (sessionError) {
+      sessionCleanupComplete = false;
+      console.error('[ChangePassword] Password changed; session finalization incomplete:', sessionError?.code || sessionError?.message);
+    }
 
     // ── In-app audit announcement ─────────────────────────────────────────
     if (notify_app !== false) {
@@ -984,11 +986,6 @@ async function changePassword(req, res) {
     } catch (_) { /* push service may not be available */ }
 
     // ── Invalidate all existing sessions (force re-login with new password) ──
-    try {
-      await db.collection('user_sessions').deleteMany({ user_id: userId });
-      console.log(`[ChangePassword] Sessions cleared for user_id=${userId}`);
-    } catch (_) { /* non-critical */ }
-
     // ── Audit log entry ───────────────────────────────────────────────────
     try {
       await db.collection('login_attempts').insertOne({
@@ -1001,7 +998,7 @@ async function changePassword(req, res) {
       });
     } catch (_) { /* non-critical */ }
 
-    res.json({ message: 'Password updated successfully' });
+    res.json({ message: 'Password updated successfully', sessionCleanupComplete });
   } catch (error) {
     console.error('Change password error:', error);
     res.status(500).json({ detail: 'Failed to change password. Please try again.' });
@@ -1122,6 +1119,17 @@ function getResetPasswordPage(req, res) {
 <div class="body"><div class="icon">⚠️</div>
 <h1>Invalid Reset Link</h1><p>This link is missing a reset token. Please request a new password reset from the app.</p></div></div></body></html>`);
   }
+
+  // The standalone mobile backend no longer owns an interactive reset UI.
+  // Preserve already-issued links by handing them to the canonical API's
+  // CSP-compatible compatibility page; no password is placed in the URL.
+  const canonicalApiOrigin = String(
+    process.env.CANONICAL_AUTH_API_ORIGIN || 'https://api.lilycrest.space',
+  ).replace(/\/+$/, '');
+  return res.redirect(
+    302,
+    `${canonicalApiOrigin}/api/m/auth/reset-password?token=${encodeURIComponent(String(token))}`,
+  );
 
   const safeToken = encodeURIComponent(token);
   const prodLink  = `frontend://reset-password?token=${safeToken}`;
@@ -1352,7 +1360,10 @@ async function checkResetTokenValid(req, res) {
     const record = await db.collection('password_reset_tokens').findOne(
       resetTokenEligibilityFilter(hashedToken),
     );
-    res.json({ valid: Boolean(record) });
+    const user = record?.user_id
+      ? await db.collection('users').findOne({ user_id: record.user_id })
+      : null;
+    res.json({ valid: Boolean(record) && Boolean(user) && isAccountActive(user) && isTenantMobileRole(user.role) });
   } catch (error) {
     console.error('Reset token status check error:', error);
     res.status(500).json({ valid: false, detail: 'Failed to check reset link status.' });
@@ -1376,10 +1387,11 @@ async function resetPassword(req, res) {
     const hashedToken = hashAuthSecret(token);
     const db = getDb();
     const claimTime = new Date();
+    const processingId = crypto.randomUUID();
     const claimedRecord = await db.collection('password_reset_tokens').findOneAndUpdate(
       resetTokenEligibilityFilter(hashedToken, claimTime),
-      { $set: { used: true, usedAt: claimTime } },
-      { returnDocument: 'before' }
+      { $set: { processingId, processingAt: claimTime } },
+      { returnDocument: 'after' }
     );
     const record = claimedRecord?.value ?? claimedRecord;
 
@@ -1387,8 +1399,35 @@ async function resetPassword(req, res) {
       return res.status(400).json({ detail: 'This reset link is invalid or has expired. Please request a new one.' });
     }
 
-    // Update password in Firebase via Admin SDK
-    await admin.auth().updateUser(record.uid, { password: newPassword });
+    const eligibleUser = record.user_id
+      ? await db.collection('users').findOne({ user_id: record.user_id }).catch(() => null)
+      : null;
+    if (!eligibleUser || !isAccountActive(eligibleUser) || !isTenantMobileRole(eligibleUser.role)) {
+      await db.collection('password_reset_tokens').updateOne(
+        { hashedToken, processingId, used: false },
+        { $set: { used: true, usedAt: new Date() }, $unset: { processingId: '', processingAt: '' } },
+      ).catch(() => undefined);
+      return res.status(400).json({ detail: 'This reset link is invalid or has expired. Please request a new one.' });
+    }
+
+    // Keep the one-time claim exclusive while Firebase owns the credential
+    // update. A provider failure releases the claim; successful update is
+    // followed by terminal token consumption.
+    try {
+      await admin.auth().updateUser(record.uid, { password: newPassword });
+    } catch (providerError) {
+      await db.collection('password_reset_tokens').updateOne(
+        { hashedToken, processingId, used: false },
+        { $unset: { processingId: '', processingAt: '' } },
+      ).catch(() => undefined);
+      console.error('[ResetPassword] Firebase update failed:', providerError?.code || providerError?.message);
+      return res.status(502).json({ code: 'PASSWORD_PROVIDER_FAILURE', detail: 'We could not update your password right now. Please try again.' });
+    }
+
+    await db.collection('password_reset_tokens').updateOne(
+      { hashedToken, processingId, used: false },
+      { $set: { used: true, usedAt: new Date() }, $unset: { processingId: '', processingAt: '' } },
+    );
 
     // Invalidate all active sessions for this user.
     // Auth middleware validates against the user_sessions collection.
@@ -1420,7 +1459,8 @@ module.exports = {
   logout,
   sessionTeardown,
   changePassword,
-  forgotPassword,
+  // New reset requests are owned by canonicalPasswordReset.controller.js;
+  // this legacy auth module cannot be called to mint a custom Mongo token.
   getResetPasswordPage,
   checkResetTokenValid,
   resetPassword,

@@ -2,7 +2,8 @@ const express = require('express');
 const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const authController = require('../controllers/auth.controller');
-const { authMiddleware, authMiddlewareRecentSession } = require('../middleware/auth');
+const canonicalPasswordResetController = require('../controllers/canonicalPasswordReset.controller');
+const { authMiddleware, authMiddlewareRecentSession, tenantPasswordMiddleware } = require('../middleware/auth');
 
 const authLimiter = rateLimit({
 	windowMs: 15 * 60 * 1000,
@@ -20,8 +21,11 @@ router.post('/login/resend-otp', authLimiter, authController.resendOtp);
 router.get('/me', authMiddleware, authController.getMe);
 router.post('/logout', authMiddleware, authController.logout);
 router.post('/session-teardown', authLimiter, authMiddlewareRecentSession, authController.sessionTeardown);
-router.post('/change-password', authLimiter, authMiddleware, authController.changePassword);
-router.post('/forgot-password', authLimiter, authController.forgotPassword);
+router.post('/change-password', authLimiter, authMiddleware, tenantPasswordMiddleware, authController.changePassword);
+router.post('/forgot-password', authLimiter, canonicalPasswordResetController.requestPasswordReset);
+// Transitional only: GET redirects already-issued custom links to the
+// canonical API compatibility page. Status/reset below can consume only
+// credentials minted before the cutover; Forgot Password cannot mint them.
 router.get('/reset-password', authController.getResetPasswordPage);
 // Read-only pre-check for a canonical web frontend's /auth-action page (see
 // buildPasswordResetLink in auth.controller.js) — does not consume the token.

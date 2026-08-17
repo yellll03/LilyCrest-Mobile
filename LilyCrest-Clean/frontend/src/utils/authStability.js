@@ -80,6 +80,13 @@ export function classifyAuthError(error) {
 // are safe and useful to show verbatim — unlike an arbitrary/unvetted error
 // path, which must never reach the tenant as raw backend text.
 export function classifyChangePasswordError(error) {
+  const responseCode = String(error?.response?.data?.code || '').toUpperCase();
+  if (responseCode === 'CURRENT_PASSWORD_VERIFICATION_UNAVAILABLE') {
+    return { type: 'provider', message: "We couldn't verify your current password right now. Please try again." };
+  }
+  if (responseCode === 'PASSWORD_PROVIDER_FAILURE') {
+    return { type: 'provider', message: "We couldn't update your password right now. Please try again." };
+  }
   const base = classifyAuthError(error);
   if (['offline', 'timeout', 'server', 'rate-limit'].includes(base.type)) {
     return { type: base.type, message: base.message };

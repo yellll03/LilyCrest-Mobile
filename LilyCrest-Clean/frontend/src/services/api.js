@@ -408,7 +408,14 @@ export const apiService = {
     }),
 
   // Auth
-  forgotPassword: (email) => api.post('/auth/forgot-password', { email }),
+  // Password reset is a public, shared web/mobile operation. Use the
+  // canonical Firebase action-code request service through the tenant-only
+  // /api/m alias, not the retired password_reset_tokens authority.
+  forgotPassword: (email) => axios.post(
+    `${MOBILE_API_BASE_URL}/auth/forgot-password`,
+    { email },
+    { timeout: 15000 },
+  ),
   changePassword: (currentPassword, newPassword, options = {}) =>
     api.post('/auth/change-password', {
       current_password: currentPassword,
