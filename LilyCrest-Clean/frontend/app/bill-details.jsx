@@ -16,6 +16,7 @@ import {
   isBillingUnavailableMessage,
 } from '../src/services/billingState';
 import { safeBack } from '../src/utils/navigation';
+import { billingDocumentCacheKey } from '../src/utils/billingDocumentCache';
 import { ensureFirebaseStorageAttachments, IMAGE_UPLOAD_MIME_TYPES, MAX_IMAGE_UPLOAD_BYTES } from '../src/services/firebaseStorageUpload';
 import { getBillPaymentDate, getUtilityReleaseSchedule, isBillOutstanding } from '../src/utils/billingStatus';
 
@@ -686,7 +687,7 @@ export default function BillDetailsScreen() {
               // regeneration — see backend resolveStatementVersion()) so a
               // statement that changed since it was last cached (e.g. a utility
               // charge just posted) is never served stale from disk.
-              params: { kind: 'bill', id: String(billIdentifier), title: 'Billing Statement', cacheKey: `${billIdentifier}_v${bill?.statement_version || 'v1'}` },
+              params: { kind: 'bill', id: String(billIdentifier), title: 'Billing Statement', cacheKey: billingDocumentCacheKey(billIdentifier, bill) },
             });
           }}
         >
@@ -702,7 +703,7 @@ export default function BillDetailsScreen() {
               if (!billIdentifier) return;
               router.push({
                 pathname: '/document-viewer',
-                params: { kind: 'bill-receipt', id: String(billIdentifier), title: 'Payment Receipt', cacheKey: `${billIdentifier}_receipt_v${bill?.statement_version || 'v1'}` },
+                params: { kind: 'bill-receipt', id: String(billIdentifier), title: 'Payment Receipt', cacheKey: billingDocumentCacheKey(billIdentifier, bill, 'receipt') },
               });
             }}
           >

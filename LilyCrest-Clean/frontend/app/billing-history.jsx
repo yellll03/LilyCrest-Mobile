@@ -11,6 +11,7 @@ import { apiService, getApiErrorMessage } from '../src/services/api';
 import { subscribeBillingRefresh } from '../src/services/billingState';
 import { getBillOwedAmount, getBillPaymentDate, getBillStatus, getUtilityReleaseSchedule, isBillOutstanding } from '../src/utils/billingStatus';
 import { safeBack } from '../src/utils/navigation';
+import { billingDocumentCacheKey } from '../src/utils/billingDocumentCache';
 
 // Helpers
 function safeCurrency(amount) {
@@ -417,7 +418,7 @@ export default function BillingScreen() {
               if (!billId) return;
               router.push({
                 pathname: '/document-viewer',
-                params: { kind: 'bill', id: String(billId), title: 'Billing Statement', cacheKey: `${billId}_v${bill?.statement_version || 'v1'}` },
+                params: { kind: 'bill', id: String(billId), title: 'Billing Statement', cacheKey: billingDocumentCacheKey(billId, bill) },
               });
             }}
           >
@@ -432,7 +433,7 @@ export default function BillingScreen() {
                 if (!billId) return;
                 router.push({
                   pathname: '/document-viewer',
-                  params: { kind: 'bill-receipt', id: String(billId), title: 'Payment Receipt', cacheKey: `${billId}_receipt_v${bill?.statement_version || 'v1'}` },
+                  params: { kind: 'bill-receipt', id: String(billId), title: 'Payment Receipt', cacheKey: billingDocumentCacheKey(billId, bill, 'receipt') },
                 });
               }}
             >
