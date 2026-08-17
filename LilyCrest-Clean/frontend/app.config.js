@@ -98,7 +98,7 @@ module.exports = {
     experiments: {
       typedRoutes: true,
     },
-    owner: 'leigh_23',
+    owner: 'ayagfdfgdgs-team',
     extra: {
       router: {},
       eas: {
