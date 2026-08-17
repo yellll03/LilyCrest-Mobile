@@ -18,11 +18,29 @@ describe('auth flow implementation contracts', () => {
   // see auth.controller.js's buildPasswordResetLink) rather than Firebase's
   // client SDK, whose action link domain is controlled by Firebase Console
   // settings and is not guaranteed to point at our production domain.
-  test('forgot password is routed through the backend, not the Firebase client SDK', () => {
+  test('forgot password uses the canonical web/mobile reset API, not a mobile token authority', () => {
     const source = read('app/forgot-password.jsx');
+    const apiSource = read('src/services/api.js');
     expect(source).toContain('apiService.forgotPassword(');
     expect(source).not.toContain('sendPasswordResetEmail(auth');
     expect(source).not.toMatch(/from ['"]firebase\/auth['"]/);
+    expect(apiSource).toContain('`${MOBILE_API_BASE_URL}/auth/forgot-password`');
+    expect(apiSource).not.toMatch(/forgotPassword:[\s\S]{0,160}password_reset_tokens/);
+  });
+
+  test('the mobile reset route is only a legacy browser handoff, with no password form or reset submission', () => {
+    const source = read('app/reset-password.jsx');
+    expect(source).toContain('/api/m/auth/reset-password?token=');
+    expect(source).toContain('Linking.openURL(legacyWebUrl)');
+    expect(source).not.toContain('newPassword');
+    expect(source).not.toContain("api.post('/auth/reset-password'");
+  });
+
+  test('login preserves the exact entered password', () => {
+    const source = read('app/login.jsx');
+    expect(source).toContain('const normalizedPassword = password;');
+    expect(source).toContain('loginWithEmail(normalizedEmail, normalizedPassword, rememberMe)');
+    expect(source).not.toMatch(/password\.(trim|replace)\(/);
   });
 
   test('Google authentication uses the singleton Firebase module', () => {

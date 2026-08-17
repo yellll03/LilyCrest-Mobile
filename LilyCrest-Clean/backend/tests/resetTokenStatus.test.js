@@ -26,14 +26,21 @@ function fakeResponse() {
   };
 }
 
-function fakeDb(tokenDocs) {
+function fakeDb(tokenDocs, user = {
+  user_id: 'tenant-a',
+  role: 'tenant',
+  account_status: 'active',
+}) {
   return {
     collection(name) {
+      if (name === 'users') {
+        return { findOne: async (query) => user?.user_id === query.user_id ? { ...user } : null };
+      }
       if (name !== 'password_reset_tokens') {
         return { findOne: async () => null };
       }
       return {
-        findOne: async (query) => tokenDocs.find((doc) =>
+        findOne: async (query) => tokenDocs.map((doc) => ({ user_id: 'tenant-a', ...doc })).find((doc) =>
           doc.hashedToken === query.hashedToken
           && doc.used === query.used
           && doc.expiresAt > query.expiresAt.$gt) || null,
@@ -78,6 +85,20 @@ test('an already-used token reports valid: false', async () => {
   await checkResetTokenValid({ body: { token: rawToken } }, res);
   assert.equal(res.body.valid, false);
 });
+
+for (const role of ['applicant', 'admin', 'superadmin', 'branch_admin', 'owner', 'staff']) {
+  test(`a token tied to ${role} reports valid: false`, async () => {
+    const rawToken = `role-${role}`;
+    const db = fakeDb(
+      [{ hashedToken: hash(rawToken), used: false, expiresAt: new Date(Date.now() + 60000) }],
+      { user_id: 'tenant-a', role, account_status: 'active' },
+    );
+    const { checkResetTokenValid } = freshAuthController(db);
+    const res = fakeResponse();
+    await checkResetTokenValid({ body: { token: rawToken } }, res);
+    assert.equal(res.body.valid, false);
+  });
+}
 
 test('a missing body reports valid: false without touching the database', async () => {
   let dbTouched = false;
@@ -164,9 +185,15 @@ test('checking status never consumes the token (uses findOne, not a claiming upd
   let findOneCalls = 0;
   const db = {
     collection(name) {
+      if (name === 'users') {
+        return { findOne: async () => ({ user_id: 'tenant-a', role: 'tenant', account_status: 'active' }) };
+      }
       assert.equal(name, 'password_reset_tokens');
       return {
-        findOne: async () => { findOneCalls += 1; return { hashedToken: hash(rawToken) }; },
+        findOne: async () => {
+          findOneCalls += 1;
+          return { hashedToken: hash(rawToken), user_id: 'tenant-a' };
+        },
         findOneAndUpdate: async () => { throw new Error('status check must never claim the token'); },
       };
     },
@@ -269,6 +296,7 @@ test('resetTokenEligibilityFilter and hashAuthSecret are the exact functions che
     hashedToken,
     used: false,
     expiresAt: { $gt: new Date('2026-01-01T00:00:00.000Z') },
+    processingId: { $exists: false },
   });
 });
 
@@ -299,6 +327,7 @@ test('status(valid) -> status(same token again) -> POST reset -> status(after re
             if (store.doc.hashedToken !== query.hashedToken) return null;
             if (store.doc.used !== query.used) return null;
             if (!(store.doc.expiresAt > query.expiresAt.$gt)) return null;
+            if (query.processingId && store.doc.processingId) return null;
             return { ...store.doc };
           },
           // Mirrors the mongodb driver v6 default (no includeResultMetadata):
@@ -308,14 +337,25 @@ test('status(valid) -> status(same token again) -> POST reset -> status(after re
             if (store.doc.hashedToken !== query.hashedToken) return null;
             if (store.doc.used !== query.used) return null;
             if (!(store.doc.expiresAt > query.expiresAt.$gt)) return null;
-            const before = { ...store.doc };
+            if (query.processingId && store.doc.processingId) return null;
             Object.assign(store.doc, update.$set);
-            return before;
+            return { ...store.doc };
+          },
+          updateOne: async (query, update) => {
+            if (store.doc.hashedToken !== query.hashedToken) return { matchedCount: 0 };
+            if (query.processingId && store.doc.processingId !== query.processingId) return { matchedCount: 0 };
+            if (typeof query.used === 'boolean' && store.doc.used !== query.used) return { matchedCount: 0 };
+            if (update.$set) Object.assign(store.doc, update.$set);
+            if (update.$unset) Object.keys(update.$unset).forEach((key) => delete store.doc[key]);
+            return { matchedCount: 1, modifiedCount: 1 };
           },
         };
       }
       if (name === 'user_sessions') {
         return { deleteMany: async (query) => { sessionsDeleted.push(query.user_id); return { deletedCount: 1 }; } };
+      }
+      if (name === 'users') {
+        return { findOne: async () => ({ user_id: 'tenant-a', role: 'tenant', account_status: 'active' }) };
       }
       return { insertOne: async () => ({}), findOne: async () => null };
     },

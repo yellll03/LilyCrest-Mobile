@@ -23,13 +23,17 @@ function fakeResponse() {
   };
 }
 
-function fakeDb() {
+function fakeDb(order = []) {
   const deletedSessionsFor = [];
   return {
     _deletedSessionsFor: deletedSessionsFor,
     collection(name) {
       if (name === 'user_sessions') {
-        return { deleteMany: async (query) => { deletedSessionsFor.push(query.user_id); return { deletedCount: 1 }; } };
+        return { deleteMany: async (query) => {
+          order.push('sessions-delete');
+          deletedSessionsFor.push(query.user_id);
+          return { deletedCount: 1 };
+        } };
       }
       return {
         insertOne: async () => ({ insertedId: 'fake-id' }),
@@ -120,6 +124,62 @@ test('wrong current password is rejected with 401 and the password is never upda
   assert.equal(db._deletedSessionsFor.length, 0);
 });
 
+test('the exact current password, including legacy whitespace, is sent to Firebase unchanged', async () => {
+  const db = fakeDb();
+  let verifiedPassword = null;
+  await withChangePassword({
+    db,
+    axiosImpl: async (_url, body) => {
+      verifiedPassword = body.password;
+      const err = new Error('Firebase auth failed');
+      err.response = { data: { error: { message: 'INVALID_PASSWORD' } } };
+      throw err;
+    },
+  }, async (changePassword) => {
+    const res = fakeResponse();
+    await changePassword(baseReq({ body: { current_password: ' Legacy Pass1! ', new_password: 'NewStrong1!' } }), res);
+    assert.equal(res.statusCode, 401);
+  });
+  assert.equal(verifiedPassword, ' Legacy Pass1! ');
+});
+
+test('a Firebase verification network failure is not mislabeled as a wrong password', async () => {
+  const db = fakeDb();
+  await withChangePassword({
+    db,
+    axiosImpl: async () => {
+      throw Object.assign(new Error('network timeout'), { code: 'ECONNABORTED', request: {} });
+    },
+  }, async (changePassword) => {
+    const res = fakeResponse();
+    await changePassword(baseReq({ body: { current_password: 'CurrentStrong1!', new_password: 'NewStrong1!' } }), res);
+    assert.equal(res.statusCode, 503);
+    assert.equal(res.body.code, 'CURRENT_PASSWORD_VERIFICATION_UNAVAILABLE');
+    assert.doesNotMatch(res.body.detail, /incorrect/i);
+  });
+});
+
+test('a Firebase password-update failure is truthful and leaves sessions intact', async () => {
+  const db = fakeDb();
+  const originalError = console.error;
+  console.error = () => {};
+  try {
+    await withChangePassword({
+      db,
+      updateUserImpl: async () => { throw Object.assign(new Error('provider unavailable'), { code: 'auth/internal-error' }); },
+      axiosImpl: async () => ({ data: {} }),
+    }, async (changePassword) => {
+      const res = fakeResponse();
+      await changePassword(baseReq({ body: { current_password: 'CurrentStrong1!', new_password: 'NewStrong1!' } }), res);
+      assert.equal(res.statusCode, 502);
+      assert.equal(res.body.code, 'PASSWORD_PROVIDER_FAILURE');
+    });
+  } finally {
+    console.error = originalError;
+  }
+  assert.equal(db._deletedSessionsFor.length, 0);
+});
+
 test('a weak new password is rejected server-side even if the client somehow skipped its own validation', async () => {
   const db = fakeDb();
   await withChangePassword({ db, axiosImpl: async () => ({ data: {} }) }, async (changePassword) => {
@@ -140,17 +200,23 @@ test('the new password cannot be identical to the current password', async () =>
 });
 
 test('a successful change updates Firebase and invalidates every existing session (forces re-login everywhere)', async () => {
-  const db = fakeDb();
+  const order = [];
+  const db = fakeDb(order);
   let updatedUid = null;
   let updatedPassword = null;
   await withChangePassword({
     db,
-    updateUserImpl: async (uid, patch) => { updatedUid = uid; updatedPassword = patch.password; },
+    updateUserImpl: async (uid, patch) => {
+      order.push('provider-update');
+      updatedUid = uid;
+      updatedPassword = patch.password;
+    },
     axiosImpl: async () => ({ data: {} }),
   }, async (changePassword) => {
     const res = fakeResponse();
     await changePassword(baseReq({ body: { current_password: 'CurrentStrong1!', new_password: 'NewStrong1!' } }), res);
     assert.equal(res.statusCode, 200);
+    assert.equal(res.body.sessionCleanupComplete, true);
   });
   assert.equal(updatedUid, 'firebase-uid-a');
   assert.equal(updatedPassword, 'NewStrong1!');
@@ -158,4 +224,5 @@ test('a successful change updates Firebase and invalidates every existing sessio
   // client's own forced local logout (see change-password.jsx) is backed by
   // an equivalent server-side guarantee, not just client-side trust.
   assert.deepEqual(db._deletedSessionsFor, ['tenant-a']);
+  assert.deepEqual(order, ['provider-update', 'sessions-delete']);
 });
