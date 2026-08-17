@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useLocalSearchParams } from 'expo-router';
 import InquiryCard from '../components/assistant/InquiryCard';
 import LilyFlowerIcon from '../components/assistant/LilyFlowerIcon';
 import MessageBubble from '../components/assistant/MessageBubble';
@@ -331,12 +332,17 @@ const getConversationMode = (conversation) => {
 const isSupportMode = (mode) => mode === CHAT_MODE.WAITING || mode === CHAT_MODE.ACTIVE;
 
 export default function LilyAssistantScreen() {
+  const { conversationId: notificationConversationIdParam } = useLocalSearchParams();
+  const notificationConversationId = Array.isArray(notificationConversationIdParam)
+    ? notificationConversationIdParam[0]
+    : notificationConversationIdParam;
   const scrollRef = useRef(null);
   const adminScrollRef = useRef(null);
   const seenSupportMsgIds = useRef(new Set());
   const sendGuardRef = useRef(false);
   const escalationGuardRef = useRef(false);
   const sendCooldownRef = useRef(0);
+  const handledNotificationConversationRef = useRef('');
   const { user, authReady } = useAuth();
   const { colors } = useTheme();
   const styles = useThemedStyles(createAssistantStyles);
@@ -716,7 +722,22 @@ export default function LilyAssistantScreen() {
 
       try {
         setNetworkError(null);
-        await loadSupportInquiries({ preserveSelection: false });
+        const conversations = await loadSupportInquiries({ preserveSelection: false });
+        const targetConversationId = String(notificationConversationId || '').trim();
+        const targetConversation = conversations.find(
+          (conversation) => String(conversation.id) === targetConversationId,
+        );
+        if (
+          targetConversation
+          && handledNotificationConversationRef.current !== targetConversationId
+        ) {
+          handledNotificationConversationRef.current = targetConversationId;
+          setActiveTab('chat');
+          await refreshSupportConversation(targetConversationId, {
+            replaceMainFeed: true,
+            scroll: true,
+          });
+        }
       } catch (error) {
         setInquiries([]);
         setNetworkError(getChatErrorMessage(error, 'Unable to initialize admin support right now.'));
@@ -726,7 +747,7 @@ export default function LilyAssistantScreen() {
     bootstrapSupport();
     // These support helpers intentionally use the latest selected conversation refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authReady, user?.user_id]);
+  }, [authReady, notificationConversationId, user?.user_id]);
 
   useEffect(() => {
     if (!supportConversationId) return;

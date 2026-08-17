@@ -17,6 +17,7 @@ import {
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
+import { resolveNotificationRoute } from '../services/notifications';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const SHEET_MAX_HEIGHT = Math.round(SCREEN_HEIGHT * 0.70);
@@ -159,8 +160,19 @@ export default function AppHeader() {
     if (notification?.notification_id && markNotificationRead) {
       markNotificationRead(notification.notification_id).catch(() => {});
     }
-    viewAllNotifications();
-  }, [markNotificationRead, viewAllNotifications]);
+    const destination = resolveNotificationRoute({
+      ...(notification?.data || {}),
+      type: notification?.type,
+      category: notification?.category,
+      url: notification?.url || notification?.data?.url,
+      billing_id: notification?.billing_id,
+      contract_id: notification?.contract_id,
+      conversation_id: notification?.conversation_id,
+      request_id: notification?.request_id,
+    });
+    closeSheet();
+    setTimeout(() => router.push(destination), 270);
+  }, [closeSheet, markNotificationRead, router]);
 
   // Dismiss is per-tenant hide only — for a shared announcement this never
   // deletes/mutates the underlying document, so other tenants and admins

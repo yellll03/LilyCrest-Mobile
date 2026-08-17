@@ -302,6 +302,14 @@ export function resolveNotificationRoute(data = {}) {
   if (!data || typeof data !== 'object') return '/(tabs)/announcements';
 
   const directUrl = typeof data?.url === 'string' ? data.url.trim() : '';
+  const conversationId = data?.conversation_id || data?.conversationId || data?.session_id;
+  const requestId = data?.request_id || data?.requestId;
+  if (/^\/\(tabs\)\/chatbot(?:[/?#]|$)/i.test(directUrl) && conversationId) {
+    return { pathname: '/(tabs)/chatbot', params: { conversationId: String(conversationId) } };
+  }
+  if (/^\/\(tabs\)\/services(?:[/?#]|$)/i.test(directUrl) && requestId) {
+    return { pathname: '/(tabs)/services', params: { requestId: String(requestId) } };
+  }
   const directSurvey = directUrl.match(/^\/surveys\/([^/?#]+)/i);
   if (directSurvey) {
     return SURVEY_FEEDBACK_ENABLED
@@ -332,12 +340,16 @@ export function resolveNotificationRoute(data = {}) {
       return '/(tabs)/announcements';
     case 'maintenance':
     case 'services':
-      return '/(tabs)/services';
+      return requestId
+        ? { pathname: '/(tabs)/services', params: { requestId: String(requestId) } }
+        : '/(tabs)/services';
     case 'chat':
     case 'chatbot':
     case 'admin chat':
     case 'live chat':
-      return '/(tabs)/chatbot';
+      return conversationId
+        ? { pathname: '/(tabs)/chatbot', params: { conversationId: String(conversationId) } }
+        : '/(tabs)/chatbot';
     case 'reservation':
       return '/(tabs)/home';
     case 'survey':

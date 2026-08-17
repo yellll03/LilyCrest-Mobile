@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Crypto from 'expo-crypto';
 import { format } from 'date-fns';
-import { Link, useFocusEffect } from 'expo-router';
+import { Link, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -249,6 +249,10 @@ function canReplyToRequest(request = {}) {
 }
 
 export default function ServicesScreen() {
+  const { requestId: notificationRequestIdParam } = useLocalSearchParams();
+  const notificationRequestId = Array.isArray(notificationRequestIdParam)
+    ? notificationRequestIdParam[0]
+    : notificationRequestIdParam;
   const { user, authReady, authStatus } = useAuth();
   const { colors } = useTheme();
   const { showToast } = useToast();
@@ -396,6 +400,7 @@ export default function ServicesScreen() {
   // Search
   const [searchQuery, setSearchQuery] = useState('');
   const bannerTimerRef = useRef(null);
+  const handledNotificationRequestRef = useRef('');
   // Idempotency key for the current submission attempt. Minted once and
   // reused across retries (e.g. a timed-out request the tenant resubmits by
   // tapping Submit again) so the backend can recognize it as the same
@@ -695,6 +700,29 @@ export default function ServicesScreen() {
       setDetailLoading(false);
     }
   };
+
+  useEffect(() => {
+    const targetRequestId = String(notificationRequestId || '').trim();
+    if (!targetRequestId || handledNotificationRequestRef.current === targetRequestId) return;
+
+    const ownedRequest = requests.find(
+      (request) => String(request.request_id) === targetRequestId,
+    );
+    if (!ownedRequest) return;
+
+    handledNotificationRequestRef.current = targetRequestId;
+    const status = String(ownedRequest.status || '').toLowerCase();
+    setActiveTab(
+      RESOLVED_STATUSES.includes(status)
+        ? 'resolved'
+        : status === 'cancelled'
+          ? 'cancelled'
+          : 'active',
+    );
+    openDetail(ownedRequest);
+    // openDetail intentionally refreshes this same owned request after opening.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [notificationRequestId, requests]);
 
   const enterEditMode = () => {
     if (!detailRequest) return;
