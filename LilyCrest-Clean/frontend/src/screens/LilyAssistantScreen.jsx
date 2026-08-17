@@ -351,6 +351,7 @@ export default function LilyAssistantScreen() {
   const [isSending, setIsSending] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [isSendingReply, setIsSendingReply] = useState(false);
+  const [isReopeningInquiry, setIsReopeningInquiry] = useState(false);
   const [chatMode, setChatMode] = useState(CHAT_MODE.AI);
   const [pendingAdminReason, setPendingAdminReason] = useState('');
   const [pendingAdminIntent, setPendingAdminIntent] = useState('general');
@@ -920,6 +921,29 @@ export default function LilyAssistantScreen() {
     }
   };
 
+  const reopenSelectedInquiry = async () => {
+    if (!selectedInquiry?.id || isReopeningInquiry) return;
+    setIsReopeningInquiry(true);
+    setNetworkError(null);
+    try {
+      const { data } = await apiService.reopenSupportChat(
+        selectedInquiry.id,
+        'Tenant reports that the concern persists; conversation reopened.',
+      );
+      const conversation = data?.conversation;
+      if (conversation) {
+        syncConversationState(conversation);
+        updateInquiryRecord(conversation, selectedInquiry.thread || []);
+      }
+      await refreshSupportConversation(selectedInquiry.id, { replaceMainFeed: false, scroll: true });
+      await loadSupportInquiries();
+    } catch (error) {
+      setNetworkError(getChatErrorMessage(error, 'Failed to reopen this support conversation.'));
+    } finally {
+      setIsReopeningInquiry(false);
+    }
+  };
+
   const handleSelectInquiry = async (item) => {
     try {
       const { data } = await apiService.getSupportChatMessages(item.id);
@@ -1118,8 +1142,6 @@ export default function LilyAssistantScreen() {
     if (!selectedInquiry) return null;
 
     const isSolved = selectedInquiry.status === 'solved';
-    const isActive = supportConversationId === selectedInquiry.id && isSupportMode(chatMode);
-
     return (
       <View style={styles.detailScreen}>
         <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
@@ -1194,24 +1216,25 @@ export default function LilyAssistantScreen() {
 
         <View style={styles.detailFooter}>
           {isSolved ? (
-            <View style={styles.resolvedNotice}>
-              <Ionicons name="checkmark-circle" size={16} color="#15803d" />
-              <Text style={styles.resolvedNoticeText}>This support conversation is resolved.</Text>
+            <View style={styles.resolvedActions}>
+              <View style={styles.resolvedNotice}>
+                <Ionicons name="checkmark-circle" size={16} color="#15803d" />
+                <Text style={styles.resolvedNoticeText}>This support conversation is resolved.</Text>
+              </View>
+              <Text style={styles.reopenPrompt}>Still having this issue?</Text>
+              <Pressable
+                style={[styles.primaryFooterButton, isReopeningInquiry && styles.buttonDisabled]}
+                onPress={reopenSelectedInquiry}
+                disabled={isReopeningInquiry}
+                accessibilityRole="button"
+                accessibilityLabel="Reopen inquiry"
+              >
+                <Ionicons name="refresh-circle-outline" size={17} color="#ffffff" />
+                <Text style={styles.primaryFooterButtonText}>
+                  {isReopeningInquiry ? 'Reopening...' : 'Reopen Inquiry'}
+                </Text>
+              </Pressable>
             </View>
-          ) : isActive ? (
-            <Pressable
-              style={styles.primaryFooterButton}
-              onPress={async () => {
-                if (selectedInquiry?.id) {
-                  await refreshSupportConversation(selectedInquiry.id, { replaceMainFeed: true, scroll: true });
-                }
-                setSelectedInquiry(null);
-                setActiveTab('chat');
-              }}
-            >
-              <Ionicons name="arrow-forward-circle-outline" size={15} color="#ffffff" />
-              <Text style={styles.primaryFooterButtonText}>Continue in Chat</Text>
-            </Pressable>
           ) : (
             <View style={styles.replyBar}>
               <TextInput
@@ -2221,6 +2244,14 @@ function createAssistantStyles(c, dark) {
     alignItems: 'center',
     gap: 8,
     justifyContent: 'center',
+  },
+  resolvedActions: {
+    gap: 10,
+  },
+  reopenPrompt: {
+    textAlign: 'center',
+    fontSize: 13,
+    color: c.textMuted,
   },
   resolvedNoticeText: {
     fontSize: 13,

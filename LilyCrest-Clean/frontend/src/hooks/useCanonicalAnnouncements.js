@@ -22,6 +22,7 @@ export function useCanonicalAnnouncements() {
   const [submittingIds, setSubmittingIds] = useState(() => new Set());
   const requestSequenceRef = useRef(0);
   const dismissalInFlightRef = useRef(false);
+  const optimisticDismissedIdsRef = useRef(new Set());
   const hasLoadedOnceRef = useRef(false);
 
   const loadAnnouncements = useCallback(async ({ silent = false, showRefresh = false } = {}) => {
@@ -34,7 +35,9 @@ export function useCanonicalAnnouncements() {
       const response = await apiService.getAnnouncements();
       const items = Array.isArray(response?.data) ? response.data : [];
       if (requestSequenceRef.current === requestId) {
-        setAnnouncements(items);
+        setAnnouncements(items.filter((item) => (
+          !optimisticDismissedIdsRef.current.has(getCanonicalAnnouncementId(item))
+        )));
         setFetchError(null);
       }
       return true;
@@ -63,6 +66,15 @@ export function useCanonicalAnnouncements() {
 
     dismissalInFlightRef.current = true;
     setSubmittingIds(new Set(ids));
+    const idSet = new Set(ids);
+    const removed = [];
+    setAnnouncements((current) => {
+      current.forEach((item, index) => {
+        if (idSet.has(getCanonicalAnnouncementId(item))) removed.push({ item, index });
+      });
+      return current.filter((item) => !idSet.has(getCanonicalAnnouncementId(item)));
+    });
+    ids.forEach((id) => optimisticDismissedIdsRef.current.add(id));
 
     try {
       if (ids.length === 1) {
@@ -71,20 +83,51 @@ export function useCanonicalAnnouncements() {
         await apiService.dismissAnnouncementsBulk(ids);
       }
 
-      // Only remove after the backend confirms the tenant-specific dismissal.
-      // Then refetch the canonical list so server visibility/dismissal rules stay
-      // authoritative across refresh, navigation, foregrounding, and restart.
-      const dismissed = new Set(ids);
-      setAnnouncements((current) => current.filter((item) => !dismissed.has(getCanonicalAnnouncementId(item))));
       await loadAnnouncements({ silent: true });
-      return { ok: true, ids };
+      ids.forEach((id) => optimisticDismissedIdsRef.current.delete(id));
+      return { ok: true, ids, removed };
     } catch (_error) {
-      // No optimistic removal occurred, so the visible list is already the
-      // correct rollback state and the selection can be retried unchanged.
-      return { ok: false, reason: 'request', ids };
+      ids.forEach((id) => optimisticDismissedIdsRef.current.delete(id));
+      setAnnouncements((current) => {
+        const existing = new Set(current.map(getCanonicalAnnouncementId));
+        const restored = [...current];
+        removed
+          .filter(({ item }) => !existing.has(getCanonicalAnnouncementId(item)))
+          .sort((left, right) => left.index - right.index)
+          .forEach(({ item, index }) => restored.splice(Math.min(index, restored.length), 0, item));
+        return restored;
+      });
+      return { ok: false, reason: 'request', ids, removed };
     } finally {
       dismissalInFlightRef.current = false;
       setSubmittingIds(new Set());
+    }
+  }, [loadAnnouncements]);
+
+  const restoreAnnouncement = useCallback(async (announcementId, removedEntry = null) => {
+    const id = String(announcementId || '').trim();
+    if (!id || dismissalInFlightRef.current) return { ok: false, reason: id ? 'busy' : 'empty' };
+
+    const item = removedEntry?.item || null;
+    const index = Number.isInteger(removedEntry?.index) ? removedEntry.index : 0;
+    if (item) {
+      setAnnouncements((current) => {
+        if (current.some((entry) => getCanonicalAnnouncementId(entry) === id)) return current;
+        const next = [...current];
+        next.splice(Math.min(index, next.length), 0, item);
+        return next;
+      });
+    }
+
+    try {
+      await apiService.restoreAnnouncement(id);
+      await loadAnnouncements({ silent: true });
+      return { ok: true, id };
+    } catch (_error) {
+      if (item) {
+        setAnnouncements((current) => current.filter((entry) => getCanonicalAnnouncementId(entry) !== id));
+      }
+      return { ok: false, reason: 'request', id };
     }
   }, [loadAnnouncements]);
 
@@ -97,5 +140,6 @@ export function useCanonicalAnnouncements() {
     dismissalInFlight: submittingIds.size > 0,
     loadAnnouncements,
     dismissAnnouncements,
+    restoreAnnouncement,
   };
 }

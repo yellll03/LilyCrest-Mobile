@@ -13,7 +13,15 @@ describe('News announcements remain isolated from Home notifications', () => {
   it('maps dedicated announcement reads and dismissals to the canonical routes', () => {
     expect(service).toContain("getAnnouncements: () => api.get('/announcements')");
     expect(service).toContain("api.post(`/announcements/${encodeURIComponent(announcementId)}/dismiss`)");
+    expect(service).toContain("api.delete(`/announcements/${encodeURIComponent(announcementId)}/dismiss`)");
     expect(service).toContain("api.post('/announcements/dismiss-bulk', { ids: announcementIds })");
+  });
+
+  it('uses swipe-to-archive with an Undo snackbar instead of a permanent card trash action', () => {
+    expect(announcementsScreen).toContain("react-native-gesture-handler/Swipeable");
+    expect(announcementsScreen).toContain('Announcement removed');
+    expect(announcementsScreen).toContain('Undo');
+    expect(announcementsScreen).not.toContain('trash-outline');
   });
 
   it('does not read or mutate Home notification state from the News screen', () => {

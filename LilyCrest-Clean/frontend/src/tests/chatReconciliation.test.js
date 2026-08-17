@@ -12,6 +12,14 @@ describe('chat tenant/auth reconciliation', () => {
     expect(apiSource).toContain('config.headers.Authorization = `Bearer ${token}`');
   });
 
+  it('reopens the same persisted inquiry and enables follow-up in its existing thread', () => {
+    expect(apiSource).toContain('api.patch(`/chat/${conversationId}/reopen`, { note })');
+    expect(screenSource).toContain('apiService.reopenSupportChat(');
+    expect(screenSource).toContain('selectedInquiry.id');
+    expect(screenSource).toContain('Reopen Inquiry');
+    expect(screenSource).toContain('placeholder="Reply to admin support..."');
+  });
+
   it('waits for auth hydration and never sends a mobile tenant or branch override', () => {
     expect(screenSource).toContain('if (!authReady) return');
     expect(screenSource).toContain('if (!user)');
