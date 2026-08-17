@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { format, formatDistanceToNow } from 'date-fns';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, FlatList, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Swipeable from 'react-native-gesture-handler/Swipeable';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
 import { useToast } from '../../src/context/ToastContext';
@@ -75,10 +76,10 @@ export default function AnnouncementsScreen() {
     hasLoadedOnce,
     refreshing,
     fetchError,
-    submittingIds,
     dismissalInFlight,
     loadAnnouncements,
     dismissAnnouncements,
+    restoreAnnouncement,
   } = useCanonicalAnnouncements();
   const { showToast } = useToast();
   const styles = useThemedStyles((c, dark) => StyleSheet.create({
@@ -339,6 +340,25 @@ export default function AnnouncementsScreen() {
     selectionDeleteButtonDisabled: { opacity: 0.5 },
     selectionDeleteText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
 
+    swipeAction: {
+      width: 96, marginBottom: 10, borderRadius: 16,
+      backgroundColor: dark ? '#334155' : '#475569',
+      justifyContent: 'center', alignItems: 'center', gap: 5,
+    },
+    swipeActionText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },
+    undoSnackbar: {
+      position: 'absolute', left: 16, right: 16, bottom: Platform.OS === 'ios' ? 94 : 76,
+      minHeight: 52, borderRadius: 12, paddingHorizontal: 16,
+      backgroundColor: dark ? '#E2E8F0' : '#0F172A',
+      flexDirection: 'row', alignItems: 'center', gap: 12,
+      ...Platform.select({
+        default: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.22, shadowRadius: 10, elevation: 8 },
+      }),
+    },
+    undoSnackbarText: { flex: 1, color: dark ? '#0F172A' : '#FFFFFF', fontSize: 13, fontWeight: '600' },
+    undoSnackbarButton: { minHeight: 40, justifyContent: 'center', paddingHorizontal: 4 },
+    undoSnackbarButtonText: { color: c.accent, fontSize: 13, fontWeight: '900' },
+
   }));
 
   const [selectedCategory, setSelectedCategory] = useState(null);
@@ -352,6 +372,12 @@ export default function AnnouncementsScreen() {
   // visibility and tenant-specific persistence.
   const [selectionMode, setSelectionMode] = useState(false);
   const [selectedIds, setSelectedIds] = useState(() => new Set());
+  const [undoDismissal, setUndoDismissal] = useState(null);
+  const undoTimerRef = useRef(null);
+
+  useEffect(() => () => {
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+  }, []);
 
   // Navigation focus and foreground both reconcile with canonical server data.
   useFocusEffect(
@@ -379,7 +405,7 @@ export default function AnnouncementsScreen() {
       if (result.reason === 'busy' || result.reason === 'empty') return false;
       showToast({
         type: 'error',
-        title: result.reason === 'limit' ? 'Selection limit reached' : 'Remove failed',
+        title: result.reason === 'limit' ? 'Selection limit reached' : 'Archive failed',
         message: result.reason === 'limit'
           ? `Select up to ${MAX_ANNOUNCEMENT_DISMISS_IDS} announcements at a time.`
           : "Couldn't remove the announcement. Check your connection and try again.",
@@ -394,8 +420,28 @@ export default function AnnouncementsScreen() {
     setSelectedAnn((current) => (
       result.ids.includes(getCanonicalAnnouncementId(current)) ? null : current
     ));
+    if (result.ids.length === 1 && result.removed?.[0]) {
+      if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+      setUndoDismissal({ id: result.ids[0], removedEntry: result.removed[0] });
+      undoTimerRef.current = setTimeout(() => setUndoDismissal(null), 6000);
+    }
     return true;
   }, [dismissAnnouncements, showToast]);
+
+  const undoLastDismissal = useCallback(async () => {
+    const pending = undoDismissal;
+    if (!pending) return;
+    if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
+    setUndoDismissal(null);
+    const result = await restoreAnnouncement(pending.id, pending.removedEntry);
+    if (!result.ok) {
+      showToast({
+        type: 'error',
+        title: 'Undo failed',
+        message: "Couldn't restore the announcement. Pull down to refresh and try again.",
+      });
+    }
+  }, [restoreAnnouncement, showToast, undoDismissal]);
 
   const toggleSelected = useCallback((id) => {
     if (!selectedIds.has(id) && selectedIds.size >= MAX_ANNOUNCEMENT_DISMISS_IDS) {
@@ -521,7 +567,28 @@ export default function AnnouncementsScreen() {
     const isLong = (announcement.content || '').length > 120;
     const isSelected = selectedIds.has(announcementId);
 
+    const archiveAction = (
+      <Pressable
+        style={styles.swipeAction}
+        onPress={() => removeAnnouncements([announcementId])}
+        accessibilityRole="button"
+        accessibilityLabel={`Archive ${announcement.title || 'announcement'}`}
+      >
+        <Ionicons name="archive-outline" size={20} color="#FFFFFF" />
+        <Text style={styles.swipeActionText}>Archive</Text>
+      </Pressable>
+    );
+
     return (
+      <Swipeable
+        enabled={!selectionMode && !dismissalInFlight}
+        renderRightActions={() => archiveAction}
+        rightThreshold={64}
+        overshootRight={false}
+        onSwipeableOpen={(direction) => {
+          if (direction === 'right') removeAnnouncements([announcementId]);
+        }}
+      >
       <TouchableOpacity
         style={styles.announcementCard}
         onPress={() => (selectionMode ? toggleSelected(announcementId) : setSelectedAnn(announcement))}
@@ -529,6 +596,10 @@ export default function AnnouncementsScreen() {
         activeOpacity={0.85}
         accessibilityRole="button"
         accessibilityLabel={`Announcement: ${announcement.title || 'Untitled'}`}
+        accessibilityActions={[{ name: 'archive', label: 'Archive announcement' }]}
+        onAccessibilityAction={(event) => {
+          if (event.nativeEvent.actionName === 'archive') removeAnnouncements([announcementId]);
+        }}
       >
         {/* Left priority accent */}
         <View style={[styles.cardAccent, { backgroundColor: prioColor }]} />
@@ -558,21 +629,6 @@ export default function AnnouncementsScreen() {
               </View>
               <Text style={styles.announcementTime}>{safeDistanceToNow(announcementDate)}</Text>
             </View>
-            {!selectionMode && (
-              <TouchableOpacity
-                onPress={() => removeAnnouncements([announcementId])}
-                disabled={dismissalInFlight}
-                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                accessibilityRole="button"
-                accessibilityLabel={`Remove ${announcement.title || 'notification'}`}
-                accessibilityState={{ disabled: dismissalInFlight, busy: submittingIds.has(announcementId) }}
-              >
-                {submittingIds.has(announcementId)
-                  ? <ActivityIndicator size={17} color={colors.textMuted} />
-                  : <Ionicons name="trash-outline" size={17} color={colors.textMuted} />
-                }
-              </TouchableOpacity>
-            )}
           </View>
 
           {/* Category + Urgent badges */}
@@ -616,8 +672,9 @@ export default function AnnouncementsScreen() {
           </View>
         </View>
       </TouchableOpacity>
+      </Swipeable>
     );
-  }, [colors.textMuted, dismissalInFlight, expandedIds, styles, toggleExpanded, selectionMode, selectedIds, toggleSelected, enterSelectionMode, removeAnnouncements, submittingIds]);
+  }, [colors.textMuted, dismissalInFlight, expandedIds, styles, toggleExpanded, selectionMode, selectedIds, toggleSelected, enterSelectionMode, removeAnnouncements]);
 
   if (!hasLoadedOnce) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color={colors.primary} /></View>;
 
@@ -657,14 +714,14 @@ export default function AnnouncementsScreen() {
               onPress={deleteSelected}
               disabled={!selectedIds.size || dismissalInFlight}
               accessibilityRole="button"
-              accessibilityLabel={`Remove ${selectedIds.size} selected`}
+              accessibilityLabel={`Archive ${selectedIds.size} selected`}
               accessibilityState={{ disabled: !selectedIds.size || dismissalInFlight, busy: dismissalInFlight }}
             >
               {dismissalInFlight
                 ? <ActivityIndicator size={15} color="#FFFFFF" />
-                : <Ionicons name="trash-outline" size={15} color="#FFFFFF" />
+                : <Ionicons name="archive-outline" size={15} color="#FFFFFF" />
               }
-              <Text style={styles.selectionDeleteText}>{dismissalInFlight ? 'Removing' : 'Remove'}</Text>
+              <Text style={styles.selectionDeleteText}>{dismissalInFlight ? 'Archiving' : 'Archive'}</Text>
             </TouchableOpacity>
           </View>
         ) : (
@@ -906,6 +963,20 @@ export default function AnnouncementsScreen() {
           </View>
         </View>
       </Modal>
+
+      {undoDismissal ? (
+        <View style={styles.undoSnackbar} accessibilityRole="alert">
+          <Text style={styles.undoSnackbarText}>Announcement removed</Text>
+          <Pressable
+            style={styles.undoSnackbarButton}
+            onPress={undoLastDismissal}
+            accessibilityRole="button"
+            accessibilityLabel="Undo announcement archive"
+          >
+            <Text style={styles.undoSnackbarButtonText}>Undo</Text>
+          </Pressable>
+        </View>
+      ) : null}
 
       {/* ── Detail sheet ── */}
       <Modal

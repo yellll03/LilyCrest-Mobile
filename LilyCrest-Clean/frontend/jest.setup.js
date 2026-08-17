@@ -34,6 +34,15 @@ jest.mock('expo-document-picker', () => ({
   getDocumentAsync: jest.fn(),
 }));
 
+// Swipeable's behavior is covered by hook/source contracts in unit tests;
+// native gesture dispatch itself is exercised by the Android build/device QA.
+jest.mock('react-native-gesture-handler/Swipeable', () => {
+  const React = require('react');
+  const SwipeableMock = ({ children }) => React.createElement(React.Fragment, null, children);
+  SwipeableMock.displayName = 'Swipeable';
+  return SwipeableMock;
+});
+
 // expo-image's native view manager isn't registered under jest-expo's mocked
 // NativeModules shape above, so requiring it directly throws. Render it as a
 // thin wrapper around RN's own Image instead — good enough for behavioral

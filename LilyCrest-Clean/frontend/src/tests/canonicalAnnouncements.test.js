@@ -10,6 +10,7 @@ jest.mock('../services/api', () => ({
   apiService: {
     getAnnouncements: jest.fn(),
     dismissAnnouncement: jest.fn(),
+    restoreAnnouncement: jest.fn(),
     dismissAnnouncementsBulk: jest.fn(),
     getNotifications: jest.fn(),
   },
@@ -32,7 +33,7 @@ describe('canonical announcement reconciliation', () => {
     expect(result.current.announcements).toEqual([first, second]);
   });
 
-  it('does not remove an individual announcement before server confirmation', async () => {
+  it('optimistically archives an individual announcement and reconciles after server confirmation', async () => {
     let confirmDismissal;
     apiService.getAnnouncements
       .mockResolvedValueOnce({ data: [first, second] })
@@ -45,7 +46,7 @@ describe('canonical announcement reconciliation', () => {
 
     let dismissalPromise;
     act(() => { dismissalPromise = result.current.dismissAnnouncements(['ann_1']); });
-    expect(result.current.announcements).toEqual([first, second]);
+    expect(result.current.announcements).toEqual([second]);
     expect(apiService.dismissAnnouncement).toHaveBeenCalledWith('ann_1');
 
     await act(async () => {
@@ -54,6 +55,25 @@ describe('canonical announcement reconciliation', () => {
     });
     expect(result.current.announcements).toEqual([second]);
     expect(apiService.getAnnouncements).toHaveBeenCalledTimes(2);
+  });
+
+  it('Undo reverses the tenant dismissal and restores the item at its prior position', async () => {
+    apiService.getAnnouncements
+      .mockResolvedValueOnce({ data: [first, second] })
+      .mockResolvedValueOnce({ data: [second] })
+      .mockResolvedValueOnce({ data: [first, second] });
+    apiService.dismissAnnouncement.mockResolvedValueOnce({ data: { status: 'dismissed' } });
+    apiService.restoreAnnouncement.mockResolvedValueOnce({ data: { status: 'restored' } });
+    const { result } = renderHook(() => useCanonicalAnnouncements());
+    await act(async () => result.current.loadAnnouncements());
+
+    let dismissal;
+    await act(async () => { dismissal = await result.current.dismissAnnouncements(['ann_1']); });
+    expect(result.current.announcements).toEqual([second]);
+
+    await act(async () => result.current.restoreAnnouncement('ann_1', dismissal.removed[0]));
+    expect(apiService.restoreAnnouncement).toHaveBeenCalledWith('ann_1');
+    expect(result.current.announcements).toEqual([first, second]);
   });
 
   it('retains announcements and returns a retryable error result on API failure', async () => {

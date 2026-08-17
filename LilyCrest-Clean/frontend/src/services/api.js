@@ -335,6 +335,8 @@ export const apiService = {
   getAnnouncements: () => api.get('/announcements'),
   dismissAnnouncement: (announcementId) =>
     api.post(`/announcements/${encodeURIComponent(announcementId)}/dismiss`),
+  restoreAnnouncement: (announcementId) =>
+    api.delete(`/announcements/${encodeURIComponent(announcementId)}/dismiss`),
   dismissAnnouncementsBulk: (announcementIds) =>
     api.post('/announcements/dismiss-bulk', { ids: announcementIds }),
   getNotifications: () => api.get('/notifications'),
@@ -392,6 +394,8 @@ export const apiService = {
   getSupportChatMessages: (conversationId) => api.get(`/chat/${conversationId}/messages`),
   sendSupportMessage: (conversationId, message) =>
     api.post(`/chat/${conversationId}/messages`, { message }),
+  reopenSupportChat: (conversationId, note) =>
+    api.patch(`/chat/${conversationId}/reopen`, { note }),
   closeSupportChat: (conversationId, note) =>
     api.patch(`/chat/${conversationId}/close`, { note }),
   
