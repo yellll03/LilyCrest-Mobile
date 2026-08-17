@@ -23,9 +23,13 @@ describe('api config backend URL resolver', () => {
     expect(resolveBackendUrl(undefined, productionOptions)).toBe('https://api.lilycrest.space');
   });
 
-  it('still resolves the retired mobile-api host (rollback target remains reachable if explicitly configured)', () => {
+  it('rejects the retired mobile-api host even if explicitly configured, and falls back to the canonical API URL', () => {
+    // Host lock: production resolution is an allowlist of exactly the
+    // canonical API host, not a denylist of hosts we already know are bad.
+    // The old rollback host must never be reachable again, even via a
+    // misconfigured EXPO_PUBLIC_BACKEND_URL.
     expect(resolveBackendUrl('https://mobile-api.lilycrest.space', productionOptions))
-      .toBe('https://mobile-api.lilycrest.space');
+      .toBe('https://api.lilycrest.space');
   });
 
   it.each([
@@ -62,5 +66,21 @@ describe('api config backend URL resolver', () => {
   it('rejects trycloudflare.com and falls back to the canonical API URL', () => {
     expect(resolveBackendUrl('https://random-tunnel.trycloudflare.com', productionOptions))
       .toBe('https://api.lilycrest.space');
+  });
+
+  // Host lock regression guard: production resolution must be an allowlist of
+  // exactly api.lilycrest.space. Every other historically-referenced host
+  // (retired Render mobile backend, this repo's own Render service name,
+  // ad-hoc tunnels) must always resolve back to the canonical host — never be
+  // returned as-is — so nothing can silently fail over to a different host.
+  it.each([
+    'https://mobile-api.lilycrest.space',
+    'https://lilycrest-mobile.onrender.com',
+    'https://lilycrest-api.onrender.com',
+    'https://something.onrender.com',
+    'https://random-tunnel.trycloudflare.com',
+    'https://api.lilycrest.space.evil.com',
+  ])('never resolves %s as the production backend host', (url) => {
+    expect(resolveBackendUrl(url, productionOptions)).toBe('https://api.lilycrest.space');
   });
 });

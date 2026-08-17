@@ -1,6 +1,10 @@
 const MOBILE_BACKEND_URL = 'https://api.lilycrest.space';
-// Emergency rollback target (LilyCrest-Mobile on Render). Not used by any
-// runtime resolver — documented here so the rollback host stays discoverable.
+// Historical/retired host (old LilyCrest-Mobile backend on Render), kept only
+// as a named reference for engineers investigating old logs/crash reports.
+// Not read by any runtime resolver, and as of the host-lock allowlist in
+// isDisallowedMobileRuntimeUrl() below, EXPO_PUBLIC_BACKEND_URL can no longer
+// be configured to point production traffic at this host even explicitly —
+// resolveBackendUrl() will force it back to the canonical host.
 export const ROLLBACK_BACKEND_URL = 'https://mobile-api.lilycrest.space';
 
 export const normalizeBackendUrl = (value) => String(value || '').trim().replace(/\/+$/, '');
@@ -33,11 +37,19 @@ export function isLocalOrPrivateBackendUrl(value) {
   return false;
 }
 
+// Production runtime host allowlist. This is intentionally an allowlist
+// (only the canonical API host resolves) rather than a denylist of known-bad
+// hosts — a denylist only blocks hosts we've already thought of (e.g. the
+// retired mobile-api.lilycrest.space Render host, onrender.com,
+// trycloudflare.com tunnels) and silently lets anything else through
+// unnoticed if EXPO_PUBLIC_BACKEND_URL is ever misconfigured. There is no
+// runtime failover: a request to the canonical host that fails is retried
+// against that same host (see services/api.js) or surfaced as an error —
+// this function only guards which host the app is even allowed to build
+// requests against in the first place.
 export const isDisallowedMobileRuntimeUrl = (value) => {
   const normalized = normalizeBackendUrl(value);
-  return !normalized
-    || /onrender\.com/i.test(normalized)
-    || /trycloudflare\.com/i.test(normalized);
+  return normalized !== MOBILE_BACKEND_URL;
 };
 
 function isDevelopmentRuntime() {
@@ -47,7 +59,15 @@ function isDevelopmentRuntime() {
 export function resolveBackendUrl(value, { isDevelopment = isDevelopmentRuntime() } = {}) {
   const normalized = normalizeBackendUrl(value);
 
-  if (!isDevelopment && isLocalOrPrivateBackendUrl(normalized)) {
+  // Development builds may legitimately point at a local machine, emulator
+  // loopback, or LAN IP for Metro/dev-server testing — the production
+  // allowlist below does not apply to them. Production is never reached
+  // through this branch (isDevelopment is derived from __DEV__/NODE_ENV).
+  if (isDevelopment) {
+    return normalized || MOBILE_BACKEND_URL;
+  }
+
+  if (isLocalOrPrivateBackendUrl(normalized)) {
     throw new Error('Invalid production backend URL. Configure EXPO_PUBLIC_BACKEND_URL with a public HTTPS LilyCrest API host.');
   }
 
