@@ -53,6 +53,27 @@ function getBillReleaseDate(bill) {
 // charge should be presented as released or not — do not reimplement this
 // check separately in a screen.
 function getUtilityReleaseSchedule(bill) {
+  const explicitSchedules = Object.values(bill?.utility_schedules || {});
+  if (explicitSchedules.length > 0) {
+    const applicable = explicitSchedules.filter((schedule) => schedule?.state !== 'not_applicable');
+    const available = applicable
+      .filter((schedule) => schedule?.state === 'available')
+      .sort((left, right) => new Date(left.due_date) - new Date(right.due_date));
+    if (available.length > 0) {
+      return {
+        state: 'available',
+        releaseDate: available[0].release_date,
+        dueDate: available[0].due_date,
+        unreleasedUtility: false,
+      };
+    }
+    if (applicable.some((schedule) => schedule?.state === 'unavailable')) {
+      return { state: 'unavailable', releaseDate: null, dueDate: null, unreleasedUtility: false };
+    }
+    if (applicable.some((schedule) => schedule?.state === 'pending')) {
+      return { state: 'pending', releaseDate: null, dueDate: null, unreleasedUtility: true };
+    }
+  }
   const utilitySchedules = Object.values(bill?.utility_deadlines || {});
   const hasUtilityCharge = Number(bill?.electricity || 0) > 0 || Number(bill?.water || 0) > 0 || utilitySchedules.length > 0;
   const releasedUtilities = utilitySchedules
@@ -63,9 +84,9 @@ function getUtilityReleaseSchedule(bill) {
     ...releasedUtilities.map((schedule) => ({ releaseDate: schedule.billReleaseDate, dueDate: schedule.finalDueDate })),
     ...(hasRent && (bill?.due_date || bill?.dueDate) ? [{ releaseDate: getBillReleaseDate(bill), dueDate: bill.due_date || bill.dueDate }] : []),
   ].sort((left, right) => new Date(left.dueDate) - new Date(right.dueDate));
-  if (candidates.length) return { ...candidates[0], unreleasedUtility: false };
-  if (hasUtilityCharge) return { releaseDate: null, dueDate: null, unreleasedUtility: true };
-  return { releaseDate: getBillReleaseDate(bill), dueDate: bill?.due_date || bill?.dueDate || null, unreleasedUtility: false };
+  if (candidates.length) return { state: 'available', ...candidates[0], unreleasedUtility: false };
+  if (hasUtilityCharge) return { state: 'pending', releaseDate: null, dueDate: null, unreleasedUtility: true };
+  return { state: 'not_applicable', releaseDate: getBillReleaseDate(bill), dueDate: bill?.due_date || bill?.dueDate || null, unreleasedUtility: false };
 }
 
 export {

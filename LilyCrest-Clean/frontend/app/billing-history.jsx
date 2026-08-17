@@ -12,6 +12,7 @@ import { subscribeBillingRefresh } from '../src/services/billingState';
 import { getBillOwedAmount, getBillPaymentDate, getBillStatus, getUtilityReleaseSchedule, isBillOutstanding } from '../src/utils/billingStatus';
 import { safeBack } from '../src/utils/navigation';
 import { billingDocumentCacheKey } from '../src/utils/billingDocumentCache';
+import { BILLING_SCREEN_STATES, normalizeLatestBillingResponse, resolveBillingScreenState } from '../src/utils/billingScreenState';
 
 // Helpers
 function safeCurrency(amount) {
@@ -116,7 +117,8 @@ export default function BillingScreen() {
   const [activeStatus, setActiveStatus] = useState('all');
   // Type filter removed - consolidated bills contain all charge types
   const latestBillingRequestRef = useRef(0);
-  const [latestBillingDegraded, setLatestBillingDegraded] = useState(false);
+  const [screenState, setScreenState] = useState(BILLING_SCREEN_STATES.LOADING);
+  const [historyWarnings, setHistoryWarnings] = useState([]);
   const [currentSummary, setCurrentSummary] = useState({
     bill: null,
     timing: null,
@@ -133,28 +135,42 @@ export default function BillingScreen() {
       setLoading(false);
       setRefreshing(false);
       setError('Please sign in to view billing history.');
+      setScreenState(BILLING_SCREEN_STATES.UNAUTHORIZED);
       return;
     }
 
     const requestId = latestBillingRequestRef.current + 1;
     latestBillingRequestRef.current = requestId;
-    if (!silent) setLoading(true);
+    if (!silent) {
+      setLoading(true);
+      setScreenState(BILLING_SCREEN_STATES.LOADING);
+    }
     setError(null);
-    setLatestBillingDegraded(false);
+    setHistoryWarnings([]);
     try {
       const [latestBillingResult, historyResp, paymentHistoryResp] = await Promise.allSettled([
         apiService.getLatestBilling?.(),
         apiService.getBillingHistory?.(),
         apiService.getPaymentHistory?.(),
       ]);
+      if (latestBillingRequestRef.current !== requestId) return;
+      let latestOutcome = 'failed';
       if (latestBillingResult.status === 'rejected') {
         const status = latestBillingResult.reason?.response?.status;
-        if (status === 401) { try { await checkAuth?.(); } catch (_) {} }
-        setLatestBillingDegraded(true);
+        if (status === 401) {
+          latestOutcome = 'unauthorized';
+          try { await checkAuth?.(); } catch (_) {}
+        } else if (status === 404) {
+          // Compatibility with servers predating the explicit 200 no-bill contract.
+          latestOutcome = 'no_current';
+        }
+        setCurrentSummary({ bill: null, timing: null, previous_balance: 0, previous_bill_id: '', server_time: '' });
       } else {
-        const payload = latestBillingResult.value?.data || {};
+        const normalized = normalizeLatestBillingResponse(latestBillingResult.value);
+        const payload = normalized.payload || {};
+        latestOutcome = normalized.outcome;
         setCurrentSummary({
-          bill: payload.bill || null,
+          bill: normalized.bill,
           timing: payload.timing || null,
           previous_balance: Number(payload.previous_balance || 0),
           previous_bill_id: payload.previous_bill_id || '',
@@ -163,18 +179,33 @@ export default function BillingScreen() {
       }
       const hasHistory = historyResp.status === 'fulfilled' && Array.isArray(historyResp.value?.data);
       const hasPaymentHistory = paymentHistoryResp.status === 'fulfilled' && Array.isArray(paymentHistoryResp.value?.data);
-      if (!hasHistory && !hasPaymentHistory) {
-        throw historyResp.reason || paymentHistoryResp.reason;
-      }
       const historyList = hasHistory ? historyResp.value.data : [];
       const paymentHistoryList = hasPaymentHistory ? paymentHistoryResp.value.data : [];
-      if (latestBillingRequestRef.current !== requestId) return;
-      setHistory(mergeBillingLists(historyList, paymentHistoryList));
+      const mergedHistory = mergeBillingLists(historyList, paymentHistoryList);
+      setHistory(mergedHistory);
+      const warnings = [];
+      if (!hasHistory) warnings.push('Billing history is temporarily unavailable.');
+      if (!hasPaymentHistory) warnings.push('Paid history is temporarily unavailable.');
+      setHistoryWarnings(warnings);
+      const nextState = resolveBillingScreenState({
+        loading: false,
+        latest: latestOutcome,
+        historyAvailable: hasHistory || hasPaymentHistory,
+        historyCount: mergedHistory.length,
+      });
+      setScreenState(nextState);
+      if (nextState === BILLING_SCREEN_STATES.TOTAL_FAILURE) {
+        const failure = latestBillingResult.reason || historyResp.reason || paymentHistoryResp.reason;
+        setError(getApiErrorMessage(failure, 'Unable to load billing data. Pull to retry.'));
+      } else if (nextState === BILLING_SCREEN_STATES.UNAUTHORIZED) {
+        setError('Please sign in to view billing history.');
+      }
     } catch (err) {
       const status = err?.response?.status;
       if (status === 401) { try { await checkAuth?.(); } catch (_) {} }
       if (latestBillingRequestRef.current !== requestId) return;
       setError(getApiErrorMessage(err, 'Unable to load billing data. Pull to retry.'));
+      setScreenState(status === 401 ? BILLING_SCREEN_STATES.UNAUTHORIZED : BILLING_SCREEN_STATES.TOTAL_FAILURE);
     } finally {
       if (latestBillingRequestRef.current !== requestId) return;
       setLoading(false);
@@ -239,6 +270,22 @@ export default function BillingScreen() {
 
   // The hero only presents backend billing values; it does not recalculate billing rules.
   const renderHero = () => {
+    if (screenState === BILLING_SCREEN_STATES.PARTIAL_FAILURE && !currentSummary.bill) {
+      return (
+        <View style={styles.heroCard}>
+          <Text style={styles.heroStateTitle}>Current Bill Unavailable</Text>
+          <Text style={styles.heroStateText}>Your available billing history is shown below. Retry to refresh the current bill.</Text>
+        </View>
+      );
+    }
+    if (screenState === BILLING_SCREEN_STATES.NO_CURRENT_BILL) {
+      return (
+        <View style={styles.heroCard}>
+          <Text style={styles.heroStateTitle}>No Current Bill</Text>
+          <Text style={styles.heroStateText}>No bill has been issued for the current billing period.</Text>
+        </View>
+      );
+    }
     const underReviewStatuses = new Set(['pending_verification', 'verification']);
     const allUnderReview = outstandingBills.length > 0
       && outstandingBills.every(bill => underReviewStatuses.has(getBillStatus(bill)));
@@ -463,13 +510,19 @@ export default function BillingScreen() {
           <Pressable onPress={loadData}><Text style={styles.retryText}>Retry</Text></Pressable>
         </View>
       )}
-      {latestBillingDegraded && !error && (
+      {screenState === BILLING_SCREEN_STATES.PARTIAL_FAILURE && !error && currentSummary.bill && (
         <View style={styles.errorBanner}>
           <Ionicons name="information-circle" size={14} color="#92400e" />
-          <Text style={styles.errorText}>Latest billing summary is temporarily unavailable. Billing history is shown below.</Text>
+          <Text style={styles.errorText}>Some billing history could not be refreshed. The current bill is still available.</Text>
           <Pressable onPress={loadData}><Text style={styles.retryText}>Retry</Text></Pressable>
         </View>
       )}
+      {historyWarnings.map((warning) => (
+        <View key={warning} style={styles.errorBanner}>
+          <Ionicons name="information-circle" size={14} color="#92400e" />
+          <Text style={styles.errorText}>{warning}</Text>
+        </View>
+      ))}
       <Text style={styles.sectionLabel}>
         {activeStatus === 'all' ? 'Billing History' : `${STATUS_FILTERS.find(t => t.id === activeStatus)?.label || ''} Bills`}
         {' '}({filteredBills.length})

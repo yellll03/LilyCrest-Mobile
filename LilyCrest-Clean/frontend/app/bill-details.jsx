@@ -270,8 +270,16 @@ export default function BillDetailsScreen() {
   // and Home so the same bill never shows a contradictory release state
   // depending on which screen rendered it (see billingStatus.js).
   const releaseSchedule = getUtilityReleaseSchedule(bill);
-  const utilityDeadlines = Object.entries(bill.utility_deadlines || {})
-    .filter(([, deadline]) => deadline?.billReleaseDate && deadline?.finalDueDate);
+  const explicitUtilitySchedules = Object.entries(bill.utility_schedules || {})
+    .filter(([, schedule]) => schedule?.state && schedule.state !== 'not_applicable');
+  const utilitySchedules = explicitUtilitySchedules.length > 0
+    ? explicitUtilitySchedules
+    : Object.entries(bill.utility_deadlines || {}).map(([utility, deadline]) => [utility, {
+        state: deadline?.billReleaseDate && deadline?.finalDueDate ? 'available' : 'pending',
+        release_date: deadline?.billReleaseDate,
+        due_date: deadline?.finalDueDate,
+        reading_date: deadline?.meterReadingDate,
+      }]);
 
   const moveInFinancials = bill.move_in_financials || bill.moveInFinancials || null;
   // Charge items
@@ -378,20 +386,28 @@ export default function BillDetailsScreen() {
           </View>
         </View>
 
-        {utilityDeadlines.map(([utility, deadline]) => (
+        {utilitySchedules.map(([utility, schedule]) => (
           <View key={utility} style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
               <Ionicons name={utility === 'electricity' ? 'flash' : 'water'} size={16} color={utility === 'electricity' ? '#b45309' : '#0284c7'} />
               <Text style={styles.sectionTitle}>{utility === 'electricity' ? 'Electricity' : 'Water'} Billing Schedule</Text>
             </View>
-            <View style={styles.headerGrid}>
-              <View style={styles.headerGridItem}><Text style={styles.headerGridLabel}>Reading Date</Text><Text style={styles.headerGridValue}>{shortDate(deadline.meterReadingDate)}</Text></View>
-              <View style={styles.headerGridItem}><Text style={styles.headerGridLabel}>Released</Text><Text style={styles.headerGridValue}>{shortDate(deadline.billReleaseDate)}</Text></View>
-              <View style={styles.headerGridItem}><Text style={styles.headerGridLabel}>Due Date</Text><Text style={styles.headerGridValue}>{shortDate(deadline.finalDueDate)}</Text></View>
-            </View>
+            {schedule.state === 'available' ? (
+              <View style={styles.headerGrid}>
+                {!!schedule.period_start && <View style={styles.headerGridItem}><Text style={styles.headerGridLabel}>Period Start</Text><Text style={styles.headerGridValue}>{shortDate(schedule.period_start)}</Text></View>}
+                {!!schedule.period_end && <View style={styles.headerGridItem}><Text style={styles.headerGridLabel}>Period End</Text><Text style={styles.headerGridValue}>{shortDate(schedule.period_end)}</Text></View>}
+                <View style={styles.headerGridItem}><Text style={styles.headerGridLabel}>Reading Date</Text><Text style={styles.headerGridValue}>{shortDate(schedule.reading_date)}</Text></View>
+                <View style={styles.headerGridItem}><Text style={styles.headerGridLabel}>Released</Text><Text style={styles.headerGridValue}>{shortDate(schedule.release_date)}</Text></View>
+                <View style={styles.headerGridItem}><Text style={styles.headerGridLabel}>Due Date</Text><Text style={styles.headerGridValue}>{shortDate(schedule.due_date)}</Text></View>
+              </View>
+            ) : schedule.state === 'pending' ? (
+              <Text style={{ color: colors.textSecondary }}>This utility charge is still being finalized. Dates will appear after publication.</Text>
+            ) : (
+              <Text style={{ color: '#b91c1c' }}>Schedule dates are temporarily unavailable. Pull to refresh or contact your branch administrator.</Text>
+            )}
           </View>
         ))}
-        {releaseSchedule.unreleasedUtility ? (
+        {releaseSchedule.unreleasedUtility && utilitySchedules.length === 0 ? (
           <View style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
               <Ionicons name="information-circle-outline" size={17} color={colors.primary} />
@@ -541,20 +557,11 @@ export default function BillDetailsScreen() {
                 );
               })}
 
-              {/* Addition line when multiple segments */}
-              {bill.electricity_breakdown.length > 1 && (
-                <View style={styles.elecSummaryAddition}>
-                  <Text style={styles.elecSummaryAdditionText}>
-                    {bill.electricity_breakdown.map(s => safeCurrency(s.share_per_tenant)).join(' + ')}
-                  </Text>
-                </View>
-              )}
-
               {/* Total Amount Due */}
               <View style={styles.elecTotalDueRow}>
                 <Text style={styles.elecTotalDueLabel}>Total Amount Due</Text>
                 <Text style={styles.elecTotalDueValue}>
-                  {safeCurrency(bill.electricity_breakdown.reduce((s, seg) => s + (seg.share_per_tenant || 0), 0))}
+                  {safeCurrency(bill.electricity)}
                 </Text>
               </View>
 
