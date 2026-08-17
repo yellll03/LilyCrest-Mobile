@@ -123,6 +123,21 @@ const LIFECYCLE_MESSAGES = Object.freeze({
   preparing: 'Your contract is being prepared.',
 });
 
+// The generic bucket message above ("preparing") is the same for every
+// pre-document status Capstone-Website has (draft/incomplete/ready_for_generation)
+// — it doesn't name what's actually happening, which reads as indistinguishable
+// from a broken app. contract.displayStatus (server/services/tenantContractViewService.js's
+// STATUS_LABELS on Capstone-Website) is the canonical, more specific status
+// text for the exact same lifecycle — reusing it here instead of writing new
+// copy means this can never drift from what Web already tells the tenant for
+// the same contract. Falls back to the generic message if the field is absent
+// (older deployment) so this never regresses to a blank message.
+function preparingStatusMessage(contract) {
+  const canonical = String(contract?.displayStatus || '').trim();
+  const base = canonical || LIFECYCLE_MESSAGES.preparing;
+  return `${base} You'll be notified as soon as it's ready.`;
+}
+
 // Cache identity for the local PDF store. Must change whenever the canonical
 // document a tenant is entitled to changes shape or version, so a stale
 // cached PDF is never shown for a newer prepared version or after final
@@ -155,7 +170,7 @@ export function buildContractSummary(contract, locale) {
     status: contractStatusLabel(contract),
     lifecycleState,
     lifecycleLabel: LIFECYCLE_LABELS[lifecycleState],
-    message: LIFECYCLE_MESSAGES[lifecycleState],
+    message: lifecycleState === 'preparing' ? preparingStatusMessage(contract) : LIFECYCLE_MESSAGES[lifecycleState],
     fields: fields.filter((field) => field.value),
     hasMissingDetails: fields.some((field) => !field.value),
     canOpenPdf: Boolean(preferred),

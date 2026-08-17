@@ -206,6 +206,34 @@ describe('canonical tenantDocument-driven presentation rule', () => {
     });
     expect(preparingSummary.lifecycleLabel).toBe('Preparing Contract');
   });
+
+  test('preparing message reflects the canonical displayStatus instead of a generic placeholder', () => {
+    const awaitingSignature = buildContractSummary({
+      displayStatus: 'Physical signing and in-person notarization are in progress.',
+      preparedDocument: { available: false },
+      finalDocument: { available: false },
+    });
+    expect(awaitingSignature.message).toBe(
+      "Physical signing and in-person notarization are in progress. You'll be notified as soon as it's ready.",
+    );
+  });
+
+  test('preparing message falls back to the generic copy when displayStatus is absent (older deployment)', () => {
+    const noDisplayStatus = buildContractSummary({
+      preparedDocument: { available: false },
+      finalDocument: { available: false },
+    });
+    expect(noDisplayStatus.message).toBe("Your contract is being prepared. You'll be notified as soon as it's ready.");
+  });
+
+  test('draft and final messages are unaffected by displayStatus (only the preparing bucket is enriched)', () => {
+    const draft = buildContractSummary({
+      displayStatus: 'Prepared Contract Available',
+      preparedDocument: { available: true, currentVersion: 1, generatedAt: '2026-08-01' },
+      finalDocument: { available: false },
+    });
+    expect(draft.message).toBe('Your generated contract is ready for review and in-person signing. The final notarized copy will replace this document once uploaded by the admin.');
+  });
 });
 
 describe('version-aware document cache key', () => {
