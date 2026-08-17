@@ -42,3 +42,6 @@ ios/Pods/
 # Tests / coverage
 coverage/
 .nyc_output/
+# Android signing credentials
+credentials.json
+credentials/

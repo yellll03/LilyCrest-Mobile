@@ -81,6 +81,13 @@ def enableMinifyInReleaseBuilds = (findProperty('android.enableMinifyInReleaseBu
  */
 def jscFlavor = 'io.github.react-native-community:jsc-android:2026004.+'
 
+// Local release signing credentials downloaded from EAS.
+// credentials.json and the keystore are intentionally gitignored.
+def localCredentialsFile = rootProject.file("../credentials.json")
+def localCredentials = localCredentialsFile.exists()
+    ? new groovy.json.JsonSlurper().parse(localCredentialsFile)
+    : null
+
 android {
     ndkVersion rootProject.ext.ndkVersion
     externalNativeBuild {
@@ -97,8 +104,8 @@ android {
         applicationId 'com.lilycrest.lilycrestdorm'
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 11
-        versionName "1.1.9"
+        versionCode 12
+        versionName "1.1.10"
 
         buildConfigField "String", "REACT_NATIVE_RELEASE_LEVEL", "\"${findProperty('reactNativeReleaseLevel') ?: 'stable'}\""
 
@@ -113,15 +120,33 @@ android {
             keyAlias 'androiddebugkey'
             keyPassword 'android'
         }
+
+        if (localCredentials != null) {
+            release {
+                def keystoreConfig = localCredentials.android.keystore
+                def configuredKeystore = new File(keystoreConfig.keystorePath)
+
+                storeFile configuredKeystore.isAbsolute()
+                    ? configuredKeystore
+                    : rootProject.file("../${keystoreConfig.keystorePath}")
+
+                storePassword keystoreConfig.keystorePassword
+                keyAlias keystoreConfig.keyAlias
+                keyPassword keystoreConfig.keyPassword ?: keystoreConfig.keystorePassword
+            }
+        }
     }
     buildTypes {
         debug {
             signingConfig signingConfigs.debug
         }
         release {
-            // EAS replaces the local debug signing configuration with the
-            // project credential during remote builds.
-            signingConfig signingConfigs.debug
+            // Use the local EAS-downloaded keystore for local release builds when
+            // present; otherwise fall back to debug signing (matches EAS remote
+            // build behavior, which injects its own release credential).
+            signingConfig localCredentials != null
+                ? signingConfigs.release
+                : signingConfigs.debug
             def enableShrinkResources = findProperty('android.enableShrinkResourcesInReleaseBuilds') ?: 'false'
             shrinkResources enableShrinkResources.toBoolean()
             minifyEnabled enableMinifyInReleaseBuilds
