@@ -18,7 +18,8 @@ import MessageBubble from '../components/assistant/MessageBubble';
 import { useAuth } from '../context/AuthContext';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
 import { useAssistantChat } from '../hooks/useAssistantChat';
-import { apiService, getApiErrorMessage } from '../services/api';
+import { apiService } from '../services/api';
+import { getChatErrorMessage } from '../utils/chatErrorMessage';
 import {
   IMAGE_UPLOAD_MIME_TYPES,
   ensureFirebaseStorageAttachments,
@@ -535,11 +536,7 @@ export default function LilyAssistantScreen() {
         });
       }
     } catch (error) {
-      const message =
-        error?.response?.data?.detail ||
-        error?.response?.data?.error ||
-        getApiErrorMessage(error, 'Unable to refresh support data right now.');
-      setNetworkError(message);
+      setNetworkError(getChatErrorMessage(error, 'Unable to refresh support data right now.'));
     } finally {
       setRefreshingSupport(false);
     }
@@ -587,12 +584,8 @@ export default function LilyAssistantScreen() {
       await refreshSupportConversation(conversation.id, { replaceMainFeed: false, scroll: true });
       await loadSupportInquiries();
     } catch (error) {
-      const detail =
-        error?.response?.data?.detail ||
-        error?.response?.data?.error ||
-        getApiErrorMessage(error, error?.message || 'Admin support could not be started right now.');
       setChatMode(CHAT_MODE.UNAVAILABLE);
-      setNetworkError(detail);
+      setNetworkError(getChatErrorMessage(error, 'Admin support could not be started right now.'));
       setMessages((prev) => [
         ...prev,
         {
@@ -699,11 +692,7 @@ export default function LilyAssistantScreen() {
       await refreshSupportConversation(supportConversationId, { replaceMainFeed: false, scroll: true });
       await loadSupportInquiries();
     } catch (error) {
-      setNetworkError(
-        error?.response?.data?.detail ||
-        error?.response?.data?.error ||
-        getApiErrorMessage(error, 'Failed to send your message to admin support.')
-      );
+      setNetworkError(getChatErrorMessage(error, 'Failed to send your message to admin support.'));
     } finally {
       setIsSending(false);
     }
@@ -728,8 +717,8 @@ export default function LilyAssistantScreen() {
         setNetworkError(null);
         await loadSupportInquiries({ preserveSelection: false });
       } catch (error) {
-        console.warn('[Support Chat] Bootstrap failed:', error?.message);
         setInquiries([]);
+        setNetworkError(getChatErrorMessage(error, 'Unable to initialize admin support right now.'));
       }
     };
 
@@ -891,7 +880,7 @@ export default function LilyAssistantScreen() {
       if (attachments.length) {
         setAttachmentUploadStatus('Upload failed, please retry');
       }
-      setNetworkError(getApiErrorMessage(error, error?.message || 'Unable to send your message. Please try again.'));
+      setNetworkError(getChatErrorMessage(error, 'Unable to send your message. Please try again.'));
     } finally {
       setIsSending(false);
       sendGuardRef.current = false;

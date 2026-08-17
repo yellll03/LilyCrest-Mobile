@@ -3,7 +3,6 @@ import { useAssistantChat } from '../hooks/useAssistantChat';
 import { apiService } from '../services/api';
 
 jest.mock('../services/api', () => ({
-  getApiErrorMessage: (error, fallback = 'Request failed') => error?.response?.data?.detail || error?.message || fallback,
   apiService: {
     sendChatMessage: jest.fn(),
     resetChatSession: jest.fn(),
@@ -72,5 +71,37 @@ describe('useAssistantChat', () => {
 
     expect(first.error).toBeUndefined();
     expect(second.error.code).toBe('rate_limited');
+  });
+
+  it('does not retry an auth failure and returns a safe session message', async () => {
+    apiService.sendChatMessage.mockRejectedValueOnce({
+      response: { status: 401, data: { detail: 'raw token verifier detail' } },
+    });
+    const { result } = renderHook(() => useAssistantChat('session-3'));
+
+    let output;
+    await act(async () => {
+      output = await result.current.sendMessage('hello');
+    });
+
+    expect(apiService.sendChatMessage).toHaveBeenCalledTimes(1);
+    expect(output.error.detail).toMatch(/session expired/i);
+    expect(output.error.detail).not.toContain('raw token verifier detail');
+  });
+
+  it('does not expose backend details after retryable server failures', async () => {
+    apiService.sendChatMessage.mockRejectedValue({
+      response: { status: 500, data: { detail: 'MongoServerError: private internals' } },
+    });
+    const { result } = renderHook(() => useAssistantChat('session-4'));
+
+    let output;
+    await act(async () => {
+      output = await result.current.sendMessage('hello');
+    });
+
+    expect(apiService.sendChatMessage).toHaveBeenCalledTimes(2);
+    expect(output.error.detail).toBe('Chat is temporarily unavailable. Please try again later.');
+    expect(output.error.detail).not.toContain('private internals');
   });
 });

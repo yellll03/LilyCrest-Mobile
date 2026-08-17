@@ -1,5 +1,4 @@
 import { useCallback, useRef } from 'react';
-import { getApiErrorMessage } from '../services/api';
 
 // Small helper to wrap async calls with duplicate guard and normalized error shape.
 export function useAsyncCall() {
@@ -13,9 +12,15 @@ export function useAsyncCall() {
       return { data: result, error: null };
     } catch (err) {
       const status = err?.response?.status;
-      const detail = getApiErrorMessage(err, 'Request failed');
-      const code = status === 401 ? 'unauthorized' : status === 500 ? 'server_error' : 'network_error';
-      return { error: { code, detail, status } };
+      const backendCode = String(err?.response?.data?.code || '').trim() || undefined;
+      const code = status === 401
+        ? 'unauthorized'
+        : status >= 500
+          ? 'server_error'
+          : status
+            ? 'api_error'
+            : 'network_error';
+      return { error: { code, status, backendCode, network: !err?.response } };
     } finally {
       inflight.current.delete(key);
     }

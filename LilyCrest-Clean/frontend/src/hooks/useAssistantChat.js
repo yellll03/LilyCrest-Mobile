@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { apiService } from '../services/api';
+import { getChatErrorMessage } from '../utils/chatErrorMessage';
 import { useAsyncCall } from './useAsyncCall';
 
 const MAX_RETRIES = 2;
@@ -73,7 +74,7 @@ export function useAssistantChat(initialSessionId) {
           return { response, intent, metadata, needsAdmin, suggestions, attempt };
         }
 
-        lastError = error;
+        lastError = { ...error, detail: getChatErrorMessage(error) };
         if (error.code === 'unauthorized') break; // don't retry auth failures
         if (typeof error.status === 'number' && error.status >= 400 && error.status < 500) break; // validation/client errors
       }
