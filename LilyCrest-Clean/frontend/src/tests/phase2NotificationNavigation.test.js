@@ -70,6 +70,10 @@ describe('Phase 2 destination ownership guards', () => {
     path.join(process.cwd(), 'src/components/AppHeader.js'),
     'utf8',
   );
+  const indexSource = fs.readFileSync(
+    path.join(process.cwd(), 'app/index.jsx'),
+    'utf8',
+  );
 
   it('the Home notification sheet resolves and pushes each canonical event destination', () => {
     expect(appHeaderSource).toMatch(/resolveNotificationRoute\(\{/);
@@ -87,5 +91,10 @@ describe('Phase 2 destination ownership guards', () => {
     expect(servicesSource).toMatch(/requests\.find\(/);
     expect(servicesSource).toMatch(/String\(request\.request_id\) === targetRequestId/);
     expect(servicesSource).toMatch(/if \(!ownedRequest\) return/);
+  });
+
+  it('does not let the normal authenticated-root redirect overwrite a cold-start notification route', () => {
+    expect(indexSource).toMatch(/pathnameRef\.current !== '\/'/);
+    expect(indexSource).toMatch(/clearTimeout\(redirectTimer\)/);
   });
 });
