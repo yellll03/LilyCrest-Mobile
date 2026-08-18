@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
 import { safeBack } from '../src/utils/navigation';
@@ -28,7 +29,7 @@ export default function AboutScreen() {
           <View style={styles.logoIcon}><Ionicons name="home" size={48} color="#FFFFFF" /></View>
           <Text style={styles.appName}>Lilycrest</Text>
           <Text style={styles.tagline}>Dormitory Management System</Text>
-          <Text style={styles.version}>Version 1.0.0</Text>
+          <Text style={styles.version}>Version {Constants.expoConfig?.version || 'Unknown'}</Text>
         </View>
 
         <View style={styles.card}>

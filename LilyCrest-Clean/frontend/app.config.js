@@ -23,7 +23,7 @@ module.exports = {
     // the authoritative source for native Android builds (this repo commits a
     // hand-maintained android/ folder rather than regenerating it from this
     // file via `expo prebuild` before every build). Bump both together.
-    version: '1.1.13',
+    version: '1.1.14',
     orientation: 'default',
     icon: './assets/images/icon.png',
     scheme: 'frontend',
@@ -39,7 +39,7 @@ module.exports = {
     android: {
       package: 'com.lilycrest.lilycrestdorm',
       // Keep in sync with android/app/build.gradle's versionCode (see note above).
-      versionCode: 15,
+      versionCode: 16,
       googleServicesFile: process.env.GOOGLE_SERVICES_JSON || './google-services.json',
       config: {
         googleSignIn: {

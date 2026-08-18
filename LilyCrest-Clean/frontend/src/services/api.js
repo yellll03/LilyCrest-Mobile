@@ -392,8 +392,10 @@ export const apiService = {
   startSupportChat: (data) => api.post('/chat/start', data),
   getMySupportChats: () => api.get('/chat/me'),
   getSupportChatMessages: (conversationId) => api.get(`/chat/${conversationId}/messages`),
-  sendSupportMessage: (conversationId, message) =>
-    api.post(`/chat/${conversationId}/messages`, { message }),
+  sendSupportMessage: (conversationId, message, attachments = []) =>
+    api.post(`/chat/${conversationId}/messages`, { message, attachments }),
+  confirmSupportResolution: (conversationId, resolved, note = '') =>
+    api.patch(`/chat/${conversationId}/resolution`, { resolved, note }),
   reopenSupportChat: (conversationId, note) =>
     api.patch(`/chat/${conversationId}/reopen`, { note }),
   closeSupportChat: (conversationId, note) =>

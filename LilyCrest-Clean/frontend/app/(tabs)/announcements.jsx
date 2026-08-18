@@ -342,7 +342,7 @@ export default function AnnouncementsScreen() {
 
     swipeAction: {
       width: 96, marginBottom: 10, borderRadius: 16,
-      backgroundColor: dark ? '#334155' : '#475569',
+      backgroundColor: c.error,
       justifyContent: 'center', alignItems: 'center', gap: 5,
     },
     swipeActionText: { color: '#FFFFFF', fontSize: 12, fontWeight: '800' },

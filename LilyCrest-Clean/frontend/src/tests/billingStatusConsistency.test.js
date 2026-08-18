@@ -13,6 +13,14 @@ const {
 // bill. Both screens must now derive these from ../src/utils/billingStatus.js.
 
 describe('billingStatus.getUtilityReleaseSchedule', () => {
+  test('uses the explicit canonical schedule state when supplied', () => {
+    const schedule = getUtilityReleaseSchedule({
+      electricity: 500,
+      utility_schedules: { electricity: { state: 'unavailable' } },
+    });
+    expect(schedule.state).toBe('unavailable');
+    expect(schedule.unreleasedUtility).toBe(false);
+  });
   test('a paid bill whose utility_deadlines are populated is never reported as unreleased', () => {
     const bill = {
       status: 'paid',

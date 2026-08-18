@@ -13,6 +13,7 @@ import { useTenantContract } from '../../src/hooks/useTenantContract';
 import { buildContractSummary } from '../../src/utils/contractPresentation';
 import { SURVEY_FEEDBACK_ENABLED } from '../../src/config/features';
 import { API_BASE_URL } from '../../src/config/api';
+import { persistCanonicalProfileImage } from '../../src/services/profileImage';
 
 const BUILD_INFO = (() => {
   const config = Constants.expoConfig || {};
@@ -32,7 +33,6 @@ const BUILD_INFO = (() => {
 
 const NAME_MAX = 60;
 const USERNAME_MAX = 30;
-const IMAGE_MAX_BYTES = 2 * 1024 * 1024; // ~2 MB base64
 
 const validatePhone = (phone) => {
   if (!phone || phone.trim() === '+63') return { valid: true, error: '' };
@@ -67,12 +67,6 @@ const formatDate = (value) => {
 };
 
 const isProfilePayload = (value) => Boolean(value) && typeof value === 'object' && !Array.isArray(value) && typeof value.user_id === 'string' && value.user_id.trim().length > 0;
-const getDecodedBase64Bytes = (value = '') => {
-  const raw = String(value || '').replace(/^data:image\/[^;]+;base64,/, '');
-  if (!raw) return 0;
-  const padding = raw.endsWith('==') ? 2 : raw.endsWith('=') ? 1 : 0;
-  return Math.floor((raw.length * 3) / 4) - padding;
-};
 
 export default function ProfileScreen() {
   const { user, authReady, authStatus, logout, updateUser, checkAuth, isLoading: authLoading } = useAuth();
@@ -248,21 +242,12 @@ export default function ProfileScreen() {
   const pickImage = async () => {
     const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
     if (!permissionResult.granted) { showAlert({ title: 'Permission Required', message: 'Please allow access to your photo library to change your profile picture.', type: 'warning' }); return; }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.5, base64: true });
-    if (!result.canceled && result.assets[0].base64) {
-      const base64Image = `data:image/jpeg;base64,${result.assets[0].base64}`;
-      const fileSizeBytes = getDecodedBase64Bytes(base64Image);
-      if (fileSizeBytes > IMAGE_MAX_BYTES) {
-        setProfileBanner({ type: 'error', text: 'Image is too large (max 2 MB). Please choose a smaller photo.' });
-        return;
-      }
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.5 });
+    if (!result.canceled && result.assets[0]) {
       setIsLoading(true);
       try {
-        const response = await apiService.updateProfile({ picture: base64Image });
-        if (!isProfilePayload(response?.data)) {
-          throw new Error('Invalid profile picture response shape');
-        }
-        updateUser(response.data);
+        const profile = await persistCanonicalProfileImage(result.assets[0], userId);
+        updateUser(profile);
         setProfileBanner({ type: 'success', text: 'Profile picture updated.' });
       } catch (error) {
         setProfileBanner({ type: 'error', text: error?.response?.data?.errors?.picture || getApiErrorMessage(error, 'Failed to update profile picture.') });

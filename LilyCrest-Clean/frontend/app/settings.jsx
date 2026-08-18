@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../src/context/ThemeContext';
 import { useAlert } from '../src/context/AlertContext';
@@ -290,7 +291,9 @@ export default function SettingsScreen() {
           </TouchableOpacity>
         </View>
 
-        <Text style={styles.versionText}>LilyCrest Tenant Portal v1.0.0</Text>
+        <Text style={styles.versionText}>
+          LilyCrest Tenant Portal v{Constants.expoConfig?.version || 'Unknown'}
+        </Text>
       </ScrollView>
     </SafeAreaView>
   );

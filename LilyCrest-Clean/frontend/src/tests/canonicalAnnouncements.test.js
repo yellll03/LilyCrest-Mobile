@@ -76,6 +76,26 @@ describe('canonical announcement reconciliation', () => {
     expect(result.current.announcements).toEqual([first, second]);
   });
 
+  it('rolls back an optimistic Undo when the canonical restore request fails', async () => {
+    apiService.getAnnouncements
+      .mockResolvedValueOnce({ data: [first, second] })
+      .mockResolvedValueOnce({ data: [second] });
+    apiService.dismissAnnouncement.mockResolvedValueOnce({ data: { status: 'dismissed' } });
+    apiService.restoreAnnouncement.mockRejectedValueOnce(new Error('restore failed'));
+    const { result } = renderHook(() => useCanonicalAnnouncements());
+    await act(async () => result.current.loadAnnouncements());
+
+    let dismissal;
+    await act(async () => { dismissal = await result.current.dismissAnnouncements(['ann_1']); });
+    let restore;
+    await act(async () => {
+      restore = await result.current.restoreAnnouncement('ann_1', dismissal.removed[0]);
+    });
+
+    expect(restore).toMatchObject({ ok: false, reason: 'request' });
+    expect(result.current.announcements).toEqual([second]);
+  });
+
   it('retains announcements and returns a retryable error result on API failure', async () => {
     apiService.getAnnouncements.mockResolvedValueOnce({ data: [first, second] });
     apiService.dismissAnnouncement.mockRejectedValueOnce(new Error('network'));

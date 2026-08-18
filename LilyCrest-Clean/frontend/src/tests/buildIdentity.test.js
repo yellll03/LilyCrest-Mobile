@@ -5,6 +5,8 @@ const path = require('path');
 describe('Android release identity', () => {
   const config = fs.readFileSync(path.resolve(__dirname, '../../app.config.js'), 'utf8');
   const gradle = fs.readFileSync(path.resolve(__dirname, '../../android/app/build.gradle'), 'utf8');
+  const about = fs.readFileSync(path.resolve(__dirname, '../../app/about.jsx'), 'utf8');
+  const settings = fs.readFileSync(path.resolve(__dirname, '../../app/settings.jsx'), 'utf8');
 
   it('keeps Expo and native Android version declarations synchronized', () => {
     const expoVersion = config.match(/version:\s*'([^']+)'/)?.[1];
@@ -14,12 +16,19 @@ describe('Android release identity', () => {
 
     expect(expoVersion).toBe(nativeVersion);
     expect(expoVersionCode).toBe(nativeVersionCode);
-    expect(nativeVersion).toBe('1.1.13');
-    expect(nativeVersionCode).toBe(15);
+    expect(nativeVersion).toBe('1.1.14');
+    expect(nativeVersionCode).toBe(16);
   });
 
   it('keeps the production application ID unchanged', () => {
     expect(config).toContain("package: 'com.lilycrest.lilycrestdorm'");
     expect(gradle).toContain("applicationId 'com.lilycrest.lilycrestdorm'");
+  });
+
+  it('renders the configured release version instead of stale hardcoded copy', () => {
+    expect(about).toContain("Constants.expoConfig?.version || 'Unknown'");
+    expect(settings).toContain("Constants.expoConfig?.version || 'Unknown'");
+    expect(about).not.toContain('Version 1.0.0');
+    expect(settings).not.toContain('v1.0.0');
   });
 });

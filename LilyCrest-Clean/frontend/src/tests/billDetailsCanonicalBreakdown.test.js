@@ -52,6 +52,11 @@ describe('bill-details.jsx breakdown line items', () => {
   test('the segmented electricity/water breakdown only renders when the backend actually supplies it', () => {
     expect(details).toContain('Array.isArray(bill.electricity_breakdown) && bill.electricity_breakdown.length > 0');
   });
+
+  test('the displayed electricity total is the canonical bill field, never a client-side segment sum', () => {
+    expect(details).toContain('safeCurrency(bill.electricity)');
+    expect(details).not.toContain('bill.electricity_breakdown.reduce');
+  });
 });
 
 describe('billingStatus.getBillReleaseDate', () => {
