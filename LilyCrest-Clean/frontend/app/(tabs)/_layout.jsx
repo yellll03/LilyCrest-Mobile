@@ -1,50 +1,24 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Tabs } from 'expo-router';
-import { useEffect, useMemo, useRef } from 'react';
-import { Animated, Platform, StyleSheet, Text, View } from 'react-native';
+import { useMemo } from 'react';
+import { Platform, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../src/context/ThemeContext';
 
-// Animated Tab Icon Component
-function AnimatedTabIcon({ focused, iconName, focusedIconName, label, colors, styles, badgeCount = 0 }) {
-  const scaleAnim = useRef(new Animated.Value(focused ? 1 : 0.9)).current;
-  const bgAnim = useRef(new Animated.Value(focused ? 1 : 0)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.spring(scaleAnim, {
-        toValue: focused ? 1.05 : 1,
-        friction: 5,
-        useNativeDriver: true,
-      }),
-      Animated.timing(bgAnim, {
-        toValue: focused ? 1 : 0,
-        duration: 200,
-        useNativeDriver: false,
-      }),
-    ]).start();
-  }, [bgAnim, focused, scaleAnim]);
-
-  const bgColor = bgAnim.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['transparent', colors.primaryLight],
-  });
-
+function TabBarItem({ focused, iconName, focusedIconName, label, colors, styles, badgeCount = 0 }) {
   return (
     <View style={styles.tabItem}>
-      <Animated.View style={[styles.iconWrapper, { backgroundColor: bgColor }]}>
-        <Animated.View style={{ transform: [{ scale: scaleAnim }] }}>
-          <Ionicons
-            name={focused ? focusedIconName : iconName}
-            size={22}
-            color={focused ? colors.primary : colors.textMuted}
-          />
-        </Animated.View>
+      <View style={[styles.iconWrapper, focused && styles.iconWrapperActive]}>
+        <Ionicons
+          name={focused ? focusedIconName : iconName}
+          size={22}
+          color={focused ? colors.primary : colors.textMuted}
+        />
         {badgeCount > 0 && (
           <View style={styles.badgeDot}>
             <Text style={styles.badgeText}>{badgeCount > 9 ? '9+' : badgeCount}</Text>
           </View>
         )}
-      </Animated.View>
+      </View>
       <Text style={[styles.tabLabel, focused && styles.tabLabelActive]} numberOfLines={1}>
         {label}
       </Text>
@@ -71,7 +45,7 @@ export default function TabLayout() {
         options={{
           title: 'Services',
           tabBarIcon: ({ focused }) => (
-            <AnimatedTabIcon
+            <TabBarItem
               focused={focused}
               iconName="construct-outline"
               focusedIconName="construct"
@@ -87,7 +61,7 @@ export default function TabLayout() {
         options={{
           title: 'News',
           tabBarIcon: ({ focused }) => (
-            <AnimatedTabIcon
+            <TabBarItem
               focused={focused}
               iconName="megaphone-outline"
               focusedIconName="megaphone"
@@ -103,7 +77,7 @@ export default function TabLayout() {
         options={{
           title: 'Home',
           tabBarIcon: ({ focused }) => (
-            <AnimatedTabIcon
+            <TabBarItem
               focused={focused}
               iconName="home-outline"
               focusedIconName="home"
@@ -119,7 +93,7 @@ export default function TabLayout() {
         options={{
           title: 'Billings',
           tabBarIcon: ({ focused }) => (
-            <AnimatedTabIcon
+            <TabBarItem
               focused={focused}
               iconName="card-outline"
               focusedIconName="card"
@@ -135,7 +109,7 @@ export default function TabLayout() {
         options={{
           title: 'Profile',
           tabBarIcon: ({ focused }) => (
-            <AnimatedTabIcon
+            <TabBarItem
               focused={focused}
               iconName="person-outline"
               focusedIconName="person"
@@ -204,6 +178,9 @@ const createStyles = (colors) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 2,
+  },
+  iconWrapperActive: {
+    backgroundColor: colors.primaryLight,
   },
   tabLabel: {
     fontSize: 10,

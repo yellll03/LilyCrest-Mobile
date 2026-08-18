@@ -1,4 +1,4 @@
-/* global describe, expect, test */
+/* global test */
 import { BRAND, DARK_COLORS, LIGHT_COLORS, RADII, SPACING, STATUS, statusTone } from '../theme/tokens';
 
 describe('canonical Lilycrest mobile theme', () => {

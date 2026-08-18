@@ -675,7 +675,7 @@ export default function ServicesScreen() {
   const getTypeInfo = (type) => REQUEST_TYPES.find(t => t.id === type) || REQUEST_TYPES[7];
 
   // --- Detail modal handlers ---
-  const openDetail = async (request) => {
+  const openDetail = useCallback(async (request) => {
     setDetailRequest(request);
     setEditMode(false);
     setShowCancelConfirm(false);
@@ -700,7 +700,7 @@ export default function ServicesScreen() {
     } finally {
       setDetailLoading(false);
     }
-  };
+  }, [fetchRequests, showBannerMessage]);
 
   useEffect(() => {
     const targetRequestId = String(notificationRequestId || '').trim();

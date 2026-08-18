@@ -1,4 +1,4 @@
-/* global __dirname, describe, expect, test */
+/* global __dirname, test */
 import fs from 'fs';
 import path from 'path';
 
@@ -45,7 +45,8 @@ describe('canonical Lilycrest visual-system guardrails', () => {
     const tabs = fs.readFileSync(path.join(projectRoot, 'app/(tabs)/_layout.jsx'), 'utf8');
     const support = fs.readFileSync(path.join(projectRoot, 'src/screens/LilyAssistantScreen.jsx'), 'utf8');
     expect(tabs).not.toContain('HomeTabIcon');
-    expect(tabs).toContain('AnimatedTabIcon');
+    expect(tabs).toContain('TabBarItem');
+    expect(tabs).not.toContain('AnimatedTabIcon');
     expect(support).toContain('paddingBottom: tabBarHeight');
   });
 });
