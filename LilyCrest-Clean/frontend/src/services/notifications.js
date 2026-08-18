@@ -67,6 +67,57 @@ function normalizePushProvider(token, platform = Platform.OS) {
   return normalizeDeviceProvider(platform);
 }
 
+function tokenValue(tokenData) {
+  return typeof tokenData?.data === 'string' ? tokenData.data.trim() : '';
+}
+
+export async function acquirePushToken({
+  notifications = Notifications,
+  platform = Platform.OS,
+  projectId = getExpoProjectId(),
+} = {}) {
+  if (!notifications) return '';
+
+  const getNativeToken = async () => {
+    if (!notifications.getDevicePushTokenAsync) return '';
+    try {
+      const token = tokenValue(await notifications.getDevicePushTokenAsync());
+      if (token && IS_DEV) console.log('[Notifications] Native push token acquired');
+      return token;
+    } catch (error) {
+      console.warn('[Notifications] Native push token fetch failed:', error?.message);
+      return '';
+    }
+  };
+
+  const getExpoToken = async () => {
+    if (!projectId || !notifications.getExpoPushTokenAsync) return '';
+    try {
+      const token = tokenValue(await notifications.getExpoPushTokenAsync({ projectId }));
+      if (token && IS_DEV) console.log('[Notifications] Expo push token acquired');
+      return token;
+    } catch (error) {
+      console.warn('[Notifications] Expo push token fetch failed:', error?.message);
+      return '';
+    }
+  };
+
+  // Native FCM notification messages are displayed by Android even when the
+  // React Native process is not running. Prefer that transport on Android;
+  // retain Expo as a fallback and as the primary provider on iOS.
+  if (platform === 'android') {
+    return (await getNativeToken()) || (await getExpoToken());
+  }
+
+  const expoToken = await getExpoToken();
+  if (expoToken) return expoToken;
+  if (platform === 'ios') {
+    console.warn('[Notifications] Expo push token unavailable on iOS; skipping unsupported direct APNs registration.');
+    return '';
+  }
+  return getNativeToken();
+}
+
 async function ensureAndroidNotificationChannel() {
   if (!Notifications || Platform.OS !== 'android') return;
 
@@ -153,32 +204,7 @@ export async function registerForPushNotifications({ requestPermission = false }
       return null;
     }
 
-    let token = '';
-    const projectId = getExpoProjectId();
-
-    if (projectId && Notifications.getExpoPushTokenAsync) {
-      try {
-        const expoTokenData = await Notifications.getExpoPushTokenAsync({ projectId });
-        token = typeof expoTokenData?.data === 'string' ? expoTokenData.data.trim() : '';
-        if (token) {
-          if (IS_DEV) console.log('[Notifications] Expo push token acquired');
-        }
-      } catch (error) {
-        console.warn('[Notifications] Expo push token fetch failed, falling back to native token:', error?.message);
-      }
-    }
-
-    if (!token) {
-      if (Platform.OS === 'ios') {
-        console.warn('[Notifications] Expo push token unavailable on iOS; skipping unsupported APNs token registration.');
-        return null;
-      }
-      const tokenData = await Notifications.getDevicePushTokenAsync();
-      token = typeof tokenData?.data === 'string' ? tokenData.data.trim() : '';
-      if (token) {
-        if (IS_DEV) console.log('[Notifications] Native push token acquired');
-      }
-    }
+    const token = await acquirePushToken();
 
     if (!token) return null;
 
