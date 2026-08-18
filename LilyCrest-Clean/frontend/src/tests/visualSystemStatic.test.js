@@ -44,9 +44,11 @@ describe('canonical Lilycrest visual-system guardrails', () => {
   test('bottom navigation uses one icon treatment and keeps content above the bar', () => {
     const tabs = fs.readFileSync(path.join(projectRoot, 'app/(tabs)/_layout.jsx'), 'utf8');
     const support = fs.readFileSync(path.join(projectRoot, 'src/screens/LilyAssistantScreen.jsx'), 'utf8');
+    const billDetails = fs.readFileSync(path.join(projectRoot, 'app/bill-details.jsx'), 'utf8');
     expect(tabs).not.toContain('HomeTabIcon');
     expect(tabs).toContain('TabBarItem');
     expect(tabs).not.toContain('AnimatedTabIcon');
     expect(support).toContain('paddingBottom: tabBarHeight');
+    expect(billDetails).toContain("<SafeAreaView style={styles.container} edges={['top']}>");
   });
 });
