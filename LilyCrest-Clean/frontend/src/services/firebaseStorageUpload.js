@@ -313,6 +313,7 @@ export async function uploadAttachmentToFirebaseStorage(attachment = {}, options
   const {
     allowedMimeTypes = DEFAULT_UPLOAD_MIME_TYPES,
     context,
+    conversationId,
     entityId = 'temp',
     folder = 'tenant-uploads',
     index = 0,
@@ -353,6 +354,7 @@ export async function uploadAttachmentToFirebaseStorage(attachment = {}, options
     const response = await api.post('/upload/firebase-storage', {
       allowedMimeTypes,
       context,
+      conversationId,
       dataBase64,
       entityId,
       fileName: originalName,

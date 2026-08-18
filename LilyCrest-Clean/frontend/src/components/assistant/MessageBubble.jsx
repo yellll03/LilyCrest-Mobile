@@ -1,8 +1,8 @@
-import { Platform, StyleSheet, Text, View } from 'react-native';
+import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import LilyFlowerIcon from './LilyFlowerIcon';
 
-export default function MessageBubble({ message, isUser }) {
+export default function MessageBubble({ message, isUser, onOpenAttachment }) {
   const { colors, isDarkMode } = useTheme();
 
   const systemLineColor = colors.border;
@@ -46,9 +46,16 @@ export default function MessageBubble({ message, isUser }) {
         {message.attachments?.length ? (
           <View style={styles.attachmentsRow}>
             {message.attachments.map((file, idx) => (
-              <View key={`${message.id}-att-${idx}`} style={[styles.attachmentChip, isUser && styles.attachmentChipUser]}>
+              <Pressable
+                key={`${message.id}-att-${idx}`}
+                style={[styles.attachmentChip, isUser && styles.attachmentChipUser]}
+                onPress={() => onOpenAttachment?.(file)}
+                disabled={!onOpenAttachment}
+                accessibilityRole="button"
+                accessibilityLabel={`Open ${file?.name || 'attachment'}`}
+              >
                 <Text style={[styles.attachmentText, isUser && styles.attachmentTextUser]}>Attachment: {file?.name || file}</Text>
-              </View>
+              </Pressable>
             ))}
           </View>
         ) : null}
