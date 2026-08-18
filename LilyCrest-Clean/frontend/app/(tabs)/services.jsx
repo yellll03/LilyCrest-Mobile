@@ -38,6 +38,7 @@ import {
 } from '../../src/services/firebaseStorageUpload';
 import { pickDocument, pickFromCamera, pickFromLibrary } from '../../src/utils/attachmentPicker';
 import { classifyMaintenanceAttachment, getValidMaintenanceAttachmentUrl } from '../../src/utils/maintenanceAttachmentViewer';
+import { STATUS } from '../../src/theme/tokens';
 
 function safeFormat(dateStr, fmt) {
   try {
@@ -174,20 +175,20 @@ function buildRequestProgress(request) {
 }
 
 const REQUEST_TYPES = [
-  { id: 'maintenance', label: 'Maintenance', icon: 'construct', color: '#F59E0B' },
-  { id: 'plumbing', label: 'Plumbing', icon: 'water', color: '#3B82F6' },
-  { id: 'electrical', label: 'Electrical', icon: 'flash', color: '#EF4444' },
-  { id: 'aircon', label: 'Air Conditioning', icon: 'snow', color: '#06B6D4' },
-  { id: 'cleaning', label: 'Cleaning', icon: 'sparkles', color: '#22C55E' },
-  { id: 'pest', label: 'Pest Control', icon: 'bug', color: '#8B5CF6' },
-  { id: 'furniture', label: 'Furniture', icon: 'bed', color: '#EC4899' },
-  { id: 'other', label: 'Other', icon: 'ellipsis-horizontal', color: '#6B7280' },
+  { id: 'maintenance', label: 'Maintenance', icon: 'construct', color: '#0A1628' },
+  { id: 'plumbing', label: 'Plumbing', icon: 'water', color: '#0A1628' },
+  { id: 'electrical', label: 'Electrical', icon: 'flash', color: '#0A1628' },
+  { id: 'aircon', label: 'Air Conditioning', icon: 'snow', color: '#0A1628' },
+  { id: 'cleaning', label: 'Cleaning', icon: 'sparkles', color: '#0A1628' },
+  { id: 'pest', label: 'Pest Control', icon: 'bug', color: '#0A1628' },
+  { id: 'furniture', label: 'Furniture', icon: 'bed', color: '#0A1628' },
+  { id: 'other', label: 'Other', icon: 'ellipsis-horizontal', color: '#0A1628' },
 ];
 
 const URGENCY_LEVELS = [
-  { id: 'low', label: 'Low', description: 'Can wait a few days', color: '#22C55E' },
-  { id: 'normal', label: 'Normal', description: 'Within 1-2 days', color: '#F59E0B' },
-  { id: 'high', label: 'Urgent', description: 'Needs immediate attention', color: '#EF4444' },
+  { id: 'low', label: 'Low', description: 'Can wait a few days', color: '#059669' },
+  { id: 'normal', label: 'Normal', description: 'Within 1-2 days', color: '#D97706' },
+  { id: 'high', label: 'Urgent', description: 'Needs immediate attention', color: '#DC2626' },
 ];
 
 const RESOLUTION_ESTIMATES = {
@@ -259,17 +260,18 @@ export default function ServicesScreen() {
   const styles = useThemedStyles((c) => StyleSheet.create({
     container: { flex: 1, backgroundColor: c.background },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: c.background },
-    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
-    headerTitle: { fontSize: 20, fontWeight: 'bold', color: c.text },
-    refreshIndicator: { width: 36, height: 36, borderRadius: 18, backgroundColor: c.surfaceSecondary, justifyContent: 'center', alignItems: 'center' },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, backgroundColor: c.headerBg, borderBottomWidth: 2, borderBottomColor: c.accent },
+    headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#FFFFFF' },
+    headerSubtitle: { color: c.accentLight, fontSize: 12, fontWeight: '700', marginTop: 2 },
+    refreshIndicator: { width: 36, height: 36, borderRadius: 8, backgroundColor: c.primaryHover, justifyContent: 'center', alignItems: 'center' },
     scrollView: { flex: 1 },
     scrollContent: { padding: 16 },
-    submitCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.surface, borderRadius: 14, padding: 14, marginBottom: 12, borderWidth: 1.5, borderColor: c.primaryLight, borderStyle: 'dashed' },
+    submitCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.surface, borderRadius: 12, padding: 14, marginBottom: 12, borderWidth: 1, borderColor: c.accent, borderStyle: 'dashed' },
     submitIcon: { marginRight: 12 },
     submitContent: { flex: 1 },
     submitTitle: { fontSize: 15, fontWeight: '600', color: c.text, marginBottom: 2 },
     submitDescription: { fontSize: 12, color: c.textMuted },
-    quickServicesCard: { backgroundColor: c.surface, borderRadius: 14, paddingVertical: 12, paddingHorizontal: 14, marginBottom: 12 },
+    quickServicesCard: { backgroundColor: c.surface, borderRadius: 12, paddingVertical: 12, paddingHorizontal: 14, marginBottom: 12, borderWidth: 1, borderColor: c.border },
     sectionTitle: { fontSize: 14, fontWeight: '600', color: c.text, marginBottom: 10 },
     servicesGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
     serviceItem: { width: '30%', alignItems: 'center' },
@@ -280,11 +282,11 @@ export default function ServicesScreen() {
     tabActive: { backgroundColor: c.primary },
     tabText: { fontSize: 11, fontWeight: '600', color: c.textMuted },
     tabTextActive: { color: c.surface },
-    emptyState: { alignItems: 'center', paddingVertical: 40, backgroundColor: c.surface, borderRadius: 14 },
+    emptyState: { alignItems: 'center', paddingVertical: 40, backgroundColor: c.surface, borderRadius: 12, borderWidth: 1, borderColor: c.border },
     emptyIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: c.surfaceSecondary, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
     emptyTitle: { fontSize: 16, fontWeight: '600', color: c.text, marginBottom: 6 },
     emptyText: { fontSize: 13, color: c.textMuted, textAlign: 'center', paddingHorizontal: 32 },
-    requestCard: { backgroundColor: c.surface, borderRadius: 14, padding: 14, marginBottom: 10, borderLeftWidth: 4, borderLeftColor: c.border, ...Platform.select({ ios: { shadowColor: '#000', shadowOpacity: 0.05, shadowRadius: 6, shadowOffset: { width: 0, height: 2 } }, android: { elevation: 2 } }) },
+    requestCard: { backgroundColor: c.surface, borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: c.border, borderLeftWidth: 4, borderLeftColor: c.border },
     requestCardPressed: { backgroundColor: c.surfaceSecondary },
     requestHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
     requestIcon: { width: 40, height: 40, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginRight: 10 },
@@ -297,12 +299,12 @@ export default function ServicesScreen() {
     requestAttachments: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8 },
     attachmentText: { fontSize: 11, color: c.textMuted },
     urgencyBadge: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 4 },
-    urgencyText: { fontSize: 12, color: '#EF4444', fontWeight: '500' },
+    urgencyText: { fontSize: 12, color: '#DC2626', fontWeight: '500' },
     bottomSpacer: { height: Platform.OS === 'ios' ? 140 : 120 },
-    chatbotButton: { position: 'absolute', bottom: Platform.OS === 'ios' ? 120 : 100, right: 20, width: 56, height: 56, borderRadius: 28, backgroundColor: c.primary, justifyContent: 'center', alignItems: 'center', ...Platform.select({ ios: { shadowColor: c.primary, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8 }, android: { elevation: 8 }, web: { boxShadow: '0 4px 16px rgba(0, 0, 0, 0.4)' } }) },
+    chatbotButton: { position: 'absolute', bottom: Platform.OS === 'ios' ? 120 : 100, right: 20, width: 52, height: 52, borderRadius: 26, backgroundColor: c.primary, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: c.primaryHover, ...Platform.select({ ios: { shadowColor: '#0A1628', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.16, shadowRadius: 4 }, android: { elevation: 3 }, web: { boxShadow: '0 2px 8px rgba(10, 22, 40, 0.18)' } }) },
     modalContainer: { flex: 1 },
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-    modalContent: { backgroundColor: c.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, padding: 24, maxHeight: '90%' },
+    modalContent: { backgroundColor: c.surface, borderTopLeftRadius: 12, borderTopRightRadius: 12, padding: 24, maxHeight: '90%', borderWidth: 1, borderColor: c.border },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
     modalTitle: { fontSize: 20, fontWeight: 'bold', color: c.text },
     modalSectionTitle: { fontSize: 14, fontWeight: '600', color: c.text, marginBottom: 12, marginTop: 8 },
@@ -319,7 +321,7 @@ export default function ServicesScreen() {
     urgencyLabel: { fontSize: 14, fontWeight: '600', color: c.text },
     urgencyDesc: { fontSize: 12, color: c.textMuted },
     descriptionInput: { backgroundColor: c.surfaceSecondary, borderRadius: 12, padding: 16, fontSize: 15, color: c.text, minHeight: 120, marginBottom: 20 },
-    uploadPanel: { borderWidth: 1, borderStyle: 'dashed', borderColor: c.border, borderRadius: 14, padding: 14, alignItems: 'center', gap: 8, backgroundColor: c.surfaceSecondary, marginBottom: 10 },
+    uploadPanel: { borderWidth: 1, borderStyle: 'dashed', borderColor: c.border, borderRadius: 12, padding: 14, alignItems: 'center', gap: 8, backgroundColor: c.surfaceSecondary, marginBottom: 10 },
     uploadIcon: { width: 52, height: 52, borderRadius: 16, borderWidth: 1, borderColor: c.border, justifyContent: 'center', alignItems: 'center', backgroundColor: c.surface },
     uploadTitle: { color: c.text, fontWeight: '800', fontSize: 15 },
     uploadSubtitle: { color: c.textMuted, fontSize: 12, textAlign: 'center' },
@@ -338,27 +340,26 @@ export default function ServicesScreen() {
       alignItems: 'center',
       gap: 10,
       padding: 14,
-      borderRadius: 14,
+      borderRadius: 12,
       marginBottom: 16,
       borderWidth: 1,
-      ...Platform.select({ ios: { shadowColor: '#000', shadowOpacity: 0.08, shadowRadius: 8, shadowOffset: { width: 0, height: 4 } }, android: { elevation: 3 } }),
     },
     bannerText: { flex: 1, fontSize: 14, fontWeight: '700', color: c.text },
-    bannerSuccess: { backgroundColor: '#ecfdf3', borderColor: '#bbf7d0' },
-    bannerError: { backgroundColor: '#fef2f2', borderColor: '#fecaca' },
-    bannerWarning: { backgroundColor: '#fffbeb', borderColor: '#fde68a' },
-    fieldError: { color: '#b91c1c', fontSize: 12, marginBottom: 10 },
+    bannerSuccess: { backgroundColor: '#ECFDF5', borderColor: '#059669' },
+    bannerError: { backgroundColor: '#fef2f2', borderColor: '#DC2626' },
+    bannerWarning: { backgroundColor: '#fffbeb', borderColor: '#F3E4B0' },
+    fieldError: { color: '#991B1B', fontSize: 12, marginBottom: 10 },
     descriptionCounter: { alignSelf: 'flex-end', fontSize: 11, color: colors.textMuted, marginTop: 4, marginBottom: 6 },
-    descriptionCounterOver: { color: '#b91c1c', fontWeight: '600' },
+    descriptionCounterOver: { color: '#991B1B', fontWeight: '600' },
     confirmOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center' },
-    confirmCard: { width: '84%', backgroundColor: c.surface, borderRadius: 16, padding: 20, gap: 10, ...Platform.select({ ios: { shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 12, shadowOffset: { width: 0, height: 8 } }, android: { elevation: 10 } }) },
+    confirmCard: { width: '84%', backgroundColor: c.surface, borderRadius: 12, padding: 20, gap: 10, borderWidth: 1, borderColor: c.border },
     confirmTitle: { fontSize: 17, fontWeight: '700', color: c.text },
     confirmText: { fontSize: 14, color: c.textMuted, lineHeight: 20 },
     confirmActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 4 },
     confirmBtn: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10 },
     confirmCancel: { backgroundColor: c.surfaceSecondary },
-    confirmDiscard: { backgroundColor: '#fee2e2' },
-    confirmDiscardText: { color: '#b91c1c', fontWeight: '700' },
+    confirmDiscard: { backgroundColor: '#FEF2F2' },
+    confirmDiscardText: { color: '#991B1B', fontWeight: '700' },
     confirmCancelText: { color: c.text, fontWeight: '700' },
   }));
   const [requests, setRequests] = useState([]);
@@ -458,7 +459,7 @@ export default function ServicesScreen() {
         <Ionicons
           name={banner.type === 'success' ? 'checkmark-circle' : banner.type === 'error' ? 'alert-circle' : 'information-circle'}
           size={18}
-          color={banner.type === 'success' ? '#15803d' : banner.type === 'error' ? '#b91c1c' : '#92400e'}
+          color={banner.type === 'success' ? '#065F46' : banner.type === 'error' ? '#991B1B' : '#92400e'}
         />
         <Text style={styles.bannerText}>{banner.text}</Text>
         <TouchableOpacity onPress={() => setBanner(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -658,23 +659,23 @@ export default function ServicesScreen() {
 
   const getStatusColor = (status) => {
     switch ((status || '').toLowerCase()) {
-      case 'viewed': return { bg: '#E0E7FF', text: '#6366F1', label: 'Viewed', icon: 'eye' };
-      case 'in_progress': case 'in process': return { bg: '#DBEAFE', text: '#3B82F6', label: 'In Progress', icon: 'construct' };
-      case 'assigned': return { bg: '#EDE9FE', text: '#7C3AED', label: 'Assigned', icon: 'person' };
-      case 'scheduled': return { bg: '#ECFEFF', text: '#0891B2', label: 'Scheduled', icon: 'calendar' };
-      case 'resolved': return { bg: '#D1FAE5', text: '#059669', label: 'Resolved', icon: 'checkmark-done-circle' };
-      case 'completed': return { bg: '#DCFCE7', text: '#22C55E', label: 'Completed', icon: 'checkmark-circle' };
-      case 'rejected': return { bg: '#FEE2E2', text: '#DC2626', label: 'Rejected', icon: 'close-circle' };
-      case 'cancelled': return { bg: '#F3F4F6', text: '#9CA3AF', label: 'Cancelled', icon: 'ban' };
-      case 'pending': return { bg: '#FEF3C7', text: '#F59E0B', label: 'Pending', icon: 'time' };
-      default: return { bg: '#F3F4F6', text: '#6B7280', label: status || 'Pending', icon: 'help-circle' };
+      case 'viewed': return { bg: STATUS.info.background, text: STATUS.info.text, solid: STATUS.info.solid, label: 'Viewed', icon: 'eye' };
+      case 'in_progress': case 'in process': return { bg: STATUS.info.background, text: STATUS.info.text, solid: STATUS.info.solid, label: 'In Progress', icon: 'construct' };
+      case 'assigned': return { bg: STATUS.info.background, text: STATUS.info.text, solid: STATUS.info.solid, label: 'Assigned', icon: 'person' };
+      case 'scheduled': return { bg: STATUS.info.background, text: STATUS.info.text, solid: STATUS.info.solid, label: 'Scheduled', icon: 'calendar' };
+      case 'resolved': return { bg: STATUS.success.background, text: STATUS.success.text, solid: STATUS.success.solid, label: 'Resolved', icon: 'checkmark-done-circle' };
+      case 'completed': return { bg: STATUS.success.background, text: STATUS.success.text, solid: STATUS.success.solid, label: 'Completed', icon: 'checkmark-circle' };
+      case 'rejected': return { bg: STATUS.danger.background, text: STATUS.danger.text, solid: STATUS.danger.solid, label: 'Rejected', icon: 'close-circle' };
+      case 'cancelled': return { bg: STATUS.danger.background, text: STATUS.danger.text, solid: STATUS.danger.solid, label: 'Cancelled', icon: 'ban' };
+      case 'pending': return { bg: STATUS.warning.background, text: STATUS.warning.text, solid: STATUS.warning.solid, label: 'Pending', icon: 'time' };
+      default: return { bg: STATUS.neutral.background, text: STATUS.neutral.text, solid: STATUS.neutral.solid, label: status || 'Pending', icon: 'help-circle' };
     }
   };
 
   const getTypeInfo = (type) => REQUEST_TYPES.find(t => t.id === type) || REQUEST_TYPES[7];
 
   // --- Detail modal handlers ---
-  const openDetail = async (request) => {
+  const openDetail = useCallback(async (request) => {
     setDetailRequest(request);
     setEditMode(false);
     setShowCancelConfirm(false);
@@ -699,7 +700,7 @@ export default function ServicesScreen() {
     } finally {
       setDetailLoading(false);
     }
-  };
+  }, [fetchRequests, showBannerMessage]);
 
   useEffect(() => {
     const targetRequestId = String(notificationRequestId || '').trim();
@@ -951,23 +952,23 @@ export default function ServicesScreen() {
     const hasNewAttachment = latestUpdate?.hasAttachments;
     const locationParts = [request.branch, request.room_id || request.roomId].filter(Boolean);
     return (
-      <TouchableOpacity style={[styles.requestCard, { borderLeftColor: unreadCount > 0 ? colors.primary : typeInfo.color }]} onPress={() => openDetail(request)} activeOpacity={0.85}>
+      <TouchableOpacity style={[styles.requestCard, { borderLeftColor: unreadCount > 0 ? colors.accent : statusColor.solid }]} onPress={() => openDetail(request)} activeOpacity={0.85}>
         <View style={styles.requestHeader}>
-          <View style={[styles.requestIcon, { backgroundColor: `${typeInfo.color}15` }]}>
+          <View style={[styles.requestIcon, { backgroundColor: colors.accentSubtle }]}>
             <Ionicons name={typeInfo.icon} size={20} color={typeInfo.color} />
           </View>
           <View style={styles.requestInfo}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
               <Text style={styles.requestType}>{typeInfo.label}</Text>
               {unreadCount > 0 ? (
-                <View style={{ backgroundColor: colors.primary, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2 }}>
-                  <Text style={{ color: colors.surface, fontSize: 9, fontWeight: '800' }}>{unreadCount > 9 ? '9+' : unreadCount} new</Text>
+                <View style={{ backgroundColor: colors.accent, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2 }}>
+                  <Text style={{ color: '#0A1628', fontSize: 9, fontWeight: '800' }}>{unreadCount > 9 ? '9+' : unreadCount} new</Text>
                 </View>
               ) : null}
             </View>
             <Text style={styles.requestDate}>Last update {safeFormat(lastActivity, 'MMM dd, yyyy • h:mm a')}</Text>
           </View>
-          <View style={[styles.statusBadge, { backgroundColor: statusColor.bg, borderColor: `${statusColor.text}30` }]}>
+          <View style={[styles.statusBadge, { backgroundColor: statusColor.bg, borderColor: statusColor.solid }]}>
             <Text style={[styles.statusText, { color: statusColor.text }]}>{statusColor.label}</Text>
           </View>
         </View>
@@ -981,7 +982,7 @@ export default function ServicesScreen() {
         {latestUpdate ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, backgroundColor: unreadCount > 0 ? '#EFF6FF' : colors.surfaceSecondary, borderRadius: 9, paddingVertical: 7, paddingHorizontal: 9 }}>
             <Ionicons name={hasNewAttachment ? 'attach' : 'chatbubble-ellipses-outline'} size={13} color={unreadCount > 0 ? '#2563EB' : colors.textMuted} />
-            <Text style={{ flex: 1, fontSize: 11, color: unreadCount > 0 ? '#1D4ED8' : colors.textMuted, fontWeight: unreadCount > 0 ? '700' : '500' }} numberOfLines={1}>
+            <Text style={{ flex: 1, fontSize: 11, color: unreadCount > 0 ? '#1E40AF' : colors.textMuted, fontWeight: unreadCount > 0 ? '700' : '500' }} numberOfLines={1}>
               {unreadCount > 0 ? (hasNewAttachment ? 'New attachment available' : latestUpdate.senderRole === 'admin' ? 'Admin replied' : 'New update available') : latestUpdate.preview}
             </Text>
           </View>
@@ -1071,7 +1072,7 @@ export default function ServicesScreen() {
   const requestListEmpty = (
     <View style={styles.emptyState}>
       <View style={styles.emptyIcon}>
-        <Ionicons name={activeTab === 'active' ? 'construct-outline' : activeTab === 'resolved' ? 'checkmark-done-circle' : 'close-circle-outline'} size={36} color={activeTab === 'active' ? colors.primary : activeTab === 'resolved' ? '#22C55E' : '#9CA3AF'} />
+        <Ionicons name={activeTab === 'active' ? 'construct-outline' : activeTab === 'resolved' ? 'checkmark-done-circle' : 'close-circle-outline'} size={36} color={activeTab === 'active' ? colors.primary : activeTab === 'resolved' ? '#059669' : '#6B7280'} />
       </View>
       <Text style={styles.emptyTitle}>
         {activeTab === 'active' ? 'No Active Requests' : activeTab === 'resolved' ? 'No Resolved Requests' : 'No Cancelled Requests'}
@@ -1090,7 +1091,7 @@ export default function ServicesScreen() {
         <View>
           <Text style={styles.headerTitle}>Services & Inquiries</Text>
           {totalUnreadMaintenance > 0 ? (
-            <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '800', marginTop: 2 }}>{totalUnreadMaintenance} maintenance update{totalUnreadMaintenance > 1 ? 's' : ''} unread</Text>
+          <Text style={styles.headerSubtitle}>{totalUnreadMaintenance} maintenance update{totalUnreadMaintenance > 1 ? 's' : ''} unread</Text>
           ) : null}
         </View>
         <TouchableOpacity
@@ -1098,7 +1099,7 @@ export default function ServicesScreen() {
           onPress={() => { setRefreshing(true); fetchRequests(); }}
           accessibilityLabel="Refresh service requests"
         >
-          <Ionicons name="sync" size={18} color="#9CA3AF" />
+          <Ionicons name="sync" size={18} color="#FFFFFF" />
         </TouchableOpacity>
       </View>
 
@@ -1162,7 +1163,7 @@ export default function ServicesScreen() {
                 </View>
                 <Text style={styles.modalSectionTitle}>Describe Your Concern</Text>
                 <TextInput
-                  style={[styles.descriptionInput, fieldErrors.description && { borderColor: '#fca5a5', borderWidth: 1 }]}
+                  style={[styles.descriptionInput, fieldErrors.description && { borderColor: '#DC2626', borderWidth: 1 }]}
                   placeholder="Please provide details..."
                   placeholderTextColor={colors.textMuted}
                   multiline
@@ -1320,7 +1321,7 @@ export default function ServicesScreen() {
                   )}
 
                   {!editMode && (
-                    <View style={{ backgroundColor: '#F8FAFC', borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#E2E8F0' }}>
+                    <View style={{ backgroundColor: '#F8FAFC', borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#E5E7EB' }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                         <Ionicons name={getStatusColor(detailRequest.status).icon} size={18} color={getStatusColor(detailRequest.status).text} />
                         <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text }}>Current Status</Text>
@@ -1387,10 +1388,10 @@ export default function ServicesScreen() {
                   )}
 
                   {!editMode && detailTenantSummary && !hasConversationSummary && (
-                    <View style={{ backgroundColor: '#FFF7ED', borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#FED7AA' }}>
+                    <View style={{ backgroundColor: '#FFFBEB', borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#F3E4B0' }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                        <Ionicons name="reader-outline" size={18} color="#C2410C" />
-                        <Text style={{ fontSize: 14, fontWeight: '800', color: '#9A3412' }}>Maintenance Summary</Text>
+                        <Ionicons name="reader-outline" size={18} color="#92400E" />
+                        <Text style={{ fontSize: 14, fontWeight: '800', color: '#92400E' }}>Maintenance Summary</Text>
                       </View>
                       {[
                         ['Current status', formatStatusLabel(detailTenantSummary.current_status)],
@@ -1401,16 +1402,16 @@ export default function ServicesScreen() {
                         ['Completion note', detailTenantSummary.completion_note],
                       ].filter(([, value]) => Boolean(value)).map(([label, value]) => (
                         <View key={label} style={{ marginBottom: 8 }}>
-                          <Text style={{ fontSize: 11, color: '#9A3412', fontWeight: '800', textTransform: 'uppercase' }}>{label}</Text>
-                          <Text style={{ fontSize: 13, color: '#7C2D12', lineHeight: 19 }}>{value}</Text>
+                          <Text style={{ fontSize: 11, color: '#92400E', fontWeight: '800', textTransform: 'uppercase' }}>{label}</Text>
+                          <Text style={{ fontSize: 13, color: '#92400E', lineHeight: 19 }}>{value}</Text>
                         </View>
                       ))}
                       {detailTenantSummary.attachments?.length ? (
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
                           {detailTenantSummary.attachments.map((att, idx) => (
-                            <TouchableOpacity key={`${getAttachmentDisplayName(att, idx)}_${idx}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#FFEDD5', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 }} onPress={() => openAttachment(att)}>
-                              <Ionicons name={isImageAttachment(att) ? 'image-outline' : 'document-outline'} size={13} color="#C2410C" />
-                              <Text style={{ fontSize: 11, color: '#9A3412', fontWeight: '700' }} numberOfLines={1}>{getAttachmentDisplayName(att, idx)}</Text>
+                            <TouchableOpacity key={`${getAttachmentDisplayName(att, idx)}_${idx}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#FFFBEB', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 }} onPress={() => openAttachment(att)}>
+                              <Ionicons name={isImageAttachment(att) ? 'image-outline' : 'document-outline'} size={13} color="#92400E" />
+                              <Text style={{ fontSize: 11, color: '#92400E', fontWeight: '700' }} numberOfLines={1}>{getAttachmentDisplayName(att, idx)}</Text>
                             </TouchableOpacity>
                           ))}
                         </View>
@@ -1424,7 +1425,7 @@ export default function ServicesScreen() {
                       <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text, marginBottom: 8 }}>Maintenance Thread</Text>
                       <View style={{ gap: 10 }}>
                         {detailProgressEntries.map((entry) => (
-                          <View key={entry.id} style={{ backgroundColor: entry.actorRole === 'tenant' ? '#ECFDF5' : colors.surfaceSecondary, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: entry.actorRole === 'tenant' ? '#BBF7D0' : '#E5E7EB' }}>
+                          <View key={entry.id} style={{ backgroundColor: entry.actorRole === 'tenant' ? '#ECFDF5' : colors.surfaceSecondary, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: entry.actorRole === 'tenant' ? '#059669' : '#E5E7EB' }}>
                             <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 10, marginBottom: entry.message ? 6 : 0 }}>
                               <View style={{ flex: 1 }}>
                                 <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>{entry.title}</Text>
@@ -1455,7 +1456,7 @@ export default function ServicesScreen() {
                                   {entry.attachments.map((att, idx) => (
                                     <TouchableOpacity
                                       key={`${getAttachmentDownloadUrl(att) || 'attachment'}_${idx}`}
-                                      style={{ width: 96, height: 96, borderRadius: 12, backgroundColor: colors.surface, marginRight: 10, overflow: 'hidden', borderWidth: 1, borderColor: '#D1D5DB', justifyContent: 'center', alignItems: 'center' }}
+                                      style={{ width: 96, height: 96, borderRadius: 12, backgroundColor: colors.surface, marginRight: 10, overflow: 'hidden', borderWidth: 1, borderColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' }}
                                       activeOpacity={0.85}
                                       onPress={() => openAttachment(att)}
                                     >
@@ -1512,7 +1513,7 @@ export default function ServicesScreen() {
 
                   {/* Reopen note if exists */}
                   {!editMode && detailRequest.reopen_note && (
-                    <View style={{ backgroundColor: '#EFF6FF', borderRadius: 12, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#BFDBFE' }}>
+                    <View style={{ backgroundColor: '#EFF6FF', borderRadius: 12, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#2563EB' }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
                         <Ionicons name="refresh" size={14} color="#2563EB" />
                         <Text style={{ fontSize: 12, fontWeight: '600', color: '#2563EB' }}>Reopened</Text>
@@ -1582,7 +1583,7 @@ export default function ServicesScreen() {
                               <Ionicons name="create-outline" size={20} color={colors.surface} />
                               <Text style={{ color: colors.surface, fontWeight: '700', fontSize: 15 }}>Edit Request</Text>
                             </TouchableOpacity>
-                            <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FEE2E2', borderRadius: 12, paddingVertical: 14 }} onPress={() => setShowCancelConfirm(true)}>
+                            <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FEF2F2', borderRadius: 12, paddingVertical: 14 }} onPress={() => setShowCancelConfirm(true)}>
                               <Ionicons name="close-circle-outline" size={20} color="#DC2626" />
                               <Text style={{ color: '#DC2626', fontWeight: '700', fontSize: 15 }}>Cancel Request</Text>
                             </TouchableOpacity>
@@ -1590,9 +1591,9 @@ export default function ServicesScreen() {
                         )}
                         {['resolved', 'completed'].includes((detailRequest.status || '').toLowerCase()) && !detailRequest.tenant_confirmed_resolved && (
                           <>
-                            <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#DCFCE7', borderRadius: 12, paddingVertical: 14 }} onPress={handleConfirmResolved} disabled={saving}>
-                              <Ionicons name="checkmark-done-circle-outline" size={20} color="#15803D" />
-                              <Text style={{ color: '#15803D', fontWeight: '700', fontSize: 15 }}>Confirm Resolved</Text>
+                            <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#ECFDF5', borderRadius: 12, paddingVertical: 14 }} onPress={handleConfirmResolved} disabled={saving}>
+                              <Ionicons name="checkmark-done-circle-outline" size={20} color="#065F46" />
+                              <Text style={{ color: '#065F46', fontWeight: '700', fontSize: 15 }}>Confirm Resolved</Text>
                             </TouchableOpacity>
                             <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#EFF6FF', borderRadius: 12, paddingVertical: 14 }} onPress={() => setShowReopenModal(true)}>
                               <Ionicons name="refresh" size={20} color="#2563EB" />
@@ -1622,13 +1623,11 @@ export default function ServicesScreen() {
             style={{
               width: '88%',
               backgroundColor: colors.surface,
-              borderRadius: 18,
+              borderRadius: 12,
               padding: 16,
               gap: 12,
-              ...Platform.select({
-                ios: { shadowColor: '#000', shadowOpacity: 0.24, shadowRadius: 18, shadowOffset: { width: 0, height: 10 } },
-                android: { elevation: 12 },
-              }),
+              borderWidth: 1,
+              borderColor: colors.border,
             }}
           >
             <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -1640,7 +1639,7 @@ export default function ServicesScreen() {
             {getAttachmentDownloadUrl(previewAttachment) ? (
               <Image
                 source={{ uri: getAttachmentDownloadUrl(previewAttachment) }}
-                style={{ width: '100%', height: 340, borderRadius: 14, backgroundColor: colors.surfaceSecondary }}
+                style={{ width: '100%', height: 340, borderRadius: 12, backgroundColor: colors.surfaceSecondary }}
                 resizeMode="contain"
                 onError={(event) => {
                   const message = sanitizeAttachmentErrorMessage(event?.nativeEvent?.error || 'Attachment preview could not be loaded.');
@@ -1656,8 +1655,8 @@ export default function ServicesScreen() {
               />
             ) : null}
             {previewAttachmentError ? (
-              <View style={{ backgroundColor: '#FEF2F2', borderColor: '#FECACA', borderWidth: 1, borderRadius: 10, padding: 10 }}>
-                <Text style={{ color: '#B91C1C', fontSize: 12, lineHeight: 18 }}>{previewAttachmentError}</Text>
+              <View style={{ backgroundColor: '#FEF2F2', borderColor: '#DC2626', borderWidth: 1, borderRadius: 10, padding: 10 }}>
+                <Text style={{ color: '#991B1B', fontSize: 12, lineHeight: 18 }}>{previewAttachmentError}</Text>
               </View>
             ) : null}
             <Text style={{ fontSize: 13, color: colors.textMuted }}>
@@ -1678,7 +1677,7 @@ export default function ServicesScreen() {
                 <Text style={styles.confirmCancelText}>Keep Request</Text>
               </TouchableOpacity>
               <TouchableOpacity style={[styles.confirmBtn, styles.confirmDiscard]} onPress={handleCancel} disabled={saving}>
-                {saving ? <ActivityIndicator size="small" color="#b91c1c" /> : <Text style={styles.confirmDiscardText}>Cancel Request</Text>}
+                {saving ? <ActivityIndicator size="small" color="#991B1B" /> : <Text style={styles.confirmDiscardText}>Cancel Request</Text>}
               </TouchableOpacity>
             </View>
           </View>
@@ -1704,7 +1703,7 @@ export default function ServicesScreen() {
               <TouchableOpacity style={[styles.confirmBtn, styles.confirmCancel]} onPress={() => { setShowReopenModal(false); setReopenNote(''); }}>
                 <Text style={styles.confirmCancelText}>Nevermind</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.confirmBtn, { backgroundColor: '#DBEAFE' }]} onPress={handleReopen} disabled={saving}>
+              <TouchableOpacity style={[styles.confirmBtn, { backgroundColor: '#EFF6FF' }]} onPress={handleReopen} disabled={saving}>
                 {saving ? <ActivityIndicator size="small" color="#2563EB" /> : <Text style={{ color: '#2563EB', fontWeight: '700' }}>Reopen</Text>}
               </TouchableOpacity>
             </View>

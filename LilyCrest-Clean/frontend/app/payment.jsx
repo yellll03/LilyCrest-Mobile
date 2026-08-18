@@ -2,8 +2,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../src/context/AlertContext';
 import { useTheme } from '../src/context/ThemeContext';
@@ -46,15 +46,16 @@ export default function PaymentScreen() {
   const router = useRouter();
   const { billId: billIdParam } = useLocalSearchParams();
   const billId = Array.isArray(billIdParam) ? billIdParam[0] : billIdParam;
-  const { colors, isDarkMode } = useTheme();
+  const { colors } = useTheme();
   const { showAlert } = useAlert();
-  const styles = useMemo(() => createStyles(colors, isDarkMode), [colors, isDarkMode]);
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   const [bill, setBill] = useState(null);
   const [loading, setLoading] = useState(true);
   const [creatingCheckout, setCreatingCheckout] = useState(false);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const checkoutGuardRef = useRef(false);
 
   const loadBill = useCallback(async ({ showLoader = true } = {}) => {
     if (showLoader) setLoading(true);
@@ -104,16 +105,17 @@ export default function PaymentScreen() {
   }, [loadBill]));
 
   const handlePayOnline = async () => {
-    const latestBill = await loadBill({ showLoader: false });
-    if (!latestBill) return;
-    const id = getBillId(latestBill);
-    if (!id) {
-      setError(BILL_UNAVAILABLE_MESSAGE);
-      return;
-    }
-
+    if (checkoutGuardRef.current) return;
+    checkoutGuardRef.current = true;
     setCreatingCheckout(true);
     try {
+      const latestBill = await loadBill({ showLoader: false });
+      if (!latestBill) return;
+      const id = getBillId(latestBill);
+      if (!id) {
+        setError(BILL_UNAVAILABLE_MESSAGE);
+        return;
+      }
       const resp = await apiService.createPaymongoCheckout(id);
       const checkoutUrl = resp?.data?.checkout_url;
       const checkoutId = resp?.data?.checkout_id;
@@ -142,6 +144,7 @@ export default function PaymentScreen() {
       }
       showAlert({ title: 'Payment Error', message, type: 'error' });
     } finally {
+      checkoutGuardRef.current = false;
       setCreatingCheckout(false);
     }
   };
@@ -190,15 +193,15 @@ export default function PaymentScreen() {
   const charges = [];
   if (moveInFinancials) {
     charges.push(
-      { label: 'One Month Advance Rent', amount: moveInFinancials.advanceRent, icon: 'home', color: '#1d4ed8' },
-      { label: 'Security Deposit', amount: moveInFinancials.securityDeposit, icon: 'shield-checkmark', color: '#0284c7' },
-      { label: 'Reservation Fee Already Paid', amount: -moveInFinancials.reservationFeeAlreadyPaid, icon: 'remove-circle', color: '#15803d' },
+      { label: 'One Month Advance Rent', amount: moveInFinancials.advanceRent, icon: 'home', color: '#1E40AF' },
+      { label: 'Security Deposit', amount: moveInFinancials.securityDeposit, icon: 'shield-checkmark', color: '#2563EB' },
+      { label: 'Reservation Fee Already Paid', amount: -moveInFinancials.reservationFeeAlreadyPaid, icon: 'remove-circle', color: '#065F46' },
     );
   } else {
-    if (bill.rent) charges.push({ label: 'Rent', amount: bill.rent, icon: 'home', color: '#1d4ed8' });
-    if (bill.electricity) charges.push({ label: 'Electricity', amount: bill.electricity, icon: 'flash', color: '#b45309' });
-    if (bill.water) charges.push({ label: 'Water', amount: bill.water, icon: 'water', color: '#0284c7' });
-    if (bill.penalties) charges.push({ label: 'Penalties', amount: bill.penalties, icon: 'warning', color: '#b91c1c' });
+    if (bill.rent) charges.push({ label: 'Rent', amount: bill.rent, icon: 'home', color: '#1E40AF' });
+    if (bill.electricity) charges.push({ label: 'Electricity', amount: bill.electricity, icon: 'flash', color: '#92400E' });
+    if (bill.water) charges.push({ label: 'Water', amount: bill.water, icon: 'water', color: '#2563EB' });
+    if (bill.penalties) charges.push({ label: 'Penalties', amount: bill.penalties, icon: 'warning', color: '#991B1B' });
   }
 
   return (
@@ -269,7 +272,7 @@ export default function PaymentScreen() {
         {!isOutstanding ? (
           <View style={styles.paidCard}>
             <View style={styles.paidHeader}>
-              <Ionicons name="checkmark-circle" size={24} color="#22C55E" />
+              <Ionicons name="checkmark-circle" size={24} color="#059669" />
               <Text style={styles.paidTitle}>Payment Complete</Text>
             </View>
             <Text style={styles.paidDesc}>
@@ -286,7 +289,7 @@ export default function PaymentScreen() {
           <View style={styles.paymentSection}>
             <View style={styles.onlineCard}>
               <View style={styles.onlineHeader}>
-                <Ionicons name="shield-checkmark" size={20} color="#22C55E" />
+                <Ionicons name="shield-checkmark" size={20} color="#059669" />
                 <Text style={styles.onlineTitle}>Secure Online Payment</Text>
               </View>
               <Text style={styles.onlineDesc}>
@@ -295,7 +298,7 @@ export default function PaymentScreen() {
               <View style={styles.methodsList}>
                 {['GCash', 'Maya', 'Credit/Debit Card', 'Online Banking'].map((method) => (
                   <View key={method} style={styles.methodChip}>
-                    <Ionicons name="checkmark-circle" size={14} color="#22C55E" />
+                    <Ionicons name="checkmark-circle" size={14} color="#059669" />
                     <Text style={styles.methodChipText}>{method}</Text>
                   </View>
                 ))}
@@ -340,7 +343,7 @@ export default function PaymentScreen() {
   );
 }
 
-const createStyles = (c, isDarkMode) => StyleSheet.create({
+const createStyles = (c) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.background },
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 12, padding: 16 },
   errorLabel: { fontSize: 16, fontWeight: '700', color: c.text },
@@ -356,17 +359,14 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
 
   scrollContent: { padding: 16, gap: 16 },
 
-  summaryCard: {
-    backgroundColor: c.headerBg, borderRadius: 18, padding: 18,
-    ...Platform.select({ ios: { shadowColor: c.headerBg, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10 }, android: { elevation: 4 } }),
-  },
+  summaryCard: { backgroundColor: c.headerBg, borderRadius: 12, padding: 18 },
   summaryRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   summaryTitle: { fontSize: 15, fontWeight: '700', color: '#ffffff', flex: 1 },
   summaryPeriod: { fontSize: 12, color: 'rgba(255,255,255,0.5)', marginTop: 4, fontWeight: '600' },
   summaryDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.1)', marginVertical: 12 },
   summaryDetail: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
   summaryLabel: { fontSize: 13, color: 'rgba(255,255,255,0.6)', fontWeight: '600' },
-  summaryAmount: { fontSize: 24, fontWeight: '800', color: '#ff9000' },
+  summaryAmount: { fontSize: 24, fontWeight: '800', color: '#D4AF37' },
   summaryValue: { fontSize: 14, fontWeight: '700', color: '#ffffff' },
 
   chargesList: { marginBottom: 8 },
@@ -377,7 +377,7 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
   chargeTotalDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.15)', marginTop: 4, marginBottom: 8 },
 
   paymentSection: { gap: 14 },
-  onlineCard: { backgroundColor: c.surface, borderRadius: 16, padding: 16, gap: 10, borderWidth: isDarkMode ? 1 : 0, borderColor: c.border },
+  onlineCard: { backgroundColor: c.surface, borderRadius: 12, padding: 16, gap: 10, borderWidth: 1, borderColor: c.border },
   onlineHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   onlineTitle: { fontSize: 15, fontWeight: '700', color: c.text },
   onlineDesc: { fontSize: 13, color: c.textSecondary, lineHeight: 19 },
@@ -387,7 +387,7 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
 
   payBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: c.primary, paddingVertical: 16, borderRadius: 14,
+    backgroundColor: c.primary, paddingVertical: 16, borderRadius: 8,
   },
   payBtnText: { color: '#ffffff', fontWeight: '700', fontSize: 16 },
 
@@ -397,17 +397,17 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
   singleBillNoteText: { fontSize: 11, color: c.textMuted },
 
   paidCard: {
-    backgroundColor: c.surface, borderRadius: 16, padding: 18, gap: 10,
-    borderWidth: 1.5, borderColor: '#BBF7D0',
+    backgroundColor: c.surface, borderRadius: 12, padding: 18, gap: 10,
+    borderWidth: 1.5, borderColor: '#059669',
   },
   paidHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  paidTitle: { fontSize: 16, fontWeight: '700', color: '#15803d' },
+  paidTitle: { fontSize: 16, fontWeight: '700', color: '#065F46' },
   paidDesc: { fontSize: 13, color: c.textSecondary, lineHeight: 19 },
   paidRefRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 },
   paidRefLabel: { fontSize: 12, color: c.textMuted, fontWeight: '600' },
   paidRefValue: { fontSize: 13, fontWeight: '700', color: c.text },
 
-  cancelBtn: { paddingVertical: 14, borderRadius: 14, borderWidth: 1.5, borderColor: c.border, alignItems: 'center', backgroundColor: c.surface },
+  cancelBtn: { paddingVertical: 14, borderRadius: 8, borderWidth: 1.5, borderColor: c.border, alignItems: 'center', backgroundColor: c.surface },
   cancelText: { color: c.textSecondary, fontWeight: '600', fontSize: 15 },
 
   btnDisabled: { opacity: 0.6 },

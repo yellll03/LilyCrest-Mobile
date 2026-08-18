@@ -627,7 +627,8 @@ export function AuthProvider({ children }) {
     return subscribeToPushTokenChanges((token, tokenData) => {
       savePushTokenToServer(token, {
         notificationsEnabled: true,
-        platform: tokenData?.type || undefined,
+        provider: tokenData?.type || undefined,
+        platform: Platform.OS,
         syncKey: user.user_id,
       }).catch(() => {});
     });
@@ -894,11 +895,18 @@ export function AuthProvider({ children }) {
         return { authenticated: false };
       }
 
-      const cachedUser = await getCachedSessionUser();
-      if (cachedUser) await AsyncStorage.removeItem(SESSION_USER_KEY).catch(() => {});
-      setUser(null);
-      setAuthStatus('unauthenticated');
-      return { authenticated: false };
+      const cachedUser = await getCachedSessionUser() || userRef.current;
+      if (cachedUser) {
+        setUser(cachedUser);
+        setAuthStatus('authenticated');
+        return { authenticated: true, restoredFromCache: true, offline: true };
+      }
+
+      // A timeout, offline state, or 5xx response is not proof that the
+      // locally persisted session is invalid. Keep the token so a later
+      // retry can recover; only an authoritative 401/403 signs the user out.
+      setAuthStatus((current) => current === 'authenticated' ? current : 'unauthenticated');
+      return { authenticated: false, indeterminate: true };
     }
   }, []);
 
@@ -959,7 +967,7 @@ export function AuthProvider({ children }) {
   if (isLoading) {
     return (
       <View style={styles.authLoadingContainer}>
-        <ActivityIndicator size="large" color="#204B7E" />
+        <ActivityIndicator size="large" color="#0A1628" />
         <Text style={styles.authLoadingTitle}>Preparing LilyCrest</Text>
         <Text style={styles.authLoadingText}>Checking your secure session...</Text>
       </View>
@@ -1040,7 +1048,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 13,
     fontWeight: '500',
-    color: '#64748B',
+    color: '#4B5563',
   },
   bannerOverlay: {
     position: 'absolute',
@@ -1056,7 +1064,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: '#EFF6FF',
     borderWidth: 1,
-    borderColor: '#BFDBFE',
+    borderColor: '#2563EB',
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
@@ -1093,6 +1101,6 @@ const styles = StyleSheet.create({
   bannerCloseText: {
     fontSize: 18,
     lineHeight: 18,
-    color: '#64748B',
+    color: '#4B5563',
   },
 });

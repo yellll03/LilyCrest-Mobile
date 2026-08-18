@@ -27,12 +27,12 @@ function formatBody(body) {
 }
 
 function statusColor(result) {
-  if (result.skipped) return '#64748B';
-  if (result.ok) return '#15803D';
-  if (result.status === 401) return '#B45309';
+  if (result.skipped) return '#4B5563';
+  if (result.ok) return '#065F46';
+  if (result.status === 401) return '#92400E';
   if (result.status === 404) return '#DC2626';
   if (result.status >= 500) return '#DC2626';
-  if (result.status == null) return '#BE123C';
+  if (result.status == null) return '#DC2626';
   return '#334155';
 }
 
@@ -294,7 +294,7 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     marginTop: 6,
     fontSize: 12,
     lineHeight: 18,
-    color: '#B45309',
+    color: '#92400E',
     fontWeight: '700',
   },
   bodyLabel: {

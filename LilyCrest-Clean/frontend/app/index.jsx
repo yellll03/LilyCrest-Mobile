@@ -50,10 +50,9 @@ const SLIDES = [
   },
 ];
 
-const NAVY = '#0a1220';
-const PRIMARY = '#204b7e';
-const ACCENT = '#ff9000';
-const ACCENT_LIGHT = '#cc7200';
+const NAVY = '#0A1628';
+const ACCENT = '#D4AF37';
+const ACCENT_LIGHT = '#B9921F';
 
 export default function OnboardingScreen() {
   const router = useRouter();
@@ -164,7 +163,7 @@ export default function OnboardingScreen() {
           resizeMode="contain"
           accessibilityLabel="LilyCrest logo"
         />
-        <ActivityIndicator size="large" color={PRIMARY} style={{ marginTop: 32 }} />
+        <ActivityIndicator size="large" color={ACCENT} style={{ marginTop: 32 }} />
       </View>
     );
   }
@@ -215,7 +214,7 @@ export default function OnboardingScreen() {
             {SLIDES.map((s, i) => (
               <View key={s.id} style={styles.featureItem}>
                 <View style={[styles.featureIconBox, activeIndex === i && styles.featureIconBoxActive]}>
-                  <Ionicons name={s.icon} size={22} color={activeIndex === i ? '#fff' : ACCENT} />
+                  <Ionicons name={s.icon} size={22} color={activeIndex === i ? NAVY : ACCENT} />
                 </View>
                 <Text style={[styles.featureLabel, activeIndex === i && styles.featureLabelActive]}>
                   {s.label}
@@ -244,7 +243,7 @@ export default function OnboardingScreen() {
                 {activeIndex === SLIDES.length - 1 ? 'Get Started' : 'Next'}
               </Text>
               <View style={styles.ctaArrow}>
-                <Ionicons name="arrow-forward" size={18} color="#fff" />
+                <Ionicons name="arrow-forward" size={18} color={NAVY} />
               </View>
             </TouchableOpacity>
           </View>
@@ -297,79 +296,6 @@ const styles = StyleSheet.create({
     width: 144,
     height: 112,
   },
-  brandWrap: {
-    alignItems: 'center',
-    gap: 12,
-  },
-  brandWrapCompact: {
-    gap: 10,
-  },
-  brandBadge: {
-    width: 132,
-    height: 132,
-    borderRadius: 36,
-    backgroundColor: 'rgba(13, 27, 62, 0.96)',
-    borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
-    overflow: 'hidden',
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOpacity: 0.18, shadowOffset: { width: 0, height: 8 }, shadowRadius: 18 },
-      android: { elevation: 8 },
-      web: { boxShadow: '0 12px 24px rgba(0,0,0,0.24)' },
-    }),
-  },
-  brandBadgeCompact: {
-    width: 110,
-    height: 110,
-    borderRadius: 30,
-  },
-  brandBadgeImage: {
-    width: 180,
-    height: 180,
-    transform: [{ translateY: -24 }],
-  },
-  brandBadgeImageCompact: {
-    width: 152,
-    height: 152,
-    transform: [{ translateY: -20 }],
-  },
-  brandTextWrap: {
-    alignItems: 'center',
-    gap: 4,
-  },
-  brandWordmark: {
-    fontSize: 30,
-    fontWeight: '800',
-    letterSpacing: 0.3,
-  },
-  brandWordmarkCompact: {
-    fontSize: 24,
-  },
-  brandWordmarkLight: {
-    color: '#FFFFFF',
-  },
-  brandWordmarkAccent: {
-    color: ACCENT,
-  },
-  brandTagline: {
-    fontSize: 11,
-    fontWeight: '700',
-    color: 'rgba(255,255,255,0.74)',
-    letterSpacing: 2.6,
-    textTransform: 'uppercase',
-    textAlign: 'center',
-  },
-  brandTaglineCompact: {
-    fontSize: 10,
-    letterSpacing: 2.2,
-  },
-  logoImage: {
-    width: width * 0.62,
-    height: height * 0.22,
-  },
-
   // ── Carousel ──
   carouselSection: {
     flex: 1,
@@ -386,9 +312,9 @@ const styles = StyleSheet.create({
     width: 88,
     height: 88,
     borderRadius: 44,
-    backgroundColor: 'rgba(255,144,0,0.15)',
+    backgroundColor: 'rgba(212,175,55,0.15)',
     borderWidth: 2,
-    borderColor: 'rgba(255,144,0,0.40)',
+    borderColor: 'rgba(212,175,55,0.40)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -424,17 +350,13 @@ const styles = StyleSheet.create({
     borderRadius: 16,
     backgroundColor: 'rgba(255,255,255,0.08)',
     borderWidth: 1.5,
-    borderColor: 'rgba(255,144,0,0.35)',
+    borderColor: 'rgba(212,175,55,0.35)',
     alignItems: 'center',
     justifyContent: 'center',
   },
   featureIconBoxActive: {
     backgroundColor: ACCENT,
     borderColor: ACCENT_LIGHT,
-    ...Platform.select({
-      ios: { shadowColor: ACCENT, shadowOpacity: 0.5, shadowOffset: { width: 0, height: 4 }, shadowRadius: 10 },
-      android: { elevation: 6 },
-    }),
   },
   featureLabel: {
     fontSize: 11,
@@ -443,7 +365,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   featureLabelActive: {
-    color: '#FFFFFF',
+    color: ACCENT_LIGHT,
     fontWeight: '700',
   },
 
@@ -476,7 +398,7 @@ const styles = StyleSheet.create({
     width: 24,
     height: 8,
     borderRadius: 4,
-    backgroundColor: PRIMARY,
+    backgroundColor: ACCENT,
   },
   ctaBtn: {
     flexDirection: 'row',
@@ -485,15 +407,11 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     paddingLeft: 24,
     paddingRight: 16,
-    borderRadius: 50,
+    borderRadius: 8,
     gap: 10,
-    ...Platform.select({
-      ios: { shadowColor: ACCENT, shadowOpacity: 0.45, shadowOffset: { width: 0, height: 6 }, shadowRadius: 12 },
-      android: { elevation: 8 },
-    }),
   },
   ctaBtnText: {
-    color: '#FFFFFF',
+    color: NAVY,
     fontSize: 16,
     fontWeight: '700',
   },

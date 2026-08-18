@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import Constants from 'expo-constants';
+import * as Crypto from 'expo-crypto';
 import { Platform } from 'react-native';
 import { api } from './api';
 import { SURVEY_FEEDBACK_ENABLED } from '../config/features';
@@ -21,6 +22,7 @@ const PUSH_TOKEN_KEY = '@lilycrest_push_token';
 const PUSH_PERMISSION_REQUESTED_KEY = '@lilycrest_push_permission_requested';
 const PUSH_SETTING_KEY = 'notifications';
 const PUSH_SYNC_SIGNATURE_KEY = '@lilycrest_push_sync_signature';
+const PUSH_INSTALLATION_ID_KEY = '@lilycrest_push_installation_id';
 const DEFAULT_CHANNEL_ID = 'default';
 
 export function initializeNotificationHandler() {
@@ -73,7 +75,7 @@ async function ensureAndroidNotificationChannel() {
       name: 'LilyCrest Notifications',
       importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#204b7e',
+      lightColor: '#0A1628',
       sound: 'default',
     });
   } catch (error) {
@@ -92,6 +94,29 @@ export async function arePushNotificationsEnabled() {
 
 export async function setPushNotificationsEnabled(enabled) {
   await AsyncStorage.setItem(PUSH_SETTING_KEY, String(Boolean(enabled)));
+}
+
+let installationIdPromise = null;
+
+export async function getOrCreatePushInstallationId() {
+  if (!installationIdPromise) {
+    installationIdPromise = (async () => {
+      const existing = String(await AsyncStorage.getItem(PUSH_INSTALLATION_ID_KEY) || '').trim();
+      if (existing) return existing;
+
+      const uuid = typeof Crypto?.randomUUID === 'function'
+        ? Crypto.randomUUID()
+        : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+      const nextId = `lilycrest-${Platform.OS}-${uuid}`;
+      await AsyncStorage.setItem(PUSH_INSTALLATION_ID_KEY, nextId);
+      return nextId;
+    })().catch((error) => {
+      installationIdPromise = null;
+      throw error;
+    });
+  }
+
+  return installationIdPromise;
 }
 
 export async function registerForPushNotifications({ requestPermission = false } = {}) {
@@ -183,8 +208,10 @@ export async function savePushTokenToServer(token, options = {}) {
   const trimmedToken = typeof token === 'string' ? token.trim() : '';
   const notificationsEnabled = options.notificationsEnabled ?? true;
   const devicePlatform = options.platform || Platform.OS;
+  const provider = options.provider || normalizePushProvider(trimmedToken, devicePlatform);
   const authTokenOverride = typeof options.authTokenOverride === 'string' ? options.authTokenOverride.trim() : '';
   const suppressUnauthorized = options.suppressUnauthorized === true;
+  const installationId = await getOrCreatePushInstallationId();
   const syncKey = typeof options.syncKey === 'string' && options.syncKey.trim()
     ? options.syncKey.trim()
     : 'default';
@@ -193,6 +220,11 @@ export async function savePushTokenToServer(token, options = {}) {
     token: trimmedToken || null,
     enabled: Boolean(notificationsEnabled),
     platform: devicePlatform,
+    provider,
+    installationId,
+    // Refresh server-side last_seen_at at most once per UTC day without
+    // registering repeatedly on every render/app foreground event.
+    syncDay: new Date().toISOString().slice(0, 10),
   });
 
   if (!trimmedToken && notificationsEnabled) return;
@@ -206,8 +238,10 @@ export async function savePushTokenToServer(token, options = {}) {
     await api.post('/users/push-token', {
       push_token: trimmedToken || null,
       notifications_enabled: Boolean(notificationsEnabled),
-      provider: normalizePushProvider(trimmedToken, devicePlatform),
+      provider,
       device_platform: devicePlatform,
+      device_id: installationId,
+      replace_legacy_platform_tokens: true,
     }, {
       headers: authTokenOverride ? { Authorization: `Bearer ${authTokenOverride}` } : undefined,
     });
@@ -319,6 +353,7 @@ export function resolveNotificationRoute(data = {}) {
   if (directUrl.startsWith('/') && !/^\/surveys?(\/|$)/i.test(directUrl)) return directUrl;
 
   const billingId = data?.billing_id || data?.bill_id;
+  const contractId = data?.contract_id || data?.contractId;
   const surveyId = data?.surveyId || data?.survey_id;
   const explicitScreen = typeof data?.screen === 'string' ? data.screen.trim().toLowerCase() : '';
   const type = typeof data?.type === 'string' ? data.type.trim().toLowerCase() : '';
@@ -360,6 +395,12 @@ export function resolveNotificationRoute(data = {}) {
         : '/surveys';
     case 'settings':
       return '/settings';
+    case 'contract':
+    case 'contracts':
+    case 'contract_document_ready':
+      return contractId
+        ? { pathname: '/contract-viewer', params: { contractId: String(contractId) } }
+        : '/contract-viewer';
     case 'profile':
     case 'system':
       return '/(tabs)/profile';

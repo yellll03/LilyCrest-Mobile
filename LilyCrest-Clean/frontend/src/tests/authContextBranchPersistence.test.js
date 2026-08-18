@@ -66,11 +66,15 @@ const GOOD_BRANCH = {
 };
 
 let mockUsersMeResponse;
+let mockUsersMeError;
 
 jest.mock('../services/api', () => ({
   api: {
     get: jest.fn((url) => {
-      if (url === '/users/me') return Promise.resolve(mockUsersMeResponse);
+      if (url === '/users/me') {
+        if (mockUsersMeError) return Promise.reject(mockUsersMeError);
+        return Promise.resolve(mockUsersMeResponse);
+      }
       if (url === '/notifications') return Promise.resolve({ data: [] });
       return Promise.resolve({ data: {} });
     }),
@@ -106,6 +110,7 @@ describe('AuthContext branch persistence across profile refreshes (regression)',
     jest.clearAllMocks();
     await AsyncStorage.clear();
     mockSessionToken = 'valid-session-token';
+    mockUsersMeError = null;
     mockUsersMeResponse = { data: { user_id: 'tenant-a', name: 'Tenant A', branch: GOOD_BRANCH } };
   });
 
@@ -213,5 +218,40 @@ describe('AuthContext branch persistence across profile refreshes (regression)',
     });
 
     expect(latest.user?.branch?.branchName).toBe('Guadalupe');
+  });
+
+  it('checkAuth() preserves the authenticated cached session on a timeout', async () => {
+    const { clearCredentials } = require('../services/secureCredentials');
+    let latest;
+    renderAuth((state) => { latest = state; });
+    await waitFor(() => expect(latest.authStatus).toBe('authenticated'));
+
+    mockUsersMeError = Object.assign(new Error('timeout'), { code: 'ECONNABORTED' });
+    let result;
+    await act(async () => {
+      result = await latest.checkAuth();
+    });
+
+    expect(result).toEqual(expect.objectContaining({ authenticated: true, restoredFromCache: true, offline: true }));
+    expect(latest.authStatus).toBe('authenticated');
+    expect(latest.user?.user_id).toBe('tenant-a');
+    expect(await AsyncStorage.getItem('session_user')).not.toBeNull();
+    expect(clearCredentials).not.toHaveBeenCalled();
+  });
+
+  it('checkAuth() preserves the authenticated cached session on a server 5xx', async () => {
+    const { clearCredentials } = require('../services/secureCredentials');
+    let latest;
+    renderAuth((state) => { latest = state; });
+    await waitFor(() => expect(latest.authStatus).toBe('authenticated'));
+
+    mockUsersMeError = { response: { status: 503 } };
+    await act(async () => {
+      await latest.checkAuth();
+    });
+
+    expect(latest.authStatus).toBe('authenticated');
+    expect(latest.user?.user_id).toBe('tenant-a');
+    expect(clearCredentials).not.toHaveBeenCalled();
   });
 });

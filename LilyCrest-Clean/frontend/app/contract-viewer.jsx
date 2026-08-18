@@ -7,6 +7,16 @@ import { useTheme } from '../src/context/ThemeContext';
 import { useTenantContract } from '../src/hooks/useTenantContract';
 import { buildContractSummary } from '../src/utils/contractPresentation';
 import { safeBack } from '../src/utils/navigation';
+import {
+  ActionButton,
+  DataRow,
+  DocumentActionCard,
+  EmptyState,
+  ScreenHeader,
+  SectionHeader,
+  StatusBadge,
+  SurfaceCard,
+} from '../src/components/ui/LilycrestUI';
 
 export default function ContractViewer() {
   const router = useRouter();
@@ -21,12 +31,7 @@ export default function ContractViewer() {
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]}>
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => safeBack(router)} accessibilityLabel="Back">
-          <Ionicons name="arrow-back" size={25} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Lease Contract</Text>
-      </View>
+      <ScreenHeader title="Contract" subtitle="Your canonical Lilycrest tenancy document" onBack={() => safeBack(router)} strong />
       <ScrollView
         contentContainerStyle={styles.content}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={colors.accent} />}
@@ -36,18 +41,14 @@ export default function ContractViewer() {
             <ActivityIndicator color={colors.accent} />
           </View>
         ) : error && !summary ? (
-          <View style={styles.empty}>
-            <Ionicons name="cloud-offline-outline" size={58} color={colors.textSecondary} />
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>{error}</Text>
-            <TouchableOpacity style={[styles.open, { backgroundColor: colors.primary }]} onPress={reload}>
-              <Text style={styles.openText}>Retry</Text>
-            </TouchableOpacity>
-          </View>
+          <EmptyState
+            icon="cloud-offline-outline"
+            title="Contract unavailable"
+            description={error}
+            action={<ActionButton label="Retry" onPress={reload} />}
+          />
         ) : !summary ? (
-          <View style={styles.empty}>
-            <Ionicons name="document-outline" size={58} color={colors.textSecondary} />
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>No current contract is available.</Text>
-          </View>
+          <EmptyState icon="document-outline" title="No current contract" description="Your current contract will appear here once it is available." />
         ) : (
           <>
             {showStaleWarning ? (
@@ -58,40 +59,42 @@ export default function ContractViewer() {
               </View>
             ) : null}
 
-            <View style={[styles.card, { backgroundColor: colors.card, borderColor: colors.border }]}>
-              <View style={styles.statusRow}>
-                <Ionicons name="shield-checkmark-outline" size={23} color={colors.accent} />
-                <Text style={[styles.status, { color: colors.text }]}>{summary.lifecycleLabel}</Text>
-              </View>
+            <SurfaceCard style={styles.card}>
+              <SectionHeader
+                icon="shield-checkmark-outline"
+                title="Contract Summary"
+                trailing={<StatusBadge status={summary.lifecycleState} label={summary.status} tone={summary.lifecycleState === 'final' ? 'success' : summary.lifecycleState === 'draft' ? 'warning' : 'info'} />}
+              />
               <Text style={[styles.lifecycleMessage, { color: colors.textSecondary }]}>{summary.message}</Text>
-              {summary.fields.map((field) => (
-                <View key={field.key} style={styles.summaryField}>
-                  <Text style={[styles.label, { color: colors.textSecondary }]}>{field.label}</Text>
-                  <Text style={[styles.value, { color: colors.text }]}>{field.value}</Text>
-                </View>
+              {summary.fields.map((field, index) => (
+                <DataRow key={field.key} label={field.label} value={field.value} last={index === summary.fields.length - 1} />
               ))}
               {summary.hasMissingDetails ? (
                 <Text style={[styles.finalizing, { color: colors.textSecondary }]}>Some contract details are still being finalized.</Text>
               ) : null}
-            </View>
+            </SurfaceCard>
 
-            {summary.canOpenPdf ? (
-              <TouchableOpacity
-                style={[styles.open, { backgroundColor: colors.primary }]}
-                onPress={() => router.push({
-                  pathname: '/document-viewer',
-                  params: {
-                    kind: summary.documentKind,
-                    id: contract.id,
-                    cacheKey: summary.documentCacheKey,
-                    title: 'Lease Contract',
-                  },
-                })}
-              >
-                <Ionicons name="document-text-outline" size={20} color="#fff" />
-                <Text style={styles.openText}>View / Download Contract</Text>
-              </TouchableOpacity>
-            ) : null}
+            <DocumentActionCard
+              title="Current Document"
+              subtitle={summary.lifecycleLabel}
+              status={summary.lifecycleState === 'final' ? 'Verified' : summary.lifecycleState === 'draft' ? 'Under Review' : 'Processing'}
+            >
+              {summary.canOpenPdf ? (
+                <ActionButton
+                  label="View Contract"
+                  icon="document-text-outline"
+                  onPress={() => router.push({
+                    pathname: '/document-viewer',
+                    params: {
+                      kind: summary.documentKind,
+                      id: contract.id,
+                      cacheKey: summary.documentCacheKey,
+                      title: summary.lifecycleLabel,
+                    },
+                  })}
+                />
+              ) : <Text style={[styles.documentPending, { color: colors.textSecondary }]}>The current PDF is not available yet. Pull down to refresh.</Text>}
+            </DocumentActionCard>
 
             {summary.documentInfo.length ? (
               <View style={[styles.documentInfo, { borderColor: colors.border }]}>
@@ -116,24 +119,16 @@ export default function ContractViewer() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  header: { height: 62, borderBottomWidth: 1, flexDirection: 'row', alignItems: 'center', gap: 16, paddingHorizontal: 16 },
-  headerTitle: { fontSize: 18, fontWeight: '700' },
   content: { padding: 18, paddingBottom: 42 },
   empty: { alignItems: 'center', paddingTop: 100, gap: 16 },
-  emptyTitle: { maxWidth: 310, textAlign: 'center', fontSize: 19, lineHeight: 27, fontWeight: '700' },
-  card: { borderRadius: 16, padding: 18, borderWidth: 1, gap: 17 },
-  statusRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
-  status: { fontSize: 21, fontWeight: '800' },
+  card: { gap: 12, marginBottom: 16 },
   lifecycleMessage: { fontSize: 13, lineHeight: 19, marginTop: -6 },
   staleWarning: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 14 },
   staleWarningText: { flex: 1, fontSize: 12, lineHeight: 17 },
   staleWarningRetry: { fontSize: 13, fontWeight: '700' },
-  summaryField: { gap: 4 },
   label: { fontSize: 12, fontWeight: '600' },
-  value: { fontSize: 16, lineHeight: 22, fontWeight: '700' },
   finalizing: { paddingTop: 14, borderTopWidth: StyleSheet.hairlineWidth, fontSize: 13, lineHeight: 19 },
-  open: { marginTop: 18, borderRadius: 12, padding: 15, flexDirection: 'row', justifyContent: 'center', gap: 9 },
-  openText: { color: '#fff', fontWeight: '700' },
+  documentPending: { fontSize: 13, lineHeight: 19, marginTop: 12 },
   documentInfo: { marginTop: 18, borderWidth: 1, borderRadius: 12, padding: 14 },
   documentInfoToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   documentInfoTitle: { fontSize: 14, fontWeight: '700' },

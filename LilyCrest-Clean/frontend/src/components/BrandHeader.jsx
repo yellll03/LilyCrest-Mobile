@@ -1,7 +1,7 @@
 import { Image, Platform, StyleSheet, Text, View } from 'react-native';
 
-const ACCENT = '#ff9000';
-const PRIMARY_TEXT = '#204b7e';
+const ACCENT = '#D4AF37';
+const PRIMARY_TEXT = '#0A1628';
 
 export default function BrandHeader({
   compact = false,
@@ -70,8 +70,8 @@ const styles = StyleSheet.create({
   badge: {
     width: 132,
     height: 132,
-    borderRadius: 36,
-    backgroundColor: 'rgba(13, 27, 62, 0.96)',
+    borderRadius: 12,
+    backgroundColor: '#0A1628',
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
     overflow: 'hidden',
@@ -80,18 +80,18 @@ const styles = StyleSheet.create({
     ...Platform.select({
       ios: {
         shadowColor: '#000',
-        shadowOpacity: 0.18,
-        shadowOffset: { width: 0, height: 8 },
-        shadowRadius: 18,
+        shadowOpacity: 0.12,
+        shadowOffset: { width: 0, height: 3 },
+        shadowRadius: 6,
       },
-      android: { elevation: 8 },
-      web: { boxShadow: '0 12px 24px rgba(0,0,0,0.24)' },
+      android: { elevation: 3 },
+      web: { boxShadow: '0 3px 10px rgba(0,0,0,0.18)' },
     }),
   },
   badgeCompact: {
     width: 110,
     height: 110,
-    borderRadius: 30,
+    borderRadius: 12,
   },
   badgeImage: {
     width: 180,
@@ -139,6 +139,6 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.74)',
   },
   taglineLightTheme: {
-    color: '#64748B',
+    color: '#4B5563',
   },
 });

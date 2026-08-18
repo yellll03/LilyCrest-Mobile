@@ -100,10 +100,13 @@ export default function AnnouncementsScreen() {
       paddingTop: 14,
       paddingBottom: 8,
       gap: 8,
+      backgroundColor: c.headerBg,
+      borderBottomWidth: 3,
+      borderBottomColor: c.accent,
     },
     headerLeft: { flex: 1 },
-    headerTitle: { fontSize: 20, fontWeight: '800', color: c.text, letterSpacing: -0.3 },
-    headerSubtitle: { fontSize: 12, color: c.textMuted, marginTop: 2 },
+    headerTitle: { fontSize: 20, fontWeight: '800', color: '#FFFFFF', letterSpacing: -0.3 },
+    headerSubtitle: { fontSize: 12, color: '#D0D7E2', marginTop: 2 },
     toolbarRow: {
       flexDirection: 'row', alignItems: 'center',
       paddingHorizontal: 14, paddingBottom: 12, gap: 8,
@@ -114,12 +117,12 @@ export default function AnnouncementsScreen() {
       flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 5,
     },
     toolbarButtonActive: {
-      backgroundColor: dark ? 'rgba(59,130,246,0.14)' : '#EFF6FF',
+      backgroundColor: dark ? c.surfaceSecondary : '#FBF7EA',
       borderColor: c.accent,
     },
     toolbarButtonDisabled: { opacity: 0.65 },
     toolbarButtonText: { fontSize: 12, fontWeight: '700', color: c.textSecondary },
-    toolbarButtonTextActive: { color: c.accent },
+    toolbarButtonTextActive: { color: dark ? c.accent : c.heading },
 
     readMoreBtn: { marginTop: 6, alignSelf: 'flex-start' },
     readMoreText: { fontSize: 13, fontWeight: '600', color: c.primary },
@@ -129,14 +132,10 @@ export default function AnnouncementsScreen() {
     scrollContent: { padding: 14, paddingTop: 14, gap: 10 },
     announcementCard: {
       backgroundColor: c.surface,
-      borderRadius: 16,
+      borderRadius: 12,
       borderWidth: 1,
       borderColor: c.border,
       overflow: 'hidden',
-      ...Platform.select({
-        web: { boxShadow: '0 2px 8px rgba(0,0,0,0.06)' },
-        default: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: dark ? 0.18 : 0.06, shadowRadius: 6, elevation: 2 },
-      }),
     },
     cardAccent: {
       position: 'absolute', left: 0, top: 0, bottom: 0,
@@ -153,7 +152,7 @@ export default function AnnouncementsScreen() {
     announcementTitle: { fontSize: 15, fontWeight: '700', color: c.text, flex: 1, lineHeight: 21 },
     newDot: {
       width: 7, height: 7, borderRadius: 4,
-      backgroundColor: '#3B82F6', marginTop: 7, flexShrink: 0,
+      backgroundColor: c.accent, marginTop: 7, flexShrink: 0,
     },
     announcementTime: { fontSize: 12, color: c.textMuted, marginTop: 3 },
     badgeRow: { flexDirection: 'row', flexWrap: 'wrap', marginBottom: 10, gap: 6 },
@@ -165,11 +164,11 @@ export default function AnnouncementsScreen() {
     categoryBadgeText: { fontSize: 12, fontWeight: '600' },
     urgentBadge: {
       flexDirection: 'row', alignItems: 'center',
-      backgroundColor: dark ? 'rgba(239,68,68,0.18)' : '#FEE2E2',
+      backgroundColor: c.errorBg,
       paddingVertical: 3, paddingHorizontal: 8,
       borderRadius: 6, gap: 4,
     },
-    urgentText: { fontSize: 12, fontWeight: '600', color: dark ? '#FCA5A5' : '#DC2626' },
+    urgentText: { fontSize: 12, fontWeight: '600', color: dark ? '#DC2626' : '#DC2626' },
     announcementContent: {
       fontSize: 14, color: c.textSecondary, lineHeight: 21,
     },
@@ -186,13 +185,13 @@ export default function AnnouncementsScreen() {
     // ── Error banner ──
     errorBanner: {
       flexDirection: 'row', alignItems: 'center', gap: 8,
-      backgroundColor: dark ? '#2C1A00' : '#FEF3C7',
-      borderWidth: 1, borderColor: dark ? '#78350F' : '#FDE68A',
+      backgroundColor: dark ? c.errorBg : '#FEF2F2',
+      borderWidth: 1, borderColor: c.error,
       borderRadius: 10, padding: 12, marginBottom: 10,
     },
-    errorBannerText: { flex: 1, fontSize: 13, color: dark ? '#FCD34D' : '#92400E', fontWeight: '500' },
+    errorBannerText: { flex: 1, fontSize: 13, color: dark ? c.errorText : '#991B1B', fontWeight: '500' },
     retryButton: { minHeight: 36, justifyContent: 'center', paddingHorizontal: 6 },
-    retryButtonText: { fontSize: 13, fontWeight: '800', color: dark ? '#FCD34D' : '#92400E' },
+    retryButtonText: { fontSize: 13, fontWeight: '800', color: dark ? c.errorText : '#991B1B' },
 
     // ── Empty state ──
     emptyState: { alignItems: 'center', paddingVertical: 56 },
@@ -208,7 +207,7 @@ export default function AnnouncementsScreen() {
       minHeight: 44, marginTop: 14, paddingHorizontal: 18, borderRadius: 10,
       backgroundColor: c.accent, justifyContent: 'center', alignItems: 'center',
     },
-    emptyActionText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
+    emptyActionText: { color: '#0A1628', fontSize: 13, fontWeight: '800' },
 
     // ── Filter sheet ──
     filterModalOverlay: {
@@ -216,12 +215,10 @@ export default function AnnouncementsScreen() {
     },
     filterSheet: {
       backgroundColor: c.surface,
-      borderTopLeftRadius: 24, borderTopRightRadius: 24,
+      borderTopLeftRadius: 12, borderTopRightRadius: 12,
       maxHeight: '84%', paddingTop: 10,
       paddingBottom: Platform.OS === 'ios' ? 34 : 20,
-      ...Platform.select({
-        default: { shadowColor: '#000', shadowOffset: { width: 0, height: -6 }, shadowOpacity: 0.16, shadowRadius: 18, elevation: 18 },
-      }),
+      borderWidth: 1, borderColor: c.border,
     },
     filterSheetHeader: {
       flexDirection: 'row', alignItems: 'center',
@@ -246,7 +243,7 @@ export default function AnnouncementsScreen() {
       minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 12,
       paddingHorizontal: 10, borderRadius: 10,
     },
-    filterOptionSelected: { backgroundColor: dark ? 'rgba(59,130,246,0.12)' : '#EFF6FF' },
+    filterOptionSelected: { backgroundColor: c.accentSubtle },
     radioOuter: {
       width: 20, height: 20, borderRadius: 10, borderWidth: 2,
       borderColor: c.textMuted, justifyContent: 'center', alignItems: 'center',
@@ -259,9 +256,9 @@ export default function AnnouncementsScreen() {
       minWidth: 28, height: 24, borderRadius: 12, paddingHorizontal: 7,
       backgroundColor: c.surfaceSecondary, justifyContent: 'center', alignItems: 'center',
     },
-    filterCountSelected: { backgroundColor: dark ? 'rgba(59,130,246,0.22)' : '#DBEAFE' },
+    filterCountSelected: { backgroundColor: c.accentSubtle },
     filterCountText: { fontSize: 12, color: c.textMuted, fontWeight: '700' },
-    filterCountTextSelected: { color: c.accent },
+    filterCountTextSelected: { color: c.heading },
     filterSheetActions: {
       flexDirection: 'row', gap: 10, paddingHorizontal: 18, paddingTop: 14,
       borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: c.border,
@@ -275,7 +272,7 @@ export default function AnnouncementsScreen() {
       flex: 1, minHeight: 46, borderRadius: 12,
       backgroundColor: c.accent, justifyContent: 'center', alignItems: 'center',
     },
-    filterApplyText: { fontSize: 14, fontWeight: '800', color: '#FFFFFF' },
+    filterApplyText: { fontSize: 14, fontWeight: '800', color: '#0A1628' },
 
     // ── Detail sheet ──
     modalOverlay: {
@@ -284,9 +281,9 @@ export default function AnnouncementsScreen() {
     },
     modalSheet: {
       backgroundColor: c.surface,
-      borderTopLeftRadius: 24, borderTopRightRadius: 24,
+      borderTopLeftRadius: 12, borderTopRightRadius: 12,
       padding: 18, paddingBottom: Platform.OS === 'ios' ? 34 : 20,
-      maxHeight: '82%',
+      maxHeight: '82%', borderWidth: 1, borderColor: c.border,
     },
     dragHandle: { alignItems: 'center', marginBottom: 14 },
     dragHandlePill: {
@@ -309,7 +306,7 @@ export default function AnnouncementsScreen() {
       minHeight: 44, borderRadius: 10, backgroundColor: c.accent,
       justifyContent: 'center', alignItems: 'center', marginTop: 10,
     },
-    notificationActionText: { color: '#FFFFFF', fontWeight: '800' },
+    notificationActionText: { color: '#0A1628', fontWeight: '800' },
     modalCloseBtn: {
       width: 28, height: 28, borderRadius: 8,
       backgroundColor: dark ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)',
@@ -334,14 +331,14 @@ export default function AnnouncementsScreen() {
     selectionBarButtonText: { fontSize: 13, fontWeight: '700', color: c.accent },
     selectionDeleteButton: {
       minHeight: 38, paddingHorizontal: 14, borderRadius: 10,
-      backgroundColor: '#EF4444', justifyContent: 'center', alignItems: 'center',
+      backgroundColor: '#DC2626', justifyContent: 'center', alignItems: 'center',
       flexDirection: 'row', gap: 6,
     },
     selectionDeleteButtonDisabled: { opacity: 0.5 },
     selectionDeleteText: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
 
     swipeAction: {
-      width: 96, marginBottom: 10, borderRadius: 16,
+      width: 96, marginBottom: 10, borderRadius: 12,
       backgroundColor: c.error,
       justifyContent: 'center', alignItems: 'center', gap: 5,
     },
@@ -349,13 +346,13 @@ export default function AnnouncementsScreen() {
     undoSnackbar: {
       position: 'absolute', left: 16, right: 16, bottom: Platform.OS === 'ios' ? 94 : 76,
       minHeight: 52, borderRadius: 12, paddingHorizontal: 16,
-      backgroundColor: dark ? '#E2E8F0' : '#0F172A',
+      backgroundColor: dark ? '#E5E7EB' : '#0A1628',
       flexDirection: 'row', alignItems: 'center', gap: 12,
       ...Platform.select({
-        default: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.22, shadowRadius: 10, elevation: 8 },
+        default: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.14, shadowRadius: 5, elevation: 3 },
       }),
     },
-    undoSnackbarText: { flex: 1, color: dark ? '#0F172A' : '#FFFFFF', fontSize: 13, fontWeight: '600' },
+    undoSnackbarText: { flex: 1, color: dark ? '#0A1628' : '#FFFFFF', fontSize: 13, fontWeight: '600' },
     undoSnackbarButton: { minHeight: 40, justifyContent: 'center', paddingHorizontal: 4 },
     undoSnackbarButtonText: { color: c.accent, fontSize: 13, fontWeight: '900' },
 
@@ -476,9 +473,9 @@ export default function AnnouncementsScreen() {
 
   const getPriorityColor = (priority) => {
     switch (priority) {
-      case 'high': return '#EF4444';
-      case 'normal': return '#3B82F6';
-      case 'low': return '#22C55E';
+      case 'high': return '#DC2626';
+      case 'normal': return '#2563EB';
+      case 'low': return '#059669';
       default: return '#6B7280';
     }
   };
@@ -494,17 +491,17 @@ export default function AnnouncementsScreen() {
 
   const getCategoryColor = (category) => {
     switch (category?.toLowerCase()) {
-      case 'announcement': return { bg: '#EEF2FF', text: '#4F46E5', icon: 'megaphone' };
-      case 'billing':     return { bg: '#DBEAFE', text: '#2563EB', icon: 'card' };
-      case 'maintenance': return { bg: '#FEF3C7', text: '#D97706', icon: 'construct' };
-      case 'assistant':   return { bg: '#F3E8FF', text: '#9333EA', icon: 'chatbubble-ellipses' };
-      case 'security':    return { bg: '#FEE2E2', text: '#DC2626', icon: 'shield-checkmark' };
-      case 'reservation': return { bg: '#DCFCE7', text: '#16A34A', icon: 'calendar' };
-      case 'survey':      return { bg: '#F3E8FF', text: '#7E22CE', icon: 'chatbox-ellipses' };
-      case 'rules':       return { bg: '#EEF2FF', text: '#4F46E5', icon: 'document-text' };
-      case 'promo':       return { bg: '#DCFCE7', text: '#16A34A', icon: 'pricetag' };
-      case 'event':       return { bg: '#F3E8FF', text: '#9333EA', icon: 'calendar' };
-      default:            return { bg: '#F3F4F6', text: '#4B5563', icon: 'megaphone' };
+      case 'announcement': return { bg: '#F1F5F9', text: '#2563EB', icon: 'megaphone' };
+      case 'billing':     return { bg: '#EFF6FF', text: '#2563EB', icon: 'card' };
+      case 'maintenance': return { bg: '#FFFBEB', text: '#D97706', icon: 'construct' };
+      case 'assistant':   return { bg: '#FBF7EA', text: '#B9921F', icon: 'chatbubble-ellipses' };
+      case 'security':    return { bg: '#FEF2F2', text: '#DC2626', icon: 'shield-checkmark' };
+      case 'reservation': return { bg: '#ECFDF5', text: '#059669', icon: 'calendar' };
+      case 'survey':      return { bg: '#EFF6FF', text: '#2563EB', icon: 'chatbox-ellipses' };
+      case 'rules':       return { bg: '#F1F5F9', text: '#2563EB', icon: 'document-text' };
+      case 'promo':       return { bg: '#ECFDF5', text: '#059669', icon: 'pricetag' };
+      case 'event':       return { bg: '#EFF6FF', text: '#2563EB', icon: 'calendar' };
+      default:            return { bg: '#F1F5F9', text: '#4B5563', icon: 'megaphone' };
     }
   };
 
@@ -615,7 +612,7 @@ export default function AnnouncementsScreen() {
                 accessibilityState={{ checked: isSelected }}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
-                {isSelected ? <Ionicons name="checkmark" size={14} color="#FFFFFF" /> : null}
+                {isSelected ? <Ionicons name="checkmark" size={14} color="#0A1628" /> : null}
               </TouchableOpacity>
             ) : (
               <View style={[styles.priorityIcon, { backgroundColor: `${prioColor}14` }]}>
@@ -786,7 +783,7 @@ export default function AnnouncementsScreen() {
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={fetchError ? (
           <View style={styles.errorBanner}>
-            <Ionicons name="cloud-offline-outline" size={15} color="#92400E" />
+            <Ionicons name="cloud-offline-outline" size={15} color="#991B1B" />
             <Text style={styles.errorBannerText}>{fetchError}</Text>
             <TouchableOpacity
               style={styles.retryButton}
@@ -929,7 +926,7 @@ export default function AnnouncementsScreen() {
                       <Ionicons
                         name={option.icon}
                         size={17}
-                        color={option.key === 'urgent' ? '#EF4444' : (selected ? colors.accent : colors.textMuted)}
+                        color={option.key === 'urgent' ? '#DC2626' : (selected ? colors.accent : colors.textMuted)}
                       />
                       <Text style={[styles.filterOptionText, selected && styles.filterOptionTextSelected]}>{option.label}</Text>
                       <View style={[styles.filterCount, selected && styles.filterCountSelected]}>

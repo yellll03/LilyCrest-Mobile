@@ -7,8 +7,8 @@ import { useTheme } from '../src/context/ThemeContext';
 
 export default function PaymentCancelScreen() {
   const router = useRouter();
-  const { colors, isDarkMode } = useTheme();
-  const styles = useMemo(() => createStyles(colors, isDarkMode), [colors, isDarkMode]);
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -21,7 +21,7 @@ export default function PaymentCancelScreen() {
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
       <View style={styles.content}>
         <View style={styles.iconCircle}>
-          <Ionicons name="close-circle" size={64} color="#F59E0B" />
+          <Ionicons name="close-circle" size={64} color="#D97706" />
         </View>
         <Text style={styles.title}>Payment Cancelled</Text>
         <Text style={styles.subtitle}>
@@ -41,7 +41,7 @@ export default function PaymentCancelScreen() {
   );
 }
 
-const createStyles = (c, isDarkMode) => StyleSheet.create({
+const createStyles = (c) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.background },
   content: {
     flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 14,
@@ -55,8 +55,8 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
   subtitle: { fontSize: 15, color: c.textSecondary, textAlign: 'center', lineHeight: 22, maxWidth: 300 },
   primaryBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: c.accent, paddingVertical: 15, paddingHorizontal: 32,
-    borderRadius: 14, marginTop: 16, width: '100%', maxWidth: 300,
+    backgroundColor: c.primary, paddingVertical: 15, paddingHorizontal: 32,
+    borderRadius: 8, marginTop: 16, width: '100%', maxWidth: 300,
   },
   primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   secondaryBtn: { paddingVertical: 12, paddingHorizontal: 24 },

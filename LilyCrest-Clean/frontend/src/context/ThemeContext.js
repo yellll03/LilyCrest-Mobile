@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createContext, useContext, useEffect, useMemo, useState } from 'react';
 import { Appearance, Platform } from 'react-native';
+import { DARK_COLORS, LIGHT_COLORS } from '../theme/tokens';
 
 const ThemeContext = createContext(undefined);
 
@@ -89,51 +90,7 @@ export function ThemeProvider({ children }) {
     }
   };
 
-  const colors = isDarkMode ? {
-    // Dark theme — near-black base, blue primary, orange accent
-    background: '#0D0D0D',
-    surface: '#141820',
-    surfaceSecondary: '#1c2130',
-    text: '#F2F2F2',
-    textSecondary: '#A8B4C8',
-    textMuted: '#5a6a80',
-    border: 'rgba(255,255,255,0.12)',
-    primary: '#4d8ec4',
-    primaryLight: '#0d1f35',
-    primaryHover: '#3a7ab0',
-    accent: '#ff9000',
-    accentLight: '#2a1e00',
-    success: '#22C55E',
-    error: '#EF4444',
-    warning: '#F59E0B',
-    info: '#4d8ec4',
-    disabled: '#3a3a4a',
-    cardBg: '#141820',
-    inputBg: '#1c2130',
-    headerBg: '#0a1220',
-  } : {
-    // Light theme — white surfaces, dark text, blue primary, orange accent
-    background: '#F4F6FA',
-    surface: '#FFFFFF',
-    surfaceSecondary: '#EEF2F8',
-    text: '#1a2744',
-    textSecondary: '#4a5568',
-    textMuted: '#8a97aa',
-    border: '#D8E2F0',
-    primary: '#204b7e',
-    primaryLight: '#e8f0fa',
-    primaryHover: '#163966',
-    accent: '#ff9000',
-    accentLight: '#fff3e0',
-    success: '#22C55E',
-    error: '#EF4444',
-    warning: '#F59E0B',
-    info: '#204b7e',
-    disabled: '#c0cad8',
-    cardBg: '#FFFFFF',
-    inputBg: '#F0F4FA',
-    headerBg: '#204b7e',
-  };
+  const colors = isDarkMode ? DARK_COLORS : LIGHT_COLORS;
 
   return (
     <ThemeContext.Provider value={{ isDarkMode, toggleDarkMode, colors, fonts, isLoading }}>

@@ -1,23 +1,18 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
+import { useThemedStyles } from '../src/context/ThemeContext';
 import { safeBack } from '../src/utils/navigation';
+import { ScreenHeader } from '../src/components/ui/LilycrestUI';
 
 export default function PrivacyPolicyScreen() {
   const router = useRouter();
-  const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => safeBack(router, '/(tabs)/profile')}><Ionicons name="arrow-back" size={24} color={colors.text} /></TouchableOpacity>
-        <Text style={styles.headerTitle}>Privacy Policy</Text>
-        <View style={{ width: 40 }} />
-      </View>
+      <ScreenHeader strong title="Privacy Policy" subtitle="How Lilycrest handles tenant information" onBack={() => safeBack(router, '/(tabs)/profile')} />
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         <Text style={styles.updateDate}>Last updated: January 2024</Text>
         
@@ -52,9 +47,6 @@ export default function PrivacyPolicyScreen() {
 
 const createStyles = (c) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.background },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: c.surface, borderBottomWidth: 1, borderBottomColor: c.border },
-  backButton: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '600', color: c.text },
   scrollView: { flex: 1 },
   scrollContent: { padding: 20 },
   updateDate: { fontSize: 13, color: c.textMuted, marginBottom: 24 },

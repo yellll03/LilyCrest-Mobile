@@ -58,19 +58,19 @@ export default function DocumentViewer() {
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]}>
-      <View style={[styles.header, { borderBottomColor: colors.border }]}>
-        <TouchableOpacity onPress={() => safeBack(router)} accessibilityLabel="Back"><Ionicons name="arrow-back" size={25} color={colors.text} /></TouchableOpacity>
+      <View style={[styles.header, { backgroundColor: colors.surface, borderBottomColor: colors.border }]}>
+        <TouchableOpacity style={styles.headerAction} onPress={() => safeBack(router)} accessibilityLabel="Back"><Ionicons name="arrow-back" size={25} color={colors.heading} /></TouchableOpacity>
         <View style={styles.heading}><Text numberOfLines={1} style={[styles.title, { color: colors.text }]}>{title}</Text>
           {!!uri && <Text style={[styles.meta, { color: colors.textSecondary }]}>PDF · {fileSize ? `${formatFileSize(fileSize)} · ` : ''}{pages ? `${pages} page${pages === 1 ? '' : 's'}` : 'Checking pages'}</Text>}
         </View>
-        <TouchableOpacity disabled={!uri} accessibilityLabel="Download PDF" onPress={async () => { try { const saved = await downloadPdf(uri, title); Alert.alert('Download complete', `${saved.filename} was saved.`); } catch (e) { Alert.alert('Download unavailable', documentErrorMessage(e)); } }}>
-          <Ionicons name="download-outline" size={24} color={uri ? colors.primary : colors.textSecondary} />
+        <TouchableOpacity style={styles.headerAction} disabled={!uri} accessibilityLabel="Download PDF" onPress={async () => { try { const saved = await downloadPdf(uri, title); Alert.alert('Download complete', `${saved.filename} was saved.`); } catch (e) { Alert.alert('Download unavailable', documentErrorMessage(e)); } }}>
+          <Ionicons name="download-outline" size={24} color={uri ? colors.heading : colors.textSecondary} />
         </TouchableOpacity>
-        <TouchableOpacity disabled={!uri} accessibilityLabel="Print PDF" onPress={async () => { try { await Print.printAsync({ uri }); } catch (e) { Alert.alert('Print unavailable', documentErrorMessage(e)); } }}>
-          <Ionicons name="print-outline" size={24} color={uri ? colors.primary : colors.textSecondary} />
+        <TouchableOpacity style={styles.headerAction} disabled={!uri} accessibilityLabel="Print PDF" onPress={async () => { try { await Print.printAsync({ uri }); } catch (e) { Alert.alert('Print unavailable', documentErrorMessage(e)); } }}>
+          <Ionicons name="print-outline" size={24} color={uri ? colors.heading : colors.textSecondary} />
         </TouchableOpacity>
-        <TouchableOpacity disabled={!uri} accessibilityLabel="Share PDF" onPress={async () => { try { await sharePdf(uri, title); } catch (e) { Alert.alert('Share unavailable', documentErrorMessage(e)); } }}>
-          <Ionicons name="share-outline" size={24} color={uri ? colors.primary : colors.textSecondary} />
+        <TouchableOpacity style={styles.headerAction} disabled={!uri} accessibilityLabel="Share PDF" onPress={async () => { try { await sharePdf(uri, title); } catch (e) { Alert.alert('Share unavailable', documentErrorMessage(e)); } }}>
+          <Ionicons name="share-outline" size={24} color={uri ? colors.heading : colors.textSecondary} />
         </TouchableOpacity>
       </View>
       {loading ? <View style={styles.center}><ActivityIndicator size="large" color={colors.primary} /><Text style={{ color: colors.textSecondary }}>Loading PDF… {progress ? `${Math.round(progress * 100)}%` : ''}</Text></View>
@@ -79,7 +79,7 @@ export default function DocumentViewer() {
       : <Pdf ref={pdfRef} source={{ uri, cache: false }} style={styles.pdf} minScale={1} maxScale={5} spacing={8}
           onLoadComplete={(count) => setPages(count)} onPageChanged={setPage}
           onError={(e) => { setError(documentErrorMessage(e)); setUri(null); }} />}
-      {!!uri && pages > 0 && <View style={[styles.controls, { backgroundColor: colors.card }]}>
+      {!!uri && pages > 0 && <View style={[styles.controls, { backgroundColor: colors.card, borderColor: colors.border }]}>
         <TouchableOpacity disabled={page <= 1} onPress={() => go(page - 1)}><Ionicons name="chevron-back" size={26} color={page <= 1 ? colors.border : colors.text} /></TouchableOpacity>
         <Text style={{ color: colors.text }}>Page {page} of {pages}</Text>
         <TouchableOpacity disabled={page >= pages} onPress={() => go(page + 1)}><Ionicons name="chevron-forward" size={26} color={page >= pages ? colors.border : colors.text} /></TouchableOpacity>
@@ -89,9 +89,10 @@ export default function DocumentViewer() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1 }, header: { minHeight: 62, borderBottomWidth: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 14 },
+  root: { flex: 1 }, header: { minHeight: 64, borderBottomWidth: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 8, gap: 4 },
+  headerAction: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   heading: { flex: 1 }, title: { fontSize: 17, fontWeight: '700' }, meta: { fontSize: 12, marginTop: 2 },
-  pdf: { flex: 1, width: '100%', backgroundColor: '#e9edf2' }, center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, padding: 28 },
-  error: { textAlign: 'center', fontSize: 16, lineHeight: 23 }, retry: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10 }, retryText: { color: '#fff', fontWeight: '700' },
-  controls: { position: 'absolute', bottom: 22, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 22, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 24, elevation: 5 },
+  pdf: { flex: 1, width: '100%', backgroundColor: '#F1F5F9' }, center: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 14, padding: 28 },
+  error: { textAlign: 'center', fontSize: 16, lineHeight: 23 }, retry: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 }, retryText: { color: '#fff', fontWeight: '700' },
+  controls: { position: 'absolute', bottom: 22, alignSelf: 'center', flexDirection: 'row', alignItems: 'center', gap: 22, paddingHorizontal: 16, paddingVertical: 10, borderRadius: 12, borderWidth: 1, elevation: 3 },
 });

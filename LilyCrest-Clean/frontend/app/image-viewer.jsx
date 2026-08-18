@@ -45,7 +45,7 @@ export default function ImageViewer() {
   useEffect(() => { load(); }, [load]);
 
   return (
-    <SafeAreaView style={[styles.root, { backgroundColor: '#111827' }]}>
+    <SafeAreaView style={[styles.root, { backgroundColor: '#1E293B' }]}>
       <View style={styles.header}>
         <TouchableOpacity onPress={() => safeBack(router)} accessibilityLabel="Back">
           <Ionicons name="arrow-back" size={25} color="#fff" />
@@ -72,19 +72,19 @@ export default function ImageViewer() {
         </ScrollView>
       ) : null}
       {loading && !error && <View style={styles.overlay}><ActivityIndicator size="large" color={colors.primary} /><Text style={styles.message}>Loading image… {progress ? `${Math.round(progress * 100)}%` : ''}</Text></View>}
-      {!!error && <View style={styles.overlay}><Ionicons name="image-outline" size={54} color="#9CA3AF" /><Text style={styles.message}>{error}</Text><TouchableOpacity style={[styles.retry, { backgroundColor: colors.primary }]} onPress={() => load(true)}><Text style={styles.retryText}>Retry</Text></TouchableOpacity></View>}
+      {!!error && <View style={styles.overlay}><Ionicons name="image-outline" size={54} color="#6B7280" /><Text style={styles.message}>{error}</Text><TouchableOpacity style={[styles.retry, { backgroundColor: colors.primary }]} onPress={() => load(true)}><Text style={styles.retryText}>Retry</Text></TouchableOpacity></View>}
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  header: { minHeight: 58, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 14, backgroundColor: '#111827' },
+  header: { minHeight: 58, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, gap: 14, backgroundColor: '#1E293B' },
   title: { flex: 1, color: '#fff', fontSize: 17, fontWeight: '700', textAlign: 'center' },
   viewport: { flex: 1 },
   imageWrap: { flexGrow: 1, alignItems: 'center', justifyContent: 'center' },
   image: { width: '100%', height: '100%' },
-  overlay: { ...StyleSheet.absoluteFillObject, top: 58, alignItems: 'center', justifyContent: 'center', gap: 14, padding: 28, backgroundColor: '#111827' },
+  overlay: { ...StyleSheet.absoluteFillObject, top: 58, alignItems: 'center', justifyContent: 'center', gap: 14, padding: 28, backgroundColor: '#1E293B' },
   message: { color: '#E5E7EB', textAlign: 'center', fontSize: 15, lineHeight: 22 },
   retry: { paddingHorizontal: 24, paddingVertical: 12, borderRadius: 10 },
   retryText: { color: '#fff', fontWeight: '700' },

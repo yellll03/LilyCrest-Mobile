@@ -135,7 +135,7 @@ function createStyles(c, isDarkMode) {
     scrollContent: { paddingHorizontal: 16, gap: CARD_GAP },
     card: {
       width: CARD_W, height: CARD_H, borderRadius: 16, overflow: 'hidden',
-      backgroundColor: '#1a2a3a',
+      backgroundColor: '#0A1628',
       justifyContent: 'flex-end',
       ...Platform.select({
         ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.15, shadowRadius: 8 },

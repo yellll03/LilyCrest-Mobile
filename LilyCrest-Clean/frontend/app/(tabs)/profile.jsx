@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Linking, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
@@ -85,6 +85,9 @@ export default function ProfileScreen() {
   const [errors, setErrors] = useState({ username: '', email: '', phone: '' });
   const [discardModalVisible, setDiscardModalVisible] = useState(false);
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const logoutGuardRef = useRef(false);
+  const profileMutationGuardRef = useRef(false);
   const [profileError, setProfileError] = useState('');
   const [profileBanner, setProfileBanner] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -168,9 +171,17 @@ export default function ProfileScreen() {
   const handleLogout = () => setLogoutModalVisible(true);
 
   const confirmLogout = async () => {
+    if (logoutGuardRef.current) return;
+    logoutGuardRef.current = true;
+    setIsLoggingOut(true);
     setLogoutModalVisible(false);
-    await logout();
-    router.replace('/login');
+    try {
+      await logout();
+      router.replace('/login');
+    } finally {
+      logoutGuardRef.current = false;
+      setIsLoggingOut(false);
+    }
   };
 
   const hasChanges = () => {
@@ -181,6 +192,7 @@ export default function ProfileScreen() {
   };
 
   const handleSave = async () => {
+    if (profileMutationGuardRef.current || isLoading) return;
     const usernameValidation = validateUsername(formData.username);
     const phoneValidation = validatePhone(formData.phone);
     if (!usernameValidation.valid || !phoneValidation.valid) {
@@ -192,6 +204,7 @@ export default function ProfileScreen() {
       return;
     }
 
+    profileMutationGuardRef.current = true;
     setIsLoading(true);
     try {
       const payload = {
@@ -235,25 +248,31 @@ export default function ProfileScreen() {
         setProfileBanner({ type: 'error', text: getApiErrorMessage(error, 'Failed to update profile. Please try again.') });
       }
     } finally {
+      profileMutationGuardRef.current = false;
       setIsLoading(false);
     }
   };
 
   const pickImage = async () => {
-    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permissionResult.granted) { showAlert({ title: 'Permission Required', message: 'Please allow access to your photo library to change your profile picture.', type: 'warning' }); return; }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.5 });
-    if (!result.canceled && result.assets[0]) {
-      setIsLoading(true);
-      try {
-        const profile = await persistCanonicalProfileImage(result.assets[0], userId);
-        updateUser(profile);
-        setProfileBanner({ type: 'success', text: 'Profile picture updated.' });
-      } catch (error) {
-        setProfileBanner({ type: 'error', text: error?.response?.data?.errors?.picture || getApiErrorMessage(error, 'Failed to update profile picture.') });
-      } finally {
-        setIsLoading(false);
+    if (profileMutationGuardRef.current || isLoading) return;
+    profileMutationGuardRef.current = true;
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissionResult.granted) {
+        showAlert({ title: 'Permission Required', message: 'Please allow access to your photo library to change your profile picture.', type: 'warning' });
+        return;
       }
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.5 });
+      if (result.canceled || !result.assets?.[0]) return;
+      setIsLoading(true);
+      const profile = await persistCanonicalProfileImage(result.assets[0], userId);
+      updateUser(profile);
+      setProfileBanner({ type: 'success', text: 'Profile picture updated.' });
+    } catch (error) {
+      setProfileBanner({ type: 'error', text: error?.response?.data?.errors?.picture || getApiErrorMessage(error, 'Failed to update profile picture.') });
+    } finally {
+      profileMutationGuardRef.current = false;
+      setIsLoading(false);
     }
   };
 
@@ -331,26 +350,27 @@ export default function ProfileScreen() {
 
   const bannerBg = profileBanner
     ? profileBanner.type === 'success'
-      ? isDarkMode ? 'rgba(34,197,94,0.15)' : '#ecfdf3'
+      ? colors.successBg
       : profileBanner.type === 'warning'
-      ? isDarkMode ? 'rgba(245,158,11,0.15)' : '#fffbeb'
-      : isDarkMode ? 'rgba(239,68,68,0.15)' : '#fef2f2'
+      ? colors.warningBg
+      : colors.errorBg
     : 'transparent';
   const bannerBorder = profileBanner
     ? profileBanner.type === 'success'
-      ? isDarkMode ? 'rgba(34,197,94,0.4)' : '#bbf7d0'
+      ? colors.success
       : profileBanner.type === 'warning'
-      ? isDarkMode ? 'rgba(245,158,11,0.4)' : '#fde68a'
-      : isDarkMode ? 'rgba(239,68,68,0.4)' : '#fecaca'
+      ? colors.warning
+      : colors.error
     : 'transparent';
   const bannerIconColor = profileBanner
-    ? profileBanner.type === 'success' ? '#22c55e' : profileBanner.type === 'warning' ? '#f59e0b' : '#ef4444'
+    ? profileBanner.type === 'success' ? '#059669' : profileBanner.type === 'warning' ? '#D97706' : '#DC2626'
     : '#000';
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Profile</Text>
+        <Text style={styles.headerSubtitle}>Identity and tenancy records</Text>
       </View>
       <ScrollView
         style={styles.scrollView}
@@ -382,7 +402,7 @@ export default function ProfileScreen() {
 
         {profileError ? (
           <View style={styles.errorBanner}>
-            <Ionicons name="warning" size={16} color="#b91c1c" />
+            <Ionicons name="warning" size={16} color="#991B1B" />
             <Text style={styles.errorText}>{profileError}</Text>
             <TouchableOpacity onPress={fetchProfile}><Text style={styles.retryText}>Retry</Text></TouchableOpacity>
           </View>
@@ -394,7 +414,7 @@ export default function ProfileScreen() {
               ? <Image source={{ uri: user.picture }} style={styles.avatar} />
               : <View style={styles.avatarPlaceholder}><Ionicons name="person" size={44} color={colors.textMuted} /></View>
             }
-            <View style={styles.editAvatarButton}><Ionicons name="camera" size={14} color="#FFFFFF" /></View>
+            <View style={styles.editAvatarButton}><Ionicons name="camera" size={14} color="#0A1628" /></View>
           </TouchableOpacity>
           <Text style={styles.userName}>{user?.name || 'User'}</Text>
           {user?.username ? <Text style={styles.userHandle}>@{user.username}</Text> : null}
@@ -443,7 +463,7 @@ export default function ProfileScreen() {
                 />
               </View>
               <View style={styles.fieldFooter}>
-                {errors.username ? <View style={styles.errorContainer}><Ionicons name="alert-circle" size={14} color="#EF4444" /><Text style={styles.fieldErrorText}>{errors.username}</Text></View> : <View />}
+                {errors.username ? <View style={styles.errorContainer}><Ionicons name="alert-circle" size={14} color="#DC2626" /><Text style={styles.fieldErrorText}>{errors.username}</Text></View> : <View />}
                 <Text style={styles.charCount}>{formData.username.length}/{USERNAME_MAX}</Text>
               </View>
               {usernameCooldownActive ? (
@@ -484,7 +504,7 @@ export default function ProfileScreen() {
                 placeholderTextColor={colors.textMuted}
                 keyboardType="phone-pad"
               />
-              {errors.phone ? <View style={styles.errorContainer}><Ionicons name="alert-circle" size={14} color="#EF4444" /><Text style={styles.fieldErrorText}>{errors.phone}</Text></View> : null}
+              {errors.phone ? <View style={styles.errorContainer}><Ionicons name="alert-circle" size={14} color="#DC2626" /><Text style={styles.fieldErrorText}>{errors.phone}</Text></View> : null}
             </View>
 
             <View style={styles.inputContainer}>
@@ -503,7 +523,7 @@ export default function ProfileScreen() {
             </View>
 
             <TouchableOpacity style={[styles.saveButton, !isFormValid && styles.saveButtonDisabled]} onPress={handleSave} disabled={isLoading || !isFormValid}>
-              {isLoading ? <ActivityIndicator color="#FFFFFF" /> : <><Ionicons name="checkmark" size={20} color="#FFFFFF" /><Text style={styles.saveButtonText}>Save Changes</Text></>}
+              {isLoading ? <ActivityIndicator color="#0A1628" /> : <><Ionicons name="checkmark" size={20} color="#0A1628" /><Text style={styles.saveButtonText}>Save Changes</Text></>}
             </TouchableOpacity>
           </View>
         ) : (
@@ -630,7 +650,7 @@ export default function ProfileScreen() {
 
         {!isEditing && (
           <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-            <Ionicons name="log-out-outline" size={20} color="#EF4444" />
+            <Ionicons name="log-out-outline" size={20} color="#DC2626" />
             <Text style={styles.logoutText}>Sign Out</Text>
           </TouchableOpacity>
         )}
@@ -647,12 +667,12 @@ export default function ProfileScreen() {
       <Modal visible={logoutModalVisible} transparent={true} animationType="fade" onRequestClose={() => setLogoutModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <View style={styles.modalIconContainer}><Ionicons name="log-out-outline" size={32} color="#EF4444" /></View>
+            <View style={styles.modalIconContainer}><Ionicons name="log-out-outline" size={32} color="#DC2626" /></View>
             <Text style={styles.modalTitle}>Sign Out?</Text>
-            <Text style={styles.modalMessage}>Are you sure you want to sign out?</Text>
+            <Text style={styles.modalMessage}>Are you sure you want to sign out of your Lilycrest account?</Text>
             <View style={styles.modalButtons}>
               <TouchableOpacity style={styles.modalCancelButton} onPress={() => setLogoutModalVisible(false)}><Text style={styles.modalCancelText}>Cancel</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.modalConfirmButton} onPress={confirmLogout}><Text style={styles.modalConfirmText}>Sign Out</Text></TouchableOpacity>
+              <TouchableOpacity style={[styles.modalConfirmButton, isLoggingOut && styles.btnDisabled]} onPress={confirmLogout} disabled={isLoggingOut}>{isLoggingOut ? <ActivityIndicator size="small" color="#ffffff" /> : <Text style={styles.modalConfirmText}>Sign Out</Text>}</TouchableOpacity>
             </View>
           </View>
         </View>
@@ -661,12 +681,12 @@ export default function ProfileScreen() {
       <Modal visible={discardModalVisible} transparent={true} animationType="fade" onRequestClose={() => setDiscardModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <View style={[styles.modalIconContainer, { backgroundColor: isDarkMode ? 'rgba(245,158,11,0.2)' : '#FEF3C7' }]}><Ionicons name="alert-circle" size={32} color="#F59E0B" /></View>
+            <View style={[styles.modalIconContainer, { backgroundColor: isDarkMode ? 'rgba(245,158,11,0.2)' : '#FFFBEB' }]}><Ionicons name="alert-circle" size={32} color="#D97706" /></View>
             <Text style={styles.modalTitle}>Discard Changes?</Text>
             <Text style={styles.modalMessage}>You have unsaved edits. Are you sure you want to discard them?</Text>
             <View style={styles.modalButtons}>
               <TouchableOpacity style={styles.modalCancelButton} onPress={() => setDiscardModalVisible(false)}><Text style={styles.modalCancelText}>Keep Editing</Text></TouchableOpacity>
-              <TouchableOpacity style={[styles.modalConfirmButton, { backgroundColor: '#F59E0B' }]} onPress={confirmDiscard}><Text style={styles.modalConfirmText}>Discard</Text></TouchableOpacity>
+              <TouchableOpacity style={[styles.modalConfirmButton, { backgroundColor: '#D97706' }]} onPress={confirmDiscard}><Text style={styles.modalConfirmText}>Discard</Text></TouchableOpacity>
             </View>
           </View>
         </View>
@@ -692,7 +712,7 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   scrollView: { flex: 1 },
   scrollContent: { paddingBottom: 16 },
   infoSection: { paddingHorizontal: 20, marginBottom: 20 },
-  infoCard: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 16, padding: 16, gap: 14 },
+  infoCard: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 12, padding: 16, gap: 14 },
   infoRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   infoRowIcon: { width: 34, height: 34, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: isDarkMode ? `${colors.accent}25` : `${colors.accent}12` },
   infoRowText: { flex: 1, minWidth: 0 },
@@ -710,9 +730,10 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 18,
     borderBottomWidth: 3,
-    borderBottomColor: '#ff9000',
+    borderBottomColor: '#D4AF37',
   },
   headerTitle: { fontSize: 22, fontWeight: '700', color: '#FFFFFF' },
+  headerSubtitle: { marginTop: 2, fontSize: 12, color: '#D0D7E2' },
 
   banner: {
     flexDirection: 'row',
@@ -735,32 +756,27 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     marginBottom: 4,
     padding: 12,
     borderRadius: 10,
-    backgroundColor: isDarkMode ? 'rgba(248,113,113,0.15)' : '#FEE2E2',
+    backgroundColor: colors.errorBg,
     borderWidth: 1,
-    borderColor: isDarkMode ? 'rgba(248,113,113,0.4)' : '#FCA5A5',
+    borderColor: colors.error,
     gap: 8,
   },
-  errorText: { flex: 1, fontSize: 13, color: isDarkMode ? '#fca5a5' : '#b91c1c' },
-  retryText: { color: '#b91c1c', fontWeight: '600' },
+  errorText: { flex: 1, fontSize: 13, color: isDarkMode ? '#DC2626' : '#991B1B' },
+  retryText: { color: '#991B1B', fontWeight: '600' },
 
   profileCard: {
     backgroundColor: colors.surface,
     marginHorizontal: 20,
     marginTop: 20,
     marginBottom: 20,
-    borderRadius: 20,
+    borderRadius: 12,
     padding: 28,
     alignItems: 'center',
-    borderWidth: isDarkMode ? 1 : 0,
+    borderWidth: 1,
     borderColor: colors.border,
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 12 },
-      android: { elevation: 4 },
-      web: { boxShadow: '0 4px 12px rgba(0,0,0,0.08)' },
-    }),
   },
   avatarContainer: { position: 'relative', marginBottom: 16 },
-  avatar: { width: 96, height: 96, borderRadius: 48, borderWidth: 3, borderColor: '#ff9000' },
+  avatar: { width: 96, height: 96, borderRadius: 48, borderWidth: 3, borderColor: '#D4AF37' },
   avatarPlaceholder: {
     width: 96,
     height: 96,
@@ -769,7 +785,7 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 3,
-    borderColor: '#ff9000',
+    borderColor: '#D4AF37',
   },
   editAvatarButton: {
     position: 'absolute',
@@ -778,14 +794,14 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: '#ff9000',
+    backgroundColor: '#D4AF37',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 2,
     borderColor: colors.surface,
   },
   userName: { fontSize: 20, fontWeight: '700', color: colors.text, marginBottom: 3 },
-  userHandle: { fontSize: 14, color: colors.accent, marginBottom: 4, fontWeight: '600' },
+  userHandle: { fontSize: 14, color: colors.textSecondary, marginBottom: 4, fontWeight: '600' },
   userEmail: { fontSize: 13, color: colors.textSecondary, marginBottom: 14 },
 
   menuContainer: { gap: 4 },
@@ -800,15 +816,10 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   },
   menuSection: {
     backgroundColor: colors.surface,
-    borderRadius: 16,
+    borderRadius: 12,
     overflow: 'hidden',
-    borderWidth: isDarkMode ? 1 : 0,
+    borderWidth: 1,
     borderColor: colors.border,
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8 },
-      android: { elevation: 2 },
-      web: { boxShadow: '0 2px 8px rgba(0,0,0,0.06)' },
-    }),
   },
   menuItem: {
     flexDirection: 'row',
@@ -831,22 +842,22 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     marginHorizontal: 20,
     marginTop: 20,
     paddingVertical: 14,
-    borderRadius: 14,
+    borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: isDarkMode ? 'rgba(239,68,68,0.3)' : '#FEE2E2',
-    backgroundColor: isDarkMode ? 'rgba(239,68,68,0.1)' : '#FEF2F2',
+    borderColor: colors.error,
+    backgroundColor: colors.errorBg,
     gap: 8,
   },
-  logoutText: { fontSize: 15, fontWeight: '600', color: '#EF4444' },
+  logoutText: { fontSize: 15, fontWeight: '600', color: '#DC2626' },
   buildInfoBlock: { marginTop: 16 },
   versionText: { textAlign: 'center', fontSize: 10, color: colors.textMuted, marginTop: 2 },
 
   editForm: {
     backgroundColor: colors.surface,
     marginHorizontal: 20,
-    borderRadius: 16,
+    borderRadius: 12,
     padding: 20,
-    borderWidth: isDarkMode ? 1 : 0,
+    borderWidth: 1,
     borderColor: colors.border,
   },
   formHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
@@ -854,31 +865,31 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   inputContainer: { marginBottom: 16 },
   inputLabel: { fontSize: 12, fontWeight: '700', color: colors.textSecondary, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.6 },
   input: { borderWidth: 1.5, borderColor: colors.border, borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, fontSize: 15, color: colors.text, backgroundColor: colors.inputBg },
-  readOnlyInput: { color: colors.textSecondary, backgroundColor: isDarkMode ? 'rgba(148,163,184,0.12)' : '#F8FAFC' },
+  readOnlyInput: { color: colors.textSecondary, backgroundColor: colors.surfaceSecondary },
   inputWithPrefix: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: colors.border, borderRadius: 12, backgroundColor: colors.inputBg, overflow: 'hidden' },
   inputPrefix: { paddingLeft: 16, fontSize: 15, fontWeight: '600', color: colors.textMuted },
   inputInner: { flex: 1, paddingHorizontal: 4, paddingVertical: 14, fontSize: 15, color: colors.text, paddingRight: 16 },
-  inputError: { borderColor: '#EF4444', backgroundColor: isDarkMode ? 'rgba(239,68,68,0.1)' : '#FEF2F2' },
+  inputError: { borderColor: colors.error, backgroundColor: colors.errorBg },
   textArea: { minHeight: 80, textAlignVertical: 'top' },
   errorContainer: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  fieldErrorText: { fontSize: 12, color: '#EF4444' },
+  fieldErrorText: { fontSize: 12, color: '#DC2626' },
   fieldFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 },
   helperRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 8 },
   helperText: { flex: 1, fontSize: 12, lineHeight: 18, color: colors.textMuted },
   charCount: { fontSize: 11, color: colors.textMuted, fontWeight: '600' },
   saveButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent, paddingVertical: 14, borderRadius: 12, marginTop: 8, gap: 8 },
   saveButtonDisabled: { backgroundColor: colors.textMuted, opacity: 0.6 },
-  saveButtonText: { color: '#FFFFFF', fontSize: 15, fontWeight: '700' },
+  saveButtonText: { color: '#0A1628', fontSize: 15, fontWeight: '700' },
 
   bottomSpacer: { height: Platform.OS === 'ios' ? 100 : 80 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalContent: { backgroundColor: colors.surface, borderRadius: 20, padding: 24, width: '100%', maxWidth: 320, alignItems: 'center' },
-  modalIconContainer: { width: 64, height: 64, borderRadius: 32, backgroundColor: isDarkMode ? 'rgba(239,68,68,0.2)' : '#FEE2E2', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
+  modalContent: { backgroundColor: colors.surface, borderRadius: 12, padding: 24, width: '100%', maxWidth: 320, alignItems: 'center' },
+  modalIconContainer: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.errorBg, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
   modalTitle: { fontSize: 20, fontWeight: '700', color: colors.text, marginBottom: 8 },
   modalMessage: { fontSize: 14, color: colors.textSecondary, textAlign: 'center', marginBottom: 24, lineHeight: 20 },
   modalButtons: { flexDirection: 'row', gap: 12, width: '100%' },
   modalCancelButton: { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1.5, borderColor: colors.border, alignItems: 'center' },
   modalCancelText: { fontSize: 15, fontWeight: '600', color: colors.textSecondary },
-  modalConfirmButton: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: '#EF4444', alignItems: 'center' },
+  modalConfirmButton: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: '#DC2626', alignItems: 'center' },
   modalConfirmText: { fontSize: 15, fontWeight: '600', color: '#FFFFFF' },
 });

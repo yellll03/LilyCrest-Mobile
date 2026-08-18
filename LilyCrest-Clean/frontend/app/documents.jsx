@@ -1,57 +1,57 @@
 import React from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../src/context/ThemeContext';
 import { safeBack } from '../src/utils/navigation';
+import { ScreenHeader } from '../src/components/ui/LilycrestUI';
 
 const documents = [
-  { id: 'house_rules', title: 'House Rules', icon: 'home', color: '#F59E0B', description: 'General dormitory guidelines', category: 'Policy' },
-  { id: 'curfew_policy', title: 'Curfew Policy', icon: 'time', color: '#9333EA', description: 'Entry and exit times', category: 'Policy' },
-  { id: 'visitor_policy', title: 'Visitor Policy', icon: 'people', color: '#06B6D4', description: 'Guest registration rules', category: 'Policy' },
-  { id: 'payment_terms', title: 'Payment Terms', icon: 'cash', color: '#ff9000', description: 'Billing and payment policies', category: 'Billing' },
-  { id: 'emergency_procedures', title: 'Emergency Procedures', icon: 'alert-circle', color: '#EF4444', description: 'Safety and emergency contacts', category: 'Safety' },
-  { id: 'contract', title: 'Lease Contract', icon: 'document-text', color: '#3B82F6', description: 'Status, dates, and agreement', category: 'Contract', contract: true },
+  { id: 'house_rules', title: 'House Rules', icon: 'home', color: '#0A1628', background: '#FBF7EA', description: 'General dormitory guidelines', category: 'Policy' },
+  { id: 'curfew_policy', title: 'Curfew Policy', icon: 'time', color: '#0A1628', background: '#FBF7EA', description: 'Entry and exit times', category: 'Policy' },
+  { id: 'visitor_policy', title: 'Visitor Policy', icon: 'people', color: '#0A1628', background: '#FBF7EA', description: 'Guest registration rules', category: 'Policy' },
+  { id: 'payment_terms', title: 'Payment Terms', icon: 'cash', color: '#B9921F', background: '#FBF7EA', description: 'Billing and payment policies', category: 'Billing' },
+  { id: 'emergency_procedures', title: 'Emergency Procedures', icon: 'alert-circle', color: '#991B1B', background: '#FEF2F2', description: 'Safety and emergency contacts', category: 'Safety' },
+  { id: 'contract', title: 'Lease Contract', icon: 'document-text', color: '#0A1628', background: '#FBF7EA', description: 'Status, dates, and agreement', category: 'Contract', contract: true },
 ];
 
 export default function DocumentsScreen() {
   const router = useRouter();
-  const { colors, isDarkMode } = useTheme();
+  const { colors } = useTheme();
   const handlePress = (doc) => router.push(doc.contract
     ? '/contract-viewer'
     : { pathname: '/document-viewer', params: { kind: 'policy', id: doc.id, title: doc.title } });
 
-  const styles = createStyles(colors, isDarkMode);
+  const styles = createStyles(colors);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => safeBack(router, '/(tabs)/home')}>
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>House Rules & Documents</Text>
-        <View style={{ width: 40 }} />
-      </View>
+      <ScreenHeader
+        strong
+        title="House Rules & Documents"
+        subtitle="Policies, safety guidance, and your lease"
+        onBack={() => safeBack(router, '/(tabs)/home')}
+      />
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.infoCard}>
           <View style={styles.infoIcon}>
-            <Ionicons name="information-circle" size={22} color="#3B82F6" />
+            <Ionicons name="information-circle" size={22} color="#2563EB" />
           </View>
           <Text style={styles.infoText}>Please read and understand all dormitory rules. Contact the admin if you have questions.</Text>
         </View>
 
         {documents.map((doc, index) => (
           <TouchableOpacity key={index} style={styles.documentCard} onPress={() => handlePress(doc)} activeOpacity={0.7}>
-            <View style={[styles.documentIcon, { backgroundColor: `${doc.color}12` }]}>
+            <View style={[styles.documentIcon, { backgroundColor: doc.background }]}>
               <Ionicons name={doc.icon} size={22} color={doc.color} />
             </View>
             <View style={styles.documentContent}>
               <Text style={styles.documentTitle}>{doc.title}</Text>
               <Text style={styles.documentDescription}>{doc.description}</Text>
             </View>
-            <View style={[styles.categoryTag, { backgroundColor: `${doc.color}12` }]}>
+            <View style={[styles.categoryTag, { backgroundColor: doc.background }]}>
               <Text style={[styles.categoryText, { color: doc.color }]}>{doc.category}</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={colors.textMuted} style={{ marginLeft: 8 }} />
@@ -62,17 +62,14 @@ export default function DocumentsScreen() {
   );
 }
 
-const createStyles = (colors, isDarkMode) => StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border },
-  backButton: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '600', color: colors.text, flex: 1, textAlign: 'center' },
   scrollView: { flex: 1 },
   scrollContent: { padding: 16 },
-  infoCard: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: isDarkMode ? 'rgba(59,130,246,0.12)' : '#EFF6FF', borderRadius: 14, padding: 14, marginBottom: 18, gap: 10 },
-  infoIcon: { width: 32, height: 32, borderRadius: 10, backgroundColor: isDarkMode ? 'rgba(59,130,246,0.2)' : '#DBEAFE', justifyContent: 'center', alignItems: 'center' },
-  infoText: { flex: 1, fontSize: 13, color: isDarkMode ? '#93C5FD' : '#1E40AF', lineHeight: 20 },
-  documentCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: isDarkMode ? 1 : 0, borderColor: colors.border, ...Platform.select({ web: { boxShadow: '0 2px 6px rgba(0,0,0,0.05)' }, default: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 } }) },
+  infoCard: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: colors.infoBg, borderRadius: 12, padding: 14, marginBottom: 18, gap: 10, borderWidth: 1, borderColor: colors.info },
+  infoIcon: { width: 32, height: 32, borderRadius: 8, backgroundColor: colors.infoBg, justifyContent: 'center', alignItems: 'center' },
+  infoText: { flex: 1, fontSize: 13, color: colors.infoText, lineHeight: 20 },
+  documentCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: colors.border },
   documentIcon: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   documentContent: { flex: 1 },
   documentTitle: { fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: 3 },
