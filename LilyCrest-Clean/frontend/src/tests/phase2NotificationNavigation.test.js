@@ -11,6 +11,14 @@ describe('Phase 2 canonical notification destinations', () => {
       contract_id: 'contract-1',
       url: '/contract-viewer',
     })).toBe('/contract-viewer');
+
+    expect(resolveNotificationRoute({
+      type: 'contract_document_ready',
+      contract_id: 'contract-2',
+    })).toEqual({
+      pathname: '/contract-viewer',
+      params: { contractId: 'contract-2' },
+    });
   });
 
   it('routes an admin reply to its persisted conversation', () => {

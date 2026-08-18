@@ -40,12 +40,14 @@ describe('tenant billing UI polish', () => {
     expect(source).not.toContain('charges.map');
   });
 
-  test('uses visible surface colors for utility schedule labels and values', () => {
+  test('keeps cycle metadata inside breakdowns without a standalone schedule card', () => {
     const details = fs.readFileSync(path.resolve(__dirname, '../../app/bill-details.jsx'), 'utf8');
-    expect(details).toContain('styles.utilityScheduleLabel');
-    expect(details).toContain('styles.utilityScheduleValue');
-    expect(details).toContain('utilityScheduleLabel: { color: c.textSecondary }');
-    expect(details).toContain('utilityScheduleValue: { color: c.text }');
+    expect(details).not.toContain('styles.utilityScheduleLabel');
+    expect(details).not.toContain('styles.utilityScheduleValue');
+    expect(details).not.toContain('Electricity Billing Schedule');
+    expect(details).not.toContain('Water Billing Schedule');
+    expect(details).toContain('Meter cycle');
+    expect(details).toContain('Usage period');
   });
 
   test('reserves safe space for the assistant and bottom navigation', () => {

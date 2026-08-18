@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../src/context/AlertContext';
@@ -55,6 +55,7 @@ export default function PaymentScreen() {
   const [creatingCheckout, setCreatingCheckout] = useState(false);
   const [error, setError] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+  const checkoutGuardRef = useRef(false);
 
   const loadBill = useCallback(async ({ showLoader = true } = {}) => {
     if (showLoader) setLoading(true);
@@ -104,16 +105,17 @@ export default function PaymentScreen() {
   }, [loadBill]));
 
   const handlePayOnline = async () => {
-    const latestBill = await loadBill({ showLoader: false });
-    if (!latestBill) return;
-    const id = getBillId(latestBill);
-    if (!id) {
-      setError(BILL_UNAVAILABLE_MESSAGE);
-      return;
-    }
-
+    if (checkoutGuardRef.current) return;
+    checkoutGuardRef.current = true;
     setCreatingCheckout(true);
     try {
+      const latestBill = await loadBill({ showLoader: false });
+      if (!latestBill) return;
+      const id = getBillId(latestBill);
+      if (!id) {
+        setError(BILL_UNAVAILABLE_MESSAGE);
+        return;
+      }
       const resp = await apiService.createPaymongoCheckout(id);
       const checkoutUrl = resp?.data?.checkout_url;
       const checkoutId = resp?.data?.checkout_id;
@@ -142,6 +144,7 @@ export default function PaymentScreen() {
       }
       showAlert({ title: 'Payment Error', message, type: 'error' });
     } finally {
+      checkoutGuardRef.current = false;
       setCreatingCheckout(false);
     }
   };

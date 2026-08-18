@@ -2,7 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Image, Linking, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
@@ -85,6 +85,9 @@ export default function ProfileScreen() {
   const [errors, setErrors] = useState({ username: '', email: '', phone: '' });
   const [discardModalVisible, setDiscardModalVisible] = useState(false);
   const [logoutModalVisible, setLogoutModalVisible] = useState(false);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+  const logoutGuardRef = useRef(false);
+  const profileMutationGuardRef = useRef(false);
   const [profileError, setProfileError] = useState('');
   const [profileBanner, setProfileBanner] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -168,9 +171,17 @@ export default function ProfileScreen() {
   const handleLogout = () => setLogoutModalVisible(true);
 
   const confirmLogout = async () => {
+    if (logoutGuardRef.current) return;
+    logoutGuardRef.current = true;
+    setIsLoggingOut(true);
     setLogoutModalVisible(false);
-    await logout();
-    router.replace('/login');
+    try {
+      await logout();
+      router.replace('/login');
+    } finally {
+      logoutGuardRef.current = false;
+      setIsLoggingOut(false);
+    }
   };
 
   const hasChanges = () => {
@@ -181,6 +192,7 @@ export default function ProfileScreen() {
   };
 
   const handleSave = async () => {
+    if (profileMutationGuardRef.current || isLoading) return;
     const usernameValidation = validateUsername(formData.username);
     const phoneValidation = validatePhone(formData.phone);
     if (!usernameValidation.valid || !phoneValidation.valid) {
@@ -192,6 +204,7 @@ export default function ProfileScreen() {
       return;
     }
 
+    profileMutationGuardRef.current = true;
     setIsLoading(true);
     try {
       const payload = {
@@ -235,25 +248,31 @@ export default function ProfileScreen() {
         setProfileBanner({ type: 'error', text: getApiErrorMessage(error, 'Failed to update profile. Please try again.') });
       }
     } finally {
+      profileMutationGuardRef.current = false;
       setIsLoading(false);
     }
   };
 
   const pickImage = async () => {
-    const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permissionResult.granted) { showAlert({ title: 'Permission Required', message: 'Please allow access to your photo library to change your profile picture.', type: 'warning' }); return; }
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.5 });
-    if (!result.canceled && result.assets[0]) {
-      setIsLoading(true);
-      try {
-        const profile = await persistCanonicalProfileImage(result.assets[0], userId);
-        updateUser(profile);
-        setProfileBanner({ type: 'success', text: 'Profile picture updated.' });
-      } catch (error) {
-        setProfileBanner({ type: 'error', text: error?.response?.data?.errors?.picture || getApiErrorMessage(error, 'Failed to update profile picture.') });
-      } finally {
-        setIsLoading(false);
+    if (profileMutationGuardRef.current || isLoading) return;
+    profileMutationGuardRef.current = true;
+    try {
+      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permissionResult.granted) {
+        showAlert({ title: 'Permission Required', message: 'Please allow access to your photo library to change your profile picture.', type: 'warning' });
+        return;
       }
+      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.5 });
+      if (result.canceled || !result.assets?.[0]) return;
+      setIsLoading(true);
+      const profile = await persistCanonicalProfileImage(result.assets[0], userId);
+      updateUser(profile);
+      setProfileBanner({ type: 'success', text: 'Profile picture updated.' });
+    } catch (error) {
+      setProfileBanner({ type: 'error', text: error?.response?.data?.errors?.picture || getApiErrorMessage(error, 'Failed to update profile picture.') });
+    } finally {
+      profileMutationGuardRef.current = false;
+      setIsLoading(false);
     }
   };
 
@@ -650,10 +669,10 @@ export default function ProfileScreen() {
           <View style={styles.modalContent}>
             <View style={styles.modalIconContainer}><Ionicons name="log-out-outline" size={32} color="#DC2626" /></View>
             <Text style={styles.modalTitle}>Sign Out?</Text>
-            <Text style={styles.modalMessage}>Are you sure you want to sign out?</Text>
+            <Text style={styles.modalMessage}>Are you sure you want to sign out of your Lilycrest account?</Text>
             <View style={styles.modalButtons}>
               <TouchableOpacity style={styles.modalCancelButton} onPress={() => setLogoutModalVisible(false)}><Text style={styles.modalCancelText}>Cancel</Text></TouchableOpacity>
-              <TouchableOpacity style={styles.modalConfirmButton} onPress={confirmLogout}><Text style={styles.modalConfirmText}>Sign Out</Text></TouchableOpacity>
+              <TouchableOpacity style={[styles.modalConfirmButton, isLoggingOut && styles.btnDisabled]} onPress={confirmLogout} disabled={isLoggingOut}>{isLoggingOut ? <ActivityIndicator size="small" color="#ffffff" /> : <Text style={styles.modalConfirmText}>Sign Out</Text>}</TouchableOpacity>
             </View>
           </View>
         </View>

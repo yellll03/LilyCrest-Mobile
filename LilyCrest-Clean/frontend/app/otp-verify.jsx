@@ -57,6 +57,8 @@ export default function OtpVerifyScreen() {
 
   const inputRefs = useRef([]);
   const cooldownRef = useRef(null);
+  const verifyGuardRef = useRef(false);
+  const resendGuardRef = useRef(false);
   const otpToken = pendingLogin?.otpToken || '';
   const maskedEmail = pendingLogin?.maskedEmail || routeMaskedEmail || 'your email';
   const rememberMe = pendingLogin?.rememberMe === true;
@@ -142,7 +144,7 @@ export default function OtpVerifyScreen() {
   };
 
   const handleVerify = async () => {
-    if (isSessionLoading) return;
+    if (isSessionLoading || isLoading || verifyGuardRef.current) return;
     if (!otpToken) {
       setError('Your verification session has expired. Please log in again.');
       return;
@@ -154,42 +156,41 @@ export default function OtpVerifyScreen() {
       return;
     }
 
+    verifyGuardRef.current = true;
     setIsLoading(true);
     setError(null);
 
-    const result = await verifyLoginOtp(otpToken, code, rememberMe);
+    try {
+      const result = await verifyLoginOtp(otpToken, code, rememberMe);
 
-    if (!result.success) {
-      setIsLoading(false);
-      setError(result.error || 'Invalid code. Please try again.');
-      // Clear digits on invalid code
-      setDigits(Array(OTP_LENGTH).fill(''));
-      setTimeout(() => inputRefs.current[0]?.focus(), 100);
-      return;
-    }
+      if (!result.success) {
+        setError(result.error || 'Invalid code. Please try again.');
+        // Clear digits on invalid code
+        setDigits(Array(OTP_LENGTH).fill(''));
+        setTimeout(() => inputRefs.current[0]?.focus(), 100);
+        return;
+      }
 
-    await clearPendingLogin();
+      await clearPendingLogin();
 
     // Persist remember-me and biometric preferences post-OTP
-    await AsyncStorage.setItem('remember_me', rememberMe ? 'true' : 'false');
-    if (rememberMe && savedEmail) {
-      await AsyncStorage.setItem('last_email', savedEmail);
-    } else {
-      await AsyncStorage.removeItem('last_email');
-    }
+      await AsyncStorage.setItem('remember_me', rememberMe ? 'true' : 'false');
+      if (rememberMe && savedEmail) {
+        await AsyncStorage.setItem('last_email', savedEmail);
+      } else {
+        await AsyncStorage.removeItem('last_email');
+      }
 
     // Offer biometric if available and not yet enabled
-    const hasHardware = await LocalAuthentication.hasHardwareAsync();
-    const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-    const bioSetting = await AsyncStorage.getItem('biometricLogin');
+      const hasHardware = await LocalAuthentication.hasHardwareAsync();
+      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
+      const bioSetting = await AsyncStorage.getItem('biometricLogin');
 
-    if (hasHardware && isEnrolled && bioSetting === 'true') {
-      await enableBiometricSession(savedEmail);
-      setIsLoading(false);
-      router.replace('/(tabs)/home');
-    } else if (hasHardware && isEnrolled && bioSetting !== 'true') {
-      setIsLoading(false);
-      showAlert({
+      if (hasHardware && isEnrolled && bioSetting === 'true') {
+        await enableBiometricSession(savedEmail);
+        router.replace('/(tabs)/home');
+      } else if (hasHardware && isEnrolled && bioSetting !== 'true') {
+        showAlert({
         title: 'Enable Biometric Login',
         message: 'Use Biometrics to unlock this valid session on this device. For your security, you will need to log in again when the session expires.',
         type: 'info',
@@ -214,10 +215,15 @@ export default function OtpVerifyScreen() {
             },
           },
         ],
-      });
-    } else {
+        });
+      } else {
+        router.replace('/(tabs)/home');
+      }
+    } catch (error) {
+      setError(getApiErrorMessage(error, 'Unable to finish verification. Please try again.'));
+    } finally {
+      verifyGuardRef.current = false;
       setIsLoading(false);
-      router.replace('/(tabs)/home');
     }
   };
 
@@ -226,7 +232,8 @@ export default function OtpVerifyScreen() {
       setError('Your verification session has expired. Please log in again.');
       return;
     }
-    if (cooldown > 0 || isResending) return;
+    if (cooldown > 0 || isResending || resendGuardRef.current) return;
+    resendGuardRef.current = true;
     setIsResending(true);
     setError(null);
     try {
@@ -246,6 +253,7 @@ export default function OtpVerifyScreen() {
         setError(getApiErrorMessage(err, 'Failed to resend code. Please try again.'));
       }
     } finally {
+      resendGuardRef.current = false;
       setIsResending(false);
     }
   };

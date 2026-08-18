@@ -627,7 +627,8 @@ export function AuthProvider({ children }) {
     return subscribeToPushTokenChanges((token, tokenData) => {
       savePushTokenToServer(token, {
         notificationsEnabled: true,
-        platform: tokenData?.type || undefined,
+        provider: tokenData?.type || undefined,
+        platform: Platform.OS,
         syncKey: user.user_id,
       }).catch(() => {});
     });
@@ -894,11 +895,18 @@ export function AuthProvider({ children }) {
         return { authenticated: false };
       }
 
-      const cachedUser = await getCachedSessionUser();
-      if (cachedUser) await AsyncStorage.removeItem(SESSION_USER_KEY).catch(() => {});
-      setUser(null);
-      setAuthStatus('unauthenticated');
-      return { authenticated: false };
+      const cachedUser = await getCachedSessionUser() || userRef.current;
+      if (cachedUser) {
+        setUser(cachedUser);
+        setAuthStatus('authenticated');
+        return { authenticated: true, restoredFromCache: true, offline: true };
+      }
+
+      // A timeout, offline state, or 5xx response is not proof that the
+      // locally persisted session is invalid. Keep the token so a later
+      // retry can recover; only an authoritative 401/403 signs the user out.
+      setAuthStatus((current) => current === 'authenticated' ? current : 'unauthenticated');
+      return { authenticated: false, indeterminate: true };
     }
   }, []);
 

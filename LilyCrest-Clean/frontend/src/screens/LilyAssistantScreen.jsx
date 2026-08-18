@@ -367,6 +367,9 @@ export default function LilyAssistantScreen() {
   const seenSupportMsgIds = useRef(new Set());
   const sendGuardRef = useRef(false);
   const escalationGuardRef = useRef(false);
+  const replyGuardRef = useRef(false);
+  const reopenGuardRef = useRef(false);
+  const resolutionGuardRef = useRef(false);
   const sendCooldownRef = useRef(0);
   const handledNotificationConversationRef = useRef('');
   const { user, authReady } = useAuth();
@@ -950,8 +953,9 @@ export default function LilyAssistantScreen() {
 
   const sendReply = async () => {
     const text = sanitizeChatInput(replyText).slice(0, MAX_CHAT_INPUT_CHARS);
-    if (!text || !selectedInquiry) return;
+    if (!text || !selectedInquiry || replyGuardRef.current) return;
 
+    replyGuardRef.current = true;
     setIsSendingReply(true);
     setReplyText('');
 
@@ -985,13 +989,15 @@ export default function LilyAssistantScreen() {
         scroll: false,
       }).catch(() => undefined);
     } finally {
+      replyGuardRef.current = false;
       setIsSendingReply(false);
       setTimeout(() => adminScrollRef.current?.scrollToEnd({ animated: true }), 80);
     }
   };
 
   const reopenSelectedInquiry = async (conversationId = selectedInquiry?.id) => {
-    if (!conversationId || isReopeningInquiry) return;
+    if (!conversationId || isReopeningInquiry || reopenGuardRef.current) return;
+    reopenGuardRef.current = true;
     setIsReopeningInquiry(true);
     setNetworkError(null);
     try {
@@ -1015,13 +1021,15 @@ export default function LilyAssistantScreen() {
     } catch (error) {
       setNetworkError(getChatErrorMessage(error, 'Failed to reopen this support conversation.'));
     } finally {
+      reopenGuardRef.current = false;
       setIsReopeningInquiry(false);
     }
   };
 
   const confirmInquiryResolution = async (resolved, conversationId = null) => {
     const targetId = conversationId || selectedInquiry?.id || supportConversationId;
-    if (!targetId || isConfirmingResolution) return;
+    if (!targetId || isConfirmingResolution || resolutionGuardRef.current) return;
+    resolutionGuardRef.current = true;
     setIsConfirmingResolution(true);
     setNetworkError(null);
     try {
@@ -1042,6 +1050,7 @@ export default function LilyAssistantScreen() {
     } catch (error) {
       setNetworkError(getChatErrorMessage(error, 'Unable to save your resolution choice.'));
     } finally {
+      resolutionGuardRef.current = false;
       setIsConfirmingResolution(false);
     }
   };

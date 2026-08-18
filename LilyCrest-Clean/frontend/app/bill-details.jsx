@@ -3,7 +3,7 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import * as ImagePicker from 'expo-image-picker';
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../src/context/AlertContext';
@@ -20,10 +20,6 @@ import { safeBack } from '../src/utils/navigation';
 import { billingDocumentCacheKey } from '../src/utils/billingDocumentCache';
 import { ensureFirebaseStorageAttachments, IMAGE_UPLOAD_MIME_TYPES, MAX_IMAGE_UPLOAD_BYTES } from '../src/services/firebaseStorageUpload';
 import { getBillPaymentDate, getUtilityReleaseSchedule, isBillOutstanding } from '../src/utils/billingStatus';
-import {
-  getRenderableUtilitySchedules,
-  utilityScheduleStateMessage,
-} from '../src/utils/billingSchedulePresentation';
 import { ScreenHeader } from '../src/components/ui/LilycrestUI';
 
 const getBillId = (bill) => bill?.billing_id || bill?.id || bill?._id || bill?.billingId || bill?.billId || bill?.reference_id;
@@ -108,6 +104,8 @@ export default function BillDetailsScreen() {
   const [creatingCheckout, setCreatingCheckout] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [uploadingProof, setUploadingProof] = useState(false);
+  const checkoutGuardRef = useRef(false);
+  const proofUploadGuardRef = useRef(false);
 
   const loadBill = useCallback(async ({ showLoader = true } = {}) => {
     if (showLoader) setLoading(true);
@@ -157,15 +155,17 @@ export default function BillDetailsScreen() {
 
   // ── PayMongo Payment ──
   const handlePayOnline = async () => {
-    const latestBill = await loadBill({ showLoader: false });
-    if (!latestBill) return;
-    const id = getBillId(latestBill);
-    if (!id) {
-      setError(BILL_UNAVAILABLE_MESSAGE);
-      return;
-    }
+    if (checkoutGuardRef.current) return;
+    checkoutGuardRef.current = true;
     setCreatingCheckout(true);
     try {
+      const latestBill = await loadBill({ showLoader: false });
+      if (!latestBill) return;
+      const id = getBillId(latestBill);
+      if (!id) {
+        setError(BILL_UNAVAILABLE_MESSAGE);
+        return;
+      }
       const resp = await apiService.createPaymongoCheckout(id);
       const checkoutUrl = resp?.data?.checkout_url;
       const checkoutId = resp?.data?.checkout_id;
@@ -196,26 +196,28 @@ export default function BillDetailsScreen() {
       }
       showAlert({ title: 'Payment Error', message, type: 'error' });
     } finally {
+      checkoutGuardRef.current = false;
       setCreatingCheckout(false);
     }
   };
 
   const handleUploadProof = async () => {
-    if (uploadingProof || !billId) return;
-    if (String(bill?.status || '').toLowerCase() === 'pending_verification') {
-      showAlert({ title: 'Under Review', message: 'Your payment proof is already under review.', type: 'info' });
-      return;
-    }
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-    if (!permission.granted) {
-      showAlert({ title: 'Permission Required', message: 'Photo access is required to select payment proof.', type: 'warning' });
-      return;
-    }
-    const selected = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
-    if (selected.canceled || !selected.assets?.[0]) return;
-    const asset = selected.assets[0];
-    setUploadingProof(true);
+    if (proofUploadGuardRef.current || uploadingProof || !billId) return;
+    proofUploadGuardRef.current = true;
     try {
+      if (String(bill?.status || '').toLowerCase() === 'pending_verification') {
+        showAlert({ title: 'Under Review', message: 'Your payment proof is already under review.', type: 'info' });
+        return;
+      }
+      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (!permission.granted) {
+        showAlert({ title: 'Permission Required', message: 'Photo access is required to select payment proof.', type: 'warning' });
+        return;
+      }
+      const selected = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
+      if (selected.canceled || !selected.assets?.[0]) return;
+      const asset = selected.assets[0];
+      setUploadingProof(true);
       const [proof] = await ensureFirebaseStorageAttachments([{
         uri: asset.uri,
         name: asset.fileName || `payment-proof-${Date.now()}.jpg`,
@@ -235,6 +237,7 @@ export default function BillDetailsScreen() {
     } catch (error) {
       showAlert({ title: 'Upload Failed', message: getBillingApiMessage(error, 'Unable to upload payment proof. Please try again.'), type: 'error' });
     } finally {
+      proofUploadGuardRef.current = false;
       setUploadingProof(false);
     }
   };
@@ -276,7 +279,6 @@ export default function BillDetailsScreen() {
   // and Home so the same bill never shows a contradictory release state
   // depending on which screen rendered it (see billingStatus.js).
   const releaseSchedule = getUtilityReleaseSchedule(bill);
-  const utilitySchedules = getRenderableUtilitySchedules(bill);
 
   const moveInFinancials = bill.move_in_financials || bill.moveInFinancials || null;
   // Charge items
@@ -377,37 +379,6 @@ export default function BillDetailsScreen() {
           </View>
         </View>
 
-        {utilitySchedules.map(([utility, schedule]) => (
-          <View key={utility} style={styles.sectionCard}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name={utility === 'electricity' ? 'flash' : 'water'} size={16} color={utility === 'electricity' ? '#92400E' : '#2563EB'} />
-              <Text style={styles.sectionTitle}>{utility === 'electricity' ? 'Electricity' : 'Water'} Billing Schedule</Text>
-            </View>
-            {schedule.state === 'available' ? (
-              <View style={styles.headerGrid}>
-                {!!schedule.period_start && <View style={styles.headerGridItem}><Text style={[styles.headerGridLabel, styles.utilityScheduleLabel]}>Period Start</Text><Text style={[styles.headerGridValue, styles.utilityScheduleValue]}>{shortDate(schedule.period_start)}</Text></View>}
-                {!!schedule.period_end && <View style={styles.headerGridItem}><Text style={[styles.headerGridLabel, styles.utilityScheduleLabel]}>Period End</Text><Text style={[styles.headerGridValue, styles.utilityScheduleValue]}>{shortDate(schedule.period_end)}</Text></View>}
-                <View style={styles.headerGridItem}><Text style={[styles.headerGridLabel, styles.utilityScheduleLabel]}>Reading Date</Text><Text style={[styles.headerGridValue, styles.utilityScheduleValue]}>{shortDate(schedule.reading_date)}</Text></View>
-                <View style={styles.headerGridItem}><Text style={[styles.headerGridLabel, styles.utilityScheduleLabel]}>Released</Text><Text style={[styles.headerGridValue, styles.utilityScheduleValue]}>{shortDate(schedule.release_date)}</Text></View>
-                <View style={styles.headerGridItem}><Text style={[styles.headerGridLabel, styles.utilityScheduleLabel]}>Due Date</Text><Text style={[styles.headerGridValue, styles.utilityScheduleValue]}>{shortDate(schedule.due_date)}</Text></View>
-              </View>
-            ) : schedule.state === 'pending' ? (
-              <Text style={{ color: colors.textSecondary }}>{utilityScheduleStateMessage(schedule.state)}</Text>
-            ) : (
-              <Text style={{ color: '#991B1B' }}>{utilityScheduleStateMessage(schedule.state)}</Text>
-            )}
-          </View>
-        ))}
-        {releaseSchedule.unreleasedUtility && utilitySchedules.length === 0 ? (
-          <View style={styles.sectionCard}>
-            <View style={styles.sectionHeader}>
-              <Ionicons name="information-circle-outline" size={17} color={colors.primary} />
-              <Text style={styles.sectionTitle}>Utility Billing Schedule</Text>
-            </View>
-            <Text style={{ color: colors.textSecondary }}>Your utility bill has not been released yet.</Text>
-          </View>
-        ) : null}
-
         {/* ── Billing Summary Table ── */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
@@ -451,6 +422,19 @@ export default function BillDetailsScreen() {
             <View style={styles.sectionHeader}>
               <Ionicons name="flash" size={16} color="#92400E" />
               <Text style={styles.sectionTitle}>Electricity Breakdown</Text>
+            </View>
+
+            <View style={styles.breakdownMetaRow}>
+              <View style={styles.breakdownMetaItem}>
+                <Text style={styles.breakdownMetaLabel}>Meter cycle</Text>
+                <Text style={styles.breakdownMetaValue}>
+                  {shortDate(bill.electricity_breakdown[0]?.reading_date_from || bill.electricity_breakdown[0]?.period_start)} {'–'} {shortDate(bill.electricity_breakdown[bill.electricity_breakdown.length - 1]?.reading_date_to || bill.electricity_breakdown[bill.electricity_breakdown.length - 1]?.period_end)}
+                </Text>
+              </View>
+              <View style={styles.breakdownMetaItem}>
+                <Text style={styles.breakdownMetaLabel}>Released</Text>
+                <Text style={styles.breakdownMetaValue}>{shortDate(releaseSchedule.releaseDate)}</Text>
+              </View>
             </View>
 
             {bill.electricity_breakdown.map((seg, idx) => {
@@ -577,6 +561,18 @@ export default function BillDetailsScreen() {
             </View>
 
             <View style={styles.segmentCard}>
+              {(bill.water_breakdown.period_start || bill.water_breakdown.period_end) && (
+                <View style={styles.breakdownMetaRow}>
+                  <View style={styles.breakdownMetaItem}>
+                    <Text style={styles.breakdownMetaLabel}>Usage period</Text>
+                    <Text style={styles.breakdownMetaValue}>{shortDate(bill.water_breakdown.period_start)} {'–'} {shortDate(bill.water_breakdown.period_end)}</Text>
+                  </View>
+                  <View style={styles.breakdownMetaItem}>
+                    <Text style={styles.breakdownMetaLabel}>Reading date</Text>
+                    <Text style={styles.breakdownMetaValue}>{shortDate(bill.water_breakdown.reading_date)}</Text>
+                  </View>
+                </View>
+              )}
               <View style={styles.segmentGrid}>
                 <View style={styles.segmentGridItem}>
                   <Text style={styles.segmentGridLabel}>Meter Reading</Text>
@@ -743,8 +739,6 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
   },
   headerGridLabel: { fontSize: 11, color: 'rgba(255,255,255,0.45)', fontWeight: '600' },
   headerGridValue: { fontSize: 13, color: '#ffffff', fontWeight: '700', marginTop: 2 },
-  utilityScheduleLabel: { color: c.textSecondary },
-  utilityScheduleValue: { color: c.text },
 
   // Section Card (shared)
   sectionCard: {
@@ -753,6 +747,10 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
   },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
   sectionTitle: { fontSize: 15, fontWeight: '800', color: c.text },
+  breakdownMetaRow: { flexDirection: 'row', gap: 12, paddingBottom: 2 },
+  breakdownMetaItem: { flex: 1 },
+  breakdownMetaLabel: { fontSize: 10, color: c.textMuted, fontWeight: '600', textTransform: 'uppercase', letterSpacing: 0.4 },
+  breakdownMetaValue: { fontSize: 12, color: c.text, fontWeight: '700', marginTop: 2 },
 
   // Summary Table
   summaryRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4, gap: 8 },
