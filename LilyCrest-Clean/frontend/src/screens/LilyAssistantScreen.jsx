@@ -12,6 +12,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useLocalSearchParams } from 'expo-router';
 import InquiryCard from '../components/assistant/InquiryCard';
 import LilyFlowerIcon from '../components/assistant/LilyFlowerIcon';
@@ -28,6 +29,10 @@ import {
 } from '../services/firebaseStorageUpload';
 import { pickDocument, pickFromCamera, pickFromLibrary } from '../utils/attachmentPicker';
 import { openChatAttachment } from '../utils/chatAttachmentViewer';
+import {
+  getLatestOutgoingMessageId,
+  inquiryTicketLabel,
+} from '../utils/supportConversationPresentation';
 
 const ASSISTANT_UPLOAD_MIME_TYPES = [...IMAGE_UPLOAD_MIME_TYPES, 'application/pdf'];
 const SUPPORT_UPLOAD_MIME_TYPES = [
@@ -297,6 +302,7 @@ const toSupportFeedMessage = (message) => ({
   time: formatTime(message.createdAt ? new Date(message.createdAt) : new Date()),
   avatar: message.senderRole === 'tenant' ? 'U' : 'A',
   attachments: Array.isArray(message.attachments) ? message.attachments : [],
+  readAt: message.readAt || null,
 });
 
 const toSupportThreadMessage = (message) => ({
@@ -305,6 +311,7 @@ const toSupportThreadMessage = (message) => ({
   text: message.message || '',
   time: formatTime(message.createdAt ? new Date(message.createdAt) : new Date()),
   attachments: Array.isArray(message.attachments) ? message.attachments : [],
+  readAt: message.readAt || null,
 });
 
 const toInquiryCard = (conversation) => {
@@ -312,6 +319,7 @@ const toInquiryCard = (conversation) => {
   const last = conversation.lastMessageAt ? new Date(conversation.lastMessageAt) : created;
   return {
     id: conversation.id,
+    ticketId: inquiryTicketLabel(conversation.ticketId),
     title: supportTitle(conversation.category),
     status: supportInquiryStatus(conversation.status),
     timestamp: formatTimestamp(last),
@@ -396,7 +404,7 @@ export default function LilyAssistantScreen() {
     [user?.user_id]
   );
   const chat = useAssistantChat(initialSession);
-  const TAB_BAR_HEIGHT = Platform.OS === 'ios' ? 88 : 72;
+  const tabBarHeight = useBottomTabBarHeight();
 
   const markInteracted = () => {
     if (!hasInteracted) setHasInteracted(true);
@@ -510,15 +518,12 @@ export default function LilyAssistantScreen() {
       rawMessages.forEach((item) => seenSupportMsgIds.current.add(item.id));
       setMessages(rawMessages.map(toSupportFeedMessage));
     } else {
-      const additions = [];
-      rawMessages.forEach((item) => {
-        if (item.senderRole === 'tenant' || seenSupportMsgIds.current.has(item.id)) return;
-        seenSupportMsgIds.current.add(item.id);
-        additions.push(toSupportFeedMessage(item));
-      });
-      if (additions.length) {
-        setMessages((prev) => [...prev, ...additions]);
-      }
+      rawMessages.forEach((item) => seenSupportMsgIds.current.add(item.id));
+      const canonicalSupportMessages = rawMessages.map(toSupportFeedMessage);
+      setMessages((prev) => [
+        ...prev.filter((item) => !String(item.id || '').startsWith('support-')),
+        ...canonicalSupportMessages,
+      ]);
     }
 
     if (conversation) {
@@ -1297,8 +1302,9 @@ export default function LilyAssistantScreen() {
     const resolvedTimestamp = selectedInquiry.conversation?.resolvedAt
       ? formatTimestamp(new Date(selectedInquiry.conversation.resolvedAt))
       : '';
+    const latestOutgoingMessageId = getLatestOutgoingMessageId(selectedInquiry.thread);
     return (
-      <View style={styles.detailScreen}>
+      <View style={[styles.detailScreen, { paddingBottom: tabBarHeight }]}>
         <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
           <Pressable style={styles.backButton} onPress={() => setSelectedInquiry(null)}>
             <Ionicons name="arrow-back" size={22} color="#f8fafc" />
@@ -1306,6 +1312,7 @@ export default function LilyAssistantScreen() {
           <View style={styles.detailHeaderInfo}>
             <Text style={styles.headerTitle}>Admin Support</Text>
             <Text style={styles.headerSubtitle}>{selectedInquiry.title}</Text>
+            <Text style={styles.headerTicketId}>{selectedInquiry.ticketId}</Text>
           </View>
           <View style={[styles.statusChip, isSolved ? styles.statusChipSolved : null]}>
             <Text style={[styles.statusChipText, isSolved ? styles.statusChipTextSolved : null]}>
@@ -1346,6 +1353,7 @@ export default function LilyAssistantScreen() {
               key={item.id}
               message={item}
               isUser={item.sender === 'user'}
+              showDeliveryStatus={item.id === latestOutgoingMessageId}
               onOpenAttachment={handleOpenChatAttachment}
             />
           ))}
@@ -1441,18 +1449,21 @@ export default function LilyAssistantScreen() {
   const canAttach = chatMode === CHAT_MODE.AI
     || chatMode === CHAT_MODE.WAITING
     || chatMode === CHAT_MODE.ACTIVE;
+  const latestSupportOutgoingMessageId = getLatestOutgoingMessageId(
+    messages.filter((message) => String(message.id || '').startsWith('support-')),
+  );
 
   return (
     <View style={styles.root}>
       <KeyboardAvoidingView
         style={styles.root}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? TAB_BAR_HEIGHT : 0}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? tabBarHeight : 0}
       >
         {selectedInquiry ? (
           renderInquiryDetail()
         ) : (
-          <View style={[styles.screen, { paddingBottom: TAB_BAR_HEIGHT }]}>
+          <View style={[styles.screen, { paddingBottom: tabBarHeight }]}>
             <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
               <View style={styles.headerLeft}>
                 <View style={styles.headerAvatar}>
@@ -1569,6 +1580,7 @@ export default function LilyAssistantScreen() {
                       <MessageBubble
                         message={message}
                         isUser={message.sender === 'user'}
+                        showDeliveryStatus={message.id === latestSupportOutgoingMessageId}
                         onOpenAttachment={String(message.id).startsWith('support-')
                           ? handleOpenChatAttachment
                           : undefined}
@@ -1764,6 +1776,7 @@ export default function LilyAssistantScreen() {
                       <InquiryCard
                         key={item.id}
                         title={item.title}
+                        ticketId={item.ticketId}
                         preview={item.preview}
                         status={item.status}
                         timestamp={item.timestamp}
@@ -2293,6 +2306,13 @@ function createAssistantStyles(c, dark) {
   },
   detailHeaderInfo: {
     flex: 1,
+  },
+  headerTicketId: {
+    color: '#fed7aa',
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    marginTop: 2,
   },
   statusChip: {
     paddingHorizontal: 10,
