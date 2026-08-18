@@ -9,6 +9,7 @@ import { apiService, isNetworkOrColdStartError } from '../src/services/api';
 import { answersObjectToArray, clearSurveyDraft, loadCachedSurvey, loadSurveyDraft, saveCachedSurvey, saveSurveyDraftLocal } from '../src/services/surveyDrafts';
 import { firstInvalidQuestionId, safeSurveyErrorMessage, toAnswerObject, validateSurveyAnswers, visibleSurveyQuestions } from '../src/utils/surveyForm';
 import { SURVEY_FEEDBACK_ENABLED } from '../src/config/features';
+import { ScreenHeader } from '../src/components/ui/LilycrestUI';
 
 const CHOICE_LABELS = {
   YES: 'Yes', NO: 'No', MAYBE: 'Maybe', CONTRACT_COMPLETED: 'Contract completed',
@@ -196,7 +197,7 @@ export default function SurveyFormScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <View style={styles.header}><TouchableOpacity onPress={() => router.back()}><Ionicons name="arrow-back" size={24} color={colors.text} /></TouchableOpacity><Text style={styles.headerTitle}>{readOnly ? 'Survey Response' : 'Complete Survey'}</Text><View style={{ width: 24 }} /></View>
+      <ScreenHeader strong title={readOnly ? 'Survey Response' : 'Complete Survey'} subtitle={readOnly ? 'Submitted tenant feedback' : 'Share your Lilycrest experience'} onBack={() => router.back()} />
       {loading ? <View style={styles.center}><ActivityIndicator color={colors.accent} /></View> : !survey ? <View style={styles.center}><Text style={styles.error}>{message}</Text></View> : (
         <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView ref={scrollRef} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">
@@ -216,24 +217,23 @@ export default function SurveyFormScreen() {
 
 const createStyles = (c) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: c.background }, flex: { flex: 1 }, center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 30 },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 18, borderBottomWidth: 1, borderBottomColor: c.border },
-  headerTitle: { color: c.text, fontSize: 19, fontWeight: '800' }, content: { padding: 18, paddingBottom: 50 },
+  content: { padding: 18, paddingBottom: 50 },
   title: { color: c.text, fontSize: 23, fontWeight: '800' }, description: { color: c.textSecondary, marginTop: 7, lineHeight: 21 },
   surveyType: { color: c.accent, fontWeight: '800', marginTop: 10 }, submittedDate: { color: c.textSecondary, marginTop: 6 },
-  question: { marginTop: 18, padding: 16, borderRadius: 15, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border },
+  question: { marginTop: 18, padding: 16, borderRadius: 12, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border },
   questionInvalid: { borderColor: '#DC2626', borderWidth: 1.5 },
   prompt: { color: c.text, fontSize: 16, fontWeight: '700', lineHeight: 22 }, questionHelper: { color: c.textSecondary, lineHeight: 20, marginTop: 5 },
   ratingRow: { flexDirection: 'row', gap: 6, marginTop: 14, justifyContent: 'space-between' },
   rating: { flex: 1, minWidth: 44, minHeight: 48, maxWidth: 58, borderRadius: 12, borderWidth: 1, borderColor: c.border, alignItems: 'center', justifyContent: 'center' },
-  ratingText: { color: c.text, fontWeight: '800' }, selected: { backgroundColor: c.accent, borderColor: c.accent }, selectedText: { color: '#fff' },
+  ratingText: { color: c.text, fontWeight: '800' }, selected: { backgroundColor: c.accent, borderColor: c.accent }, selectedText: { color: '#0A1628' },
   ratingMeaning: { color: c.textSecondary, marginTop: 8 }, choices: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 12 },
   choice: { paddingVertical: 10, paddingHorizontal: 13, borderRadius: 10, borderWidth: 1, borderColor: c.border },
   choiceText: { color: c.text, fontWeight: '600' }, input: { color: c.text, minHeight: 100, marginTop: 12, borderWidth: 1, borderColor: c.border, borderRadius: 10, padding: 12, textAlignVertical: 'top' },
   disabled: { opacity: 0.75 }, count: { color: c.textMuted, textAlign: 'right', marginTop: 5, fontSize: 12 },
-  error: { color: '#B91C1C', marginTop: 7 }, errorBox: { color: '#B91C1C', backgroundColor: '#FEE2E2', padding: 12, borderRadius: 10, marginTop: 14 },
-  success: { color: '#166534', backgroundColor: '#DCFCE7', padding: 12, borderRadius: 10, marginTop: 14 },
+  error: { color: '#991B1B', marginTop: 7 }, errorBox: { color: '#991B1B', backgroundColor: '#FEF2F2', padding: 12, borderRadius: 10, marginTop: 14 },
+  success: { color: '#065F46', backgroundColor: '#ECFDF5', padding: 12, borderRadius: 10, marginTop: 14 },
   readOnly: { flexDirection: 'row', gap: 8, backgroundColor: c.surface, padding: 12, borderRadius: 10, marginTop: 14 }, readOnlyText: { color: c.textSecondary, flex: 1 },
   actions: { flexDirection: 'row', gap: 10, marginTop: 22 }, secondaryButton: { flex: 1, padding: 14, borderRadius: 11, borderWidth: 1, borderColor: c.accent, alignItems: 'center' },
-  primaryButton: { flex: 1, padding: 14, borderRadius: 11, backgroundColor: c.accent, alignItems: 'center' }, secondaryText: { color: c.accent, fontWeight: '800' }, primaryText: { color: '#fff', fontWeight: '800' },
+  primaryButton: { flex: 1, padding: 14, borderRadius: 8, backgroundColor: c.primary, alignItems: 'center' }, secondaryText: { color: c.heading, fontWeight: '800' }, primaryText: { color: '#fff', fontWeight: '800' },
   buttonDisabled: { opacity: 0.6 },
 });

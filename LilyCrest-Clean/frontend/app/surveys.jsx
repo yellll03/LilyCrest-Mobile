@@ -8,6 +8,7 @@ import { useAuth } from '../src/context/AuthContext';
 import { apiService } from '../src/services/api';
 import { saveCachedSurveyDashboard } from '../src/services/surveyDrafts';
 import { SURVEY_FEEDBACK_ENABLED } from '../src/config/features';
+import { ScreenHeader, StatusBadge } from '../src/components/ui/LilycrestUI';
 
 const LABELS = { QUARTERLY: 'Quarterly Survey', MOVE_OUT: 'Move-Out Survey' };
 const RESPONSE_STATUS_LABELS = {
@@ -79,7 +80,7 @@ export default function SurveysScreen() {
           <Text style={styles.meta}>Available: {formatDate(survey.availableFrom)} – {formatDate(survey.availableUntil)}</Text>
           <Text style={styles.meta}>Due: {formatDate(survey.availableUntil)}</Text>
           <Text style={styles.meta}>Estimated Time: 2–3 minutes</Text>
-          <Text style={styles.status}>Status: {RESPONSE_STATUS_LABELS[survey.tenantResponseStatus] || 'Unavailable'}</Text>
+          <View style={styles.status}><StatusBadge status={survey.tenantResponseStatus} label={RESPONSE_STATUS_LABELS[survey.tenantResponseStatus] || 'Unavailable'} /></View>
           <TouchableOpacity
             style={styles.button}
             onPress={() => router.push({ pathname: '/survey-form', params: { surveyId: survey.surveyId, responseStatus: survey.tenantResponseStatus } })}
@@ -93,10 +94,7 @@ export default function SurveysScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} accessibilityLabel="Back"><Ionicons name="arrow-back" size={24} color={colors.text} /></TouchableOpacity>
-        <Text style={styles.headerTitle}>Survey and Feedback</Text><View style={{ width: 24 }} />
-      </View>
+      <ScreenHeader strong title="Survey and Feedback" subtitle="Tenant experience records" onBack={() => router.back()} />
       {loading ? <View style={styles.center}><ActivityIndicator color={colors.accent} /><Text style={styles.helper}>Loading surveys…</Text></View> : (
         <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}>
           {unavailable ? (
@@ -107,7 +105,7 @@ export default function SurveysScreen() {
             </View>
           ) : error ? (
             <View style={styles.errorState}>
-              <Ionicons name="cloud-offline-outline" size={40} color="#B91C1C" />
+              <Ionicons name="cloud-offline-outline" size={40} color="#991B1B" />
               <Text style={styles.error}>{error}</Text>
               <TouchableOpacity style={styles.retryButton} onPress={() => { setLoading(true); load(); }}>
                 <Text style={styles.retryText}>Retry</Text>
@@ -136,22 +134,20 @@ export default function SurveysScreen() {
 
 const createStyles = (c) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: c.background },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 18, borderBottomWidth: 1, borderBottomColor: c.border },
-  headerTitle: { color: c.text, fontSize: 19, fontWeight: '800' },
   content: { padding: 18, paddingBottom: 40 },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   section: { marginBottom: 18 }, sectionTitle: { color: c.text, fontSize: 16, fontWeight: '800', marginBottom: 10 },
   sectionEmpty: { color: c.textSecondary, backgroundColor: c.surface, borderRadius: 12, padding: 14, lineHeight: 20 },
-  card: { backgroundColor: c.surface, padding: 16, borderRadius: 16, marginBottom: 12, borderWidth: 1, borderColor: c.border },
+  card: { backgroundColor: c.surface, padding: 16, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: c.border },
   cardTop: { flexDirection: 'row', gap: 12 }, flex: { flex: 1 },
   title: { color: c.text, fontSize: 16, fontWeight: '700' }, type: { color: c.textSecondary, marginTop: 3 },
-  meta: { color: c.textSecondary, marginTop: 9, fontSize: 13 }, status: { color: c.accent, fontWeight: '800', marginTop: 10, fontSize: 12 },
-  button: { backgroundColor: c.accent, padding: 12, borderRadius: 10, alignItems: 'center', marginTop: 12 },
+  meta: { color: c.textSecondary, marginTop: 9, fontSize: 13 }, status: { marginTop: 10 },
+  button: { backgroundColor: c.primary, padding: 12, borderRadius: 8, alignItems: 'center', marginTop: 12 },
   buttonText: { color: '#fff', fontWeight: '800' }, helper: { color: c.textSecondary, textAlign: 'center', marginTop: 10, lineHeight: 20 },
-  empty: { alignItems: 'center', padding: 30, backgroundColor: c.surface, borderRadius: 16, gap: 10 },
-  errorState: { alignItems: 'center', padding: 30, backgroundColor: '#FEE2E2', borderRadius: 16, gap: 12 },
-  error: { color: '#B91C1C', textAlign: 'center', fontWeight: '700' },
-  retryButton: { backgroundColor: '#B91C1C', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 24 },
+  empty: { alignItems: 'center', padding: 30, backgroundColor: c.surface, borderRadius: 12, gap: 10, borderWidth: 1, borderColor: c.border },
+  errorState: { alignItems: 'center', padding: 30, backgroundColor: '#FEF2F2', borderRadius: 12, gap: 12, borderWidth: 1, borderColor: '#DC2626' },
+  error: { color: '#991B1B', textAlign: 'center', fontWeight: '700' },
+  retryButton: { backgroundColor: '#991B1B', borderRadius: 10, paddingVertical: 10, paddingHorizontal: 24 },
   retryText: { color: '#fff', fontWeight: '800' },
   moveOutHelper: { color: c.textSecondary, lineHeight: 20, marginBottom: 18 },
 });

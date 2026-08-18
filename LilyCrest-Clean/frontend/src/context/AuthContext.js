@@ -959,7 +959,7 @@ export function AuthProvider({ children }) {
   if (isLoading) {
     return (
       <View style={styles.authLoadingContainer}>
-        <ActivityIndicator size="large" color="#204B7E" />
+        <ActivityIndicator size="large" color="#0A1628" />
         <Text style={styles.authLoadingTitle}>Preparing LilyCrest</Text>
         <Text style={styles.authLoadingText}>Checking your secure session...</Text>
       </View>
@@ -1040,7 +1040,7 @@ const styles = StyleSheet.create({
     marginTop: 6,
     fontSize: 13,
     fontWeight: '500',
-    color: '#64748B',
+    color: '#4B5563',
   },
   bannerOverlay: {
     position: 'absolute',
@@ -1056,7 +1056,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     backgroundColor: '#EFF6FF',
     borderWidth: 1,
-    borderColor: '#BFDBFE',
+    borderColor: '#2563EB',
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 10,
@@ -1093,6 +1093,6 @@ const styles = StyleSheet.create({
   bannerCloseText: {
     fontSize: 18,
     lineHeight: 18,
-    color: '#64748B',
+    color: '#4B5563',
   },
 });

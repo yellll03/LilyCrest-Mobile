@@ -56,9 +56,9 @@ function FollowupChips({ suggestions, onSelect }) {
           style={followupStyles.chip}
           onPress={() => onSelect(suggestion.prompt)}
         >
-          <Ionicons name="chatbubble-ellipses-outline" size={13} color="#ff9000" />
+          <Ionicons name="chatbubble-ellipses-outline" size={13} color="#D4AF37" />
           <Text style={followupStyles.text}>{suggestion.label}</Text>
-          <Ionicons name="chevron-forward" size={12} color="#ff9000" />
+          <Ionicons name="chevron-forward" size={12} color="#D4AF37" />
         </Pressable>
       ))}
     </View>
@@ -80,13 +80,13 @@ const followupStyles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: '#FDF6EC',
+    backgroundColor: '#FFFBEB',
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#F0D9A8',
+    borderColor: '#F3E4B0',
   },
   text: {
-    color: '#8B6914',
+    color: '#92400E',
     fontWeight: '600',
     fontSize: 12,
   },
@@ -96,7 +96,7 @@ function TypingIndicator({ label = 'Lily is thinking...' }) {
   return (
     <View style={typingStyles.row}>
       <View style={typingStyles.avatar}>
-        <LilyFlowerIcon size={20} glow={false} />
+        <LilyFlowerIcon size={20} />
       </View>
       <View style={typingStyles.bubble}>
         <View style={typingStyles.dot} />
@@ -120,7 +120,7 @@ const typingStyles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: '#16213b',
+    backgroundColor: '#0A1628',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
@@ -134,16 +134,16 @@ const typingStyles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
+    borderColor: '#E5E7EB',
   },
   dot: {
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: '#204b7e',
+    backgroundColor: '#0A1628',
   },
   label: {
-    color: '#94a3b8',
+    color: '#6B7280',
     fontSize: 12,
     fontWeight: '600',
     fontStyle: 'italic',
@@ -428,17 +428,17 @@ export default function LilyAssistantScreen() {
     switch (chatMode) {
       case CHAT_MODE.WAITING:
       case CHAT_MODE.NEEDS_ADMIN:
-        return { backgroundColor: '#f59e0b' };
+        return { backgroundColor: '#D97706' };
       case CHAT_MODE.ACTIVE:
       case CHAT_MODE.AWAITING_CONFIRMATION:
-        return { backgroundColor: '#38bdf8' };
+        return { backgroundColor: '#2563EB' };
       case CHAT_MODE.RESOLVED:
       case CHAT_MODE.CLOSED:
-        return { backgroundColor: '#22c55e' };
+        return { backgroundColor: '#059669' };
       case CHAT_MODE.UNAVAILABLE:
-        return { backgroundColor: '#ef4444' };
+        return { backgroundColor: '#DC2626' };
       default:
-        return { backgroundColor: '#22c55e' };
+        return { backgroundColor: '#059669' };
     }
   }, [chatMode]);
 
@@ -1202,23 +1202,23 @@ export default function LilyAssistantScreen() {
           <View style={styles.supportBannerContent}>
             <Text style={styles.supportBannerTitle}>Was your concern resolved?</Text>
             <Text style={styles.supportBannerText}>
-              Choose YES to resolve this inquiry, or NO to continue in the same conversation.
+              Please confirm whether the administrator&apos;s response solved your concern.
             </Text>
           </View>
           <View style={styles.supportBannerActions}>
             <Pressable
-              style={[styles.supportPrimaryButton, isConfirmingResolution && styles.buttonDisabled]}
+              style={[styles.supportPositiveButton, isConfirmingResolution && styles.buttonDisabled]}
               onPress={() => confirmInquiryResolution(true)}
               disabled={isConfirmingResolution}
             >
-              <Text style={styles.supportPrimaryButtonText}>YES</Text>
+              <Text style={styles.supportPrimaryButtonText}>Yes, resolved</Text>
             </Pressable>
             <Pressable
               style={[styles.supportGhostButton, isConfirmingResolution && styles.buttonDisabled]}
               onPress={() => confirmInquiryResolution(false)}
               disabled={isConfirmingResolution}
             >
-              <Text style={styles.supportGhostButtonText}>NO</Text>
+              <Text style={styles.supportGhostButtonText}>No, continue</Text>
             </Pressable>
           </View>
         </View>
@@ -1311,8 +1311,8 @@ export default function LilyAssistantScreen() {
           </Pressable>
           <View style={styles.detailHeaderInfo}>
             <Text style={styles.headerTitle}>Admin Support</Text>
-            <Text style={styles.headerSubtitle}>{selectedInquiry.title}</Text>
             <Text style={styles.headerTicketId}>{selectedInquiry.ticketId}</Text>
+            <Text style={styles.headerSubtitle}>{selectedInquiry.title}</Text>
           </View>
           <View style={[styles.statusChip, isSolved ? styles.statusChipSolved : null]}>
             <Text style={[styles.statusChipText, isSolved ? styles.statusChipTextSolved : null]}>
@@ -1363,7 +1363,7 @@ export default function LilyAssistantScreen() {
           {isSolved ? (
             <View style={styles.resolvedActions}>
               <View style={styles.resolvedNotice}>
-                <Ionicons name="checkmark-circle" size={16} color="#15803d" />
+                <Ionicons name="checkmark-circle" size={16} color="#065F46" />
                 <Text style={styles.resolvedNoticeText}>This support conversation is resolved.</Text>
               </View>
               {resolvedTimestamp ? (
@@ -1386,21 +1386,21 @@ export default function LilyAssistantScreen() {
           ) : isAwaitingConfirmation ? (
             <View style={styles.resolvedActions}>
               <Text style={styles.resolvedNoticeText}>Was your concern resolved?</Text>
-              <Text style={styles.reopenPrompt}>NO keeps this same inquiry active with all history intact.</Text>
+              <Text style={styles.reopenPrompt}>Continue the same inquiry if the administrator&apos;s response did not solve it.</Text>
               <View style={styles.supportBannerActions}>
                 <Pressable
-                  style={[styles.primaryFooterButton, isConfirmingResolution && styles.buttonDisabled]}
+                  style={[styles.primaryFooterButton, styles.positiveFooterButton, isConfirmingResolution && styles.buttonDisabled]}
                   onPress={() => confirmInquiryResolution(true, selectedInquiry.id)}
                   disabled={isConfirmingResolution}
                 >
-                  <Text style={styles.primaryFooterButtonText}>YES</Text>
+                  <Text style={styles.primaryFooterButtonText}>Yes, resolved</Text>
                 </Pressable>
                 <Pressable
                   style={[styles.supportGhostButton, isConfirmingResolution && styles.buttonDisabled]}
                   onPress={() => confirmInquiryResolution(false, selectedInquiry.id)}
                   disabled={isConfirmingResolution}
                 >
-                  <Text style={styles.supportGhostButtonText}>NO</Text>
+                  <Text style={styles.supportGhostButtonText}>No, continue</Text>
                 </Pressable>
               </View>
             </View>
@@ -1409,7 +1409,7 @@ export default function LilyAssistantScreen() {
               <TextInput
                 style={styles.replyInput}
                 placeholder="Reply to admin support..."
-                placeholderTextColor="#94a3b8"
+                placeholderTextColor="#6B7280"
                 value={replyText}
                 onChangeText={setReplyText}
                 multiline
@@ -1467,7 +1467,7 @@ export default function LilyAssistantScreen() {
             <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
               <View style={styles.headerLeft}>
                 <View style={styles.headerAvatar}>
-                  <LilyFlowerIcon size={50} glow={false} pulse={isSending} />
+                  <LilyFlowerIcon size={50} pulse={isSending} />
                 </View>
                 <View style={styles.headerTextWrap}>
                   <Text style={styles.headerTitle}>Lily</Text>
@@ -1492,7 +1492,7 @@ export default function LilyAssistantScreen() {
                     clearEscalationPrompt();
                   }}
                 >
-                  <Ionicons name="refresh-outline" size={16} color="#ff9000" />
+                  <Ionicons name="refresh-outline" size={16} color="#D4AF37" />
                   <Text style={styles.newChatButtonText}>New</Text>
                 </Pressable>
               ) : null}
@@ -1504,7 +1504,7 @@ export default function LilyAssistantScreen() {
                   <Text style={[styles.tabText, activeTab === tab ? styles.tabTextActive : null]}>
                     {tab === 'chat' ? 'Chat' : 'My Inquiries'}
                   </Text>
-                  {activeTab === tab ? <View style={[styles.tabIndicator, { backgroundColor: '#ff9000' }]} /> : null}
+                  {activeTab === tab ? <View style={[styles.tabIndicator, { backgroundColor: '#D4AF37' }]} /> : null}
                 </Pressable>
               ))}
             </View>
@@ -1535,7 +1535,7 @@ export default function LilyAssistantScreen() {
                   <View style={styles.heroCard}>
                     <View style={styles.heroRow}>
                       <View style={styles.heroBadge}>
-                        <LilyFlowerIcon size={58} glow={false} pulse />
+                        <LilyFlowerIcon size={58} pulse />
                       </View>
                       <View style={styles.heroTextWrap}>
                         <Text style={styles.heroTitle}>
@@ -1609,7 +1609,7 @@ export default function LilyAssistantScreen() {
                           style={styles.quickAction}
                           onPress={() => handleQuickAction(action)}
                         >
-                          <Ionicons name={action.icon} size={15} color="#ff9000" />
+                          <Ionicons name={action.icon} size={15} color="#D4AF37" />
                           <Text style={styles.quickActionText}>{action.label}</Text>
                         </Pressable>
                       ))}
@@ -1640,7 +1640,7 @@ export default function LilyAssistantScreen() {
                         onPress={() => setShowAttachMenu((value) => !value)}
                         disabled={isInputDisabled || !canAttach}
                       >
-                        <Ionicons name="attach" size={20} color="#1a2744" />
+                        <Ionicons name="attach" size={20} color="#0A1628" />
                       </Pressable>
                     </View> : null}
 
@@ -1653,7 +1653,7 @@ export default function LilyAssistantScreen() {
                             ? 'Continue with Lily when ready.'
                             : 'Type your concern here...'
                       }
-                      placeholderTextColor="#94a3b8"
+                      placeholderTextColor="#6B7280"
                       value={inputValue}
                       onChangeText={(value) => {
                         setInputValue(value);
@@ -1684,7 +1684,7 @@ export default function LilyAssistantScreen() {
                         disabled={isSending}
                       >
                         <View style={styles.attachMenuRow}>
-                          <Ionicons name="images-outline" size={18} color="#f8fafc" />
+                          <Ionicons name="images-outline" size={18} color={colors.text} />
                           <Text style={styles.attachMenuText}>Upload Image</Text>
                         </View>
                       </Pressable>
@@ -1694,7 +1694,7 @@ export default function LilyAssistantScreen() {
                         disabled={isSending}
                       >
                         <View style={styles.attachMenuRow}>
-                          <Ionicons name="document-text-outline" size={18} color="#f8fafc" />
+                          <Ionicons name="document-text-outline" size={18} color={colors.text} />
                           <Text style={styles.attachMenuText}>Upload Document</Text>
                         </View>
                       </Pressable>
@@ -1704,7 +1704,7 @@ export default function LilyAssistantScreen() {
                         disabled={isSending}
                       >
                         <View style={styles.attachMenuRow}>
-                          <Ionicons name="camera-outline" size={18} color="#f8fafc" />
+                          <Ionicons name="camera-outline" size={18} color={colors.text} />
                           <Text style={styles.attachMenuText}>Take Photo</Text>
                         </View>
                       </Pressable>
@@ -1753,7 +1753,7 @@ export default function LilyAssistantScreen() {
                                 : 'chatbubbles-outline'
                           }
                           size={36}
-                          color="#94a3b8"
+                          color="#6B7280"
                         />
                       </View>
                       <Text style={styles.emptyStateTitle}>
@@ -1816,7 +1816,7 @@ function createAssistantStyles(c, dark) {
     justifyContent: 'space-between',
     zIndex: 20,
     borderBottomWidth: 3,
-    borderBottomColor: '#ff9000',
+    borderBottomColor: '#D4AF37',
   },
   headerLeft: {
     flexDirection: 'row',
@@ -1828,11 +1828,11 @@ function createAssistantStyles(c, dark) {
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: 'rgba(0,0,0,0.2)',
+    backgroundColor: 'rgba(255,255,255,0.08)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
+    borderColor: '#D4AF37',
   },
   headerTextWrap: {
     flex: 1,
@@ -1849,7 +1849,7 @@ function createAssistantStyles(c, dark) {
     marginTop: 3,
   },
   headerSubtitle: {
-    color: '#94a3b8',
+    color: '#D0D7E2',
     fontSize: 12,
     fontWeight: '500',
   },
@@ -1857,7 +1857,7 @@ function createAssistantStyles(c, dark) {
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: '#22c55e',
+    backgroundColor: '#059669',
   },
   newChatButton: {
     flexDirection: 'row',
@@ -1865,11 +1865,11 @@ function createAssistantStyles(c, dark) {
     gap: 5,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: 'rgba(212,148,42,0.15)',
-    borderRadius: 10,
+    backgroundColor: 'rgba(212,175,55,0.14)',
+    borderRadius: 8,
   },
   newChatButtonText: {
-    color: '#ff9000',
+    color: '#D4AF37',
     fontWeight: '700',
     fontSize: 12,
   },
@@ -1900,7 +1900,7 @@ function createAssistantStyles(c, dark) {
     right: '20%',
     height: 3,
     borderRadius: 2,
-    backgroundColor: '#204b7e',
+    backgroundColor: '#D4AF37',
   },
   body: {
     flex: 1,
@@ -1910,14 +1910,14 @@ function createAssistantStyles(c, dark) {
     gap: 10,
   },
   errorBanner: {
-    backgroundColor: '#fef3c7',
-    borderColor: '#fde68a',
+    backgroundColor: '#FEF2F2',
+    borderColor: '#DC2626',
     borderWidth: 1,
     padding: 10,
     borderRadius: 12,
   },
   errorBannerText: {
-    color: '#92400e',
+    color: '#991B1B',
     fontSize: 12,
     fontWeight: '600',
   },
@@ -1932,7 +1932,7 @@ function createAssistantStyles(c, dark) {
   },
   heroCard: {
     backgroundColor: c.surface,
-    borderRadius: 20,
+    borderRadius: 12,
     padding: 18,
     marginBottom: 14,
     borderWidth: 1,
@@ -1948,11 +1948,11 @@ function createAssistantStyles(c, dark) {
     width: 70,
     height: 70,
     borderRadius: 35,
-    backgroundColor: 'rgba(0,0,0,0.2)',
+    backgroundColor: dark ? c.surfaceSecondary : '#FBF7EA',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.15)',
+    borderColor: '#D4AF37',
   },
   heroTextWrap: {
     flex: 1,
@@ -1977,7 +1977,7 @@ function createAssistantStyles(c, dark) {
     paddingHorizontal: 14,
     paddingVertical: 9,
     backgroundColor: c.surfaceSecondary,
-    borderRadius: 20,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: c.border,
   },
@@ -2006,7 +2006,7 @@ function createAssistantStyles(c, dark) {
     paddingHorizontal: 14,
     paddingVertical: 10,
     backgroundColor: c.surface,
-    borderRadius: 20,
+    borderRadius: 8,
     borderWidth: 1,
     borderColor: c.border,
   },
@@ -2024,10 +2024,10 @@ function createAssistantStyles(c, dark) {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: '#fff7ed',
-    borderRadius: 14,
+    backgroundColor: '#FFFBEB',
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#fdba74',
+    borderColor: '#F3E4B0',
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
@@ -2035,10 +2035,10 @@ function createAssistantStyles(c, dark) {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: '#eff6ff',
-    borderRadius: 14,
+    backgroundColor: '#EFF6FF',
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#bfdbfe',
+    borderColor: '#2563EB',
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
@@ -2046,10 +2046,10 @@ function createAssistantStyles(c, dark) {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: '#fef2f2',
-    borderRadius: 14,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#fecaca',
+    borderColor: '#DC2626',
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
@@ -2073,8 +2073,8 @@ function createAssistantStyles(c, dark) {
     gap: 8,
   },
   supportPrimaryButton: {
-    backgroundColor: '#204b7e',
-    borderRadius: 18,
+    backgroundColor: '#0A1628',
+    borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 8,
   },
@@ -2083,9 +2083,17 @@ function createAssistantStyles(c, dark) {
     fontWeight: '700',
     fontSize: 12,
   },
+  supportPositiveButton: {
+    backgroundColor: '#059669',
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
   supportGhostButton: {
-    backgroundColor: dark ? 'rgba(255,255,255,0.08)' : 'rgba(15,23,42,0.06)',
-    borderRadius: 18,
+    backgroundColor: c.surface,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: c.border,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
@@ -2095,13 +2103,15 @@ function createAssistantStyles(c, dark) {
     fontSize: 12,
   },
   supportDangerButton: {
-    backgroundColor: '#ef4444',
-    borderRadius: 18,
+    backgroundColor: '#FEF2F2',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#DC2626',
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
   supportDangerButtonText: {
-    color: '#ffffff',
+    color: '#991B1B',
     fontWeight: '700',
     fontSize: 12,
   },
@@ -2115,13 +2125,13 @@ function createAssistantStyles(c, dark) {
     gap: 7,
     paddingHorizontal: 14,
     paddingVertical: 10,
-    backgroundColor: '#FDF6EC',
-    borderRadius: 20,
+    backgroundColor: '#FFFBEB',
+    borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#F0D9A8',
+    borderColor: '#F3E4B0',
   },
   quickActionText: {
-    color: '#8B6914',
+    color: '#92400E',
     fontWeight: '700',
     fontSize: 12,
   },
@@ -2158,7 +2168,7 @@ function createAssistantStyles(c, dark) {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: c.surface,
-    borderRadius: 24,
+    borderRadius: 12,
     borderWidth: 1.5,
     borderColor: c.border,
     paddingHorizontal: 10,
@@ -2188,10 +2198,10 @@ function createAssistantStyles(c, dark) {
     color: c.text,
   },
   sendButton: {
-    backgroundColor: '#204b7e',
+    backgroundColor: '#0A1628',
     paddingHorizontal: 16,
     paddingVertical: 10,
-    borderRadius: 20,
+    borderRadius: 8,
   },
   sendButtonText: {
     color: '#ffffff',
@@ -2236,7 +2246,7 @@ function createAssistantStyles(c, dark) {
     gap: 12,
   },
   attachMenuText: {
-    color: '#f1f5f9',
+    color: c.text,
     fontWeight: '600',
     fontSize: 14,
   },
@@ -2308,7 +2318,7 @@ function createAssistantStyles(c, dark) {
     flex: 1,
   },
   headerTicketId: {
-    color: '#fed7aa',
+    color: '#F3E4B0',
     fontSize: 10,
     fontWeight: '700',
     letterSpacing: 0.5,
@@ -2318,20 +2328,21 @@ function createAssistantStyles(c, dark) {
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 12,
-    backgroundColor: 'rgba(255,255,255,0.12)',
+    backgroundColor: '#FFFBEB',
     borderWidth: 1,
-    borderColor: '#fed7aa',
+    borderColor: '#D97706',
   },
   statusChipSolved: {
-    borderColor: '#86efac',
+    backgroundColor: '#ECFDF5',
+    borderColor: '#059669',
   },
   statusChipText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#fed7aa',
+    color: '#92400E',
   },
   statusChipTextSolved: {
-    color: '#86efac',
+    color: '#065F46',
   },
   detailMessages: {
     flex: 1,
@@ -2376,7 +2387,7 @@ function createAssistantStyles(c, dark) {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#204b7e',
+    backgroundColor: '#0A1628',
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 2,
@@ -2398,13 +2409,13 @@ function createAssistantStyles(c, dark) {
     borderBottomLeftRadius: 4,
   },
   threadBubbleUser: {
-    backgroundColor: '#E07840',
+    backgroundColor: '#0A1628',
     borderBottomRightRadius: 4,
   },
   threadLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#ff9000',
+    color: '#D4AF37',
     marginBottom: 4,
   },
   threadText: {
@@ -2417,7 +2428,7 @@ function createAssistantStyles(c, dark) {
   },
   threadTime: {
     fontSize: 10,
-    color: '#94a3b8',
+    color: '#6B7280',
     textAlign: 'right',
     marginTop: 4,
   },
@@ -2448,15 +2459,15 @@ function createAssistantStyles(c, dark) {
   resolvedNoticeText: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#15803d',
+    color: '#065F46',
   },
   primaryFooterButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#204b7e',
-    borderRadius: 24,
+    backgroundColor: '#0A1628',
+    borderRadius: 8,
     paddingVertical: 12,
     paddingHorizontal: 20,
   },
@@ -2464,6 +2475,9 @@ function createAssistantStyles(c, dark) {
     color: '#ffffff',
     fontWeight: '700',
     fontSize: 14,
+  },
+  positiveFooterButton: {
+    backgroundColor: '#059669',
   },
   replyBar: {
     flexDirection: 'row',

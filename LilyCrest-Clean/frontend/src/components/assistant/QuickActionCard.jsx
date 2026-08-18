@@ -1,12 +1,14 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { useTheme } from '../../context/ThemeContext';
 
 export default function QuickActionCard({ label, note, onPress }) {
+  const { colors } = useTheme();
   return (
-    <Pressable style={styles.card} onPress={onPress}>
+    <Pressable style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={onPress}>
       <View style={styles.iconDot} />
       <View style={styles.textCol}>
-        <Text style={styles.label}>{label}</Text>
-        {note ? <Text style={styles.note}>{note}</Text> : null}
+        <Text style={[styles.label, { color: colors.heading }]}>{label}</Text>
+        {note ? <Text style={[styles.note, { color: colors.textSecondary }]}>{note}</Text> : null}
       </View>
     </Pressable>
   );
@@ -15,11 +17,9 @@ export default function QuickActionCard({ label, note, onPress }) {
 const styles = StyleSheet.create({
   card: {
     width: '48%',
-    backgroundColor: '#F4F6FA',
     borderRadius: 12,
     padding: 12,
     borderWidth: 1,
-    borderColor: '#D8E2F0',
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
@@ -28,7 +28,7 @@ const styles = StyleSheet.create({
     width: 12,
     height: 12,
     borderRadius: 6,
-    backgroundColor: '#ff9000',
+    backgroundColor: '#D4AF37',
   },
   textCol: {
     flex: 1,
@@ -37,10 +37,8 @@ const styles = StyleSheet.create({
   label: {
     fontSize: 14,
     fontWeight: '700',
-    color: '#1a2744',
   },
   note: {
     fontSize: 12,
-    color: '#4a5568',
   },
 });

@@ -15,9 +15,9 @@ describe('standalone release artifact contract', () => {
   test('native and Expo versions are bumped together', () => {
     const config = read('app.config.js');
     const gradle = read('android/app/build.gradle');
-    expect(config).toContain("version: '1.1.16'");
-    expect(config).toContain('versionCode: 18');
-    expect(gradle).toContain('versionName "1.1.16"');
-    expect(gradle).toContain('versionCode 18');
+    expect(config).toContain("version: '1.2.0'");
+    expect(config).toContain('versionCode: 19');
+    expect(gradle).toContain('versionName "1.2.0"');
+    expect(gradle).toContain('versionCode 19');
   });
 });

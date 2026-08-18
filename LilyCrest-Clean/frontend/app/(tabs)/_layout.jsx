@@ -52,49 +52,9 @@ function AnimatedTabIcon({ focused, iconName, focusedIconName, label, colors, st
   );
 }
 
-// Home Tab Icon with animation only when focused
-function HomeTabIcon({ focused, colors, styles }) {
-  const scaleAnim = useRef(new Animated.Value(1)).current;
-  const elevateAnim = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    Animated.parallel([
-      Animated.spring(scaleAnim, {
-        toValue: focused ? 1.1 : 1,
-        friction: 5,
-        useNativeDriver: true,
-      }),
-      Animated.timing(elevateAnim, {
-        toValue: focused ? -8 : 0,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-    ]).start();
-  }, [elevateAnim, focused, scaleAnim]);
-
-  return (
-    <View style={styles.homeTabItem}>
-      <Animated.View style={[
-        styles.homeButton,
-        focused && styles.homeButtonActive,
-        { transform: [{ scale: scaleAnim }, { translateY: elevateAnim }] }
-      ]}>
-        <Ionicons
-          name="home"
-          size={24}
-          color="#FFFFFF"
-        />
-      </Animated.View>
-      <Text style={[styles.homeLabel, focused && styles.homeLabelActive]} numberOfLines={1}>
-        Home
-      </Text>
-    </View>
-  );
-}
-
 export default function TabLayout() {
-  const { colors, isDarkMode } = useTheme();
-  const styles = useMemo(() => createStyles(colors, isDarkMode), [colors, isDarkMode]);
+  const { colors } = useTheme();
+  const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <Tabs
       backBehavior="history"
@@ -142,7 +102,16 @@ export default function TabLayout() {
         name="home"
         options={{
           title: 'Home',
-          tabBarIcon: ({ focused }) => <HomeTabIcon focused={focused} colors={colors} styles={styles} />,
+          tabBarIcon: ({ focused }) => (
+            <AnimatedTabIcon
+              focused={focused}
+              iconName="home-outline"
+              focusedIconName="home"
+              label="Home"
+              colors={colors}
+              styles={styles}
+            />
+          ),
         }}
       />
       <Tabs.Screen
@@ -194,7 +163,7 @@ export default function TabLayout() {
   );
 }
 
-const createStyles = (colors, isDarkMode) => StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   tabBar: {
     backgroundColor: colors.surface,
     height: Platform.OS === 'ios' ? 88 : 72,
@@ -205,20 +174,20 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    borderTopWidth: isDarkMode ? 1 : 0,
+    borderTopWidth: 1,
     borderTopColor: colors.border,
     ...Platform.select({
       ios: {
-        shadowColor: colors.accent,
-        shadowOffset: { width: 0, height: -8 },
+        shadowColor: '#0A1628',
+        shadowOffset: { width: 0, height: -2 },
         shadowOpacity: 0.08,
-        shadowRadius: 16,
+        shadowRadius: 8,
       },
       android: {
-        elevation: 20,
+        elevation: 3,
       },
       web: {
-        boxShadow: '0 -8px 24px rgba(30, 58, 95, 0.08)',
+        boxShadow: '0 -2px 8px rgba(10,22,40,0.08)',
       },
     }),
   },
@@ -231,7 +200,7 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   iconWrapper: {
     width: 44,
     height: 32,
-    borderRadius: 16,
+    borderRadius: 12,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 2,
@@ -247,47 +216,6 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     color: colors.primary,
     fontWeight: '600',
   },
-  homeTabItem: {
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 4,
-  },
-  homeButton: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.textMuted,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 2,
-  },
-  homeButtonActive: {
-    backgroundColor: colors.accent,
-    ...Platform.select({
-      ios: {
-        shadowColor: colors.accent,
-        shadowOffset: { width: 0, height: 4 },
-        shadowOpacity: 0.35,
-        shadowRadius: 8,
-      },
-      android: {
-        elevation: 8,
-      },
-      web: {
-        boxShadow: '0 4px 16px rgba(30, 58, 95, 0.35)',
-      },
-    }),
-  },
-  homeLabel: {
-    fontSize: 10,
-    fontWeight: '500',
-    color: colors.textMuted,
-    marginTop: 2,
-  },
-  homeLabelActive: {
-    color: colors.primary,
-    fontWeight: '600',
-  },
   badgeDot: {
     position: 'absolute',
     top: 0,
@@ -295,7 +223,7 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     minWidth: 16,
     height: 16,
     borderRadius: 8,
-    backgroundColor: '#EF4444',
+    backgroundColor: '#DC2626',
     justifyContent: 'center',
     alignItems: 'center',
     paddingHorizontal: 3,

@@ -81,12 +81,12 @@ export default function ResetPasswordHandoffScreen() {
 
 const createStyles = (colors) => StyleSheet.create({
   container: { flex: 1, justifyContent: 'center', padding: 24, backgroundColor: colors.background },
-  card: { padding: 28, borderRadius: 20, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
-  iconBox: { width: 78, height: 78, borderRadius: 24, alignSelf: 'center', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primaryLight, marginBottom: 22 },
+  card: { padding: 28, borderRadius: 12, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border },
+  iconBox: { width: 78, height: 78, borderRadius: 12, alignSelf: 'center', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.primaryLight, marginBottom: 22 },
   title: { color: colors.text, fontSize: 26, fontWeight: '700', textAlign: 'center', marginBottom: 10 },
   subtitle: { color: colors.textSecondary, fontSize: 15, lineHeight: 22, textAlign: 'center', marginBottom: 24 },
-  error: { color: '#B91C1C', textAlign: 'center', marginBottom: 14 },
-  primaryButton: { backgroundColor: colors.accent, borderRadius: 12, paddingVertical: 15, alignItems: 'center' },
+  error: { color: '#991B1B', textAlign: 'center', marginBottom: 14 },
+  primaryButton: { backgroundColor: colors.primary, borderRadius: 8, paddingVertical: 15, alignItems: 'center' },
   disabled: { opacity: 0.6 },
   primaryText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   secondaryButton: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 12 },

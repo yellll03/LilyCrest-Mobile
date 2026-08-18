@@ -61,27 +61,27 @@ function getCategoryMeta(notification = {}) {
   const text = `${cat} ${title} ${body}`;
 
   if (cat === 'billing' || text.includes('billing') || text.includes('payment') || text.includes('invoice')) {
-    return { bg: '#DBEAFE', color: '#2563EB', icon: 'card-outline' };
+    return { bg: '#EFF6FF', color: '#2563EB', icon: 'card-outline' };
   }
   if (cat === 'maintenance' || text.includes('maintenance') || text.includes('repair')) {
-    return { bg: '#FEF3C7', color: '#D97706', icon: 'construct-outline' };
+    return { bg: '#FFFBEB', color: '#D97706', icon: 'construct-outline' };
   }
   if (cat === 'reservation' || text.includes('reservation') || text.includes('amenity')) {
-    return { bg: '#DCFCE7', color: '#16A34A', icon: 'calendar-outline' };
+    return { bg: '#ECFDF5', color: '#059669', icon: 'calendar-outline' };
   }
   if (cat === 'assistant' || text.includes('lily assistant') || text.includes('chatbot')) {
-    return { bg: '#F3E8FF', color: '#9333EA', icon: 'chatbubble-ellipses-outline' };
+    return { bg: '#FBF7EA', color: '#B9921F', icon: 'chatbubble-ellipses-outline' };
   }
   if (cat === 'security' || text.includes('password') || text.includes('security')) {
-    return { bg: '#FEE2E2', color: '#DC2626', icon: 'shield-checkmark-outline' };
+    return { bg: '#FEF2F2', color: '#DC2626', icon: 'shield-checkmark-outline' };
   }
   if (cat === 'announcement' || text.includes('announcement') || text.includes('notice')) {
-    return { bg: '#EEF2FF', color: '#4F46E5', icon: 'megaphone-outline' };
+    return { bg: '#F1F5F9', color: '#2563EB', icon: 'megaphone-outline' };
   }
   if (text.includes('reminder') || text.includes('due') || text.includes('overdue')) {
-    return { bg: '#FEE2E2', color: '#DC2626', icon: 'alarm-outline' };
+    return { bg: '#FEF2F2', color: '#DC2626', icon: 'alarm-outline' };
   }
-  return { bg: '#EEF2FF', color: '#4F46E5', icon: 'megaphone-outline' };
+  return { bg: '#F1F5F9', color: '#2563EB', icon: 'megaphone-outline' };
 }
 
 export default function AppHeader() {
@@ -216,7 +216,7 @@ export default function AppHeader() {
         alignItems: 'center',
         justifyContent: 'center',
         borderBottomWidth: 3,
-        borderBottomColor: '#ff9000',
+        borderBottomColor: c.accent,
       },
       spacer: { width: 40 },
       titleContainer: { flex: 1, alignItems: 'center' },
@@ -251,7 +251,7 @@ export default function AppHeader() {
         minWidth: 16,
         height: 16,
         borderRadius: 8,
-        backgroundColor: '#EF4444',
+        backgroundColor: '#DC2626',
         justifyContent: 'center',
         alignItems: 'center',
         paddingHorizontal: 3,
@@ -330,7 +330,7 @@ export default function AppHeader() {
         minWidth: 18,
         height: 18,
         borderRadius: 9,
-        backgroundColor: '#EF4444',
+        backgroundColor: '#DC2626',
         justifyContent: 'center',
         alignItems: 'center',
         paddingHorizontal: 4,
@@ -348,12 +348,12 @@ export default function AppHeader() {
       headerAction: {
         fontSize: 12,
         fontWeight: '500',
-        color: c.primary || '#204b7e',
+        color: c.primary || '#0A1628',
       },
       headerActionBold: {
         fontSize: 12,
         fontWeight: '600',
-        color: c.primary || '#204b7e',
+        color: c.primary || '#0A1628',
       },
       closeBtn: {
         width: 24,
@@ -364,7 +364,7 @@ export default function AppHeader() {
         alignItems: 'center',
       },
       closeBtnIcon: {
-        color: dark ? '#94A3B8' : '#64748B',
+        color: dark ? '#6B7280' : '#4B5563',
       },
 
       // ── Notification items ──────────────────────────────────────────────
@@ -379,9 +379,9 @@ export default function AppHeader() {
         gap: 10,
       },
       notificationItemUnread: {
-        backgroundColor: dark ? 'rgba(59,130,246,0.07)' : 'rgba(59,130,246,0.04)',
+        backgroundColor: c.surface,
         borderLeftWidth: 2.5,
-        borderLeftColor: '#3B82F6',
+        borderLeftColor: c.accent,
         paddingLeft: 13,
       },
       categoryIconWrap: {
@@ -400,7 +400,7 @@ export default function AppHeader() {
         width: 8,
         height: 8,
         borderRadius: 4,
-        backgroundColor: '#3B82F6',
+        backgroundColor: c.accent,
         borderWidth: 1.5,
         borderColor: c.surface,
       },
@@ -648,7 +648,7 @@ export default function AppHeader() {
                     <Ionicons
                       name="notifications-off-outline"
                       size={22}
-                      color={isDarkMode ? '#94A3B8' : '#94A3B8'}
+                      color={isDarkMode ? '#6B7280' : '#6B7280'}
                     />
                   </View>
                   <Text style={styles.emptyTitle}>All caught up</Text>

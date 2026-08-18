@@ -29,7 +29,7 @@ describe('critical mobile fixes', () => {
 
   test('bill details recognizes every canonical status the backend can return, including rejected', () => {
     const source = read('app/bill-details.jsx');
-    expect(source).toContain("rejected: { bg: '#fef2f2', text: '#b91c1c', icon: 'close-circle', label: 'Payment Rejected' }");
+    expect(source).toContain("rejected: { bg: '#FEF2F2', text: '#991B1B', icon: 'close-circle', label: 'Payment Rejected' }");
     // All 7 canonical statuses must have a STATUS_CONFIG entry so the badge
     // never silently falls back to "Unpaid" for a bill that's actually
     // overdue, under review, partially paid, rejected, or cancelled.

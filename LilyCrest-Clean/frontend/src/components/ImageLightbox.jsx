@@ -75,7 +75,7 @@ export default function ImageLightbox({ visible, images, initialIndex = 0, onClo
           ) : null}
           {loadState === 'error' ? (
             <View style={styles.overlay}>
-              <Ionicons name="image-outline" size={48} color="#9CA3AF" />
+              <Ionicons name="image-outline" size={48} color="#6B7280" />
               <Text style={styles.errorText}>Unable to load this image.</Text>
             </View>
           ) : null}

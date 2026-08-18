@@ -73,7 +73,7 @@ async function ensureAndroidNotificationChannel() {
       name: 'LilyCrest Notifications',
       importance: Notifications.AndroidImportance.HIGH,
       vibrationPattern: [0, 250, 250, 250],
-      lightColor: '#204b7e',
+      lightColor: '#0A1628',
       sound: 'default',
     });
   } catch (error) {

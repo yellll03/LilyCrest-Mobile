@@ -384,11 +384,11 @@ export default function LoginScreen() {
           {/* Login Error Banner — placed above the form so it's always visible */}
           {loginError ? (() => {
             const cfg = {
-              credentials: { bg: '#FEF2F2', border: '#FECACA', text: '#991B1B', icon: 'lock-closed', iconColor: '#EF4444' },
-              access:      { bg: '#FFF7ED', border: '#FED7AA', text: '#92400E', icon: 'shield-checkmark', iconColor: '#F97316' },
-              ratelimit:   { bg: '#FFFBEB', border: '#FDE68A', text: '#92400E', icon: 'time', iconColor: '#F59E0B' },
-              network:     { bg: '#F0F9FF', border: '#BAE6FD', text: '#0C4A6E', icon: 'wifi', iconColor: '#0EA5E9' },
-            }[loginError.type] || { bg: '#FEF2F2', border: '#FECACA', text: '#991B1B', icon: 'alert-circle', iconColor: '#EF4444' };
+              credentials: { bg: '#FEF2F2', border: '#DC2626', text: '#991B1B', icon: 'lock-closed', iconColor: '#DC2626' },
+              access:      { bg: '#FFFBEB', border: '#F3E4B0', text: '#92400E', icon: 'shield-checkmark', iconColor: '#D97706' },
+              ratelimit:   { bg: '#FFFBEB', border: '#F3E4B0', text: '#92400E', icon: 'time', iconColor: '#D97706' },
+              network:     { bg: '#EFF6FF', border: '#2563EB', text: '#1E40AF', icon: 'wifi', iconColor: '#2563EB' },
+            }[loginError.type] || { bg: '#FEF2F2', border: '#DC2626', text: '#991B1B', icon: 'alert-circle', iconColor: '#DC2626' };
             return (
               <View style={[styles.loginErrorContainer, { backgroundColor: cfg.bg, borderColor: cfg.border }]}>
                 <Ionicons name={cfg.icon} size={18} color={cfg.iconColor} />
@@ -403,11 +403,11 @@ export default function LoginScreen() {
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Email Address</Text>
               <View style={[styles.inputWrapper, showEmailFieldError && styles.inputWrapperError, !showEmailFieldError && touched.email && isEmailValid && styles.inputWrapperSuccess]}>
-                <Ionicons name="mail-outline" size={20} color={showEmailFieldError ? '#EF4444' : '#9CA3AF'} style={styles.inputIcon} />
+                <Ionicons name="mail-outline" size={20} color={showEmailFieldError ? '#DC2626' : '#6B7280'} style={styles.inputIcon} />
                 <TextInput 
                   style={styles.input} 
                   placeholder="Enter your email" 
-                  placeholderTextColor="#9CA3AF" 
+                  placeholderTextColor="#6B7280"
                   value={email} 
                   onChangeText={(text) => setEmail((text || '').replace(/\s+/g, ''))} 
                   onBlur={() => setTouched(prev => ({ ...prev, email: true }))} 
@@ -415,11 +415,11 @@ export default function LoginScreen() {
                   autoCapitalize="none" 
                   autoCorrect={false} 
                 />
-                {!showEmailFieldError && touched.email && isEmailValid && <Ionicons name="checkmark-circle" size={20} color="#22C55E" />}
+                {!showEmailFieldError && touched.email && isEmailValid && <Ionicons name="checkmark-circle" size={20} color="#059669" />}
               </View>
               {touched.email && errors.email && !loginError ? (
                 <View style={styles.errorContainer}>
-                  <Ionicons name="alert-circle" size={14} color="#EF4444" />
+                  <Ionicons name="alert-circle" size={14} color="#DC2626" />
                   <Text style={styles.errorText}>{errors.email}</Text>
                 </View>
               ) : null}
@@ -429,23 +429,23 @@ export default function LoginScreen() {
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Password</Text>
               <View style={[styles.inputWrapper, showPasswordFieldError && styles.inputWrapperError, !showPasswordFieldError && touched.password && isPasswordValid && styles.inputWrapperSuccess]}>
-                <Ionicons name="lock-closed-outline" size={20} color={showPasswordFieldError ? '#EF4444' : '#9CA3AF'} style={styles.inputIcon} />
+                <Ionicons name="lock-closed-outline" size={20} color={showPasswordFieldError ? '#DC2626' : '#6B7280'} style={styles.inputIcon} />
                 <TextInput 
                   style={styles.input} 
                   placeholder="Enter your password" 
-                  placeholderTextColor="#9CA3AF" 
+                  placeholderTextColor="#6B7280"
                   value={password} 
                   onChangeText={handlePasswordChange}
                   onBlur={() => setTouched(prev => ({ ...prev, password: true }))} 
                   secureTextEntry={!showPassword} 
                 />
                 <TouchableOpacity onPress={() => setShowPassword(!showPassword)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                  <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#9CA3AF" />
+                  <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#6B7280" />
                 </TouchableOpacity>
               </View>
               {touched.password && errors.password && !loginError ? (
                 <View style={styles.errorContainer}>
-                  <Ionicons name="alert-circle" size={14} color="#EF4444" />
+                  <Ionicons name="alert-circle" size={14} color="#DC2626" />
                   <Text style={styles.errorText}>{errors.password}</Text>
                 </View>
               ) : null}
@@ -459,7 +459,7 @@ export default function LoginScreen() {
                 await AsyncStorage.setItem('remember_me', next ? 'true' : 'false');
               }}>
                 <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
-                  {rememberMe ? <Ionicons name="checkmark" size={14} color="#ffffff" /> : null}
+                  {rememberMe ? <Ionicons name="checkmark" size={14} color="#0A1628" /> : null}
                 </View>
                 <Text style={styles.rememberText}>Remember me</Text>
               </TouchableOpacity>
@@ -497,7 +497,7 @@ export default function LoginScreen() {
               </TouchableOpacity>
             ) : biometricAvailable ? (
               <View style={styles.biometricHintRow}>
-                <Ionicons name="finger-print" size={16} color="#9CA3AF" />
+                <Ionicons name="finger-print" size={16} color="#6B7280" />
                 <Text style={styles.biometricHintText}>
                   {biometricEnabled
                     ? `${biometricType} is enabled — sign in once to activate it.`
@@ -556,7 +556,7 @@ export default function LoginScreen() {
   );
 }
 
-const createStyles = (c, dark) => StyleSheet.create({
+const createStyles = (c) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.background },
   keyboardView: { flex: 1 },
   scrollContent: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 16, paddingBottom: 32 },
@@ -583,12 +583,12 @@ const createStyles = (c, dark) => StyleSheet.create({
   inputContainer: { marginBottom: 20 },
   label: { fontSize: 13, fontWeight: '600', color: c.text, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
   inputWrapper: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: c.border, borderRadius: 12, backgroundColor: c.inputBg, paddingHorizontal: 16 },
-  inputWrapperError: { borderColor: '#EF4444', backgroundColor: dark ? 'rgba(239,68,68,0.1)' : '#FEF2F2' },
-  inputWrapperSuccess: { borderColor: '#22C55E', backgroundColor: dark ? 'rgba(34,197,94,0.1)' : '#F0FDF4' },
+  inputWrapperError: { borderColor: c.error, backgroundColor: c.errorBg },
+  inputWrapperSuccess: { borderColor: c.success, backgroundColor: c.successBg },
   inputIcon: { marginRight: 12 },
   input: { flex: 1, paddingVertical: 14, fontSize: 15, color: c.text },
   errorContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 4 },
-  errorText: { fontSize: 12, color: '#EF4444' },
+  errorText: { fontSize: 12, color: '#DC2626' },
   optionsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 },
   rememberRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   checkbox: { width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: c.border, justifyContent: 'center', alignItems: 'center', backgroundColor: c.inputBg },
@@ -599,14 +599,14 @@ const createStyles = (c, dark) => StyleSheet.create({
   loginErrorContainer: { flexDirection: 'row', alignItems: 'flex-start', borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 20, gap: 10 },
   loginErrorText: { flex: 1, fontSize: 13, fontWeight: '500', lineHeight: 18 },
   signInButton: {
-    backgroundColor: c.accent,
+    backgroundColor: c.primary,
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
     ...Platform.select({
-      ios: { shadowColor: c.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
-      android: { elevation: 4 },
-      web: { boxShadow: '0 4px 12px rgba(0,0,0,0.2)' },
+      ios: { shadowColor: '#0A1628', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.16, shadowRadius: 4 },
+      android: { elevation: 3 },
+      web: { boxShadow: '0 2px 8px rgba(10,22,40,0.18)' },
     }),
   },
   signInButtonDisabled: {

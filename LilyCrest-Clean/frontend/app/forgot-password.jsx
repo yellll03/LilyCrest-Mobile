@@ -94,11 +94,11 @@ export default function ForgotPasswordScreen() {
               <View style={styles.inputContainer}>
                 <Text style={styles.label}>Email Address</Text>
                 <View style={[styles.inputWrapper, touched.email && errors.email ? styles.inputWrapperError : null, touched.email && !errors.email && isEmailValid ? styles.inputWrapperSuccess : null]}>
-                  <Ionicons name="mail-outline" size={20} color={touched.email && errors.email ? '#EF4444' : '#9CA3AF'} style={styles.inputIcon} />
+                  <Ionicons name="mail-outline" size={20} color={touched.email && errors.email ? '#DC2626' : '#6B7280'} style={styles.inputIcon} />
                   <TextInput
                     style={styles.input}
                     placeholder="Enter your email"
-                    placeholderTextColor="#9CA3AF"
+                    placeholderTextColor="#6B7280"
                     value={email}
                     onChangeText={setEmail}
                     onBlur={() => setTouched((prev) => ({ ...prev, email: true }))}
@@ -107,12 +107,12 @@ export default function ForgotPasswordScreen() {
                     autoCorrect={false}
                   />
                   {touched.email && !errors.email && isEmailValid ? (
-                    <Ionicons name="checkmark-circle" size={20} color="#22C55E" />
+                    <Ionicons name="checkmark-circle" size={20} color="#059669" />
                   ) : null}
                 </View>
                 {touched.email && errors.email ? (
                   <View style={styles.errorContainer}>
-                    <Ionicons name="alert-circle" size={14} color="#EF4444" />
+                    <Ionicons name="alert-circle" size={14} color="#DC2626" />
                     <Text style={styles.errorText}>{errors.email}</Text>
                   </View>
                 ) : null}
@@ -140,7 +140,7 @@ export default function ForgotPasswordScreen() {
   );
 }
 
-function createStyles(c, dark) {
+function createStyles(c) {
   return StyleSheet.create({
     container: { flex: 1, backgroundColor: c.background },
     keyboardView: { flex: 1 },
@@ -152,13 +152,13 @@ function createStyles(c, dark) {
     inputContainer: { marginBottom: 24 },
     label: { fontSize: 13, fontWeight: '600', color: c.text, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
     inputWrapper: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: c.border, borderRadius: 12, backgroundColor: c.inputBg, paddingHorizontal: 16 },
-    inputWrapperError: { borderColor: '#EF4444', backgroundColor: dark ? 'rgba(239,68,68,0.1)' : '#FEF2F2' },
-    inputWrapperSuccess: { borderColor: '#22C55E', backgroundColor: dark ? 'rgba(34,197,94,0.1)' : '#F0FDF4' },
+    inputWrapperError: { borderColor: c.error, backgroundColor: c.errorBg },
+    inputWrapperSuccess: { borderColor: c.success, backgroundColor: c.successBg },
     inputIcon: { marginRight: 12 },
     input: { flex: 1, paddingVertical: 14, fontSize: 15, color: c.text },
     errorContainer: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 6 },
-    errorText: { color: '#EF4444', fontSize: 12 },
-    resetButton: { backgroundColor: c.accent, paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginBottom: 16 },
+    errorText: { color: '#DC2626', fontSize: 12 },
+    resetButton: { backgroundColor: c.primary, paddingVertical: 16, borderRadius: 8, alignItems: 'center', marginBottom: 16 },
     resetButtonDisabled: { backgroundColor: c.textMuted },
     resetButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
     backToLogin: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingTop: 12, paddingBottom: 12, marginTop: 'auto' },

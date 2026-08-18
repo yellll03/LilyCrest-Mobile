@@ -155,9 +155,10 @@ export function buildContractSummary(contract, locale) {
   if (!contract) return null;
   const room = String(contract.roomNumber || '').trim();
   const fields = [
-    { key: 'period', label: 'Contract Period', value: contractPeriod(contract, locale) },
-    { key: 'room', label: 'Room Assignment', value: room ? `Room ${room}${contract.bedLabel ? ` (${contract.bedLabel})` : ''}` : null },
+    { key: 'number', label: 'Contract Number', value: String(contract.contractNumber || '').trim() || null },
     { key: 'branch', label: 'Branch', value: branchLabel(contract.branch) },
+    { key: 'room', label: 'Room', value: room ? `Room ${room}${contract.bedLabel ? ` (${contract.bedLabel})` : ''}` : null },
+    { key: 'period', label: 'Lease Period', value: contractPeriod(contract, locale) },
     { key: 'leaseType', label: 'Lease Type', value: leaseTypeLabel(contract.leaseType) },
     { key: 'monthlyRate', label: 'Monthly Rate', value: formatPeso(contract.approvedMonthlyRate, locale) },
     { key: 'advanceRent', label: 'One Month Advance Rent', value: formatPeso(contract.advanceRentAmount, locale) },

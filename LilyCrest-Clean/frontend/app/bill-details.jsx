@@ -4,7 +4,7 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
 import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useAlert } from '../src/context/AlertContext';
 import { useAuth } from '../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
@@ -23,6 +23,7 @@ import {
   getRenderableUtilitySchedules,
   utilityScheduleStateMessage,
 } from '../src/utils/billingSchedulePresentation';
+import { ScreenHeader } from '../src/components/ui/LilycrestUI';
 
 const getBillId = (bill) => bill?.billing_id || bill?.id || bill?._id || bill?.billingId || bill?.billId || bill?.reference_id;
 
@@ -79,16 +80,16 @@ function paymentMethodLabel(rawMethod, channel) {
 }
 
 const STATUS_CONFIG = {
-  paid: { bg: '#ecfdf3', text: '#15803d', icon: 'checkmark-circle', label: 'Paid' },
-  settled: { bg: '#ecfdf3', text: '#15803d', icon: 'checkmark-circle', label: 'Paid' },
-  unpaid: { bg: '#FDF6EC', text: '#92400e', icon: 'time', label: 'Unpaid' },
-  pending: { bg: '#FDF6EC', text: '#92400e', icon: 'time', label: 'Unpaid' },
-  overdue: { bg: '#fef2f2', text: '#b91c1c', icon: 'alert-circle', label: 'Overdue' },
-  pending_verification: { bg: '#eff6ff', text: '#1d4ed8', icon: 'hourglass', label: 'Payment Under Review' },
-  verification: { bg: '#eff6ff', text: '#1d4ed8', icon: 'hourglass', label: 'Payment Under Review' },
-  partially_paid: { bg: '#fff7ed', text: '#c2410c', icon: 'pie-chart', label: 'Partially Paid' },
-  rejected: { bg: '#fef2f2', text: '#b91c1c', icon: 'close-circle', label: 'Payment Rejected' },
-  cancelled: { bg: '#f3f4f6', text: '#6b7280', icon: 'close-circle', label: 'Cancelled' },
+  paid: { bg: '#ECFDF5', text: '#065F46', icon: 'checkmark-circle', label: 'Paid' },
+  settled: { bg: '#ECFDF5', text: '#065F46', icon: 'checkmark-circle', label: 'Paid' },
+  unpaid: { bg: '#FFFBEB', text: '#92400E', icon: 'time', label: 'Unpaid' },
+  pending: { bg: '#FFFBEB', text: '#92400E', icon: 'time', label: 'Unpaid' },
+  overdue: { bg: '#FEF2F2', text: '#991B1B', icon: 'alert-circle', label: 'Overdue' },
+  pending_verification: { bg: '#EFF6FF', text: '#1E40AF', icon: 'hourglass', label: 'Payment Under Review' },
+  verification: { bg: '#EFF6FF', text: '#1E40AF', icon: 'hourglass', label: 'Payment Under Review' },
+  partially_paid: { bg: '#FFFBEB', text: '#92400E', icon: 'pie-chart', label: 'Partially Paid' },
+  rejected: { bg: '#FEF2F2', text: '#991B1B', icon: 'close-circle', label: 'Payment Rejected' },
+  cancelled: { bg: '#F1F5F9', text: '#6B7280', icon: 'close-circle', label: 'Cancelled' },
 };
 
 export default function BillDetailsScreen() {
@@ -281,15 +282,15 @@ export default function BillDetailsScreen() {
   const charges = [];
   if (moveInFinancials) {
     charges.push(
-      { label: 'One Month Advance Rent', amount: moveInFinancials.advanceRent, icon: 'home', color: '#1d4ed8' },
-      { label: 'Security Deposit', amount: moveInFinancials.securityDeposit, icon: 'shield-checkmark', color: '#0284c7' },
-      { label: 'Reservation Fee Already Paid', amount: -moveInFinancials.reservationFeeAlreadyPaid, icon: 'remove-circle', color: '#15803d' },
+      { label: 'One Month Advance Rent', amount: moveInFinancials.advanceRent, icon: 'home', color: '#1E40AF' },
+      { label: 'Security Deposit', amount: moveInFinancials.securityDeposit, icon: 'shield-checkmark', color: '#2563EB' },
+      { label: 'Reservation Fee Already Paid', amount: -moveInFinancials.reservationFeeAlreadyPaid, icon: 'remove-circle', color: '#065F46' },
     );
   } else {
-    if (bill.rent) charges.push({ label: 'Rent', amount: bill.rent, icon: 'home', color: '#1d4ed8' });
-    if (bill.electricity) charges.push({ label: 'Electricity', amount: bill.electricity, icon: 'flash', color: '#b45309' });
-    if (bill.water) charges.push({ label: 'Water', amount: bill.water, icon: 'water', color: '#0284c7' });
-    if (bill.penalties) charges.push({ label: 'Penalty', amount: bill.penalties, icon: 'warning', color: '#b91c1c' });
+    if (bill.rent) charges.push({ label: 'Rent', amount: bill.rent, icon: 'home', color: '#1E40AF' });
+    if (bill.electricity) charges.push({ label: 'Electricity', amount: bill.electricity, icon: 'flash', color: '#92400E' });
+    if (bill.water) charges.push({ label: 'Water', amount: bill.water, icon: 'water', color: '#2563EB' });
+    if (bill.penalties) charges.push({ label: 'Penalty', amount: bill.penalties, icon: 'warning', color: '#991B1B' });
   }
   // Include extra line items if present. The canonical bridge returns these
   // as bill.additional_charges: [{ name, amount }] (see mobileBillingBridge.js
@@ -304,7 +305,7 @@ export default function BillDetailsScreen() {
       const label = item.name || item.label || item.description || 'Charge';
       if (charges.find((charge) => charge.label === label)) return;
       const typeIcons = { rent: 'home', electricity: 'flash', water: 'water', penalty: 'warning' };
-      const typeColors = { rent: '#1d4ed8', electricity: '#b45309', water: '#0284c7', penalty: '#b91c1c' };
+      const typeColors = { rent: '#1E40AF', electricity: '#92400E', water: '#2563EB', penalty: '#991B1B' };
       const t = (item.type || 'other').toLowerCase();
       charges.push({
         label,
@@ -317,10 +318,10 @@ export default function BillDetailsScreen() {
   // Fallback: if no itemized charges but there's a billing_type, show single charge row
   if (charges.length === 0 && bill.billing_type && totalAmount > 0) {
     const typeMap = {
-      rent: { icon: 'home', color: '#1d4ed8' },
-      electricity: { icon: 'flash', color: '#b45309' },
-      water: { icon: 'water', color: '#0284c7' },
-      penalty: { icon: 'warning', color: '#b91c1c' },
+      rent: { icon: 'home', color: '#1E40AF' },
+      electricity: { icon: 'flash', color: '#92400E' },
+      water: { icon: 'water', color: '#2563EB' },
+      penalty: { icon: 'warning', color: '#991B1B' },
     };
     const t = bill.billing_type.toLowerCase();
     const cfg = typeMap[t] || { icon: 'receipt', color: '#6B7280' };
@@ -330,13 +331,7 @@ export default function BillDetailsScreen() {
 
   return (
     <View style={styles.container}>
-      <View style={styles.header}>
-        <Pressable onPress={() => safeBack(router, '/(tabs)/billing')} style={styles.headerBack}>
-          <Ionicons name="chevron-back" size={22} color={colors.text} />
-        </Pressable>
-        <Text style={styles.headerTitle}>Bill Details</Text>
-        <View style={styles.headerBack} />
-      </View>
+      <ScreenHeader title="Billing Statement" subtitle={bill.billing_period || 'Statement details'} onBack={() => safeBack(router, '/(tabs)/billing')} strong />
 
       <ScrollView
         contentContainerStyle={styles.content}
@@ -384,7 +379,7 @@ export default function BillDetailsScreen() {
         {utilitySchedules.map(([utility, schedule]) => (
           <View key={utility} style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
-              <Ionicons name={utility === 'electricity' ? 'flash' : 'water'} size={16} color={utility === 'electricity' ? '#b45309' : '#0284c7'} />
+              <Ionicons name={utility === 'electricity' ? 'flash' : 'water'} size={16} color={utility === 'electricity' ? '#92400E' : '#2563EB'} />
               <Text style={styles.sectionTitle}>{utility === 'electricity' ? 'Electricity' : 'Water'} Billing Schedule</Text>
             </View>
             {schedule.state === 'available' ? (
@@ -398,7 +393,7 @@ export default function BillDetailsScreen() {
             ) : schedule.state === 'pending' ? (
               <Text style={{ color: colors.textSecondary }}>{utilityScheduleStateMessage(schedule.state)}</Text>
             ) : (
-              <Text style={{ color: '#b91c1c' }}>{utilityScheduleStateMessage(schedule.state)}</Text>
+              <Text style={{ color: '#991B1B' }}>{utilityScheduleStateMessage(schedule.state)}</Text>
             )}
           </View>
         ))}
@@ -453,7 +448,7 @@ export default function BillDetailsScreen() {
         {Array.isArray(bill.electricity_breakdown) && bill.electricity_breakdown.length > 0 && (
           <View style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
-              <Ionicons name="flash" size={16} color="#b45309" />
+              <Ionicons name="flash" size={16} color="#92400E" />
               <Text style={styles.sectionTitle}>Electricity Breakdown</Text>
             </View>
 
@@ -576,7 +571,7 @@ export default function BillDetailsScreen() {
         {bill.water_breakdown && (
           <View style={styles.sectionCard}>
             <View style={styles.sectionHeader}>
-              <Ionicons name="water" size={16} color="#0284c7" />
+              <Ionicons name="water" size={16} color="#2563EB" />
               <Text style={styles.sectionTitle}>Water Breakdown</Text>
             </View>
 
@@ -618,7 +613,7 @@ export default function BillDetailsScreen() {
         {!isOutstanding ? (
             <View style={styles.paidInfo}>
               <View style={styles.paidBadge}>
-                <Ionicons name="checkmark-circle" size={20} color="#22C55E" />
+                <Ionicons name="checkmark-circle" size={20} color="#059669" />
                 <Text style={styles.paidBadgeText}>Payment Complete</Text>
               </View>
               {getBillPaymentDate(bill) && (
@@ -728,19 +723,11 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
   backBtn: { paddingHorizontal: 14, paddingVertical: 10, backgroundColor: c.primary, borderRadius: 10 },
   backBtnText: { color: c.surface, fontWeight: '700' },
 
-  header: {
-    flexDirection: 'row', alignItems: 'center', height: 52, paddingHorizontal: 16,
-    borderBottomWidth: 1, borderBottomColor: c.border,
-    backgroundColor: isDarkMode ? c.headerBg : c.surface,
-  },
-  headerBack: { width: 40, height: 40, justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '800', color: c.text },
   content: { padding: 16, gap: 14 },
 
   // Header Card
   headerCard: {
-    backgroundColor: c.headerBg, borderRadius: 18, padding: 18,
-    ...Platform.select({ ios: { shadowColor: c.headerBg, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 10 }, android: { elevation: 4 } }),
+    backgroundColor: c.headerBg, borderRadius: 12, padding: 18,
   },
   brandText: { fontSize: 10, letterSpacing: 2, color: 'rgba(255,255,255,0.4)', fontWeight: '700', marginBottom: 6 },
   billTitle: { fontSize: 18, fontWeight: '800', color: '#ffffff', marginBottom: 8 },
@@ -760,7 +747,7 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
 
   // Section Card (shared)
   sectionCard: {
-    backgroundColor: c.surface, borderRadius: 16, padding: 16, gap: 10,
+    backgroundColor: c.surface, borderRadius: 12, padding: 16, gap: 10,
     borderWidth: 1, borderColor: c.border,
   },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 4 },
@@ -775,7 +762,7 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
   totalDivider: { height: 1.5, backgroundColor: c.border, marginVertical: 6 },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
   totalLabel: { fontSize: 14, fontWeight: '800', color: c.text },
-  totalValue: { fontSize: 20, fontWeight: '800', color: c.accent },
+  totalValue: { fontSize: 20, fontWeight: '800', color: c.accentHover },
 
   // Computation Segments (old styles kept for water breakdown)
   segmentCard: {
@@ -784,7 +771,7 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
   },
   segmentHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   segmentPeriod: { fontSize: 13, fontWeight: '700', color: c.text },
-  segmentTotal: { fontSize: 14, fontWeight: '800', color: '#b45309' },
+  segmentTotal: { fontSize: 14, fontWeight: '800', color: '#92400E' },
   segmentGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 0 },
   segmentGridItem: { width: '50%', paddingVertical: 4 },
   segmentGridLabel: { fontSize: 11, color: c.textMuted, fontWeight: '600' },
@@ -821,7 +808,7 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
   elecAmountRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingHorizontal: 12, paddingVertical: 9,
-    backgroundColor: isDarkMode ? 'rgba(212,104,42,0.15)' : '#FFF7ED',
+    backgroundColor: c.warningBg,
   },
   elecAmountLabel: { fontSize: 11, fontWeight: '600', color: c.accent, flex: 1 },
   elecAmountValue: { fontSize: 14, fontWeight: '800', color: c.accent },
@@ -849,10 +836,10 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
     paddingHorizontal: 12, paddingVertical: 10,
   },
   elecTotalDueLabel: { fontSize: 13, fontWeight: '700', color: '#ffffff' },
-  elecTotalDueValue: { fontSize: 16, fontWeight: '800', color: '#ff9000' },
+  elecTotalDueValue: { fontSize: 16, fontWeight: '800', color: '#D4AF37' },
   elecDueDateRow: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
-    backgroundColor: isDarkMode ? '#1A1A1A' : '#0A2040',
+    backgroundColor: isDarkMode ? '#1E293B' : '#0A1628',
     paddingHorizontal: 12, paddingVertical: 8,
     borderBottomLeftRadius: 10, borderBottomRightRadius: 10,
   },
@@ -862,26 +849,26 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
   // Payment
   paidInfo: { gap: 8 },
   paidBadge: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  paidBadgeText: { fontSize: 14, fontWeight: '700', color: '#15803d' },
+  paidBadgeText: { fontSize: 14, fontWeight: '700', color: '#065F46' },
   paymentInfoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   paymentInfoLabel: { fontSize: 13, color: c.textMuted, fontWeight: '600' },
   paymentInfoValue: { fontSize: 13, fontWeight: '700', color: c.text },
   paySection: { gap: 10 },
   paymongoBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: c.primary, paddingVertical: 16, borderRadius: 14,
+    backgroundColor: c.primary, paddingVertical: 14, borderRadius: 8,
   },
   paymongoBtnText: { color: '#ffffff', fontWeight: '700', fontSize: 16 },
   proofBtn: { minHeight: 48, borderWidth: 1.5, borderColor: c.primary, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
   proofBtnText: { color: c.primary, fontSize: 14, fontWeight: '700' },
-  rejectionText: { color: '#b91c1c', fontSize: 12, lineHeight: 18, textAlign: 'center' },
+  rejectionText: { color: '#991B1B', fontSize: 12, lineHeight: 18, textAlign: 'center' },
   secureNote: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
   secureNoteText: { fontSize: 11, color: c.textMuted },
 
   // Download
   downloadBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
-    backgroundColor: c.headerBg, paddingVertical: 14, borderRadius: 14,
+    backgroundColor: c.headerBg, paddingVertical: 14, borderRadius: 8,
   },
   downloadText: { color: '#ffffff', fontWeight: '700', fontSize: 15 },
   receiptBtn: { backgroundColor: 'transparent', borderWidth: 1.5, borderColor: c.primary, marginTop: 10 },

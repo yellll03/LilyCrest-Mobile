@@ -21,53 +21,54 @@ import { safeBack } from '../src/utils/navigation';
 import { getSessionToken } from '../src/services/secureCredentials';
 import { useTenantContract } from '../src/hooks/useTenantContract';
 import { contractStatusLabel } from '../src/utils/contractPresentation';
+import { ScreenHeader } from '../src/components/ui/LilycrestUI';
 
 // ── Document types for upload picker ──
 const UPLOAD_TYPES = [
-  { key: 'government_id', label: 'Government ID', icon: 'card', color: '#22C55E' },
-  { key: 'passport', label: 'Passport', icon: 'globe', color: '#3B82F6' },
-  { key: 'drivers_license', label: "Driver's License", icon: 'car', color: '#8B5CF6' },
-  { key: 'student_id', label: 'Student ID', icon: 'school', color: '#F59E0B' },
-  { key: 'company_id', label: 'Company/Employee ID', icon: 'business', color: '#0EA5E9' },
-  { key: 'lease_extension', label: 'Lease Extension', icon: 'document-attach', color: '#ff9000' },
-  { key: 'proof_of_income', label: 'Proof of Income', icon: 'cash', color: '#10B981' },
-  { key: 'authorization_letter', label: 'Authorization Letter', icon: 'mail', color: '#EC4899' },
-  { key: 'other', label: 'Other Document', icon: 'document', color: '#6B7280' },
+  { key: 'government_id', label: 'Government ID', icon: 'card', color: '#0A1628' },
+  { key: 'passport', label: 'Passport', icon: 'globe', color: '#0A1628' },
+  { key: 'drivers_license', label: "Driver's License", icon: 'car', color: '#0A1628' },
+  { key: 'student_id', label: 'Student ID', icon: 'school', color: '#0A1628' },
+  { key: 'company_id', label: 'Company/Employee ID', icon: 'business', color: '#0A1628' },
+  { key: 'lease_extension', label: 'Lease Extension', icon: 'document-attach', color: '#B9921F' },
+  { key: 'proof_of_income', label: 'Proof of Income', icon: 'cash', color: '#0A1628' },
+  { key: 'authorization_letter', label: 'Authorization Letter', icon: 'mail', color: '#0A1628' },
+  { key: 'other', label: 'Other Document', icon: 'document', color: '#0A1628' },
 ];
 
 // ── Policy document registry ──
 const POLICY_DOCUMENTS = [
   {
     id: 'contract', title: 'Lease Contract', description: 'Your rental agreement with LilyCrest', icon: 'document-text',
-    color: '#3B82F6', category: 'Policies', status: 'Available',
+    color: '#0A1628', category: 'Policies', status: 'Available',
   },
   {
     id: 'house_rules', title: 'House Rules', description: 'General dormitory guidelines and policies', icon: 'home',
-    color: '#F59E0B', category: 'Policies', status: 'Active',
+    color: '#0A1628', category: 'Policies', status: 'Active',
   },
   {
     id: 'curfew_policy', title: 'Curfew Policy', description: 'Entry and exit time guidelines', icon: 'time',
-    color: '#9333EA', category: 'Policies', status: 'Active',
+    color: '#0A1628', category: 'Policies', status: 'Active',
   },
   {
     id: 'visitor_policy', title: 'Visitor Policy', description: 'Guest registration and visitation rules', icon: 'people',
-    color: '#06B6D4', category: 'Policies', status: 'Active',
+    color: '#0A1628', category: 'Policies', status: 'Active',
   },
   {
     id: 'payment_terms', title: 'Payment Terms', description: 'Billing methods, due dates, and late fees', icon: 'cash',
-    color: '#ff9000', category: 'Billing', status: 'Active',
+    color: '#B9921F', category: 'Billing', status: 'Active',
   },
   {
     id: 'emergency_procedures', title: 'Emergency Procedures', description: 'Safety protocols and emergency contacts', icon: 'alert-circle',
-    color: '#EF4444', category: 'Safety', status: 'Active',
+    color: '#991B1B', category: 'Safety', status: 'Active',
   },
 ];
 
 const CATEGORIES = [
-  { key: 'Personal', icon: 'person', color: '#3B82F6', label: 'My Documents' },
-  { key: 'Policies', icon: 'shield-checkmark', color: '#9333EA', label: 'Dormitory Policies' },
-  { key: 'Billing', icon: 'wallet', color: '#ff9000', label: 'Billing & Payments' },
-  { key: 'Safety', icon: 'warning', color: '#EF4444', label: 'Safety & Emergency' },
+  { key: 'Personal', icon: 'person', color: '#0A1628', label: 'My Documents' },
+  { key: 'Policies', icon: 'shield-checkmark', color: '#0A1628', label: 'Dormitory Policies' },
+  { key: 'Billing', icon: 'wallet', color: '#B9921F', label: 'Billing & Payments' },
+  { key: 'Safety', icon: 'warning', color: '#991B1B', label: 'Safety & Emergency' },
 ];
 
 // ── Structured document content for rich preview ──
@@ -192,7 +193,7 @@ function PreviewSection({ section, colors, isDarkMode }) {
       <View style={pStyles.section}>
         <Text style={[pStyles.sectionTitle, { color: colors.text }]}>{section.title}</Text>
         {section.subsections.map((sub, i) => (
-          <View key={i} style={[pStyles.subCard, { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.04)' : '#F8FAFC', borderColor: isDarkMode ? 'rgba(255,255,255,0.08)' : '#E2E8F0' }]}>
+          <View key={i} style={[pStyles.subCard, { backgroundColor: isDarkMode ? 'rgba(255,255,255,0.04)' : '#F8FAFC', borderColor: isDarkMode ? 'rgba(255,255,255,0.08)' : '#E5E7EB' }]}>
             <Text style={[pStyles.subLabel, { color: colors.text }]}>{sub.label}</Text>
             <Text style={[pStyles.subDetail, { color: colors.textSecondary }]}>{sub.detail}</Text>
           </View>
@@ -218,8 +219,8 @@ const pStyles = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 8, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: 'rgba(0,0,0,0.06)' },
   rowLabel: { fontSize: 13, fontWeight: '500' },
   rowValue: { fontSize: 13, fontWeight: '600', textAlign: 'right', flex: 1, marginLeft: 12 },
-  badge: { backgroundColor: '#DCFCE7', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10 },
-  badgeText: { fontSize: 12, fontWeight: '700', color: '#166534' },
+  badge: { backgroundColor: '#ECFDF5', paddingHorizontal: 10, paddingVertical: 3, borderRadius: 10 },
+  badgeText: { fontSize: 12, fontWeight: '700', color: '#065F46' },
   bulletRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, marginBottom: 6 },
   bulletDot: { width: 6, height: 6, borderRadius: 3, marginTop: 7 },
   bulletText: { fontSize: 14, lineHeight: 22, flex: 1 },
@@ -230,14 +231,16 @@ const pStyles = StyleSheet.create({
 
 // ── Status badge color ──
 function statusColor(status) {
-  switch (status) {
-    case 'Verified':
-    case 'verified': return { bg: '#DCFCE7', text: '#166534' };
-    case 'On File': return { bg: '#DBEAFE', text: '#1E40AF' };
-    case 'pending_review': return { bg: '#FEF3C7', text: '#92400E' };
-    case 'rejected': return { bg: '#FEE2E2', text: '#991B1B' };
-    default: return { bg: '#F0FDF4', text: '#15803D' };
+  const normalized = String(status || '').trim().toLowerCase();
+  if (['verified', 'active', 'available', 'approved', 'final notarized contract'].includes(normalized)) {
+    return { bg: '#ECFDF5', text: '#065F46', solid: '#059669' };
   }
+  if (['pending', 'pending_review', 'under review'].includes(normalized)) {
+    return { bg: '#FFFBEB', text: '#92400E', solid: '#D97706' };
+  }
+  if (normalized === 'rejected') return { bg: '#FEF2F2', text: '#991B1B', solid: '#DC2626' };
+  if (normalized === 'on file') return { bg: '#EFF6FF', text: '#1E40AF', solid: '#2563EB' };
+  return { bg: '#F1F5F9', text: '#4B5563', solid: '#6B7280' };
 }
 
 function statusLabel(status) {
@@ -531,17 +534,12 @@ export default function MyDocumentsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => safeBack(router, '/(tabs)/profile')}>
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
-        </TouchableOpacity>
-        <View>
-          <Text style={styles.headerTitle}>My Documents</Text>
-          <Text style={styles.headerSubtitle}>{POLICY_DOCUMENTS.length + uploadedDocs.length} documents</Text>
-        </View>
-        <View style={{ width: 40 }} />
-      </View>
+      <ScreenHeader
+        strong
+        title="My Documents"
+        subtitle={`${POLICY_DOCUMENTS.length + uploadedDocs.length} records and policies`}
+        onBack={() => safeBack(router, '/(tabs)/profile')}
+      />
 
       {/* Category Filter Chips */}
       <View style={styles.chipBar}>
@@ -550,16 +548,16 @@ export default function MyDocumentsScreen() {
             style={[styles.chip, !activeCategory && styles.chipActive]}
             onPress={() => setActiveCategory(null)}
           >
-            <Ionicons name="apps" size={14} color={!activeCategory ? '#fff' : colors.textMuted} />
+            <Ionicons name="apps" size={14} color={!activeCategory ? '#0A1628' : colors.textMuted} />
             <Text style={[styles.chipText, !activeCategory && styles.chipTextActive]}>All</Text>
           </TouchableOpacity>
           {CATEGORIES.map(cat => (
             <TouchableOpacity
               key={cat.key}
-              style={[styles.chip, activeCategory === cat.key && { backgroundColor: cat.color }]}
+              style={[styles.chip, activeCategory === cat.key && styles.chipActive]}
               onPress={() => setActiveCategory(prev => prev === cat.key ? null : cat.key)}
             >
-              <Ionicons name={cat.icon} size={14} color={activeCategory === cat.key ? '#fff' : colors.textMuted} />
+              <Ionicons name={cat.icon} size={14} color={activeCategory === cat.key ? '#0A1628' : colors.textMuted} />
               <Text style={[styles.chipText, activeCategory === cat.key && styles.chipTextActive]}>{cat.label}</Text>
             </TouchableOpacity>
           ))}
@@ -594,8 +592,8 @@ export default function MyDocumentsScreen() {
         {(!activeCategory || activeCategory === 'Personal') && (
           <View style={styles.categoryGroup}>
             <View style={styles.categoryHeader}>
-              <View style={[styles.categoryIcon, { backgroundColor: '#3B82F615' }]}>
-                <Ionicons name="person" size={16} color="#3B82F6" />
+              <View style={[styles.categoryIcon, { backgroundColor: '#2563EB15' }]}>
+                <Ionicons name="person" size={16} color="#2563EB" />
               </View>
               <Text style={styles.categoryTitle}>My Documents</Text>
               <TouchableOpacity
@@ -607,10 +605,10 @@ export default function MyDocumentsScreen() {
                 disabled={uploading || Boolean(deletingDocId)}
               >
                 {uploading ? (
-                  <ActivityIndicator size="small" color="#fff" />
+                  <ActivityIndicator size="small" color="#0A1628" />
                 ) : (
                   <>
-                    <Ionicons name="cloud-upload-outline" size={14} color="#fff" />
+                    <Ionicons name="cloud-upload-outline" size={14} color="#0A1628" />
                     <Text style={styles.uploadButtonText}>Upload</Text>
                   </>
                 )}
@@ -626,7 +624,7 @@ export default function MyDocumentsScreen() {
             {reservationDocs.length > 0 && (
               <View style={styles.subSection}>
                 <View style={styles.reservationBadgeRow}>
-                  <Ionicons name="checkmark-circle" size={14} color="#16A34A" />
+                  <Ionicons name="checkmark-circle" size={14} color="#059669" />
                   <Text style={styles.reservationBadgeText}>Submitted During Reservation</Text>
                 </View>
                 {reservationIdDocs.length > 0 && (
@@ -721,7 +719,7 @@ export default function MyDocumentsScreen() {
                         disabled={Boolean(deletingDocId)}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       >
-                        <Ionicons name="trash-outline" size={16} color="#EF4444" />
+                        <Ionicons name="trash-outline" size={16} color="#DC2626" />
                       </TouchableOpacity>
                     </TouchableOpacity>
                   );
@@ -758,7 +756,7 @@ export default function MyDocumentsScreen() {
                         disabled={Boolean(deletingDocId)}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       >
-                        <Ionicons name="trash-outline" size={16} color="#EF4444" />
+                        <Ionicons name="trash-outline" size={16} color="#DC2626" />
                       </TouchableOpacity>
                     </TouchableOpacity>
                   );
@@ -784,7 +782,7 @@ export default function MyDocumentsScreen() {
 
             {/* Info card about stay extension */}
             <View style={styles.extensionInfoCard}>
-              <Ionicons name="information-circle" size={20} color="#3B82F6" />
+              <Ionicons name="information-circle" size={20} color="#2563EB" />
               <Text style={styles.extensionInfoText}>
                 Need to extend your stay? Upload updated Valid IDs and required documents here. The admin will review and process your extension.
               </Text>
@@ -829,9 +827,9 @@ export default function MyDocumentsScreen() {
                         disabled={downloading === doc.id}
                       >
                         {downloading === doc.id ? (
-                          <ActivityIndicator size="small" color="#fff" />
+                          <ActivityIndicator size="small" color="#0A1628" />
                         ) : (
-                          <Ionicons name="download-outline" size={18} color="#fff" />
+                          <Ionicons name="download-outline" size={18} color="#0A1628" />
                         )}
                       </TouchableOpacity>
                     </View>
@@ -843,7 +841,7 @@ export default function MyDocumentsScreen() {
         })}
 
         <View style={styles.helpCard}>
-          <Ionicons name="help-circle" size={22} color="#ff9000" />
+          <Ionicons name="help-circle" size={22} color="#D4AF37" />
           <Text style={styles.helpText}>Need a document not listed here? Contact the admin office or chat with Lily for assistance.</Text>
         </View>
         <View style={{ height: 40 }} />
@@ -878,7 +876,7 @@ export default function MyDocumentsScreen() {
       <Modal visible={!!deleteTarget} transparent animationType="fade" onRequestClose={() => setDeleteTarget(null)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
-            <View style={styles.modalIconWrap}><Ionicons name="trash-outline" size={32} color="#EF4444" /></View>
+            <View style={styles.modalIconWrap}><Ionicons name="trash-outline" size={32} color="#DC2626" /></View>
             <Text style={styles.modalTitle}>Delete Document?</Text>
             <Text style={styles.modalMessage}>Are you sure you want to delete &quot;{deleteTarget?.label}&quot;? This action cannot be undone.</Text>
             <View style={styles.modalButtons}>
@@ -954,9 +952,9 @@ export default function MyDocumentsScreen() {
 
           <ScrollView style={styles.previewScroll} contentContainerStyle={styles.previewScrollContent}>
             {previewDoc?.header && (
-              <View style={[styles.previewBanner, { backgroundColor: `${previewDoc.color || '#3B82F6'}10` }]}>
-                <View style={[styles.previewBannerIcon, { backgroundColor: `${previewDoc.color || '#3B82F6'}20` }]}>
-                  <Ionicons name={previewDoc.icon || 'document-text'} size={28} color={previewDoc.color || '#3B82F6'} />
+              <View style={[styles.previewBanner, { backgroundColor: `${previewDoc.color || '#2563EB'}10` }]}>
+                <View style={[styles.previewBannerIcon, { backgroundColor: `${previewDoc.color || '#2563EB'}20` }]}>
+                  <Ionicons name={previewDoc.icon || 'document-text'} size={28} color={previewDoc.color || '#2563EB'} />
                 </View>
                 <Text style={[styles.previewBannerTitle, { color: colors.text }]}>{previewDoc.header}</Text>
                 {previewDoc.subtitle ? <Text style={[styles.previewBannerSub, { color: colors.textSecondary }]}>{previewDoc.subtitle}</Text> : null}
@@ -989,23 +987,18 @@ export default function MyDocumentsScreen() {
 
 const createStyles = (colors, isDarkMode) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  // Header
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border, gap: 12 },
-  backButton: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { fontSize: 20, fontWeight: '700', color: colors.text },
-  headerSubtitle: { fontSize: 12, color: colors.textMuted, fontWeight: '500', marginTop: 2 },
   // Chips
   chipBar: { backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border, paddingVertical: 10 },
   chipRow: { paddingHorizontal: 16, gap: 8 },
-  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: isDarkMode ? 'rgba(255,255,255,0.06)' : '#F1F5F9', borderWidth: 1, borderColor: isDarkMode ? 'rgba(255,255,255,0.1)' : '#E2E8F0' },
+  chip: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, backgroundColor: isDarkMode ? 'rgba(255,255,255,0.06)' : '#F1F5F9', borderWidth: 1, borderColor: isDarkMode ? 'rgba(255,255,255,0.1)' : '#E5E7EB' },
   chipActive: { backgroundColor: colors.accent, borderColor: colors.accent },
   chipText: { fontSize: 12, fontWeight: '600', color: colors.textMuted },
-  chipTextActive: { color: '#fff' },
+  chipTextActive: { color: '#0A1628' },
   // List
   scrollView: { flex: 1 },
   scrollContent: { padding: 16 },
-  errorBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: isDarkMode ? 'rgba(146,64,14,0.18)' : '#FEF3C7', borderWidth: 1, borderColor: isDarkMode ? 'rgba(251,191,36,0.35)' : '#FDE68A', borderRadius: 12, padding: 12, marginBottom: 14 },
-  errorBannerText: { flex: 1, fontSize: 13, fontWeight: '600', color: isDarkMode ? '#FCD34D' : '#92400E' },
+  errorBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.warningBg, borderWidth: 1, borderColor: colors.warning, borderRadius: 12, padding: 12, marginBottom: 14 },
+  errorBannerText: { flex: 1, fontSize: 13, fontWeight: '600', color: colors.warningText },
   errorRetryText: { fontSize: 13, fontWeight: '800', color: colors.primary },
   categoryGroup: { marginBottom: 24 },
   categoryHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
@@ -1015,45 +1008,45 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   countText: { fontSize: 11, fontWeight: '700', color: colors.textMuted },
   // Upload button
   uploadButton: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6, borderRadius: 10, backgroundColor: colors.accent },
-  uploadButtonText: { color: '#fff', fontSize: 12, fontWeight: '600' },
+  uploadButtonText: { color: '#0A1628', fontSize: 12, fontWeight: '700' },
   // Uploaded documents
   subSection: { marginBottom: 14 },
   subSectionTitle: { fontSize: 12, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8, marginLeft: 4 },
-  uploadedDocCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 14, padding: 14, marginBottom: 8, borderWidth: isDarkMode ? 1 : 0, borderColor: colors.border, ...Platform.select({ web: { boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }, default: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 } }) },
+  uploadedDocCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: colors.border },
   uploadedDocIcon: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   uploadedDocContent: { flex: 1 },
   uploadedDocTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
   uploadedDocTitle: { fontSize: 14, fontWeight: '600', color: colors.text, flexShrink: 1 },
   uploadedDocDate: { fontSize: 11, color: colors.textMuted },
-  deleteBtn: { width: 32, height: 32, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginLeft: 8, backgroundColor: isDarkMode ? 'rgba(239,68,68,0.15)' : '#FEF2F2' },
+  deleteBtn: { width: 32, height: 32, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginLeft: 8, backgroundColor: colors.errorBg },
   // Empty state
   emptyUpload: { alignItems: 'center', paddingVertical: 24, gap: 8 },
   emptyUploadTitle: { fontSize: 15, fontWeight: '600', color: colors.text },
   emptyUploadHint: { fontSize: 12, color: colors.textMuted, textAlign: 'center' },
   // Extension info
-  extensionInfoCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: isDarkMode ? 'rgba(59,130,246,0.1)' : '#EFF6FF', padding: 12, borderRadius: 12, marginTop: 4 },
-  extensionInfoText: { flex: 1, fontSize: 12, color: isDarkMode ? '#93C5FD' : '#1E40AF', lineHeight: 18 },
+  extensionInfoCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 8, backgroundColor: colors.infoBg, padding: 12, borderRadius: 12, marginTop: 4, borderWidth: 1, borderColor: colors.info },
+  extensionInfoText: { flex: 1, fontSize: 12, color: colors.infoText, lineHeight: 18 },
   // Policy doc cards
-  documentCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: isDarkMode ? 1 : 0, borderColor: colors.border, ...Platform.select({ web: { boxShadow: '0 2px 8px rgba(0,0,0,0.05)' }, default: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 6, elevation: 2 } }) },
+  documentCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: colors.border },
   documentIcon: { width: 48, height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   documentContent: { flex: 1 },
   docTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
   documentTitle: { fontSize: 14, fontWeight: '600', color: colors.text, flexShrink: 1 },
   documentDescription: { fontSize: 12, color: colors.textSecondary },
-  statusBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 8, marginLeft: 8 },
+  statusBadge: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, marginLeft: 8 },
   statusText: { fontSize: 10, fontWeight: '700' },
   actionButtons: { marginLeft: 8 },
   downloadButton: { width: 36, height: 36, borderRadius: 10, backgroundColor: colors.accent, justifyContent: 'center', alignItems: 'center' },
   downloadButtonDisabled: { backgroundColor: colors.textMuted },
-  helpCard: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: isDarkMode ? 'rgba(249,115,22,0.1)' : '#FFF7ED', borderRadius: 12, padding: 14, marginTop: 8, gap: 10 },
-  helpText: { flex: 1, fontSize: 13, color: isDarkMode ? '#FDBA74' : '#9A3412', lineHeight: 20 },
+  helpCard: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: colors.warningBg, borderRadius: 12, padding: 14, marginTop: 8, gap: 10, borderWidth: 1, borderColor: colors.warning },
+  helpText: { flex: 1, fontSize: 13, color: colors.warningText, lineHeight: 20 },
   // Reservation document styles
-  reservationBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: isDarkMode ? 'rgba(22,163,106,0.12)' : '#F0FDF4', borderRadius: 8, alignSelf: 'flex-start' },
-  reservationBadgeText: { fontSize: 11, fontWeight: '700', color: '#16A34A', letterSpacing: 0.3 },
+  reservationBadgeRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10, paddingHorizontal: 10, paddingVertical: 5, backgroundColor: colors.successBg, borderRadius: 8, alignSelf: 'flex-start' },
+  reservationBadgeText: { fontSize: 11, fontWeight: '700', color: colors.successText, letterSpacing: 0.3 },
   reservationLock: { width: 32, height: 32, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginLeft: 8, backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : '#F8FAFC' },
   // Upload Type Picker
   pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  pickerSheet: { backgroundColor: colors.surface, borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingBottom: Platform.OS === 'ios' ? 34 : 20, maxHeight: '70%' },
+  pickerSheet: { backgroundColor: colors.surface, borderTopLeftRadius: 12, borderTopRightRadius: 12, paddingHorizontal: 20, paddingBottom: Platform.OS === 'ios' ? 34 : 20, maxHeight: '70%', borderWidth: 1, borderColor: colors.border },
   pickerHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginTop: 12, marginBottom: 16 },
   pickerTitle: { fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: 4 },
   pickerSubtitle: { fontSize: 13, color: colors.textMuted, marginBottom: 16 },
@@ -1065,14 +1058,14 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   pickerCancelText: { fontSize: 15, fontWeight: '600', color: colors.textSecondary },
   // Modals
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalContent: { backgroundColor: colors.surface, borderRadius: 20, padding: 24, width: '100%', maxWidth: 320, alignItems: 'center' },
-  modalIconWrap: { width: 64, height: 64, borderRadius: 32, backgroundColor: isDarkMode ? 'rgba(239,68,68,0.2)' : '#FEE2E2', justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
+  modalContent: { backgroundColor: colors.surface, borderRadius: 12, padding: 24, width: '100%', maxWidth: 320, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
+  modalIconWrap: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.errorBg, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
   modalTitle: { fontSize: 20, fontWeight: '600', color: colors.text, marginBottom: 8 },
   modalMessage: { fontSize: 14, color: colors.textSecondary, textAlign: 'center', marginBottom: 24, lineHeight: 20 },
   modalButtons: { flexDirection: 'row', gap: 12, width: '100%' },
   modalCancelBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1.5, borderColor: colors.border, alignItems: 'center' },
   modalCancelText: { fontSize: 15, fontWeight: '600', color: colors.textSecondary },
-  modalDeleteBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: '#EF4444', alignItems: 'center' },
+  modalDeleteBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: '#DC2626', alignItems: 'center' },
   modalDeleteText: { fontSize: 15, fontWeight: '600', color: '#fff' },
   // Image Preview
   imagePreviewContainer: { flex: 1, backgroundColor: colors.background },
@@ -1089,13 +1082,13 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   downloadBtnSmall: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
   previewScroll: { flex: 1 },
   previewScrollContent: { padding: 16 },
-  previewBanner: { borderRadius: 16, padding: 24, alignItems: 'center', marginBottom: 20 },
-  previewBannerIcon: { width: 56, height: 56, borderRadius: 16, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
+  previewBanner: { borderRadius: 12, padding: 24, alignItems: 'center', marginBottom: 20 },
+  previewBannerIcon: { width: 56, height: 56, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
   previewBannerTitle: { fontSize: 20, fontWeight: '700', textAlign: 'center', marginBottom: 4 },
   previewBannerSub: { fontSize: 13, textAlign: 'center' },
   dateBadge: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 10, paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, backgroundColor: 'rgba(0,0,0,0.04)' },
   dateText: { fontSize: 11, fontWeight: '600' },
-  previewBody: { backgroundColor: colors.surface, borderRadius: 16, padding: 20, borderWidth: isDarkMode ? 1 : 0, borderColor: colors.border, ...Platform.select({ web: { boxShadow: '0 2px 12px rgba(0,0,0,0.06)' }, default: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 } }) },
+  previewBody: { backgroundColor: colors.surface, borderRadius: 12, padding: 20, borderWidth: 1, borderColor: colors.border },
   previewFooter: { marginTop: 20, paddingVertical: 16, alignItems: 'center' },
   previewFooterText: { fontSize: 11, textAlign: 'center', fontStyle: 'italic' },
 });

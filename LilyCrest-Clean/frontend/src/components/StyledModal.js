@@ -43,10 +43,10 @@ export default function StyledModal({
   }, [opacityAnim, scaleAnim, visible]);
 
   const typeConfig = {
-    success: { icon: 'checkmark-circle', color: '#22C55E' },
-    error: { icon: 'close-circle', color: '#EF4444' },
-    warning: { icon: 'warning', color: '#F59E0B' },
-    info: { icon: 'information-circle', color: '#3B82F6' },
+    success: { icon: 'checkmark-circle', color: '#059669' },
+    error: { icon: 'close-circle', color: '#DC2626' },
+    warning: { icon: 'warning', color: '#D97706' },
+    info: { icon: 'information-circle', color: '#2563EB' },
   };
 
   const cfg = type ? typeConfig[type] : null;
@@ -77,7 +77,7 @@ export default function StyledModal({
       },
       accentBar: {
         height: 4,
-        backgroundColor: resolvedColor || c.primary || '#204b7e',
+        backgroundColor: resolvedColor || c.primary || '#0A1628',
       },
       body: {
         paddingHorizontal: 24,
@@ -89,7 +89,7 @@ export default function StyledModal({
         width: 56,
         height: 56,
         borderRadius: 28,
-        backgroundColor: `${resolvedColor || c.primary || '#204b7e'}18`,
+        backgroundColor: `${resolvedColor || c.primary || '#0A1628'}18`,
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 16,
@@ -128,14 +128,14 @@ export default function StyledModal({
       btnText: {
         fontSize: 15,
         fontWeight: '600',
-        color: c.primary || '#204b7e',
+        color: c.primary || '#0A1628',
       },
       btnTextCancel: {
         color: c.textSecondary,
         fontWeight: '500',
       },
       btnTextDestructive: {
-        color: '#EF4444',
+        color: '#DC2626',
       },
     })
   );
@@ -150,7 +150,7 @@ export default function StyledModal({
               <View style={styles.body}>
                 {resolvedIcon && (
                   <View style={styles.iconWrap}>
-                    <Ionicons name={resolvedIcon} size={28} color={resolvedColor || colors.primary || '#204b7e'} />
+                    <Ionicons name={resolvedIcon} size={28} color={resolvedColor || colors.primary || '#0A1628'} />
                   </View>
                 )}
                 {title ? <Text style={styles.title}>{title}</Text> : null}

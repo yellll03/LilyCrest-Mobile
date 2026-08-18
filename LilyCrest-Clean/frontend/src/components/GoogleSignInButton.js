@@ -203,7 +203,7 @@ export default function GoogleSignInButton({
         </>
       ) : (
         <>
-          <Ionicons name="logo-google" size={20} color="#DB4437" />
+          <Ionicons name="logo-google" size={20} color="#DC2626" />
           <Text style={styles.buttonText}>Sign in with Google</Text>
         </>
       )}
@@ -230,8 +230,8 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   buttonDisabled: {
-    backgroundColor: '#f5f5f5',
-    borderColor: '#e0e0e0',
+    backgroundColor: '#F8FAFC',
+    borderColor: '#E5E7EB',
   },
   buttonText: {
     fontSize: 16,

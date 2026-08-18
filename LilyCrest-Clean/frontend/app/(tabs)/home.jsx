@@ -244,38 +244,38 @@ export default function HomeScreen() {
   const billingTonePalette = useMemo(() => {
     if (billingCardMode === 'overdue') {
       return {
-        accent: '#B91C1C',
-        border: '#FECACA',
+        accent: '#DC2626',
+        border: '#DC2626',
         chipBg: '#FEF2F2',
-        chipText: '#B91C1C',
-        iconBg: '#FEE2E2',
+        chipText: '#991B1B',
+        iconBg: '#FEF2F2',
       };
     }
     if (billingCardMode === 'open') {
       return {
-        accent: '#C2410C',
-        border: '#FED7AA',
-        chipBg: '#FFF7ED',
-        chipText: '#C2410C',
-        iconBg: '#FFEDD5',
+        accent: '#D97706',
+        border: '#D97706',
+        chipBg: '#FFFBEB',
+        chipText: '#92400E',
+        iconBg: '#FFFBEB',
       };
     }
     if (billingCardMode === 'cleared') {
       return {
-        accent: '#15803D',
-        border: '#BBF7D0',
-        chipBg: '#F0FDF4',
-        chipText: '#166534',
-        iconBg: '#DCFCE7',
+        accent: '#059669',
+        border: '#059669',
+        chipBg: '#ECFDF5',
+        chipText: '#065F46',
+        iconBg: '#ECFDF5',
       };
     }
 
     return {
-      accent: '#204B7E',
-      border: '#D8E2F0',
+      accent: '#0A1628',
+      border: '#E5E7EB',
       chipBg: '#F8FAFC',
-      chipText: '#204B7E',
-      iconBg: '#E8F0FA',
+      chipText: '#0A1628',
+      iconBg: '#F1F5F9',
     };
   }, [billingCardMode]);
   const billingLastPaidStat = useMemo(() => {
@@ -454,19 +454,19 @@ export default function HomeScreen() {
     return (
       <Text>
         {text.slice(0, idx)}
-        <Text style={{ backgroundColor: '#FEF08A', fontWeight: '700', borderRadius: 2 }}>{text.slice(idx, idx + q.length)}</Text>
+        <Text style={{ backgroundColor: '#F3E4B0', fontWeight: '700', borderRadius: 2 }}>{text.slice(idx, idx + q.length)}</Text>
         {text.slice(idx + q.length)}
       </Text>
     );
   };
 
   const categoryMeta = {
-    'Quick Actions': { icon: 'flash', color: '#ff9000' },
-    'Room': { icon: 'bed', color: '#6366F1' },
-    'Bills': { icon: 'card', color: '#3B82F6' },
-    'Maintenance': { icon: 'construct', color: '#0EA5E9' },
-    'Policies': { icon: 'shield-checkmark', color: '#9333EA' },
-    'Notifications': { icon: 'notifications', color: '#EF4444' },
+    'Quick Actions': { icon: 'flash', color: '#D4AF37' },
+    'Room': { icon: 'bed', color: '#2563EB' },
+    'Bills': { icon: 'card', color: '#2563EB' },
+    'Maintenance': { icon: 'construct', color: '#2563EB' },
+    'Policies': { icon: 'shield-checkmark', color: '#2563EB' },
+    'Notifications': { icon: 'notifications', color: '#DC2626' },
   };
 
   // ── Data fetching ──
@@ -592,7 +592,7 @@ export default function HomeScreen() {
       <AppHeader />
       {loadError ? (
         <View style={styles.errorBanner}>
-          <Ionicons name="warning" size={16} color="#b91c1c" />
+          <Ionicons name="warning" size={16} color="#991B1B" />
           <Text style={styles.errorText}>{loadError}</Text>
           <TouchableOpacity onPress={fetchDashboard}><Text style={styles.retryText}>Retry</Text></TouchableOpacity>
         </View>
@@ -607,12 +607,12 @@ export default function HomeScreen() {
       >
         {/* ── Search Bar ── */}
         <View style={[styles.searchContainer, searchFocused && styles.searchContainerFocused]}>
-          <Ionicons name="search" size={20} color={searchFocused ? colors.primary : '#9CA3AF'} />
+          <Ionicons name="search" size={20} color={searchFocused ? colors.primary : '#6B7280'} />
           <TextInput
             ref={searchInputRef}
             style={styles.searchInput}
             placeholder="Search bills, maintenance, policies…"
-            placeholderTextColor="#9CA3AF"
+            placeholderTextColor="#6B7280"
             value={searchQuery}
             onChangeText={(text) => setSearchQuery(text.replace(/[<>]/g, ''))}
             onFocus={() => setSearchFocused(true)}
@@ -623,7 +623,7 @@ export default function HomeScreen() {
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => { setSearchQuery(''); setDebouncedQuery(''); Keyboard.dismiss(); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+              <Ionicons name="close-circle" size={20} color="#6B7280" />
             </TouchableOpacity>
           )}
         </View>
@@ -672,7 +672,7 @@ export default function HomeScreen() {
                           <Text style={styles.searchResultTitle}>{highlightMatch(item.title, debouncedQuery)}</Text>
                           <Text style={styles.searchResultSubtitle} numberOfLines={1}>{highlightMatch(item.subtitle, debouncedQuery)}</Text>
                         </View>
-                        {item.route && <Ionicons name="chevron-forward" size={16} color="#9CA3AF" />}
+                        {item.route && <Ionicons name="chevron-forward" size={16} color="#6B7280" />}
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -710,7 +710,7 @@ export default function HomeScreen() {
                 <Text style={styles.activeText}>Active Tenant</Text>
               </View>
             ) : (
-              <View style={[styles.activeBadge, { backgroundColor: '#FEF3C7' }]}>
+              <View style={[styles.activeBadge, { backgroundColor: '#FFFBEB' }]}>
                 <Text style={[styles.activeText, { color: '#D97706' }]}>No Room Assigned</Text>
               </View>
             )}
@@ -814,8 +814,8 @@ export default function HomeScreen() {
                 });
               }}
             >
-              <View style={[styles.dateItemIcon, { backgroundColor: '#DCFCE7' }]}>
-                <Ionicons name="enter-outline" size={17} color="#22C55E" />
+              <View style={[styles.dateItemIcon, { backgroundColor: '#ECFDF5' }]}>
+                <Ionicons name="enter-outline" size={17} color="#059669" />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.dateLabel}>Move-in</Text>
@@ -866,8 +866,8 @@ export default function HomeScreen() {
                 setModalData({ visible: true, title: 'Contract End', message, type: modalType });
               }}
             >
-              <View style={[styles.dateItemIcon, { backgroundColor: '#FEE2E2' }]}>
-                <Ionicons name="exit-outline" size={17} color="#EF4444" />
+              <View style={[styles.dateItemIcon, { backgroundColor: '#FEF2F2' }]}>
+                <Ionicons name="exit-outline" size={17} color="#DC2626" />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.dateLabel}>Contract End</Text>
@@ -878,11 +878,11 @@ export default function HomeScreen() {
                   try {
                     const daysLeft = Math.floor((new Date(moveOut).getTime() - Date.now()) / 86400000);
                     if (isNaN(daysLeft)) return null;
-                    let color = '#22C55E';
+                    let color = '#059669';
                     let text = `${daysLeft}d left`;
-                    if (daysLeft < 0) { color = '#b91c1c'; text = `Expired ${Math.abs(daysLeft)}d ago`; }
-                    else if (daysLeft <= 30) { color = '#EF4444'; text = `${daysLeft}d left`; }
-                    else if (daysLeft <= 90) { color = '#ff9000'; text = `${daysLeft}d left`; }
+                    if (daysLeft < 0) { color = '#991B1B'; text = `Expired ${Math.abs(daysLeft)}d ago`; }
+                    else if (daysLeft <= 30) { color = '#DC2626'; text = `${daysLeft}d left`; }
+                    else if (daysLeft <= 90) { color = '#D4AF37'; text = `${daysLeft}d left`; }
                     return <Text style={[styles.dateMeta, { color }]}>{text}</Text>;
                   } catch (_e) { return null; }
                 })()}
@@ -962,7 +962,7 @@ export default function HomeScreen() {
                 activeOpacity={0.88}
               >
                 <Text style={styles.billingHeroActionText}>{billingHeroActionLabel}</Text>
-                <Ionicons name="arrow-forward" size={14} color="#ffffff" />
+                <Ionicons name="arrow-forward" size={14} color="#0A1628" />
               </TouchableOpacity>
             </View>
 
@@ -1050,8 +1050,8 @@ export default function HomeScreen() {
           </View>
           <TouchableOpacity style={styles.summaryRow} onPress={() => router.push('/(tabs)/services')} activeOpacity={0.75}>
             <View style={styles.summaryItem}>
-              <View style={[styles.summaryIcon, { backgroundColor: '#E0F2FE' }]}>
-                <Ionicons name="construct" size={20} color="#0EA5E9" />
+              <View style={[styles.summaryIcon, { backgroundColor: '#EFF6FF' }]}>
+                <Ionicons name="construct" size={20} color="#2563EB" />
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.summaryLabel}>Maintenance</Text>
@@ -1070,7 +1070,7 @@ export default function HomeScreen() {
       <Link href="/(tabs)/chatbot" prefetch asChild>
         <TouchableOpacity activeOpacity={0.85}>
           <Animated.View style={[styles.chatbotButton, { transform: [{ scale: fabScale }] }]}>
-            <LilyFlowerIcon size={28} glow={false} />
+            <LilyFlowerIcon size={28} />
           </Animated.View>
         </TouchableOpacity>
       </Link>
@@ -1104,20 +1104,12 @@ function createStyles(c) {
 
     // Search
     searchContainer: {
-      flexDirection: 'row', alignItems: 'center', backgroundColor: c.surface, paddingHorizontal: 16, borderRadius: 14, marginBottom: 16, borderWidth: 2, borderColor: 'transparent',
-      ...Platform.select({
-        web: { boxShadow: '0 2px 4px rgba(0,0,0,0.05)' },
-        default: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 4, elevation: 2 },
-      }),
+      flexDirection: 'row', alignItems: 'center', backgroundColor: c.surface, paddingHorizontal: 16, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: c.border,
     },
     searchContainerFocused: { borderColor: c.primary },
     searchInput: { flex: 1, paddingVertical: 13, paddingHorizontal: 12, fontSize: 15, color: c.text },
     searchResultsCard: {
-      backgroundColor: c.surface, borderRadius: 14, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: c.border,
-      ...Platform.select({
-        web: { boxShadow: '0 4px 12px rgba(0,0,0,0.08)' },
-        default: { shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.08, shadowRadius: 8, elevation: 4 },
-      }),
+      backgroundColor: c.surface, borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: c.border,
     },
     searchResultsHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
     searchResultsTitle: { fontSize: 13, fontWeight: '600', color: c.textSecondary },
@@ -1140,11 +1132,7 @@ function createStyles(c) {
 
     // Location
     locationCard: {
-      flexDirection: 'row', alignItems: 'center', backgroundColor: c.surface, borderRadius: 16, padding: 14, marginBottom: 16,
-      ...Platform.select({
-        web: { boxShadow: '0 2px 6px rgba(0,0,0,0.06)' },
-        default: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 6, elevation: 2 },
-      }),
+      flexDirection: 'row', alignItems: 'center', backgroundColor: c.surface, borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: c.border,
     },
     locationIconContainer: { width: 42, height: 42, borderRadius: 12, backgroundColor: c.surfaceSecondary, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
     locationInfo: { flex: 1 },
@@ -1154,18 +1142,14 @@ function createStyles(c) {
 
     // Card (generic)
     card: {
-      backgroundColor: c.surface, borderRadius: 16, padding: 16, marginBottom: 16,
-      ...Platform.select({
-        web: { boxShadow: '0 2px 8px rgba(0,0,0,0.06)' },
-        default: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
-      }),
+      backgroundColor: c.surface, borderRadius: 12, padding: 16, marginBottom: 16, borderWidth: 1, borderColor: c.border,
     },
     cardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 },
 
     // Tenancy
-    activeBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#DCFCE7', paddingVertical: 5, paddingHorizontal: 10, borderRadius: 20, gap: 5 },
-    activeDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#22C55E' },
-    activeText: { fontSize: 11, fontWeight: '600', color: '#22C55E' },
+    activeBadge: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#ECFDF5', paddingVertical: 5, paddingHorizontal: 10, borderRadius: 20, gap: 5 },
+    activeDot: { width: 7, height: 7, borderRadius: 4, backgroundColor: '#059669' },
+    activeText: { fontSize: 11, fontWeight: '600', color: '#059669' },
     tenancyContent: { flexDirection: 'row', marginBottom: 14 },
     roomImageContainer: { width: 105, height: 105, borderRadius: 12, overflow: 'hidden', marginRight: 14, position: 'relative' },
     roomImage: { width: '100%', height: '100%' },
@@ -1205,7 +1189,7 @@ function createStyles(c) {
     summaryTile: {
       flex: 1,
       minWidth: 145,
-      borderRadius: 16,
+      borderRadius: 12,
       padding: 14,
       backgroundColor: c.surfaceSecondary,
       borderWidth: 1,
@@ -1213,8 +1197,8 @@ function createStyles(c) {
       gap: 8,
     },
     summaryTileBillingAlert: {
-      backgroundColor: '#FFF7ED',
-      borderColor: '#FED7AA',
+      backgroundColor: '#FFFBEB',
+      borderColor: '#F3E4B0',
     },
     summaryTileHeader: {
       flexDirection: 'row',
@@ -1247,16 +1231,12 @@ function createStyles(c) {
 
     billingInsightCard: {
       backgroundColor: c.cardBg,
-      borderRadius: 20,
+      borderRadius: 12,
       padding: 18,
       marginBottom: 16,
       gap: 16,
       borderWidth: 1,
       borderColor: c.border,
-      ...Platform.select({
-        web: { boxShadow: '0 10px 24px rgba(15,23,42,0.06)' },
-        default: { shadowColor: '#0F172A', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.06, shadowRadius: 18, elevation: 2 },
-      }),
     },
     billingInsightHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
     billingInsightHeaderText: { flex: 1, gap: 2 },
@@ -1304,7 +1284,7 @@ function createStyles(c) {
       fontWeight: '600',
     },
     billingHeroCard: {
-      borderRadius: 18,
+      borderRadius: 12,
       padding: 16,
       gap: 12,
       backgroundColor: c.cardBg,
@@ -1383,7 +1363,7 @@ function createStyles(c) {
       minWidth: 128,
       paddingVertical: 12,
       paddingHorizontal: 12,
-      borderRadius: 14,
+      borderRadius: 8,
       backgroundColor: c.surfaceSecondary,
       borderWidth: 1,
       borderColor: c.border,
@@ -1413,7 +1393,7 @@ function createStyles(c) {
       alignItems: 'center',
       justifyContent: 'center',
       gap: 8,
-      borderRadius: 14,
+      borderRadius: 8,
       paddingVertical: 12,
       paddingHorizontal: 14,
       backgroundColor: c.accent,
@@ -1422,7 +1402,7 @@ function createStyles(c) {
       fontSize: 13,
       lineHeight: 18,
       fontWeight: '800',
-      color: '#ffffff',
+      color: '#0A1628',
     },
     billingInsightCallout: {
       flexDirection: 'row',
@@ -1464,7 +1444,7 @@ function createStyles(c) {
       gap: 14,
       paddingVertical: 12,
       paddingHorizontal: 12,
-      borderRadius: 14,
+      borderRadius: 8,
       backgroundColor: c.surfaceSecondary,
       borderWidth: 1,
       borderColor: c.border,
@@ -1500,19 +1480,19 @@ function createStyles(c) {
       alignItems: 'center',
       justifyContent: 'center',
     },
-    billingInsightDetailValueCritical: { backgroundColor: '#FEE2E2' },
-    billingInsightDetailValueWarning: { backgroundColor: '#FFEDD5' },
-    billingInsightDetailValuePositive: { backgroundColor: '#DCFCE7' },
-    billingInsightDetailValueTextCritical: { color: '#B91C1C' },
-    billingInsightDetailValueTextWarning: { color: '#C2410C' },
-    billingInsightDetailValueTextPositive: { color: '#15803D' },
+    billingInsightDetailValueCritical: { backgroundColor: '#FEF2F2' },
+    billingInsightDetailValueWarning: { backgroundColor: '#FFFBEB' },
+    billingInsightDetailValuePositive: { backgroundColor: '#ECFDF5' },
+    billingInsightDetailValueTextCritical: { color: '#991B1B' },
+    billingInsightDetailValueTextWarning: { color: '#92400E' },
+    billingInsightDetailValueTextPositive: { color: '#065F46' },
     billingInsightList: { gap: 12 },
     billingInsightRow: {
       flexDirection: 'row',
       alignItems: 'flex-start',
       gap: 10,
       padding: 12,
-      borderRadius: 14,
+      borderRadius: 8,
       backgroundColor: c.surfaceSecondary,
       borderWidth: 1,
       borderColor: c.border,
@@ -1528,12 +1508,12 @@ function createStyles(c) {
       alignItems: 'center',
       marginTop: 1,
     },
-    billingInsightToneCritical: { backgroundColor: '#B91C1C' },
-    billingInsightToneWarning: { backgroundColor: '#EA580C' },
-    billingInsightTonePositive: { backgroundColor: '#15803D' },
-    billingInsightToneIncrease: { backgroundColor: '#B45309' },
-    billingInsightToneDecrease: { backgroundColor: '#15803D' },
-    billingInsightToneNeutral: { backgroundColor: '#64748B' },
+    billingInsightToneCritical: { backgroundColor: '#991B1B' },
+    billingInsightToneWarning: { backgroundColor: '#D97706' },
+    billingInsightTonePositive: { backgroundColor: '#065F46' },
+    billingInsightToneIncrease: { backgroundColor: '#92400E' },
+    billingInsightToneDecrease: { backgroundColor: '#065F46' },
+    billingInsightToneNeutral: { backgroundColor: '#4B5563' },
     billingInsightItemBody: { flex: 1, gap: 4, paddingTop: 1 },
     billingInsightItemTitle: {
       fontSize: 13,
@@ -1567,16 +1547,16 @@ function createStyles(c) {
       position: 'absolute',
       bottom: Platform.OS === 'ios' ? 110 : 90,
       right: 20,
-      width: 58,
-      height: 58,
-      borderRadius: 29,
+      width: 52,
+      height: 52,
+      borderRadius: 26,
       backgroundColor: c.accent,
       justifyContent: 'center',
       alignItems: 'center',
       ...Platform.select({
-        ios: { shadowColor: c.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.4, shadowRadius: 8 },
-        android: { elevation: 8 },
-        web: { boxShadow: '0 4px 16px rgba(255,144,0,0.4)' },
+        ios: { shadowColor: c.headerBg, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.16, shadowRadius: 6 },
+        android: { elevation: 4 },
+        web: { boxShadow: '0 2px 8px rgba(10,22,40,0.16)' },
       }),
     },
 

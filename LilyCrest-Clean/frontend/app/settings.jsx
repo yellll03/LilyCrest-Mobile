@@ -18,6 +18,7 @@ import { clearCredentials, enableBiometricSession } from '../src/services/secure
 import { safeBack } from '../src/utils/navigation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
+import { ScreenHeader } from '../src/components/ui/LilycrestUI';
 
 export default function SettingsScreen() {
   const router = useRouter();
@@ -165,13 +166,7 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => safeBack(router, '/(tabs)/profile')}>
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Settings</Text>
-        <View style={{ width: 40 }} />
-      </View>
+      <ScreenHeader strong title="Settings" subtitle="Preferences, security, and legal" onBack={() => safeBack(router, '/(tabs)/profile')} />
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         {/* Appearance */}
@@ -179,8 +174,8 @@ export default function SettingsScreen() {
           <Text style={styles.sectionTitle}>Appearance</Text>
           <View style={styles.settingRow}>
             <View style={styles.settingLeft}>
-              <View style={[styles.iconContainer, { backgroundColor: isDarkMode ? 'rgba(147,51,234,0.2)' : '#F3E8FF' }]}>
-                <Ionicons name="moon" size={20} color="#9333EA" />
+              <View style={[styles.iconContainer, { backgroundColor: colors.infoBg }]}>
+                <Ionicons name="moon" size={20} color="#2563EB" />
               </View>
               <View>
                 <Text style={styles.settingLabel}>Dark Mode</Text>
@@ -190,8 +185,8 @@ export default function SettingsScreen() {
             <Switch 
               value={isDarkMode} 
               onValueChange={toggleDarkMode} 
-              trackColor={{ false: colors.border, true: '#9333EA' }} 
-              thumbColor="#FFFFFF" 
+              trackColor={{ false: colors.border, true: colors.accent }}
+              thumbColor={isDarkMode ? '#0A1628' : '#FFFFFF'}
             />
           </View>
         </View>
@@ -201,8 +196,8 @@ export default function SettingsScreen() {
           <Text style={styles.sectionTitle}>Notifications</Text>
           <View style={styles.settingRow}>
             <View style={styles.settingLeft}>
-              <View style={[styles.iconContainer, { backgroundColor: isDarkMode ? 'rgba(59,130,246,0.2)' : '#DBEAFE' }]}>
-                <Ionicons name="notifications" size={20} color="#3B82F6" />
+              <View style={[styles.iconContainer, { backgroundColor: colors.infoBg }]}>
+                <Ionicons name="notifications" size={20} color="#2563EB" />
               </View>
               <View>
                 <Text style={styles.settingLabel}>Push Notifications</Text>
@@ -215,7 +210,7 @@ export default function SettingsScreen() {
               value={notifications} 
               onValueChange={handleNotificationToggle} 
               disabled={notificationSaving}
-              trackColor={{ false: colors.border, true: '#3B82F6' }} 
+              trackColor={{ false: colors.border, true: '#2563EB' }}
               thumbColor="#FFFFFF" 
             />
           </View>
@@ -228,8 +223,8 @@ export default function SettingsScreen() {
           {biometricAvailable && (
             <View style={styles.settingRow}>
               <View style={styles.settingLeft}>
-                <View style={[styles.iconContainer, { backgroundColor: isDarkMode ? 'rgba(34,197,94,0.2)' : '#DCFCE7' }]}>
-                  <Ionicons name="finger-print" size={20} color="#22C55E" />
+                <View style={[styles.iconContainer, { backgroundColor: colors.successBg }]}>
+                  <Ionicons name="finger-print" size={20} color="#059669" />
                 </View>
                 <View>
                   <Text style={styles.settingLabel}>{biometricType} Login</Text>
@@ -239,7 +234,7 @@ export default function SettingsScreen() {
               <Switch 
                 value={biometrics} 
                 onValueChange={handleBiometricToggle} 
-                trackColor={{ false: colors.border, true: '#22C55E' }} 
+                trackColor={{ false: colors.border, true: '#059669' }}
                 thumbColor="#FFFFFF" 
               />
             </View>
@@ -247,8 +242,8 @@ export default function SettingsScreen() {
           
           <TouchableOpacity style={styles.menuItem} onPress={handleChangePassword}>
             <View style={styles.settingLeft}>
-              <View style={[styles.iconContainer, { backgroundColor: isDarkMode ? 'rgba(239,68,68,0.2)' : '#FEE2E2' }]}>
-                <Ionicons name="lock-closed" size={20} color="#EF4444" />
+              <View style={[styles.iconContainer, { backgroundColor: colors.accentSubtle }]}>
+                <Ionicons name="lock-closed" size={20} color={colors.heading} />
               </View>
               <View>
                 <Text style={styles.settingLabel}>Change Password</Text>
@@ -301,12 +296,9 @@ export default function SettingsScreen() {
 
 const createStyles = (colors, isDarkMode) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border },
-  backButton: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '600', color: colors.text },
   scrollView: { flex: 1 },
   scrollContent: { padding: 16 },
-  section: { backgroundColor: colors.surface, borderRadius: 16, marginBottom: 16, overflow: 'hidden', borderWidth: isDarkMode ? 1 : 0, borderColor: colors.border },
+  section: { backgroundColor: colors.surface, borderRadius: 12, marginBottom: 16, overflow: 'hidden', borderWidth: 1, borderColor: colors.border },
   sectionTitle: { fontSize: 13, fontWeight: '600', color: colors.textMuted, paddingHorizontal: 16, paddingTop: 16, paddingBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
   settingRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border },
   settingLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },

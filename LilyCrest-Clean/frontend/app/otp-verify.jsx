@@ -303,7 +303,7 @@ export default function OtpVerifyScreen() {
           {/* Error */}
           {error ? (
             <View style={styles.errorRow}>
-              <Ionicons name="alert-circle" size={15} color="#EF4444" />
+              <Ionicons name="alert-circle" size={15} color="#DC2626" />
               <Text style={styles.errorText}>{error}</Text>
             </View>
           ) : null}
@@ -349,7 +349,7 @@ export default function OtpVerifyScreen() {
   );
 }
 
-const createStyles = (c, dark) => StyleSheet.create({
+const createStyles = (c) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.surface },
   flex: { flex: 1 },
   scroll: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 16, paddingBottom: 40 },
@@ -370,7 +370,7 @@ const createStyles = (c, dark) => StyleSheet.create({
     width: 88, height: 88, borderRadius: 24,
     backgroundColor: c.primaryLight,
     justifyContent: 'center', alignItems: 'center',
-    borderWidth: 2, borderColor: dark ? 'rgba(255,101,0,0.3)' : '#FDDCB5',
+    borderWidth: 1, borderColor: c.accentLight,
   },
 
   title: { fontSize: 26, fontWeight: '700', color: c.text, textAlign: 'center', marginBottom: 10 },
@@ -386,19 +386,19 @@ const createStyles = (c, dark) => StyleSheet.create({
     fontSize: 22, fontWeight: '700', color: c.text,
     backgroundColor: c.inputBg,
   },
-  otpBoxFilled: { borderColor: c.accent, backgroundColor: dark ? 'rgba(255,101,0,0.08)' : '#FFF0E6' },
-  otpBoxError: { borderColor: '#EF4444', backgroundColor: dark ? 'rgba(239,68,68,0.1)' : '#FEF2F2' },
+  otpBoxFilled: { borderColor: c.accent, backgroundColor: c.accentSubtle },
+  otpBoxError: { borderColor: c.error, backgroundColor: c.errorBg },
 
   errorRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 16 },
-  errorText: { fontSize: 13, color: '#EF4444', fontWeight: '500' },
+  errorText: { fontSize: 13, color: '#DC2626', fontWeight: '500' },
 
   verifyBtn: {
-    backgroundColor: c.accent,
-    paddingVertical: 16, borderRadius: 12,
+    backgroundColor: c.primary,
+    paddingVertical: 16, borderRadius: 8,
     alignItems: 'center', marginBottom: 20,
     ...Platform.select({
-      ios: { shadowColor: c.accent, shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8 },
-      android: { elevation: 4 },
+      ios: { shadowColor: '#0A1628', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.16, shadowRadius: 4 },
+      android: { elevation: 3 },
     }),
   },
   verifyBtnDisabled: {

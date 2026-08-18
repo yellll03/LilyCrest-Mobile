@@ -17,10 +17,11 @@ import {
 } from '../src/utils/passwordValidation';
 import { classifyChangePasswordError } from '../src/utils/authStability';
 import { safeBack } from '../src/utils/navigation';
+import { ScreenHeader } from '../src/components/ui/LilycrestUI';
 
 export default function ChangePasswordScreen() {
   const router = useRouter();
-  const { colors, isDarkMode } = useTheme();
+  const { colors } = useTheme();
   const { showAlert } = useAlert();
   const { logout } = useAuth();
   const [currentPassword, setCurrentPassword] = useState('');
@@ -160,22 +161,16 @@ export default function ChangePasswordScreen() {
     if (field === 'confirm') setConfirmPassword(nextValue);
   };
 
-  const styles = createStyles(colors, isDarkMode);
+  const styles = createStyles(colors);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => safeBack(router, '/login')}>
-          <Ionicons name="arrow-back" size={24} color={colors.text} />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Change Password</Text>
-        <View style={{ width: 40 }} />
-      </View>
+      <ScreenHeader strong title="Change Password" subtitle="Secure your Lilycrest account" onBack={() => safeBack(router, '/login')} />
 
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardView}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.iconContainer}>
-            <Ionicons name="lock-closed" size={40} color="#204b7e" />
+            <Ionicons name="lock-closed" size={40} color="#0A1628" />
           </View>
           
           <Text style={styles.title}>Update Your Password</Text>
@@ -226,23 +221,23 @@ export default function ChangePasswordScreen() {
             {/* Password Requirements */}
             <View style={styles.requirementsContainer}>
               <View style={styles.requirementRow}>
-                <Ionicons name={passwordChecks.length ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={passwordChecks.length ? '#22C55E' : colors.textMuted} />
+                <Ionicons name={passwordChecks.length ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={passwordChecks.length ? '#059669' : colors.textMuted} />
                 <Text style={[styles.requirementText, passwordChecks.length && styles.requirementMet]}>At least 8 characters</Text>
               </View>
               <View style={styles.requirementRow}>
-                <Ionicons name={passwordChecks.uppercase ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={passwordChecks.uppercase ? '#22C55E' : colors.textMuted} />
+                <Ionicons name={passwordChecks.uppercase ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={passwordChecks.uppercase ? '#059669' : colors.textMuted} />
                 <Text style={[styles.requirementText, passwordChecks.uppercase && styles.requirementMet]}>One uppercase letter</Text>
               </View>
               <View style={styles.requirementRow}>
-                <Ionicons name={passwordChecks.lowercase ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={passwordChecks.lowercase ? '#22C55E' : colors.textMuted} />
+                <Ionicons name={passwordChecks.lowercase ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={passwordChecks.lowercase ? '#059669' : colors.textMuted} />
                 <Text style={[styles.requirementText, passwordChecks.lowercase && styles.requirementMet]}>One lowercase letter</Text>
               </View>
               <View style={styles.requirementRow}>
-                <Ionicons name={passwordChecks.number ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={passwordChecks.number ? '#22C55E' : colors.textMuted} />
+                <Ionicons name={passwordChecks.number ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={passwordChecks.number ? '#059669' : colors.textMuted} />
                 <Text style={[styles.requirementText, passwordChecks.number && styles.requirementMet]}>One number</Text>
               </View>
               <View style={styles.requirementRow}>
-                <Ionicons name={passwordChecks.special ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={passwordChecks.special ? '#22C55E' : colors.textMuted} />
+                <Ionicons name={passwordChecks.special ? 'checkmark-circle' : 'ellipse-outline'} size={16} color={passwordChecks.special ? '#059669' : colors.textMuted} />
                 <Text style={[styles.requirementText, passwordChecks.special && styles.requirementMet]}>One special character (!@#$%^&*...)</Text>
               </View>
             </View>
@@ -270,7 +265,7 @@ export default function ChangePasswordScreen() {
             {errors.confirm && <Text style={styles.errorText}>{errors.confirm}</Text>}
             {confirmPassword && doPasswordsMatch && !errors.confirm && (
               <View style={styles.matchIndicator}>
-                <Ionicons name="checkmark-circle" size={16} color="#22C55E" />
+                <Ionicons name="checkmark-circle" size={16} color="#059669" />
                 <Text style={styles.matchText}>Passwords match</Text>
               </View>
             )}
@@ -289,29 +284,26 @@ export default function ChangePasswordScreen() {
   );
 }
 
-const createStyles = (colors, isDarkMode) => StyleSheet.create({
+const createStyles = (colors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.background },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border },
-  backButton: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '600', color: colors.text },
   keyboardView: { flex: 1 },
   scrollContent: { flexGrow: 1, padding: 24 },
-  iconContainer: { width: 80, height: 80, borderRadius: 24, backgroundColor: isDarkMode ? 'rgba(212,148,42,0.2)' : '#FDF6EC', justifyContent: 'center', alignItems: 'center', alignSelf: 'center', marginBottom: 24 },
+  iconContainer: { width: 80, height: 80, borderRadius: 12, backgroundColor: colors.accentSubtle, justifyContent: 'center', alignItems: 'center', alignSelf: 'center', marginBottom: 24, borderWidth: 1, borderColor: colors.accentLight },
   title: { fontSize: 24, fontWeight: '700', color: colors.text, textAlign: 'center', marginBottom: 8 },
   subtitle: { fontSize: 14, color: colors.textSecondary, textAlign: 'center', lineHeight: 20, marginBottom: 32 },
   inputContainer: { marginBottom: 20 },
   label: { fontSize: 13, fontWeight: '600', color: colors.text, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
   inputWrapper: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: colors.border, borderRadius: 12, backgroundColor: colors.inputBg, paddingHorizontal: 16, gap: 12 },
-  inputError: { borderColor: '#EF4444' },
+  inputError: { borderColor: '#DC2626' },
   input: { flex: 1, paddingVertical: 14, fontSize: 15, color: colors.text },
-  errorText: { fontSize: 12, color: '#EF4444', marginTop: 6 },
+  errorText: { fontSize: 12, color: '#DC2626', marginTop: 6 },
   requirementsContainer: { marginTop: 12, gap: 6 },
   requirementRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   requirementText: { fontSize: 13, color: colors.textMuted },
-  requirementMet: { color: '#22C55E' },
+  requirementMet: { color: '#059669' },
   matchIndicator: { flexDirection: 'row', alignItems: 'center', marginTop: 8, gap: 6 },
-  matchText: { fontSize: 13, color: '#22C55E' },
-  updateButton: { backgroundColor: colors.accent, paddingVertical: 16, borderRadius: 12, alignItems: 'center', marginTop: 16 },
+  matchText: { fontSize: 13, color: '#059669' },
+  updateButton: { backgroundColor: colors.primary, paddingVertical: 16, borderRadius: 8, alignItems: 'center', marginTop: 16 },
   updateButtonDisabled: { backgroundColor: colors.textMuted },
   updateButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
 });

@@ -1,39 +1,35 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-
-const STATUS_COLORS = {
-  pending: { bg: '#fff7ed', text: '#c2410c' },
-  solved:  { bg: '#ecfdf3', text: '#15803d' },
-};
+import { useTheme } from '../../context/ThemeContext';
+import { STATUS } from '../../theme/tokens';
 
 export default function InquiryCard({ title, ticketId, preview, status, timestamp, onPress }) {
-  const colors = STATUS_COLORS[status] || STATUS_COLORS.pending;
+  const { colors } = useTheme();
+  const tone = status === 'solved' ? STATUS.success : STATUS.warning;
 
   return (
-    <Pressable style={styles.card} onPress={onPress}>
+    <Pressable style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={onPress}>
       <View style={styles.headerRow}>
-        <Text style={styles.title} numberOfLines={1}>{title}</Text>
-        <View style={[styles.chip, { backgroundColor: colors.bg }]}>
-          <Text style={[styles.chipText, { color: colors.text }]}>
+        <Text style={[styles.title, { color: colors.heading }]} numberOfLines={1}>{title}</Text>
+        <View style={[styles.chip, { backgroundColor: tone.background, borderColor: tone.solid }]}>
+          <Text style={[styles.chipText, { color: tone.text }]}>
             {status === 'solved' ? 'Solved' : 'Pending'}
           </Text>
         </View>
       </View>
-      {ticketId ? <Text style={styles.ticketId}>{ticketId}</Text> : null}
+      {ticketId ? <Text style={[styles.ticketId, { color: colors.textSecondary }]}>{ticketId}</Text> : null}
       {preview ? (
-        <Text style={styles.preview} numberOfLines={2}>{preview}</Text>
+        <Text style={[styles.preview, { color: colors.textSecondary }]} numberOfLines={2}>{preview}</Text>
       ) : null}
-      <Text style={styles.time}>{timestamp}</Text>
+      <Text style={[styles.time, { color: colors.textMuted }]}>{timestamp}</Text>
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#ffffff',
     borderRadius: 12,
     padding: 14,
     borderWidth: 1,
-    borderColor: '#e2e8f0',
     marginBottom: 10,
     gap: 5,
   },
@@ -46,12 +42,12 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 14,
     fontWeight: '700',
-    color: '#1a2744',
   },
   chip: {
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 14,
+    borderWidth: 1,
     flexShrink: 0,
   },
   chipText: {
@@ -60,17 +56,14 @@ const styles = StyleSheet.create({
   },
   preview: {
     fontSize: 13,
-    color: '#64748b',
     lineHeight: 18,
   },
   ticketId: {
     fontSize: 11,
-    color: '#204b7e',
     fontWeight: '700',
     letterSpacing: 0.4,
   },
   time: {
     fontSize: 11,
-    color: '#94a3b8',
   },
 });

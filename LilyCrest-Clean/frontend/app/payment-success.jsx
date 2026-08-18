@@ -15,29 +15,29 @@ import { emitBillingRefresh } from '../src/services/billingState';
 const OUTCOME_COPY = {
   paid: {
     icon: 'checkmark-circle',
-    iconColor: '#22C55E',
-    iconBg: { light: '#f0fdf4', dark: 'rgba(34,197,94,0.16)' },
+    iconColor: '#059669',
+    iconBg: { light: '#ECFDF5', dark: '#0B2D26' },
     title: 'Payment Successful!',
     subtitle: 'Your payment has been processed successfully. It will be reflected in your billing shortly.',
   },
   failed: {
     icon: 'close-circle',
-    iconColor: '#EF4444',
-    iconBg: { light: '#fef2f2', dark: 'rgba(239,68,68,0.16)' },
+    iconColor: '#DC2626',
+    iconBg: { light: '#FEF2F2', dark: '#3A1519' },
     title: 'Payment Failed',
     subtitle: 'Your payment was not completed. No successful payment was recorded — please try again.',
   },
   cancelled: {
     icon: 'remove-circle',
     iconColor: '#6B7280',
-    iconBg: { light: '#f3f4f6', dark: 'rgba(107,114,128,0.2)' },
+    iconBg: { light: '#F1F5F9', dark: '#0B1628' },
     title: 'Payment Cancelled',
     subtitle: 'This payment was cancelled before it completed. No charge was made.',
   },
   pending: {
     icon: 'time',
-    iconColor: '#F59E0B',
-    iconBg: { light: '#fffbeb', dark: 'rgba(245,158,11,0.16)' },
+    iconColor: '#D97706',
+    iconBg: { light: '#FFFBEB', dark: '#35250E' },
     title: 'Verifying Payment',
     subtitle: 'Your payment is still being verified. This can take a moment for some payment methods.',
   },
@@ -48,7 +48,7 @@ export default function PaymentSuccessScreen() {
   const { billing_id, checkout_id } = useLocalSearchParams();
   const checkoutId = String(checkout_id || '').trim();
   const { colors, isDarkMode } = useTheme();
-  const styles = useMemo(() => createStyles(colors, isDarkMode), [colors, isDarkMode]);
+  const styles = useMemo(() => createStyles(colors), [colors]);
   const [isVerifying, setIsVerifying] = useState(Boolean(checkoutId));
   // 'pending' is the safe default: never assume success before the backend
   // confirms it, and never assume failure while verification is still in
@@ -189,7 +189,7 @@ export default function PaymentSuccessScreen() {
   );
 }
 
-const createStyles = (c, isDarkMode) => StyleSheet.create({
+const createStyles = (c) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.background },
   content: {
     flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 14,
@@ -218,7 +218,7 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
   primaryBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     backgroundColor: c.primary, paddingVertical: 15, paddingHorizontal: 32,
-    borderRadius: 14, marginTop: 16, width: '100%', maxWidth: 300,
+    borderRadius: 8, marginTop: 16, width: '100%', maxWidth: 300,
   },
   primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   secondaryBtn: {
