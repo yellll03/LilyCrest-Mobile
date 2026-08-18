@@ -40,6 +40,14 @@ describe('tenant billing UI polish', () => {
     expect(source).not.toContain('charges.map');
   });
 
+  test('uses visible surface colors for utility schedule labels and values', () => {
+    const details = fs.readFileSync(path.resolve(__dirname, '../../app/bill-details.jsx'), 'utf8');
+    expect(details).toContain('styles.utilityScheduleLabel');
+    expect(details).toContain('styles.utilityScheduleValue');
+    expect(details).toContain('utilityScheduleLabel: { color: c.textSecondary }');
+    expect(details).toContain('utilityScheduleValue: { color: c.text }');
+  });
+
   test('reserves safe space for the assistant and bottom navigation', () => {
     expect(source).toContain('useSafeAreaInsets');
     expect(source).toContain('Math.max(insets.bottom + 76, 92)');

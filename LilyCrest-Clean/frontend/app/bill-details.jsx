@@ -389,11 +389,11 @@ export default function BillDetailsScreen() {
             </View>
             {schedule.state === 'available' ? (
               <View style={styles.headerGrid}>
-                {!!schedule.period_start && <View style={styles.headerGridItem}><Text style={styles.headerGridLabel}>Period Start</Text><Text style={styles.headerGridValue}>{shortDate(schedule.period_start)}</Text></View>}
-                {!!schedule.period_end && <View style={styles.headerGridItem}><Text style={styles.headerGridLabel}>Period End</Text><Text style={styles.headerGridValue}>{shortDate(schedule.period_end)}</Text></View>}
-                <View style={styles.headerGridItem}><Text style={styles.headerGridLabel}>Reading Date</Text><Text style={styles.headerGridValue}>{shortDate(schedule.reading_date)}</Text></View>
-                <View style={styles.headerGridItem}><Text style={styles.headerGridLabel}>Released</Text><Text style={styles.headerGridValue}>{shortDate(schedule.release_date)}</Text></View>
-                <View style={styles.headerGridItem}><Text style={styles.headerGridLabel}>Due Date</Text><Text style={styles.headerGridValue}>{shortDate(schedule.due_date)}</Text></View>
+                {!!schedule.period_start && <View style={styles.headerGridItem}><Text style={[styles.headerGridLabel, styles.utilityScheduleLabel]}>Period Start</Text><Text style={[styles.headerGridValue, styles.utilityScheduleValue]}>{shortDate(schedule.period_start)}</Text></View>}
+                {!!schedule.period_end && <View style={styles.headerGridItem}><Text style={[styles.headerGridLabel, styles.utilityScheduleLabel]}>Period End</Text><Text style={[styles.headerGridValue, styles.utilityScheduleValue]}>{shortDate(schedule.period_end)}</Text></View>}
+                <View style={styles.headerGridItem}><Text style={[styles.headerGridLabel, styles.utilityScheduleLabel]}>Reading Date</Text><Text style={[styles.headerGridValue, styles.utilityScheduleValue]}>{shortDate(schedule.reading_date)}</Text></View>
+                <View style={styles.headerGridItem}><Text style={[styles.headerGridLabel, styles.utilityScheduleLabel]}>Released</Text><Text style={[styles.headerGridValue, styles.utilityScheduleValue]}>{shortDate(schedule.release_date)}</Text></View>
+                <View style={styles.headerGridItem}><Text style={[styles.headerGridLabel, styles.utilityScheduleLabel]}>Due Date</Text><Text style={[styles.headerGridValue, styles.utilityScheduleValue]}>{shortDate(schedule.due_date)}</Text></View>
               </View>
             ) : schedule.state === 'pending' ? (
               <Text style={{ color: colors.textSecondary }}>{utilityScheduleStateMessage(schedule.state)}</Text>
@@ -755,6 +755,8 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
   },
   headerGridLabel: { fontSize: 11, color: 'rgba(255,255,255,0.45)', fontWeight: '600' },
   headerGridValue: { fontSize: 13, color: '#ffffff', fontWeight: '700', marginTop: 2 },
+  utilityScheduleLabel: { color: c.textSecondary },
+  utilityScheduleValue: { color: c.text },
 
   // Section Card (shared)
   sectionCard: {
