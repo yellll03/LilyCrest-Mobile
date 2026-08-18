@@ -1,8 +1,9 @@
 import { Platform, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
 import LilyFlowerIcon from './LilyFlowerIcon';
+import { tenantMessageDeliveryStatus } from '../../utils/supportConversationPresentation';
 
-export default function MessageBubble({ message, isUser, onOpenAttachment }) {
+export default function MessageBubble({ message, isUser, onOpenAttachment, showDeliveryStatus = false }) {
   const { colors, isDarkMode } = useTheme();
 
   const systemLineColor = colors.border;
@@ -27,6 +28,7 @@ export default function MessageBubble({ message, isUser, onOpenAttachment }) {
   }
 
   const isAdmin = message.sender === 'admin';
+  const deliveryStatus = showDeliveryStatus ? tenantMessageDeliveryStatus(message) : '';
 
   return (
     <View style={[styles.row, isUser ? styles.rowUser : styles.rowBot]}>
@@ -59,7 +61,9 @@ export default function MessageBubble({ message, isUser, onOpenAttachment }) {
             ))}
           </View>
         ) : null}
-        <Text style={[styles.time, isUser && styles.userTime]}>{message.time}</Text>
+        <Text style={[styles.time, isUser && styles.userTime]}>
+          {message.time}{deliveryStatus ? ` · ${deliveryStatus}` : ''}
+        </Text>
       </View>
 
       {/* Right avatar — User */}

@@ -19,6 +19,10 @@ import { safeBack } from '../src/utils/navigation';
 import { billingDocumentCacheKey } from '../src/utils/billingDocumentCache';
 import { ensureFirebaseStorageAttachments, IMAGE_UPLOAD_MIME_TYPES, MAX_IMAGE_UPLOAD_BYTES } from '../src/services/firebaseStorageUpload';
 import { getBillPaymentDate, getUtilityReleaseSchedule, isBillOutstanding } from '../src/utils/billingStatus';
+import {
+  getRenderableUtilitySchedules,
+  utilityScheduleStateMessage,
+} from '../src/utils/billingSchedulePresentation';
 
 const getBillId = (bill) => bill?.billing_id || bill?.id || bill?._id || bill?.billingId || bill?.billId || bill?.reference_id;
 
@@ -270,16 +274,7 @@ export default function BillDetailsScreen() {
   // and Home so the same bill never shows a contradictory release state
   // depending on which screen rendered it (see billingStatus.js).
   const releaseSchedule = getUtilityReleaseSchedule(bill);
-  const explicitUtilitySchedules = Object.entries(bill.utility_schedules || {})
-    .filter(([, schedule]) => schedule?.state && schedule.state !== 'not_applicable');
-  const utilitySchedules = explicitUtilitySchedules.length > 0
-    ? explicitUtilitySchedules
-    : Object.entries(bill.utility_deadlines || {}).map(([utility, deadline]) => [utility, {
-        state: deadline?.billReleaseDate && deadline?.finalDueDate ? 'available' : 'pending',
-        release_date: deadline?.billReleaseDate,
-        due_date: deadline?.finalDueDate,
-        reading_date: deadline?.meterReadingDate,
-      }]);
+  const utilitySchedules = getRenderableUtilitySchedules(bill);
 
   const moveInFinancials = bill.move_in_financials || bill.moveInFinancials || null;
   // Charge items
@@ -401,9 +396,9 @@ export default function BillDetailsScreen() {
                 <View style={styles.headerGridItem}><Text style={styles.headerGridLabel}>Due Date</Text><Text style={styles.headerGridValue}>{shortDate(schedule.due_date)}</Text></View>
               </View>
             ) : schedule.state === 'pending' ? (
-              <Text style={{ color: colors.textSecondary }}>This utility charge is still being finalized. Dates will appear after publication.</Text>
+              <Text style={{ color: colors.textSecondary }}>{utilityScheduleStateMessage(schedule.state)}</Text>
             ) : (
-              <Text style={{ color: '#b91c1c' }}>Schedule dates are temporarily unavailable. Pull to refresh or contact your branch administrator.</Text>
+              <Text style={{ color: '#b91c1c' }}>{utilityScheduleStateMessage(schedule.state)}</Text>
             )}
           </View>
         ))}

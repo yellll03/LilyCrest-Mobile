@@ -14,6 +14,7 @@
       }
     },
     "release": {
+      "developmentClient": false,
       "android": {
         "buildType": "apk"
       },
@@ -22,6 +23,7 @@
       }
     },
     "preview": {
+      "developmentClient": false,
       "distribution": "internal",
       "environment": "production",
       "android": {
@@ -32,6 +34,7 @@
       }
     },
     "production": {
+      "developmentClient": false,
       "env": {
         "EXPO_PUBLIC_BACKEND_URL": "https://api.lilycrest.space"
       }

@@ -5,7 +5,7 @@ const STATUS_COLORS = {
   solved:  { bg: '#ecfdf3', text: '#15803d' },
 };
 
-export default function InquiryCard({ title, preview, status, timestamp, onPress }) {
+export default function InquiryCard({ title, ticketId, preview, status, timestamp, onPress }) {
   const colors = STATUS_COLORS[status] || STATUS_COLORS.pending;
 
   return (
@@ -18,6 +18,7 @@ export default function InquiryCard({ title, preview, status, timestamp, onPress
           </Text>
         </View>
       </View>
+      {ticketId ? <Text style={styles.ticketId}>{ticketId}</Text> : null}
       {preview ? (
         <Text style={styles.preview} numberOfLines={2}>{preview}</Text>
       ) : null}
@@ -61,6 +62,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#64748b',
     lineHeight: 18,
+  },
+  ticketId: {
+    fontSize: 11,
+    color: '#204b7e',
+    fontWeight: '700',
+    letterSpacing: 0.4,
   },
   time: {
     fontSize: 11,
