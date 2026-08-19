@@ -2,6 +2,7 @@ import { useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { apiService } from '../services/api';
+import { subscribeCanonicalNotifications } from '../services/canonicalEvents';
 
 // Single source of truth for "my lease contract" across the app. Fetches the
 // tenant's canonical Contract record from the Web admin's authoritative
@@ -83,6 +84,10 @@ export function useTenantContract() {
     });
     return () => subscription.remove();
   }, [load]);
+
+  useEffect(() => subscribeCanonicalNotifications((notification) => {
+    if (notification?.data?.type === 'contract_document_ready') load();
+  }), [load]);
 
   const reload = useCallback(() => load(), [load]);
   const refresh = useCallback(() => load({ isManualRefresh: true }), [load]);

@@ -168,6 +168,7 @@ export default function AppHeader() {
       billing_id: notification?.billing_id,
       contract_id: notification?.contract_id,
       conversation_id: notification?.conversation_id,
+      message_id: notification?.message_id,
       request_id: notification?.request_id,
     });
     closeSheet();

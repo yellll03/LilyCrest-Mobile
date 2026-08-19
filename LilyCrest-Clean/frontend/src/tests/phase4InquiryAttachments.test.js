@@ -35,11 +35,15 @@ describe('Phase 4 inquiry, archive, and attachment reconciliation', () => {
 
   test('support attachments use the authenticated chat pipeline and survive history mapping', () => {
     expect(screen).not.toContain('Attachments are not supported in admin support yet.');
-    expect(screen).toContain("context: isSupportMode(chatMode) ? 'chat'");
-    expect(screen).toContain('conversationId: isSupportMode(chatMode) ? supportConversationId');
+    expect(screen).toContain('apiService.uploadSupportAttachment(');
+    expect(api).toContain('form.append(\'file\'');
+    expect(api).toContain('`/chat/${conversationId}/attachments`');
     expect(screen).toContain('attachments: Array.isArray(message.attachments)');
     expect(api).toContain('sendSupportMessage: (conversationId, message, attachments = [])');
-    expect(bubble).toContain('onOpenAttachment?.(file)');
+    expect(bubble).toContain('onOpen?.(file)');
+    expect(bubble).toContain('attachmentThumbnail');
+    expect(screen).toContain('text,');
+    expect(screen).not.toContain("text: text || 'Shared attachments'");
   });
 
   test('attachment opening uses the current session token and only protected chat paths', () => {

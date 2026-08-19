@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
+  Alert,
   Platform,
   Pressable,
   RefreshControl,
@@ -13,7 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
-import { useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import InquiryCard from '../components/assistant/InquiryCard';
 import LilyFlowerIcon from '../components/assistant/LilyFlowerIcon';
 import MessageBubble from '../components/assistant/MessageBubble';
@@ -29,9 +30,12 @@ import {
 } from '../services/firebaseStorageUpload';
 import { pickDocument, pickFromCamera, pickFromLibrary } from '../utils/attachmentPicker';
 import { openChatAttachment } from '../utils/chatAttachmentViewer';
+import { subscribeCanonicalRealtime } from '../services/realtime';
 import {
   getLatestOutgoingMessageId,
   inquiryTicketLabel,
+  supportStatusGroup,
+  supportStatusLabel,
 } from '../utils/supportConversationPresentation';
 
 const ASSISTANT_UPLOAD_MIME_TYPES = [...IMAGE_UPLOAD_MIME_TYPES, 'application/pdf'];
@@ -290,17 +294,13 @@ const supportTitle = (category = '') => {
   return normalized.replace(/_/g, ' ').replace(/\b\w/g, (value) => value.toUpperCase());
 };
 
-const supportInquiryStatus = (status = '') => {
-  if (status === 'resolved' || status === 'closed') return 'solved';
-  return 'pending';
-};
-
 const toSupportFeedMessage = (message) => ({
   id: `support-${message.id}`,
   sender: message.senderRole === 'tenant' ? 'user' : 'admin',
   text: message.message || '',
   time: formatTime(message.createdAt ? new Date(message.createdAt) : new Date()),
   avatar: message.senderRole === 'tenant' ? 'U' : 'A',
+  avatarUri: message.senderProfileImage || '',
   attachments: Array.isArray(message.attachments) ? message.attachments : [],
   readAt: message.readAt || null,
 });
@@ -311,6 +311,7 @@ const toSupportThreadMessage = (message) => ({
   text: message.message || '',
   time: formatTime(message.createdAt ? new Date(message.createdAt) : new Date()),
   attachments: Array.isArray(message.attachments) ? message.attachments : [],
+  avatarUri: message.senderProfileImage || '',
   readAt: message.readAt || null,
 });
 
@@ -321,7 +322,8 @@ const toInquiryCard = (conversation) => {
     id: conversation.id,
     ticketId: inquiryTicketLabel(conversation.ticketId),
     title: supportTitle(conversation.category),
-    status: supportInquiryStatus(conversation.status),
+    status: supportStatusGroup(conversation.status),
+    canonicalStatus: conversation.status || 'open',
     timestamp: formatTimestamp(last),
     preview:
       conversation.lastMessage
@@ -358,10 +360,17 @@ const isSupportMode = (mode) => [
 ].includes(mode);
 
 export default function LilyAssistantScreen() {
-  const { conversationId: notificationConversationIdParam } = useLocalSearchParams();
+  const router = useRouter();
+  const {
+    conversationId: notificationConversationIdParam,
+    messageId: notificationMessageIdParam,
+  } = useLocalSearchParams();
   const notificationConversationId = Array.isArray(notificationConversationIdParam)
     ? notificationConversationIdParam[0]
     : notificationConversationIdParam;
+  const notificationMessageId = Array.isArray(notificationMessageIdParam)
+    ? notificationMessageIdParam[0]
+    : notificationMessageIdParam;
   const scrollRef = useRef(null);
   const adminScrollRef = useRef(null);
   const seenSupportMsgIds = useRef(new Set());
@@ -388,6 +397,8 @@ export default function LilyAssistantScreen() {
   const [isSendingReply, setIsSendingReply] = useState(false);
   const [isReopeningInquiry, setIsReopeningInquiry] = useState(false);
   const [isConfirmingResolution, setIsConfirmingResolution] = useState(false);
+  const [satisfactionRating, setSatisfactionRating] = useState(0);
+  const [satisfactionFeedback, setSatisfactionFeedback] = useState('');
   const [chatMode, setChatMode] = useState(CHAT_MODE.AI);
   const [pendingAdminReason, setPendingAdminReason] = useState('');
   const [pendingAdminIntent, setPendingAdminIntent] = useState('general');
@@ -636,30 +647,23 @@ export default function LilyAssistantScreen() {
     }
   };
 
-  const closeSupportConversation = async () => {
-    let closedConversation = supportConversation;
-
+  const performCloseSupportConversation = async () => {
+    if (!supportConversationId) return;
+    setNetworkError(null);
     try {
-      if (supportConversationId) {
-        const { data } = await apiService.closeSupportChat(
-          supportConversationId,
-          'Closed by tenant from Lily Assistant.'
-        );
-        closedConversation = data?.conversation || closedConversation;
+      const { data } = await apiService.closeSupportChat(
+        supportConversationId,
+        'Closed by tenant from Lily Assistant.'
+      );
+      const closedConversation = data?.conversation;
+      if (!closedConversation || closedConversation.status !== 'closed') {
+        throw new Error('Support did not confirm that this conversation was closed.');
       }
-    } catch (error) {
-      console.warn('[Support Chat] Close failed:', error?.message);
-    } finally {
-      if (closedConversation) {
-        updateInquiryRecord(
-          closedConversation.status === 'closed'
-            ? closedConversation
-            : { ...closedConversation, status: 'closed' },
-          selectedInquiry?.id === closedConversation.id ? selectedInquiry.thread : null
-        );
-      }
-
-      setSupportConversation(closedConversation ? { ...closedConversation, status: 'closed' } : null);
+      updateInquiryRecord(
+        closedConversation,
+        selectedInquiry?.id === closedConversation.id ? selectedInquiry.thread : null
+      );
+      setSupportConversation(closedConversation);
       setSupportConversationId(null);
       setLiveAdminName('');
       clearEscalationPrompt();
@@ -673,7 +677,21 @@ export default function LilyAssistantScreen() {
           text: 'Lily Assistant is available again after this support conversation is closed.',
         },
       ]);
+    } catch (error) {
+      setNetworkError(getChatErrorMessage(error, 'Unable to close this support conversation.'));
     }
+  };
+
+  const closeSupportConversation = () => {
+    if (!supportConversationId) return;
+    Alert.alert(
+      'Close support conversation?',
+      'This ends the current thread. You can reopen it later from My Inquiries if the concern returns.',
+      [
+        { text: 'Keep Open', style: 'cancel' },
+        { text: 'Close', style: 'destructive', onPress: performCloseSupportConversation },
+      ],
+    );
   };
 
   const returnToLilyAssistant = async (options = {}) => {
@@ -803,6 +821,32 @@ export default function LilyAssistantScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supportConversationId, chatMode]);
 
+  useEffect(() => {
+    if (!user?.user_id) return undefined;
+    const refreshFromRealtime = async (payload = {}) => {
+      const conversationId = String(payload.conversationId || payload.id || '').trim();
+      const messageId = String(payload.message?.id || '').trim();
+      if (messageId && seenSupportMsgIds.current.has(messageId)) return;
+      if (messageId) seenSupportMsgIds.current.add(messageId);
+      await loadSupportInquiries().catch(() => undefined);
+      const visibleConversationId = selectedInquiry?.id || supportConversationId;
+      if (conversationId && conversationId === visibleConversationId) {
+        await refreshSupportConversation(conversationId, {
+          replaceMainFeed: !selectedInquiry && conversationId === supportConversationId,
+          scroll: true,
+        }).catch(() => undefined);
+      }
+    };
+    const unsubscribeMessage = subscribeCanonicalRealtime('chat:message-new', refreshFromRealtime);
+    const unsubscribeConversation = subscribeCanonicalRealtime('chat:conversation-updated', refreshFromRealtime);
+    return () => {
+      unsubscribeMessage();
+      unsubscribeConversation();
+    };
+    // Rebind only when the visible canonical conversation changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedInquiry?.id, supportConversationId, user?.user_id]);
+
   const handleSend = async (presetText) => {
     if (sendGuardRef.current || isEscalating) return;
 
@@ -842,19 +886,26 @@ export default function LilyAssistantScreen() {
       if (attachments.length) {
         setIsSending(true);
         setAttachmentUploadStatus('Uploading attachment...');
-        uploadedAttachments = await ensureFirebaseStorageAttachments(attachments, {
-          allowedMimeTypes: isSupportMode(chatMode)
-            ? SUPPORT_UPLOAD_MIME_TYPES
-            : ASSISTANT_UPLOAD_MIME_TYPES,
-          context: isSupportMode(chatMode) ? 'chat' : undefined,
-          conversationId: isSupportMode(chatMode) ? supportConversationId : undefined,
-          entityId: supportConversationId || chat.sessionId || initialSession,
-          folder: isSupportMode(chatMode) ? 'chat-attachments' : 'ai-assistant-attachments',
-          maxBytes: isSupportMode(chatMode)
-            ? MAX_SUPPORT_ATTACHMENT_BYTES
-            : MAX_ASSISTANT_ATTACHMENT_BYTES,
-          tenantId: user?.user_id || user?.id || 'unknown-tenant',
-        });
+        if (isSupportMode(chatMode)) {
+          uploadedAttachments = [];
+          for (let index = 0; index < attachments.length; index += 1) {
+            setAttachmentUploadStatus(`Uploading attachment ${index + 1} of ${attachments.length}...`);
+            const response = await apiService.uploadSupportAttachment(
+              supportConversationId,
+              attachments[index],
+            );
+            if (!response.data?.attachment) throw new Error('Attachment upload did not complete.');
+            uploadedAttachments.push(response.data.attachment);
+          }
+        } else {
+          uploadedAttachments = await ensureFirebaseStorageAttachments(attachments, {
+            allowedMimeTypes: ASSISTANT_UPLOAD_MIME_TYPES,
+            entityId: chat.sessionId || initialSession,
+            folder: 'ai-assistant-attachments',
+            maxBytes: MAX_ASSISTANT_ATTACHMENT_BYTES,
+            tenantId: user?.user_id || user?.id || 'unknown-tenant',
+          });
+        }
         setAttachmentUploadStatus('Attachment uploaded');
       } else {
         setAttachmentUploadStatus('');
@@ -863,7 +914,7 @@ export default function LilyAssistantScreen() {
       const userMessage = {
         id: `${supportConversationId && isSupportMode(chatMode) ? 'support-local' : 'user'}-${Date.now()}`,
         sender: 'user',
-        text: text || 'Shared attachments',
+        text,
         time: formatTime(new Date()),
         avatar: 'U',
         attachments: uploadedAttachments,
@@ -995,7 +1046,7 @@ export default function LilyAssistantScreen() {
     }
   };
 
-  const reopenSelectedInquiry = async (conversationId = selectedInquiry?.id) => {
+  const performReopenSelectedInquiry = async (conversationId) => {
     if (!conversationId || isReopeningInquiry || reopenGuardRef.current) return;
     reopenGuardRef.current = true;
     setIsReopeningInquiry(true);
@@ -1026,7 +1077,7 @@ export default function LilyAssistantScreen() {
     }
   };
 
-  const confirmInquiryResolution = async (resolved, conversationId = null) => {
+  const confirmInquiryResolution = async (resolved, conversationId = null, satisfaction = {}) => {
     const targetId = conversationId || selectedInquiry?.id || supportConversationId;
     if (!targetId || isConfirmingResolution || resolutionGuardRef.current) return;
     resolutionGuardRef.current = true;
@@ -1037,6 +1088,7 @@ export default function LilyAssistantScreen() {
         targetId,
         resolved,
         resolved ? '' : 'My concern is not resolved yet.',
+        satisfaction,
       );
       if (data?.conversation) {
         syncConversationState(data.conversation);
@@ -1047,6 +1099,10 @@ export default function LilyAssistantScreen() {
         scroll: true,
       });
       await loadSupportInquiries();
+      if (resolved) {
+        setSatisfactionRating(0);
+        setSatisfactionFeedback('');
+      }
     } catch (error) {
       setNetworkError(getChatErrorMessage(error, 'Unable to save your resolution choice.'));
     } finally {
@@ -1094,6 +1150,19 @@ export default function LilyAssistantScreen() {
         return;
       }
 
+      const selectedMimeType = String(file.mimeType || file.type || '').toLowerCase();
+      const selectedExtension = String(file.name).toLowerCase().split('.').pop();
+      const supportedByExtension = ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif', 'pdf'].includes(selectedExtension);
+      if (
+        isSupportMode(chatMode)
+        && !SUPPORT_UPLOAD_MIME_TYPES.includes(selectedMimeType)
+        && !((!selectedMimeType || selectedMimeType === 'application/octet-stream') && supportedByExtension)
+      ) {
+        setNetworkError('Support attachments must be a JPG, PNG, WebP, HEIC/HEIF image, or PDF.');
+        setShowAttachMenu(false);
+        return;
+      }
+
       const maxAttachmentBytes = isSupportMode(chatMode)
         ? MAX_SUPPORT_ATTACHMENT_BYTES
         : MAX_ASSISTANT_ATTACHMENT_BYTES;
@@ -1136,6 +1205,91 @@ export default function LilyAssistantScreen() {
     markInteracted();
     handleSend(prompt);
   };
+
+  const reopenSelectedInquiry = (conversationId = selectedInquiry?.id) => {
+    if (!conversationId || isReopeningInquiry) return;
+    Alert.alert(
+      'Reopen this concern?',
+      'The same support conversation will become active again so you can explain what still needs attention.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Reopen', onPress: () => performReopenSelectedInquiry(conversationId) },
+      ],
+    );
+  };
+
+  const renderContractContext = (conversation) => {
+    const context = conversation?.context;
+    if (context?.entityType !== 'contract' || !context?.entityId) return null;
+    return (
+      <Pressable
+        style={styles.contextCard}
+        onPress={() => router.push({
+          pathname: '/contract-viewer',
+          params: { contractId: context.entityId },
+        })}
+        accessibilityRole="button"
+        accessibilityLabel="View related contract"
+      >
+        <Ionicons name="document-text-outline" size={17} color="#D4AF37" />
+        <View style={styles.contextCopy}>
+          <Text style={styles.contextTitle}>Related to Contract</Text>
+          <Text style={styles.contextAction}>View Contract</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color="#D4AF37" />
+      </Pressable>
+    );
+  };
+
+  const renderResolutionConfirmation = (conversationId) => (
+    <View style={styles.resolutionCard}>
+      <Text style={styles.resolutionLabel}>Optional satisfaction rating</Text>
+      <View style={styles.ratingRow} accessibilityLabel="Satisfaction rating from one to five">
+        {[1, 2, 3, 4, 5].map((rating) => (
+          <Pressable
+            key={rating}
+            onPress={() => setSatisfactionRating(rating)}
+            accessibilityRole="button"
+            accessibilityLabel={`${rating} star${rating === 1 ? '' : 's'}`}
+          >
+            <Ionicons
+              name={rating <= satisfactionRating ? 'star' : 'star-outline'}
+              size={24}
+              color="#D4AF37"
+            />
+          </Pressable>
+        ))}
+      </View>
+      <TextInput
+        style={styles.feedbackInput}
+        value={satisfactionFeedback}
+        onChangeText={setSatisfactionFeedback}
+        placeholder="Optional feedback"
+        placeholderTextColor="#6B7280"
+        maxLength={1000}
+        multiline
+      />
+      <View style={styles.supportBannerActions}>
+        <Pressable
+          style={[styles.supportPositiveButton, isConfirmingResolution && styles.buttonDisabled]}
+          onPress={() => confirmInquiryResolution(true, conversationId, {
+            rating: satisfactionRating || undefined,
+            feedback: satisfactionFeedback,
+          })}
+          disabled={isConfirmingResolution}
+        >
+          <Text style={styles.supportPrimaryButtonText}>Yes, resolved</Text>
+        </Pressable>
+        <Pressable
+          style={[styles.supportGhostButton, isConfirmingResolution && styles.buttonDisabled]}
+          onPress={() => confirmInquiryResolution(false, conversationId)}
+          disabled={isConfirmingResolution}
+        >
+          <Text style={styles.supportGhostButtonText}>No, continue</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
 
   const renderSupportBanner = () => {
     if (chatMode === CHAT_MODE.NEEDS_ADMIN) {
@@ -1207,29 +1361,14 @@ export default function LilyAssistantScreen() {
 
     if (chatMode === CHAT_MODE.AWAITING_CONFIRMATION) {
       return (
-        <View style={styles.supportBannerActive}>
+        <View style={[styles.supportBannerActive, styles.supportBannerStacked]}>
           <View style={styles.supportBannerContent}>
             <Text style={styles.supportBannerTitle}>Was your concern resolved?</Text>
             <Text style={styles.supportBannerText}>
               Please confirm whether the administrator&apos;s response solved your concern.
             </Text>
           </View>
-          <View style={styles.supportBannerActions}>
-            <Pressable
-              style={[styles.supportPositiveButton, isConfirmingResolution && styles.buttonDisabled]}
-              onPress={() => confirmInquiryResolution(true)}
-              disabled={isConfirmingResolution}
-            >
-              <Text style={styles.supportPrimaryButtonText}>Yes, resolved</Text>
-            </Pressable>
-            <Pressable
-              style={[styles.supportGhostButton, isConfirmingResolution && styles.buttonDisabled]}
-              onPress={() => confirmInquiryResolution(false)}
-              disabled={isConfirmingResolution}
-            >
-              <Text style={styles.supportGhostButtonText}>No, continue</Text>
-            </Pressable>
-          </View>
+          {renderResolutionConfirmation(supportConversationId)}
         </View>
       );
     }
@@ -1325,7 +1464,7 @@ export default function LilyAssistantScreen() {
           </View>
           <View style={[styles.statusChip, isSolved ? styles.statusChipSolved : null]}>
             <Text style={[styles.statusChipText, isSolved ? styles.statusChipTextSolved : null]}>
-              {isSolved ? 'Solved' : 'Pending'}
+              {supportStatusLabel(selectedInquiry.canonicalStatus)}
             </Text>
           </View>
         </View>
@@ -1351,6 +1490,8 @@ export default function LilyAssistantScreen() {
             <View style={styles.systemLine} />
           </View>
 
+          {renderContractContext(selectedInquiry.conversation)}
+
           {networkError ? (
             <View style={styles.errorBanner}>
               <Text style={styles.errorBannerText}>{networkError}</Text>
@@ -1364,6 +1505,7 @@ export default function LilyAssistantScreen() {
               isUser={item.sender === 'user'}
               showDeliveryStatus={item.id === latestOutgoingMessageId}
               onOpenAttachment={handleOpenChatAttachment}
+              highlighted={String(item.id) === String(notificationMessageId || '')}
             />
           ))}
         </ScrollView>
@@ -1396,22 +1538,7 @@ export default function LilyAssistantScreen() {
             <View style={styles.resolvedActions}>
               <Text style={styles.resolvedNoticeText}>Was your concern resolved?</Text>
               <Text style={styles.reopenPrompt}>Continue the same inquiry if the administrator&apos;s response did not solve it.</Text>
-              <View style={styles.supportBannerActions}>
-                <Pressable
-                  style={[styles.primaryFooterButton, styles.positiveFooterButton, isConfirmingResolution && styles.buttonDisabled]}
-                  onPress={() => confirmInquiryResolution(true, selectedInquiry.id)}
-                  disabled={isConfirmingResolution}
-                >
-                  <Text style={styles.primaryFooterButtonText}>Yes, resolved</Text>
-                </Pressable>
-                <Pressable
-                  style={[styles.supportGhostButton, isConfirmingResolution && styles.buttonDisabled]}
-                  onPress={() => confirmInquiryResolution(false, selectedInquiry.id)}
-                  disabled={isConfirmingResolution}
-                >
-                  <Text style={styles.supportGhostButtonText}>No, continue</Text>
-                </Pressable>
-              </View>
+              {renderResolutionConfirmation(selectedInquiry.id)}
             </View>
           ) : (
             <View style={styles.replyBar}>
@@ -1584,6 +1711,8 @@ export default function LilyAssistantScreen() {
                     </View>
                   </View>
 
+                  {renderContractContext(supportConversation)}
+
                   {messages.map((message) => (
                     <View key={message.id}>
                       <MessageBubble
@@ -1593,6 +1722,7 @@ export default function LilyAssistantScreen() {
                         onOpenAttachment={String(message.id).startsWith('support-')
                           ? handleOpenChatAttachment
                           : undefined}
+                        highlighted={String(message.id) === `support-${notificationMessageId}`}
                       />
                       {message.sender === 'bot' && message.suggestions?.length ? (
                         <FollowupChips suggestions={message.suggestions} onSelect={handleSend} />
@@ -1788,6 +1918,7 @@ export default function LilyAssistantScreen() {
                         ticketId={item.ticketId}
                         preview={item.preview}
                         status={item.status}
+                        canonicalStatus={item.canonicalStatus}
                         timestamp={item.timestamp}
                         onPress={() => handleSelectInquiry(item)}
                       />
@@ -2051,6 +2182,10 @@ function createAssistantStyles(c, dark) {
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
+  supportBannerStacked: {
+    alignItems: 'stretch',
+    flexDirection: 'column',
+  },
   supportBannerWarn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -2080,6 +2215,56 @@ function createAssistantStyles(c, dark) {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
+  },
+  resolutionCard: {
+    width: '100%',
+    gap: 8,
+  },
+  resolutionLabel: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: c.textSecondary,
+  },
+  ratingRow: {
+    flexDirection: 'row',
+    gap: 6,
+  },
+  feedbackInput: {
+    minHeight: 42,
+    maxHeight: 80,
+    borderWidth: 1,
+    borderColor: c.border,
+    borderRadius: 8,
+    backgroundColor: c.inputBg,
+    color: c.text,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 12,
+  },
+  contextCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: dark ? c.surfaceSecondary : '#FBF7EA',
+    borderWidth: 1,
+    borderColor: '#F3E4B0',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 12,
+  },
+  contextCopy: {
+    flex: 1,
+  },
+  contextTitle: {
+    color: c.text,
+    fontSize: 12,
+    fontWeight: '700',
+  },
+  contextAction: {
+    color: c.textSecondary,
+    fontSize: 11,
+    marginTop: 2,
   },
   supportPrimaryButton: {
     backgroundColor: '#0A1628',

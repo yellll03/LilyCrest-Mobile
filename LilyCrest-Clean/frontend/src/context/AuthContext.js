@@ -28,6 +28,12 @@ import {
   setSessionToken,
 } from '../services/secureCredentials';
 import { subscribeSessionExpired } from '../services/sessionEvents';
+import {
+  canonicalNotificationKey,
+  publishCanonicalNotification,
+  subscribeCanonicalNotifications,
+} from '../services/canonicalEvents';
+import { startCanonicalRealtime, stopCanonicalRealtime } from '../services/realtime';
 import { useToast } from './ToastContext';
 
 const AuthContext = createContext(undefined);
@@ -401,37 +407,21 @@ export function AuthProvider({ children }) {
   }, [showToast]);
 
   useEffect(() => {
-    const buildNotificationKey = (notification) => {
-      const identifier = notification?.request?.identifier;
-      if (identifier) return String(identifier);
-
-      const title = notification?.request?.content?.title || '';
-      const body = notification?.request?.content?.body || '';
-      const data = notification?.request?.content?.data || {};
-      return JSON.stringify({ title, body, data });
-    };
-
     const cleanup = setupNotificationListeners(
       (notification) => {
         const title = notification?.request?.content?.title || 'New update';
         const message = notification?.request?.content?.body || DEFAULT_NOTIFICATION_MESSAGE;
         const data = notification?.request?.content?.data || {};
-        const nextKey = buildNotificationKey(notification);
-
-        if (!nextKey || latestNotificationKeyRef.current === nextKey) return;
-
-        latestNotificationKeyRef.current = nextKey;
+        publishCanonicalNotification({
+          notification_id: notification?.request?.identifier,
+          title,
+          body: message,
+          data,
+        });
         // Refetch rather than blindly incrementing a local counter — this
         // notification may already exist server-side (or not be a
         // notification-list item at all), so re-syncing with the backend
         // keeps the shared unread state accurate instead of drifting.
-        refreshNotifications();
-        setNotificationBanner({
-          key: nextKey,
-          title,
-          message,
-          data,
-        });
       },
       (data) => {
         pendingNotificationRef.current = data;
@@ -442,7 +432,30 @@ export function AuthProvider({ children }) {
     return () => {
       if (cleanup) cleanup();
     };
-  }, [handleNotificationTap, refreshNotifications]);
+  }, [handleNotificationTap]);
+
+  useEffect(() => subscribeCanonicalNotifications((notification) => {
+    if (authStatusRef.current !== 'authenticated') return;
+    const nextKey = canonicalNotificationKey(notification);
+    if (!nextKey || latestNotificationKeyRef.current === nextKey) return;
+    latestNotificationKeyRef.current = nextKey;
+    refreshNotifications();
+    setNotificationBanner({
+      key: nextKey,
+      title: notification.title,
+      message: notification.body || DEFAULT_NOTIFICATION_MESSAGE,
+      data: notification.data || {},
+    });
+  }), [refreshNotifications]);
+
+  useEffect(() => {
+    if (authStatus !== 'authenticated' || !user?.user_id) {
+      stopCanonicalRealtime();
+      return undefined;
+    }
+    startCanonicalRealtime().catch(() => {});
+    return () => stopCanonicalRealtime();
+  }, [authStatus, user?.user_id]);
 
   useEffect(() => {
     if (!notificationBanner) return undefined;

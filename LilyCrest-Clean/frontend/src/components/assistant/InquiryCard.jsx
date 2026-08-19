@@ -1,10 +1,12 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
-import { STATUS } from '../../theme/tokens';
+import { statusColors } from '../../theme/tokens';
+import { supportStatusLabel } from '../../utils/supportConversationPresentation';
 
-export default function InquiryCard({ title, ticketId, preview, status, timestamp, onPress }) {
+export default function InquiryCard({ title, ticketId, preview, status, canonicalStatus, timestamp, onPress }) {
   const { colors } = useTheme();
-  const tone = status === 'solved' ? STATUS.success : STATUS.warning;
+  const actualStatus = canonicalStatus || (status === 'solved' ? 'resolved' : 'open');
+  const tone = statusColors(actualStatus);
 
   return (
     <Pressable style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={onPress}>
@@ -12,7 +14,7 @@ export default function InquiryCard({ title, ticketId, preview, status, timestam
         <Text style={[styles.title, { color: colors.heading }]} numberOfLines={1}>{title}</Text>
         <View style={[styles.chip, { backgroundColor: tone.background, borderColor: tone.solid }]}>
           <Text style={[styles.chipText, { color: tone.text }]}>
-            {status === 'solved' ? 'Solved' : 'Pending'}
+            {supportStatusLabel(actualStatus)}
           </Text>
         </View>
       </View>

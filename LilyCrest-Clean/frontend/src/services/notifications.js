@@ -363,9 +363,38 @@ export function resolveNotificationRoute(data = {}) {
 
   const directUrl = typeof data?.url === 'string' ? data.url.trim() : '';
   const conversationId = data?.conversation_id || data?.conversationId || data?.session_id;
+  const messageId = data?.message_id || data?.messageId;
   const requestId = data?.request_id || data?.requestId;
+  const contractId = data?.contract_id || data?.contractId;
+  const explicitScreen = typeof data?.screen === 'string' ? data.screen.trim().toLowerCase() : '';
+  const type = typeof data?.type === 'string' ? data.type.trim().toLowerCase() : '';
+  const category = typeof data?.category === 'string' ? data.category.trim().toLowerCase() : '';
+  const screen = explicitScreen || type || category;
+
+  if (type === 'chat_reply') {
+    return conversationId
+      ? {
+          pathname: '/(tabs)/chatbot',
+          params: {
+            conversationId: String(conversationId),
+            ...(messageId ? { messageId: String(messageId) } : {}),
+          },
+        }
+      : '/(tabs)/chatbot';
+  }
+  if (type === 'contract_document_ready') {
+    return contractId
+      ? { pathname: '/contract-viewer', params: { contractId: String(contractId) } }
+      : '/contract-viewer';
+  }
   if (/^\/\(tabs\)\/chatbot(?:[/?#]|$)/i.test(directUrl) && conversationId) {
-    return { pathname: '/(tabs)/chatbot', params: { conversationId: String(conversationId) } };
+    return {
+      pathname: '/(tabs)/chatbot',
+      params: {
+        conversationId: String(conversationId),
+        ...(messageId ? { messageId: String(messageId) } : {}),
+      },
+    };
   }
   if (/^\/\(tabs\)\/services(?:[/?#]|$)/i.test(directUrl) && requestId) {
     return { pathname: '/(tabs)/services', params: { requestId: String(requestId) } };
@@ -379,12 +408,7 @@ export function resolveNotificationRoute(data = {}) {
   if (directUrl.startsWith('/') && !/^\/surveys?(\/|$)/i.test(directUrl)) return directUrl;
 
   const billingId = data?.billing_id || data?.bill_id;
-  const contractId = data?.contract_id || data?.contractId;
   const surveyId = data?.surveyId || data?.survey_id;
-  const explicitScreen = typeof data?.screen === 'string' ? data.screen.trim().toLowerCase() : '';
-  const type = typeof data?.type === 'string' ? data.type.trim().toLowerCase() : '';
-  const category = typeof data?.category === 'string' ? data.category.trim().toLowerCase() : '';
-  const screen = explicitScreen || type || category;
 
   switch (screen) {
     case 'billing':
@@ -405,11 +429,18 @@ export function resolveNotificationRoute(data = {}) {
         ? { pathname: '/(tabs)/services', params: { requestId: String(requestId) } }
         : '/(tabs)/services';
     case 'chat':
+    case 'chat_reply':
     case 'chatbot':
     case 'admin chat':
     case 'live chat':
       return conversationId
-        ? { pathname: '/(tabs)/chatbot', params: { conversationId: String(conversationId) } }
+        ? {
+            pathname: '/(tabs)/chatbot',
+            params: {
+              conversationId: String(conversationId),
+              ...(messageId ? { messageId: String(messageId) } : {}),
+            },
+          }
         : '/(tabs)/chatbot';
     case 'reservation':
       return '/(tabs)/home';

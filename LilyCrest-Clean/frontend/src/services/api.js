@@ -394,12 +394,30 @@ export const apiService = {
   getSupportChatMessages: (conversationId) => api.get(`/chat/${conversationId}/messages`),
   sendSupportMessage: (conversationId, message, attachments = []) =>
     api.post(`/chat/${conversationId}/messages`, { message, attachments }),
-  confirmSupportResolution: (conversationId, resolved, note = '') =>
-    api.patch(`/chat/${conversationId}/resolution`, { resolved, note }),
+  uploadSupportAttachment: (conversationId, attachment = {}) => {
+    const form = new FormData();
+    form.append('file', {
+      uri: attachment.uri,
+      name: attachment.name || attachment.fileName || 'attachment',
+      type: attachment.mimeType || attachment.type || 'application/octet-stream',
+    });
+    return api.post(`/chat/${conversationId}/attachments`, form, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 90000,
+    });
+  },
+  confirmSupportResolution: (conversationId, resolved, note = '', satisfaction = {}) =>
+    api.patch(`/chat/${conversationId}/resolution`, {
+      resolved,
+      note,
+      ...(satisfaction.rating ? { rating: satisfaction.rating } : {}),
+      ...(satisfaction.feedback?.trim() ? { feedback: satisfaction.feedback.trim() } : {}),
+    }),
   reopenSupportChat: (conversationId, note) =>
     api.patch(`/chat/${conversationId}/reopen`, { note }),
   closeSupportChat: (conversationId, note) =>
     api.patch(`/chat/${conversationId}/close`, { note }),
+  sendSupportTyping: (conversationId) => api.post(`/chat/${conversationId}/typing`),
   
   // Seed data
   seedData: () => api.post('/seed'),
