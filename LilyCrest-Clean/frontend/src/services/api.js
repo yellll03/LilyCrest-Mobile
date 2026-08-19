@@ -394,18 +394,14 @@ export const apiService = {
   getSupportChatMessages: (conversationId) => api.get(`/chat/${conversationId}/messages`),
   sendSupportMessage: (conversationId, message, attachments = []) =>
     api.post(`/chat/${conversationId}/messages`, { message, attachments }),
-  uploadSupportAttachment: (conversationId, attachment = {}) => {
-    const form = new FormData();
-    form.append('file', {
-      uri: attachment.uri,
-      name: attachment.name || attachment.fileName || 'attachment',
-      type: attachment.mimeType || attachment.type || 'application/octet-stream',
-    });
-    return api.post(`/chat/${conversationId}/attachments`, form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 90000,
-    });
-  },
+  // Registers an attachment whose bytes were already uploaded through the
+  // canonical durable-storage pipeline (POST /upload/firebase-storage, via
+  // ensureFirebaseStorageAttachments). The backend has no multipart parser
+  // and deliberately no second storage system — it re-proves the
+  // server-issued storagePath/downloadUrl pair belongs to this tenant, then
+  // records the metadata.
+  registerSupportAttachment: (conversationId, attachment = {}) =>
+    api.post(`/chat/${encodeURIComponent(conversationId)}/attachments`, { attachment }),
   confirmSupportResolution: (conversationId, resolved, note = '', satisfaction = {}) =>
     api.patch(`/chat/${conversationId}/resolution`, {
       resolved,
@@ -417,7 +413,6 @@ export const apiService = {
     api.patch(`/chat/${conversationId}/reopen`, { note }),
   closeSupportChat: (conversationId, note) =>
     api.patch(`/chat/${conversationId}/close`, { note }),
-  sendSupportTyping: (conversationId) => api.post(`/chat/${conversationId}/typing`),
   
   // Seed data
   seedData: () => api.post('/seed'),

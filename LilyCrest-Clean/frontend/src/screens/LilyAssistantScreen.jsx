@@ -202,6 +202,9 @@ const MAX_CHAT_INPUT_CHARS = 800;
 const MAX_ATTACHMENT_COUNT = 3;
 const MAX_ASSISTANT_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const MAX_SUPPORT_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+// Must match SUPPORT_ATTACHMENT_FOLDER in backend/controllers/chat.controller.js
+// — the server authorizes the uploaded object against `<folder>/<user_id>/`.
+const SUPPORT_ATTACHMENT_FOLDER = 'support-attachments';
 const LIVE_CHAT_POLL_MS = 5000;
 const SEND_RATE_LIMIT_MS = 900;
 const CHAT_MODE = {
@@ -870,13 +873,26 @@ export default function LilyAssistantScreen() {
         setIsSending(true);
         setAttachmentUploadStatus('Uploading attachment...');
         if (isSupportMode(chatMode)) {
+          // Same durable-storage pipeline the assistant branch below uses:
+          // bytes go to Firebase Storage through POST /upload/firebase-storage
+          // (which derives the tenant path segment server-side), then the
+          // resulting metadata is registered against this conversation, which
+          // re-proves ownership before the file can be referenced by a
+          // message. There is no separate multipart upload path.
           uploadedAttachments = [];
           for (let index = 0; index < attachments.length; index += 1) {
             setAttachmentUploadStatus(`Uploading attachment ${index + 1} of ${attachments.length}...`);
-            const response = await apiService.uploadSupportAttachment(
-              supportConversationId,
-              attachments[index],
-            );
+            const [stored] = await ensureFirebaseStorageAttachments([attachments[index]], {
+              allowedMimeTypes: SUPPORT_UPLOAD_MIME_TYPES,
+              conversationId: supportConversationId,
+              context: 'support-chat',
+              entityId: supportConversationId,
+              folder: SUPPORT_ATTACHMENT_FOLDER,
+              maxBytes: MAX_SUPPORT_ATTACHMENT_BYTES,
+              tenantId: user?.user_id || user?.id || 'unknown-tenant',
+            });
+            if (!stored) throw new Error('Attachment upload did not complete.');
+            const response = await apiService.registerSupportAttachment(supportConversationId, stored);
             if (!response.data?.attachment) throw new Error('Attachment upload did not complete.');
             uploadedAttachments.push(response.data.attachment);
           }

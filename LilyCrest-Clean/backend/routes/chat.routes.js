@@ -16,6 +16,13 @@ router.get('/me', tenantMiddleware, chatController.getMyConversations);
 router.get('/:conversationId/messages', tenantMiddleware, chatController.getConversationMessages);
 router.post('/:conversationId/messages', tenantMiddleware, chatController.sendTenantMessage);
 router.patch('/:conversationId/close', tenantMiddleware, chatController.closeConversation);
+// Register an already-uploaded file (bytes went through
+// POST /upload/firebase-storage) against a conversation the tenant owns.
+router.post('/:conversationId/attachments', tenantMiddleware, chatController.uploadConversationAttachment);
+// Tenant's answer to the admin's "was this resolved?" prompt.
+router.patch('/:conversationId/resolution', tenantMiddleware, chatController.confirmConversationResolution);
+// Reopen a resolved/closed concern on the same thread.
+router.patch('/:conversationId/reopen', tenantMiddleware, chatController.reopenConversation);
 
 // Admin support-chat routes: separately gated by adminMiddleware, unaffected
 // by the tenant-only restriction above.

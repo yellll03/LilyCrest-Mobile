@@ -36,6 +36,9 @@ test('chat.routes.js: tenant support-chat routes require tenantMiddleware', () =
     ['/:conversationId/messages', 'get'],
     ['/:conversationId/messages', 'post'],
     ['/:conversationId/close', 'patch'],
+    ['/:conversationId/attachments', 'post'],
+    ['/:conversationId/resolution', 'patch'],
+    ['/:conversationId/reopen', 'patch'],
   ]) {
     const names = middlewareNames(router, path, method);
     assert.ok(names.includes('tenantMiddleware'), `${method.toUpperCase()} ${path} must enforce tenantMiddleware, got: ${names.join(', ')}`);
