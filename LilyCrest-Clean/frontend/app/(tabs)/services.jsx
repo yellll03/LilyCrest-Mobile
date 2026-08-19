@@ -197,7 +197,12 @@ const RESOLUTION_ESTIMATES = {
   high: 'Within 24 hours',
 };
 
-const STATUS_STEPS = ['pending', 'pending_review', 'reviewed', 'provider_assigned', 'scheduled', 'in_progress', 'waiting_tenant', 'resolved'];
+const STATUS_STAGES = [
+  { label: 'Pending', statuses: ['pending', 'pending_review'] },
+  { label: 'Reviewed', statuses: ['viewed', 'reviewed', 'provider_assigned'] },
+  { label: 'In Progress', statuses: ['scheduled', 'in_progress', 'waiting_tenant', 'reopened'] },
+  { label: 'Resolved', statuses: ['resolved', 'completed'] },
+];
 const MIN_DESCRIPTION_LENGTH = 10;
 // Mirrors backend/controllers/maintenance.controller.js DESCRIPTION_MAX.
 // Frontend enforcement here is UX only — the backend remains authoritative.
@@ -1272,18 +1277,18 @@ export default function ServicesScreen() {
                   {/* Status Timeline */}
                   {!editMode && (
                     <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20, paddingHorizontal: 4 }}>
-                      {STATUS_STEPS.map((step, i) => {
-                        const currentIdx = STATUS_STEPS.indexOf((detailRequest.status || '').toLowerCase());
+                      {STATUS_STAGES.map((stage, i) => {
+                        const currentStatus = (detailRequest.status || '').toLowerCase();
+                        const currentIdx = STATUS_STAGES.findIndex((s) => s.statuses.includes(currentStatus));
                         const isActive = i <= currentIdx;
                         const isCurrent = i === currentIdx;
-                        const stepLabel = step === 'in_progress' ? 'In Progress' : step.charAt(0).toUpperCase() + step.slice(1);
                         return (
-                          <View key={step} style={{ flex: 1, alignItems: 'center' }}>
+                          <View key={stage.label} style={{ flex: 1, alignItems: 'center' }}>
                             <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: isActive ? colors.primary : colors.surfaceSecondary, justifyContent: 'center', alignItems: 'center', borderWidth: isCurrent ? 2 : 0, borderColor: isCurrent ? colors.primary : 'transparent' }}>
                               {isActive ? <Ionicons name="checkmark" size={14} color={colors.surface} /> : <Text style={{ fontSize: 10, color: colors.textMuted }}>{i + 1}</Text>}
                             </View>
-                            <Text style={{ fontSize: 9, color: isActive ? colors.primary : colors.textMuted, marginTop: 4, textAlign: 'center' }}>{stepLabel}</Text>
-                            {i < STATUS_STEPS.length - 1 && (
+                            <Text style={{ fontSize: 9, color: isActive ? colors.primary : colors.textMuted, marginTop: 4, textAlign: 'center' }}>{stage.label}</Text>
+                            {i < STATUS_STAGES.length - 1 && (
                               <View style={{ position: 'absolute', top: 13, left: '60%', right: '-40%', height: 2, backgroundColor: isActive && i < currentIdx ? colors.primary : colors.surfaceSecondary }} />
                             )}
                           </View>
