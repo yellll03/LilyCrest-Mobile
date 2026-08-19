@@ -198,10 +198,11 @@ const RESOLUTION_ESTIMATES = {
 };
 
 const STATUS_STAGES = [
-  { label: 'Pending', statuses: ['pending', 'pending_review'] },
-  { label: 'Reviewed', statuses: ['viewed', 'reviewed', 'provider_assigned'] },
-  { label: 'In Progress', statuses: ['scheduled', 'in_progress', 'waiting_tenant', 'reopened'] },
-  { label: 'Resolved', statuses: ['resolved', 'completed'] },
+  { label: 'Pending Review', cardTitle: 'Request Received', detail: 'Awaiting Admin Review', statuses: ['pending', 'pending_review'] },
+  { label: 'Under Review', cardTitle: 'Admin Reviewing', detail: 'Being Reviewed by Admin', statuses: ['viewed', 'reviewed'] },
+  { label: 'In Progress', cardTitle: 'Repair In Progress', detail: 'Provider Assigned & Working', statuses: ['provider_assigned', 'scheduled', 'in_progress', 'waiting_tenant', 'reopened'] },
+  { label: 'Resolved', cardTitle: 'Work Resolved', detail: 'Awaiting Tenant Feedback & Verification', statuses: ['resolved'] },
+  { label: 'Completed', cardTitle: 'Request Completed', detail: 'Confirmed & Closed', statuses: ['completed'] },
 ];
 const MIN_DESCRIPTION_LENGTH = 10;
 // Mirrors backend/controllers/maintenance.controller.js DESCRIPTION_MAX.
@@ -1274,28 +1275,38 @@ export default function ServicesScreen() {
                       <Text style={{ color: colors.textMuted, fontSize: 13 }}>Loading latest updates...</Text>
                     </View>
                   ) : null}
-                  {/* Status Timeline */}
-                  {!editMode && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 20, paddingHorizontal: 4 }}>
-                      {STATUS_STAGES.map((stage, i) => {
-                        const currentStatus = (detailRequest.status || '').toLowerCase();
-                        const currentIdx = STATUS_STAGES.findIndex((s) => s.statuses.includes(currentStatus));
-                        const isActive = i <= currentIdx;
-                        const isCurrent = i === currentIdx;
-                        return (
-                          <View key={stage.label} style={{ flex: 1, alignItems: 'center' }}>
-                            <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: isActive ? colors.primary : colors.surfaceSecondary, justifyContent: 'center', alignItems: 'center', borderWidth: isCurrent ? 2 : 0, borderColor: isCurrent ? colors.primary : 'transparent' }}>
-                              {isActive ? <Ionicons name="checkmark" size={14} color={colors.surface} /> : <Text style={{ fontSize: 10, color: colors.textMuted }}>{i + 1}</Text>}
-                            </View>
-                            <Text style={{ fontSize: 9, color: isActive ? colors.primary : colors.textMuted, marginTop: 4, textAlign: 'center' }}>{stage.label}</Text>
-                            {i < STATUS_STAGES.length - 1 && (
-                              <View style={{ position: 'absolute', top: 13, left: '60%', right: '-40%', height: 2, backgroundColor: isActive && i < currentIdx ? colors.primary : colors.surfaceSecondary }} />
-                            )}
-                          </View>
-                        );
-                      })}
-                    </View>
-                  )}
+                  {/* Guided Stage Action Hub */}
+                  {!editMode && (() => {
+                    const currentStatus = (detailRequest.status || '').toLowerCase();
+                    const currentIdx = STATUS_STAGES.findIndex((s) => s.statuses.includes(currentStatus));
+                    if (currentIdx === -1) return null;
+                    const currentStage = STATUS_STAGES[currentIdx];
+                    return (
+                      <View style={{ marginBottom: 20 }}>
+                        <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text }}>Guided Stage Action Hub</Text>
+                        <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 2, marginBottom: 14 }}>
+                          Step {currentIdx + 1} of {STATUS_STAGES.length}: {currentStage.label} ({currentStage.detail})
+                        </Text>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4 }}>
+                          {STATUS_STAGES.map((stage, i) => {
+                            const isActive = i <= currentIdx;
+                            const isCurrent = i === currentIdx;
+                            return (
+                              <View key={stage.label} style={{ flex: 1, alignItems: 'center' }}>
+                                <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: isActive ? colors.primary : colors.surfaceSecondary, justifyContent: 'center', alignItems: 'center', borderWidth: isCurrent ? 2 : 0, borderColor: isCurrent ? colors.primary : 'transparent' }}>
+                                  {isActive ? <Ionicons name="checkmark" size={14} color={colors.surface} /> : <Text style={{ fontSize: 10, color: colors.textMuted }}>{i + 1}</Text>}
+                                </View>
+                                <Text style={{ fontSize: 9, color: isActive ? colors.primary : colors.textMuted, marginTop: 4, textAlign: 'center' }}>{stage.label}</Text>
+                                {i < STATUS_STAGES.length - 1 && (
+                                  <View style={{ position: 'absolute', top: 13, left: '60%', right: '-40%', height: 2, backgroundColor: isActive && i < currentIdx ? colors.primary : colors.surfaceSecondary }} />
+                                )}
+                              </View>
+                            );
+                          })}
+                        </View>
+                      </View>
+                    );
+                  })()}
 
                   {/* Header info */}
                   {(() => {
@@ -1325,16 +1336,28 @@ export default function ServicesScreen() {
                     </View>
                   )}
 
-                  {!editMode && (
-                    <View style={{ backgroundColor: '#F8FAFC', borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#E5E7EB' }}>
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                        <Ionicons name={getStatusColor(detailRequest.status).icon} size={18} color={getStatusColor(detailRequest.status).text} />
-                        <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text }}>Current Status</Text>
+                  {!editMode && (() => {
+                    const currentStatus = (detailRequest.status || '').toLowerCase();
+                    const currentIdx = STATUS_STAGES.findIndex((s) => s.statuses.includes(currentStatus));
+                    const currentStage = currentIdx !== -1 ? STATUS_STAGES[currentIdx] : null;
+                    return (
+                      <View style={{ backgroundColor: '#F8FAFC', borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#E5E7EB' }}>
+                        <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
+                          <Ionicons name={getStatusColor(detailRequest.status).icon} size={18} color={getStatusColor(detailRequest.status).text} />
+                          <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text, marginLeft: 8, flex: 1 }}>
+                            {currentStage ? `Stage ${currentIdx + 1}: ${currentStage.cardTitle} • ${currentStage.detail}` : 'Current Status'}
+                          </Text>
+                          {currentStage?.badge && (
+                            <View style={{ backgroundColor: '#EEF2FF', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, marginLeft: 8 }}>
+                              <Text style={{ fontSize: 10, fontWeight: '700', color: '#4338CA' }}>{currentStage.badge}</Text>
+                            </View>
+                          )}
+                        </View>
+                        <Text style={{ fontSize: 14, color: colors.text, lineHeight: 20, fontWeight: '600' }}>{getStatusNextStep(detailRequest.status, detailRequest)}</Text>
+                        <Text style={{ fontSize: 13, color: colors.textMuted, lineHeight: 19, marginTop: 4 }}>{getNextStepDetail(detailRequest.status, detailRequest)}</Text>
                       </View>
-                      <Text style={{ fontSize: 14, color: colors.text, lineHeight: 20, fontWeight: '600' }}>{getStatusNextStep(detailRequest.status, detailRequest)}</Text>
-                      <Text style={{ fontSize: 13, color: colors.textMuted, lineHeight: 19, marginTop: 4 }}>{getNextStepDetail(detailRequest.status, detailRequest)}</Text>
-                    </View>
-                  )}
+                    );
+                  })()}
 
                   {/* Urgency */}
                   {!editMode && (

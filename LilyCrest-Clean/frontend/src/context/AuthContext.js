@@ -310,6 +310,15 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  // A fresh interactive sign-in (typed credentials, OTP, Google) must always
+  // land on Home. Without this, a stale OS-cached "last tapped notification"
+  // from a previous session gets replayed by the authStatus effect below and
+  // overrides login's own redirect (e.g. bouncing the user to News).
+  const dismissPendingNotificationForFreshSignIn = useCallback(() => {
+    pendingNotificationRef.current = null;
+    clearLastNotificationResponse().catch(() => {});
+  }, []);
+
   const navigateFromNotification = useCallback(async (data) => {
     const destination = resolveNotificationRoute(data);
     if (!destination || !routerRef.current) return false;
@@ -684,6 +693,7 @@ export function AuthProvider({ children }) {
       const profile = await loadAuthoritativeTenantProfile(userData);
       await AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(profile)).catch(() => {});
       setUser(profile);
+      dismissPendingNotificationForFreshSignIn();
       setAuthStatus('authenticated');
       return { success: true };
     } catch (error) {
@@ -737,6 +747,7 @@ export function AuthProvider({ children }) {
       const profile = await loadAuthoritativeTenantProfile(userData);
       await AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(profile)).catch(() => {});
       setUser(profile);
+      dismissPendingNotificationForFreshSignIn();
       setAuthStatus('authenticated');
       return { success: true };
     } catch (error) {
@@ -770,6 +781,7 @@ export function AuthProvider({ children }) {
       const profile = await loadAuthoritativeTenantProfile(userData);
       await AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(profile)).catch(() => {});
       setUser(profile);
+      dismissPendingNotificationForFreshSignIn();
       setAuthStatus('authenticated');
       return { success: true };
     } catch (error) {
@@ -824,6 +836,7 @@ export function AuthProvider({ children }) {
       const profile = await loadAuthoritativeTenantProfile(userData);
       await AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(profile)).catch(() => {});
       setUser(profile);
+      dismissPendingNotificationForFreshSignIn();
       setAuthStatus('authenticated');
       return { success: true };
     } catch (error) {
