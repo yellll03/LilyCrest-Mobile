@@ -2,11 +2,11 @@
 
 // Coverage for the three tenant support-chat endpoints the mobile app has
 // always called but the backend never registered — resolution confirmation,
-// same-thread reopen, and attachment registration — plus the attachment
-// round-trip through chat_messages (sendTenantMessage previously accepted an
-// `attachments` array from the client and silently discarded it, and
-// serializeMessage never returned one, so an attached file could never be
-// seen by anyone).
+// same-thread reopen, and attachment registration — plus the canonical
+// attachment contract: registration mints an immutable `chat_attachments`
+// record, a message embeds only that record's id plus presentation fields, and
+// the bytes are reachable exclusively through the protected, conversation-
+// bound route GET /chat/:conversationId/attachments/:attachmentId.
 //
 // Typing indicators are deliberately NOT covered: no screen ever called
 // apiService.sendSupportTyping, so the client shim was removed rather than a
@@ -14,13 +14,18 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
+const { PassThrough, Readable } = require('node:stream');
 
 const databasePath = require.resolve('../config/database');
 const firebasePath = require.resolve('../config/firebase');
 const chatControllerPath = require.resolve('../controllers/chat.controller');
+const chatAttachmentServicePath = require.resolve('../services/chatAttachment.service');
 
 const BUCKET = 'lilycrest-test.appspot.com';
 const TENANT_ID = 'tenant-a';
+const CONVERSATION_ID = '507f1f77bcf86cd799439011';
+const OTHER_CONVERSATION_ID = '507f1f77bcf86cd7994390aa';
+const TENANT_OBJECT_ID = '507f1f77bcf86cd799439012';
 
 // Exactly the shape POST /upload/firebase-storage issues (see
 // routes/upload.routes.js) — the storagePath's tenant segment is derived
@@ -40,24 +45,53 @@ function storedAttachment(overrides = {}) {
   };
 }
 
+function storedPdf(overrides = {}) {
+  return storedAttachment({
+    storagePath: `support-attachments/${TENANT_ID}/conv-1/1700000000001-receipt.pdf`,
+    originalName: 'receipt.pdf',
+    mimeType: 'application/pdf',
+    size: 4096,
+    ...overrides,
+  });
+}
+
 function fakeResponse() {
-  return {
-    statusCode: 200,
-    body: null,
-    status(code) { this.statusCode = code; return this; },
-    json(payload) { this.body = payload; return this; },
-  };
+  const res = new PassThrough();
+  res.statusCode = 200;
+  res.body = null;
+  res.headers = {};
+  res.chunks = [];
+  res.status = (code) => { res.statusCode = code; return res; };
+  res.json = (payload) => { res.body = payload; return res; };
+  res.setHeader = (key, value) => { res.headers[String(key).toLowerCase()] = value; };
+  res.on('data', (chunk) => res.chunks.push(chunk));
+  return res;
 }
 
 function objectIdLike(value) {
   return { toString: () => value, _value: value };
 }
 
-function fakeDb({ conversation }) {
+function fakeDb({ conversation, attachments = [] }) {
   const conversations = [conversation];
   const messages = [];
+  const attachmentDocs = [...attachments];
+  let attachmentSeq = attachmentDocs.length;
+
+  const matchesConversationScope = (found, filter) => {
+    if (filter.tenantUserId && filter.tenantUserId !== found.tenantUserId) return false;
+    if (filter.$or && !filter.$or.some((clause) => (
+      (clause.tenantUserId && clause.tenantUserId === found.tenantUserId)
+      || (clause.tenantId && String(clause.tenantId) === String(found.tenantId))
+      || (clause.branch && clause.branch === found.branch)
+      || (clause.assignedAdminId && String(clause.assignedAdminId) === String(found.assignedAdminId))
+    ))) return false;
+    return true;
+  };
+
   return {
     messages,
+    attachments: attachmentDocs,
     current() { return conversations[0]; },
     collection(name) {
       if (name === 'chat_conversations') {
@@ -66,13 +100,8 @@ function fakeDb({ conversation }) {
             const wanted = filter._id ? String(filter._id) : null;
             const found = conversations.find((c) => !wanted || String(c._id) === wanted);
             if (!found) return null;
-            // Model the tenant-ownership clause the real filter applies.
-            if (filter.tenantUserId && filter.tenantUserId !== found.tenantUserId) return null;
-            if (filter.$or && !filter.$or.some((clause) => (
-              (clause.tenantUserId && clause.tenantUserId === found.tenantUserId)
-              || (clause.tenantId && String(clause.tenantId) === String(found.tenantId))
-            ))) return null;
-            return found;
+            // Model the tenant/admin scope clause the real filters apply.
+            return matchesConversationScope(found, filter) ? found : null;
           },
           async updateOne(_filter, update) {
             Object.assign(conversations[0], update.$set || {});
@@ -87,24 +116,65 @@ function fakeDb({ conversation }) {
           async updateMany() { return { modifiedCount: 0 }; },
         };
       }
+      if (name === 'chat_attachments') {
+        return {
+          async insertOne(doc) {
+            attachmentSeq += 1;
+            const _id = objectIdLike(`507f1f77bcf86cd7994391${String(attachmentSeq).padStart(2, '0')}`);
+            attachmentDocs.push({ ...doc, _id });
+            return { insertedId: _id };
+          },
+          find(filter) {
+            const wanted = new Set((filter?._id?.$in || []).map(String));
+            const conversationId = filter?.conversationId ? String(filter.conversationId) : null;
+            const rows = attachmentDocs.filter((doc) => wanted.has(String(doc._id))
+              && (!conversationId || String(doc.conversationId) === conversationId));
+            return { async toArray() { return rows; } };
+          },
+          async findOne(filter) {
+            const wanted = filter?._id ? String(filter._id) : null;
+            const conversationId = filter?.conversationId ? String(filter.conversationId) : null;
+            return attachmentDocs.find((doc) => String(doc._id) === wanted
+              && (!conversationId || String(doc.conversationId) === conversationId)) || null;
+          },
+        };
+      }
       return { async findOne() { return null; }, async updateOne() { return { matchedCount: 0 }; } };
     },
   };
 }
 
-function loadController(db) {
+// Minimal stand-in for firebase-admin's storage surface. `readStream` decides
+// whether the object exists, so a missing storage object can be exercised as a
+// controlled response rather than only as a happy path.
+function fakeFirebaseAdmin({ configured = true, readStream } = {}) {
+  return {
+    apps: configured ? [{}] : [],
+    storage: () => ({
+      bucket: () => ({
+        file: (storagePath) => ({
+          createReadStream: () => (readStream ? readStream(storagePath) : Readable.from([Buffer.from('bytes')])),
+        }),
+      }),
+    }),
+  };
+}
+
+function loadController(db, firebaseAdmin = fakeFirebaseAdmin()) {
   require(databasePath).getDb = () => db;
   const firebase = require(firebasePath);
   firebase.resolveStorageBucket = () => BUCKET;
+  firebase.admin = firebaseAdmin;
   delete require.cache[chatControllerPath];
+  delete require.cache[chatAttachmentServicePath];
   return require(chatControllerPath);
 }
 
 function conversationDoc(overrides = {}) {
   return {
-    _id: objectIdLike('507f1f77bcf86cd799439011'),
+    _id: objectIdLike(CONVERSATION_ID),
     tenantUserId: TENANT_ID,
-    tenantId: objectIdLike('507f1f77bcf86cd799439012'),
+    tenantId: objectIdLike(TENANT_OBJECT_ID),
     tenantName: 'Ana',
     branch: 'gil-puyat',
     status: 'waiting_tenant',
@@ -115,12 +185,28 @@ function conversationDoc(overrides = {}) {
   };
 }
 
-function tenantReq(body = {}, conversationId = '507f1f77bcf86cd799439011') {
+function tenantReq(body = {}, conversationId = CONVERSATION_ID) {
   return {
-    user: { user_id: TENANT_ID, role: 'tenant', name: 'Ana', _id: objectIdLike('507f1f77bcf86cd799439012') },
+    user: { user_id: TENANT_ID, role: 'tenant', name: 'Ana', _id: objectIdLike(TENANT_OBJECT_ID) },
     params: { conversationId },
     body,
   };
+}
+
+function adminReq({ branch = 'gil-puyat', role = 'admin', params = {}, body = {} } = {}) {
+  return {
+    user: { user_id: 'admin-1', role, name: 'Rita', branch, _id: objectIdLike('507f1f77bcf86cd7994390bb') },
+    params: { conversationId: CONVERSATION_ID, ...params },
+    body,
+  };
+}
+
+// Registers one attachment through the real endpoint and returns the canonical
+// resource the composer would hand back to POST /chat/:id/messages.
+async function registerAttachment(controller, attachment = storedAttachment()) {
+  const res = fakeResponse();
+  await controller.uploadConversationAttachment(tenantReq({ attachment }), res);
+  return res;
 }
 
 // ── Resolution confirmation ─────────────────────────────────────────────────
@@ -204,18 +290,53 @@ test('reopening an already-open conversation is rejected instead of duplicating 
   assert.equal(res.statusCode, 400);
 });
 
-// ── Attachments ─────────────────────────────────────────────────────────────
+// ── Attachment registration ─────────────────────────────────────────────────
 
-test('an attachment uploaded under this tenant own prefix is accepted', async () => {
+test('a tenant image registered under their own prefix becomes a canonical attachment with an id', async () => {
   const db = fakeDb({ conversation: conversationDoc({ status: 'open' }) });
-  const { uploadConversationAttachment } = loadController(db);
+  const controller = loadController(db);
 
-  const res = fakeResponse();
-  await uploadConversationAttachment(tenantReq({ attachment: storedAttachment() }), res);
+  const res = await registerAttachment(controller);
 
   assert.equal(res.statusCode, 201);
-  assert.equal(res.body.attachment.originalName, 'photo.jpg');
-  assert.equal(res.body.attachment.provider, 'firebase-storage');
+  assert.ok(res.body.attachment.attachmentId, 'registration must mint an immutable id');
+  assert.equal(res.body.attachment.id, res.body.attachment.attachmentId);
+  assert.equal(res.body.attachment.name, 'photo.jpg');
+  assert.equal(res.body.attachment.mimeType, 'image/jpeg');
+  assert.equal(
+    res.body.attachment.url,
+    `/chat/${CONVERSATION_ID}/attachments/${res.body.attachment.attachmentId}`,
+    'the client-facing url is the protected app route',
+  );
+  assert.equal(db.attachments.length, 1, 'the canonical record is persisted, not just echoed');
+  assert.equal(db.attachments[0].branch, 'gil-puyat');
+  assert.equal(db.attachments[0].uploaderRole, 'tenant');
+});
+
+test('a tenant PDF registers the same way and keeps its document mime type', async () => {
+  const db = fakeDb({ conversation: conversationDoc({ status: 'open' }) });
+  const controller = loadController(db);
+
+  const res = await registerAttachment(controller, storedPdf());
+
+  assert.equal(res.statusCode, 201);
+  assert.equal(res.body.attachment.mimeType, 'application/pdf');
+  assert.equal(res.body.attachment.name, 'receipt.pdf');
+  assert.ok(res.body.attachment.url.startsWith('/chat/'));
+});
+
+test('a registered attachment never leaks storage internals to the client', async () => {
+  const db = fakeDb({ conversation: conversationDoc({ status: 'open' }) });
+  const controller = loadController(db);
+
+  const res = await registerAttachment(controller);
+  const keys = Object.keys(res.body.attachment);
+
+  for (const forbidden of ['storagePath', 'storageUrl', 'downloadUrl', 'uri', 'bucket']) {
+    assert.ok(!keys.includes(forbidden), `${forbidden} must not be serialized to a client`);
+  }
+  assert.equal(db.attachments[0].storagePath, `support-attachments/${TENANT_ID}/conv-1/1700000000000-photo.jpg`);
+  assert.ok(db.attachments[0].storageUrl, 'the provider URL stays server-side on the record');
 });
 
 test("an attachment pointing at another tenant's storage object is refused", async () => {
@@ -229,6 +350,7 @@ test("an attachment pointing at another tenant's storage object is refused", asy
 
   assert.equal(res.statusCode, 400);
   assert.equal(res.body.code, 'ATTACHMENT_UNAUTHORIZED');
+  assert.equal(db.attachments.length, 0, 'a refused attachment must not create a record');
 });
 
 test('an attachment whose downloadUrl does not match its storagePath is refused', async () => {
@@ -266,25 +388,49 @@ test('unsupported MIME types and oversized files are refused', async () => {
   assert.equal(noSize.body.code, 'ATTACHMENT_TOO_LARGE', 'omitting size must not bypass the cap');
 });
 
-test('attachments survive the message round-trip instead of being silently dropped', async () => {
+test('a tenant cannot register an attachment against another tenant conversation', async () => {
   const db = fakeDb({ conversation: conversationDoc({ status: 'open' }) });
-  const { sendTenantMessage } = loadController(db);
+  const { uploadConversationAttachment } = loadController(db);
+
+  const req = tenantReq({ attachment: storedAttachment() });
+  req.user = { user_id: 'tenant-b', role: 'tenant', _id: objectIdLike('507f1f77bcf86cd7994390ff') };
 
   const res = fakeResponse();
-  await sendTenantMessage(tenantReq({ message: 'See photo', attachments: [storedAttachment()] }), res);
+  await uploadConversationAttachment(req, res);
+  assert.equal(res.statusCode, 404);
+});
+
+// ── Attachments on messages ─────────────────────────────────────────────────
+
+test('attachments survive the message round-trip as an id plus protected url', async () => {
+  const db = fakeDb({ conversation: conversationDoc({ status: 'open' }) });
+  const controller = loadController(db);
+  const registered = (await registerAttachment(controller)).body.attachment;
+
+  const res = fakeResponse();
+  await controller.sendTenantMessage(tenantReq({ message: 'See photo', attachments: [registered] }), res);
 
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.message.attachments.length, 1);
-  assert.equal(res.body.message.attachments[0].storagePath, `support-attachments/${TENANT_ID}/conv-1/1700000000000-photo.jpg`);
+  const [serialized] = res.body.message.attachments;
+  assert.equal(serialized.attachmentId, registered.attachmentId);
+  assert.equal(serialized.url, `/chat/${CONVERSATION_ID}/attachments/${registered.attachmentId}`);
+  assert.equal(serialized.name, 'photo.jpg');
+
   assert.equal(db.messages[0].attachments.length, 1, 'the attachment is persisted, not just echoed back');
+  const [embedded] = db.messages[0].attachments;
+  assert.ok(embedded.attachmentId, 'the message embeds the id');
+  assert.equal(embedded.storagePath, undefined, 'the message must not duplicate storage facts');
+  assert.equal(embedded.downloadUrl, undefined);
 });
 
 test('an attachment-only message is allowed and gets a meaningful conversation preview', async () => {
   const db = fakeDb({ conversation: conversationDoc({ status: 'open' }) });
-  const { sendTenantMessage } = loadController(db);
+  const controller = loadController(db);
+  const registered = (await registerAttachment(controller)).body.attachment;
 
   const res = fakeResponse();
-  await sendTenantMessage(tenantReq({ message: '', attachments: [storedAttachment()] }), res);
+  await controller.sendTenantMessage(tenantReq({ message: '', attachments: [registered] }), res);
 
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.message.message, '');
@@ -302,12 +448,250 @@ test('a message with no text and no attachments is still rejected', async () => 
 
 test('more attachments than the per-message cap are refused', async () => {
   const db = fakeDb({ conversation: conversationDoc({ status: 'open' }) });
+  const controller = loadController(db);
+  const registered = (await registerAttachment(controller)).body.attachment;
+
+  const res = fakeResponse();
+  await controller.sendTenantMessage(tenantReq({
+    message: 'many',
+    attachments: [registered, registered, registered, registered],
+  }), res);
+  assert.equal(res.body.code, 'ATTACHMENT_LIMIT');
+});
+
+test('a message referencing an unregistered attachment is rejected', async () => {
+  const db = fakeDb({ conversation: conversationDoc({ status: 'open' }) });
+  const { sendTenantMessage } = loadController(db);
+
+  const noId = fakeResponse();
+  await sendTenantMessage(tenantReq({ message: 'hi', attachments: [storedAttachment()] }), noId);
+  assert.equal(noId.body.code, 'INVALID_CHAT_ATTACHMENT', 'raw storage metadata is no longer accepted');
+
+  const unknownId = fakeResponse();
+  await sendTenantMessage(tenantReq({
+    message: 'hi',
+    attachments: [{ attachmentId: '507f1f77bcf86cd7994390cc' }],
+  }), unknownId);
+  assert.equal(unknownId.body.code, 'ATTACHMENT_ACCESS_DENIED');
+});
+
+test("an attachment from another conversation cannot be substituted into this one", async () => {
+  const foreign = {
+    _id: objectIdLike('507f1f77bcf86cd7994390dd'),
+    conversationId: objectIdLike(OTHER_CONVERSATION_ID),
+    branch: 'guadalupe',
+    uploadedBy: objectIdLike('507f1f77bcf86cd7994390ee'),
+    uploaderRole: 'tenant',
+    originalName: 'other.jpg',
+    mimeType: 'image/jpeg',
+    size: 10,
+    provider: 'firebase-storage',
+    storagePath: 'support-attachments/tenant-b/conv-2/other.jpg',
+    storageUrl: 'https://firebasestorage.googleapis.com/v0/b/x/o/y',
+  };
+  const db = fakeDb({ conversation: conversationDoc({ status: 'open' }), attachments: [foreign] });
   const { sendTenantMessage } = loadController(db);
 
   const res = fakeResponse();
   await sendTenantMessage(tenantReq({
-    message: 'many',
-    attachments: [storedAttachment(), storedAttachment(), storedAttachment(), storedAttachment()],
+    message: 'sneaky',
+    attachments: [{ attachmentId: '507f1f77bcf86cd7994390dd' }],
   }), res);
-  assert.equal(res.body.code, 'ATTACHMENT_LIMIT');
+
+  assert.equal(res.statusCode, 403);
+  assert.equal(res.body.code, 'ATTACHMENT_ACCESS_DENIED');
+});
+
+// ── Protected download ──────────────────────────────────────────────────────
+
+test('a tenant can stream their own attachment through the protected route', async () => {
+  const db = fakeDb({ conversation: conversationDoc({ status: 'open' }) });
+  const controller = loadController(db);
+  const registered = (await registerAttachment(controller)).body.attachment;
+
+  const req = tenantReq({});
+  req.params.attachmentId = registered.attachmentId;
+
+  const streamRes = fakeResponse();
+  await controller.downloadConversationAttachment(req, streamRes);
+  await new Promise((resolve) => streamRes.on('end', resolve).on('finish', resolve));
+
+  assert.equal(streamRes.headers['content-type'], 'image/jpeg');
+  assert.match(streamRes.headers['content-disposition'], /photo\.jpg/);
+  assert.equal(streamRes.headers['cache-control'], 'private, max-age=300');
+  assert.equal(Buffer.concat(streamRes.chunks).toString(), 'bytes');
+});
+
+test("tenant B cannot stream tenant A's attachment", async () => {
+  const db = fakeDb({ conversation: conversationDoc({ status: 'open' }) });
+  const controller = loadController(db);
+  const registered = (await registerAttachment(controller)).body.attachment;
+
+  const req = tenantReq({});
+  req.params.attachmentId = registered.attachmentId;
+  req.user = { user_id: 'tenant-b', role: 'tenant', _id: objectIdLike('507f1f77bcf86cd7994390ff') };
+
+  const res = fakeResponse();
+  await controller.downloadConversationAttachment(req, res);
+  assert.equal(res.statusCode, 404, 'cross-tenant reads use the 404 IDOR convention');
+});
+
+test('an invalid or unknown attachment id is a controlled 404, never a hang', async () => {
+  const db = fakeDb({ conversation: conversationDoc({ status: 'open' }) });
+  const controller = loadController(db);
+
+  for (const attachmentId of ['not-an-id', '507f1f77bcf86cd7994390cc']) {
+    const req = tenantReq({});
+    req.params.attachmentId = attachmentId;
+    const res = fakeResponse();
+    await controller.downloadConversationAttachment(req, res);
+    assert.equal(res.statusCode, 404, `${attachmentId} must resolve to a definite 404`);
+    assert.equal(res.body.code, 'ATTACHMENT_NOT_FOUND');
+  }
+});
+
+test('a missing storage object returns a controlled 404 rather than an open socket', async () => {
+  const db = fakeDb({ conversation: conversationDoc({ status: 'open' }) });
+  const controller = loadController(db, fakeFirebaseAdmin({
+    readStream: () => {
+      const stream = new PassThrough();
+      process.nextTick(() => stream.emit('error', new Error('No such object')));
+      return stream;
+    },
+  }));
+  const registered = (await registerAttachment(controller)).body.attachment;
+
+  const req = tenantReq({});
+  req.params.attachmentId = registered.attachmentId;
+  const res = fakeResponse();
+  await controller.downloadConversationAttachment(req, res);
+  await new Promise((resolve) => setTimeout(resolve, 10));
+
+  assert.equal(res.statusCode, 404);
+  assert.equal(res.body.code, 'ATTACHMENT_NOT_FOUND');
+});
+
+test('unconfigured storage returns a controlled 503', async () => {
+  const db = fakeDb({ conversation: conversationDoc({ status: 'open' }) });
+  const controller = loadController(db, fakeFirebaseAdmin({ configured: false }));
+  const registered = (await registerAttachment(controller)).body.attachment;
+
+  const req = tenantReq({});
+  req.params.attachmentId = registered.attachmentId;
+  const res = fakeResponse();
+  await controller.downloadConversationAttachment(req, res);
+
+  assert.equal(res.statusCode, 503);
+  assert.equal(res.body.code, 'ATTACHMENT_STORAGE_UNAVAILABLE');
+});
+
+test('an admin in the conversation branch can stream the attachment', async () => {
+  const db = fakeDb({ conversation: conversationDoc({ status: 'open' }) });
+  const controller = loadController(db);
+  const registered = (await registerAttachment(controller)).body.attachment;
+
+  const req = adminReq({ branch: 'gil-puyat', params: { attachmentId: registered.attachmentId } });
+  const res = fakeResponse();
+  await controller.downloadAdminConversationAttachment(req, res);
+  await new Promise((resolve) => res.on('end', resolve).on('finish', resolve));
+
+  assert.equal(res.headers['content-type'], 'image/jpeg');
+  assert.equal(Buffer.concat(res.chunks).toString(), 'bytes');
+});
+
+test('an admin from another branch cannot reach the attachment', async () => {
+  const db = fakeDb({ conversation: conversationDoc({ status: 'open' }) });
+  const controller = loadController(db);
+  const registered = (await registerAttachment(controller)).body.attachment;
+
+  const req = adminReq({ branch: 'guadalupe', params: { attachmentId: registered.attachmentId } });
+  const res = fakeResponse();
+  await controller.downloadAdminConversationAttachment(req, res);
+
+  assert.equal(res.statusCode, 404, 'branch scoping reuses the existing conversation filter');
+});
+
+test('a superadmin keeps their existing unrestricted reach', async () => {
+  const db = fakeDb({ conversation: conversationDoc({ status: 'open' }) });
+  const controller = loadController(db);
+  const registered = (await registerAttachment(controller)).body.attachment;
+
+  const req = adminReq({ branch: 'guadalupe', role: 'superadmin', params: { attachmentId: registered.attachmentId } });
+  const res = fakeResponse();
+  await controller.downloadAdminConversationAttachment(req, res);
+  await new Promise((resolve) => res.on('end', resolve).on('finish', resolve));
+
+  assert.equal(Buffer.concat(res.chunks).toString(), 'bytes');
+});
+
+// ── Cross-repo canonical contract ───────────────────────────────────────────
+//
+// The mirror of Capstone-Website's
+// `server/models/chatAttachmentCrossRepoContract.test.js`, which runs these
+// same two shapes through the real Mongoose schemas. Pinned here as explicit
+// field sets so a drift on the mobile side fails in this repo too, rather than
+// only surfacing as an attachment the admin console cannot open.
+
+// server/models/ChatAttachment.js
+const CANONICAL_RECORD_FIELDS = [
+  'conversationId', 'branch', 'uploadedBy', 'uploaderRole', 'originalName',
+  'mimeType', 'size', 'provider', 'storagePath', 'storageUrl',
+];
+
+// The `attachments` sub-schema on server/models/ChatMessage.js
+const CANONICAL_EMBED_FIELDS = [
+  'attachmentId', 'url', 'fileUrl', 'name', 'fileName', 'type', 'mimeType', 'size',
+];
+
+test('the persisted attachment record carries exactly the canonical fields', async () => {
+  const db = fakeDb({ conversation: conversationDoc({ status: 'open' }) });
+  const controller = loadController(db);
+  await registerAttachment(controller);
+
+  const [record] = db.attachments;
+  for (const field of CANONICAL_RECORD_FIELDS) {
+    assert.ok(field in record, `the canonical schema requires ${field}`);
+    assert.notEqual(record[field], undefined, `${field} must not be undefined`);
+  }
+  assert.ok(['tenant', 'admin', 'owner'].includes(record.uploaderRole),
+    'uploaderRole must be inside the canonical enum');
+  assert.ok(record.size <= 5 * 1024 * 1024, 'size must respect the canonical 5MB ceiling');
+});
+
+test('the message embed matches the canonical sub-schema and owns no storage facts', async () => {
+  const db = fakeDb({ conversation: conversationDoc({ status: 'open' }) });
+  const controller = loadController(db);
+  const registered = (await registerAttachment(controller)).body.attachment;
+
+  const res = fakeResponse();
+  await controller.sendTenantMessage(tenantReq({ message: 'x', attachments: [registered] }), res);
+
+  const [embedded] = db.messages[0].attachments;
+  assert.deepEqual(
+    Object.keys(embedded).sort(),
+    [...CANONICAL_EMBED_FIELDS].sort(),
+    'the embed must be exactly the canonical ChatMessage.attachments shape',
+  );
+  for (const forbidden of ['storagePath', 'storageUrl', 'provider', 'bucket', 'downloadUrl']) {
+    assert.ok(!(forbidden in embedded), `${forbidden} belongs to the record, not the embed`);
+  }
+  for (const value of [embedded.url, embedded.fileUrl]) {
+    assert.ok(value.startsWith('/chat/'), 'the embed url must be the protected app route');
+    assert.ok(!/^https?:/.test(value), 'the embed url must never be a provider URL');
+  }
+});
+
+test('no serialized attachment anywhere exposes a storage provider URL', async () => {
+  const db = fakeDb({ conversation: conversationDoc({ status: 'open' }) });
+  const controller = loadController(db);
+  const registered = (await registerAttachment(controller)).body.attachment;
+
+  const res = fakeResponse();
+  await controller.sendTenantMessage(tenantReq({ message: 'x', attachments: [registered] }), res);
+
+  const payload = JSON.stringify(res.body);
+  assert.ok(!/firebasestorage|googleapis|storage\.cloud/.test(payload),
+    'a client payload must never contain a storage provider URL');
+  assert.ok(!payload.includes('support-attachments/'),
+    'a client payload must never contain a storage path');
 });

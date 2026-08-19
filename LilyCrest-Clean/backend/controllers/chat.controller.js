@@ -2,7 +2,14 @@ const { ObjectId } = require('mongodb');
 const { getDb } = require('../config/database');
 const { resolveTenantBranch, normalizedBranchReference } = require('../services/branchLocation.service');
 const { authorizeTenantStorageObject } = require('../services/documentStorageAuthorization.service');
-const { resolveStorageBucket } = require('../config/firebase');
+const { resolveStorageBucket, admin } = require('../config/firebase');
+const {
+  buildAttachmentUrl,
+  createChatAttachment,
+  findConversationAttachment,
+  findConversationAttachments,
+  serializeAttachmentRecord,
+} = require('../services/chatAttachment.service');
 
 // Matches chatbot.controller.js's MAX_CHAT_MESSAGE_CHARS and the single
 // client-side cap the mobile UI already applies to both the AI assistant and
@@ -179,32 +186,71 @@ function normalizeSupportAttachment(entry, userId) {
   };
 }
 
-// Attachments already registered through uploadConversationAttachment are
-// re-validated when they are attached to a message, so a message can never
-// carry an object this sender does not own.
-function normalizeSupportAttachments(rawAttachments, userId) {
+// Resolves the attachment ids a message references back to canonical
+// `chat_attachments` records **bound to this exact conversation**. A message
+// therefore never carries storage coordinates of its own: it carries an
+// immutable id, and the record is the only thing that knows where the bytes
+// are. Substituting an attachment from another conversation (or an id that
+// does not exist) fails here rather than at read time.
+async function normalizeSupportAttachments(db, conversation, rawAttachments) {
   if (rawAttachments === undefined || rawAttachments === null) return [];
   if (!Array.isArray(rawAttachments)) {
     throw createHttpError('Attachments must be a list.', 400, 'ATTACHMENT_INVALID');
   }
+  if (!rawAttachments.length) return [];
   if (rawAttachments.length > MAX_SUPPORT_ATTACHMENTS) {
     throw createHttpError(`You can attach up to ${MAX_SUPPORT_ATTACHMENTS} files per message.`, 400, 'ATTACHMENT_LIMIT');
   }
-  return rawAttachments.map((entry) => normalizeSupportAttachment(entry, userId));
+
+  const ids = rawAttachments
+    .map((entry) => String(entry?.attachmentId || entry?.id || '').trim())
+    .filter(Boolean);
+  if (ids.length !== rawAttachments.length || ids.some((id) => !ObjectId.isValid(id))) {
+    throw createHttpError('Upload each attachment before sending it.', 400, 'INVALID_CHAT_ATTACHMENT');
+  }
+
+  const records = await findConversationAttachments(db, conversation._id, ids);
+  const byId = new Map(records.map((record) => [String(record._id), record]));
+  if (byId.size !== new Set(ids).size || byId.size !== ids.length) {
+    throw createHttpError('An attachment does not belong to this conversation.', 403, 'ATTACHMENT_ACCESS_DENIED');
+  }
+
+  // Only an id plus presentation fields is embedded — same embed shape the
+  // admin repository's ChatMessage schema already defines.
+  return ids.map((id) => {
+    const record = byId.get(id);
+    const url = buildAttachmentUrl(conversation._id, id);
+    return {
+      attachmentId: record._id,
+      url,
+      fileUrl: url,
+      name: record.originalName,
+      fileName: record.originalName,
+      type: record.mimeType,
+      mimeType: record.mimeType,
+      size: record.size,
+    };
+  });
 }
 
-function serializeAttachment(doc = {}) {
+// Client-facing attachment shape. `url` is always the protected app route;
+// no storage path, bucket or provider download URL ever leaves the server.
+function serializeAttachment(embedded = {}, conversationId = '') {
+  const attachmentId = embedded.attachmentId ? String(embedded.attachmentId) : '';
+  const url = attachmentId ? buildAttachmentUrl(conversationId, attachmentId) : '';
+  const name = embedded.name || embedded.fileName || 'attachment';
+  const mimeType = embedded.mimeType || embedded.type || 'application/octet-stream';
   return {
-    downloadUrl: doc.downloadUrl || '',
-    uri: doc.downloadUrl || '',
-    storagePath: doc.storagePath || '',
-    originalName: doc.originalName || 'attachment',
-    name: doc.originalName || 'attachment',
-    mimeType: doc.mimeType || '',
-    type: doc.mimeType || '',
-    size: Number.isFinite(Number(doc.size)) ? Number(doc.size) : null,
-    provider: doc.provider || 'firebase-storage',
-    uploadedAt: doc.uploadedAt || null,
+    attachmentId,
+    id: attachmentId,
+    name,
+    fileName: name,
+    originalName: name,
+    mimeType,
+    type: mimeType,
+    size: Number.isFinite(Number(embedded.size)) ? Number(embedded.size) : 0,
+    url,
+    fileUrl: url,
   };
 }
 
@@ -270,7 +316,14 @@ function serializeMessage(doc = {}) {
     senderName: doc.senderName || '',
     senderRole: doc.senderRole || 'tenant',
     message: doc.message || '',
-    attachments: Array.isArray(doc.attachments) ? doc.attachments.map(serializeAttachment) : [],
+    attachments: Array.isArray(doc.attachments)
+      ? doc.attachments
+          .map((entry) => serializeAttachment(entry, doc.conversationId))
+          // A legacy pre-contract embed has no attachment id and therefore no
+          // resolvable protected route. Drop it rather than emit a half-shape
+          // the clients would render as a permanently broken tile.
+          .filter((entry) => Boolean(entry.attachmentId))
+      : [],
     readAt: doc.readAt || null,
     createdAt: doc.createdAt || null,
     updatedAt: doc.updatedAt || null,
@@ -709,7 +762,7 @@ async function sendTenantMessage(req, res) {
       throw createHttpError('This conversation is closed.', 400, 'CONVERSATION_CLOSED');
     }
 
-    const attachments = normalizeSupportAttachments(req.body?.attachments, req.user?.user_id);
+    const attachments = await normalizeSupportAttachments(db, conversation, req.body?.attachments);
     // An attachment-only message is legitimate (the composer allows sending a
     // photo with no caption), so the non-empty text rule only applies when
     // there is nothing else to deliver.
@@ -810,16 +863,21 @@ async function closeConversation(req, res) {
   }
 }
 
-// Registers one already-uploaded file against a conversation the caller owns.
+// Registers one already-uploaded file against a conversation the caller owns
+// and mints the canonical attachment resource for it.
+//
 // The bytes reached Firebase Storage through POST /upload/firebase-storage,
 // which derived the tenant path segment from the authenticated session; this
-// step re-proves ownership of that exact object before it can ever be
-// referenced from a message. Returns the normalized attachment the composer
-// then passes back to POST /chat/:id/messages.
-async function uploadConversationAttachment(req, res) {
+// step re-proves ownership of that exact object, then persists it as a
+// `chat_attachments` record. From here on the storage path exists only on that
+// record — the response, the message embed and every later read refer to the
+// file by its immutable id through the protected route.
+async function registerConversationAttachment(req, res, { admin: asAdmin = false } = {}) {
   try {
     const db = getDb();
-    const conversation = await findConversationForTenant(db, req.params.conversationId, req.user);
+    const conversation = asAdmin
+      ? await findConversationForAdmin(db, req.params.conversationId, req.user)
+      : await findConversationForTenant(db, req.params.conversationId, req.user);
 
     if (conversation.status === 'closed') {
       throw createHttpError('This conversation is closed.', 400, 'CONVERSATION_CLOSED');
@@ -829,11 +887,85 @@ async function uploadConversationAttachment(req, res) {
       ? req.body.attachment
       : req.body;
     const attachment = normalizeSupportAttachment(source, req.user?.user_id);
+    const record = await createChatAttachment(db, {
+      conversation,
+      uploader: req.user,
+      uploaderRole: asAdmin ? normalizeRole(req.user?.role) || 'admin' : 'tenant',
+      attachment,
+    });
 
-    return res.status(201).json({ attachment: serializeAttachment(attachment) });
+    return res.status(201).json({
+      attachment: serializeAttachmentRecord(record, conversation._id),
+    });
   } catch (error) {
     return sendError(res, error, 'Failed to attach that file to your support conversation.');
   }
+}
+
+function uploadConversationAttachment(req, res) {
+  return registerConversationAttachment(req, res, { admin: false });
+}
+
+function uploadAdminConversationAttachment(req, res) {
+  return registerConversationAttachment(req, res, { admin: true });
+}
+
+// The only way any client reads attachment bytes.
+//
+// Authorization is layered and none of it is taken from the request body:
+//   1. the route's auth middleware proves a session,
+//   2. the conversation is located through the caller's *existing* scope
+//      filter — buildTenantConversationFilter for a tenant (own conversations
+//      only) or buildAdminConversationFilter for an admin (branch/assignment,
+//      with owner/superadmin unrestricted) — so an unreachable conversation is
+//      a 404 exactly as it is everywhere else in this controller,
+//   3. the attachment is then resolved by id *and* conversationId, so an
+//      attachment belonging to a different conversation cannot be substituted,
+//   4. the storage path comes from that persisted record only.
+// Every failure is a definite response; nothing hangs.
+async function streamConversationAttachment(req, res, { admin: asAdmin = false } = {}) {
+  try {
+    const db = getDb();
+    const conversation = asAdmin
+      ? await findConversationForAdmin(db, req.params.conversationId, req.user)
+      : await findConversationForTenant(db, req.params.conversationId, req.user);
+
+    const attachment = await findConversationAttachment(db, conversation._id, req.params.attachmentId);
+    if (!attachment) {
+      throw createHttpError('Attachment not found.', 404, 'ATTACHMENT_NOT_FOUND');
+    }
+
+    const bucketName = resolveStorageBucket();
+    if (!bucketName || !admin.apps.length) {
+      throw createHttpError('Attachment storage is unavailable.', 503, 'ATTACHMENT_STORAGE_UNAVAILABLE');
+    }
+
+    res.setHeader('Content-Type', attachment.mimeType || 'application/octet-stream');
+    res.setHeader(
+      'Content-Disposition',
+      `inline; filename*=UTF-8''${encodeURIComponent(attachment.originalName || 'attachment')}`,
+    );
+    res.setHeader('Cache-Control', 'private, max-age=300');
+
+    return admin.storage().bucket(bucketName).file(attachment.storagePath).createReadStream()
+      .on('error', () => {
+        // A missing or unreadable storage object is a controlled 404, never a
+        // socket left open for the client to spin on.
+        if (!res.headersSent) res.status(404).json({ error: 'Attachment not found.', code: 'ATTACHMENT_NOT_FOUND' });
+        else res.destroy();
+      })
+      .pipe(res);
+  } catch (error) {
+    return sendError(res, error, 'Failed to download attachment.');
+  }
+}
+
+function downloadConversationAttachment(req, res) {
+  return streamConversationAttachment(req, res, { admin: false });
+}
+
+function downloadAdminConversationAttachment(req, res) {
+  return streamConversationAttachment(req, res, { admin: true });
 }
 
 // Tenant's answer to "was this resolved?" — the counterpart to the admin
@@ -988,7 +1120,10 @@ async function sendAdminMessage(req, res) {
       throw createHttpError('This conversation is closed.', 400, 'CONVERSATION_CLOSED');
     }
 
-    const message = normalizeMessage(req.body?.message);
+    const adminAttachments = await normalizeSupportAttachments(db, conversation, req.body?.attachments);
+    const message = adminAttachments.length && !String(req.body?.message || '').trim()
+      ? ''
+      : normalizeMessage(req.body?.message);
     const now = new Date();
     const adminName = displayName(req.user, 'Admin');
     const senderRole = normalizeRole(req.user?.role) === 'superadmin' ? 'superadmin' : 'admin';
@@ -999,10 +1134,10 @@ async function sendAdminMessage(req, res) {
       senderName: adminName,
       senderRole,
       message,
-      // Admin-side attachments are validated with the same rule as tenant
-      // ones, scoped to the sending admin's own upload prefix, so the tenant
-      // app can render and open them through the existing viewer.
-      attachments: normalizeSupportAttachments(req.body?.attachments, req.user?.user_id),
+      // Admin-side attachments resolve through the same conversation-bound
+      // canonical records as tenant ones, so the tenant app opens them through
+      // the identical protected route.
+      attachments: adminAttachments,
       readAt: null,
       createdAt: now,
       updatedAt: now,
@@ -1025,7 +1160,7 @@ async function sendAdminMessage(req, res) {
           status: 'waiting_tenant',
           assignedAdminId: req.user._id || null,
           assignedAdminName: adminName,
-          lastMessage: message,
+          lastMessage: message || (adminAttachments.length ? `Sent ${adminAttachments.length} attachment${adminAttachments.length > 1 ? 's' : ''}` : ''),
           lastMessageAt: now,
           unreadAdminCount: 0,
           unreadTenantCount: Number(conversation.unreadTenantCount || 0) + 1,
@@ -1104,19 +1239,25 @@ module.exports = {
   sendTenantMessage,
   closeConversation,
   uploadConversationAttachment,
+  downloadConversationAttachment,
   confirmConversationResolution,
   reopenConversation,
   getAdminConversations,
   getAdminConversationMessages,
   sendAdminMessage,
   updateAdminConversationStatus,
+  uploadAdminConversationAttachment,
+  downloadAdminConversationAttachment,
   __test: {
     normalizeMessage,
     MAX_MESSAGE_CHARS,
     normalizeSupportAttachment,
     normalizeSupportAttachments,
+    serializeAttachment,
+    serializeMessage,
     SUPPORT_ATTACHMENT_FOLDER,
     SUPPORT_ATTACHMENT_MAX_BYTES,
     MAX_SUPPORT_ATTACHMENTS,
+    SUPPORT_ATTACHMENT_MIME_TYPES,
   },
 };
