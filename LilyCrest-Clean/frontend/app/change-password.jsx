@@ -132,6 +132,36 @@ export default function ChangePasswordScreen() {
       });
     } catch (error) {
       const { type, message } = classifyChangePasswordError(error);
+
+      // The password change itself succeeded; only the sign-out-everywhere
+      // step did not. Route this through the same forced re-login as the
+      // success path so the tenant lands on login with their new password,
+      // rather than being invited to retry a change that already happened.
+      if (type === 'password-changed') {
+        try {
+          await clearCredentials();
+        } catch (credError) {
+          console.warn('[ChangePassword] clearCredentials failed:', credError);
+        }
+        showAlert({
+          title: 'Password Changed',
+          message,
+          type: 'warning',
+          buttons: [{
+            text: 'Sign In Again',
+            onPress: async () => {
+              try {
+                await logout();
+              } catch (logoutError) {
+                console.warn('[ChangePassword] logout failed (session may already be expired):', logoutError);
+              }
+              router.replace('/login');
+            },
+          }],
+        });
+        return;
+      }
+
       showAlert({
         title: type === 'validation' ? 'Validation Error' : 'Error',
         message,

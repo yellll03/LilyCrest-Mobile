@@ -16,6 +16,11 @@ export const AUTH_MESSAGES = Object.freeze({
   forgotSuccess: 'If an account exists for this email, a password reset link has been sent.',
   wrongCurrentPassword: 'Your current password is incorrect.',
   passwordChangeUnexpected: 'Failed to change password. Please try again.',
+  // The backend returns SESSION_FINALIZATION_FAILED *after* the password
+  // credential has already been updated, so this must never read as
+  // "retry the password change" — the new password is already live.
+  passwordChangedSessionsNotCleared:
+    'Your password has been changed. Use your new password from now on.\n\nWe could not automatically sign out your other devices. Please sign out of them and sign in again with your new password.',
 });
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -86,6 +91,15 @@ export function classifyChangePasswordError(error) {
   }
   if (responseCode === 'PASSWORD_PROVIDER_FAILURE') {
     return { type: 'provider', message: "We couldn't update your password right now. Please try again." };
+  }
+  // A 500, but the password credential *did* change before it. Classified
+  // ahead of the generic server branch so the tenant is never told to retry a
+  // change that already succeeded.
+  if (responseCode === 'SESSION_FINALIZATION_FAILED') {
+    return {
+      type: 'password-changed',
+      message: AUTH_MESSAGES.passwordChangedSessionsNotCleared,
+    };
   }
   const base = classifyAuthError(error);
   if (['offline', 'timeout', 'server', 'rate-limit'].includes(base.type)) {

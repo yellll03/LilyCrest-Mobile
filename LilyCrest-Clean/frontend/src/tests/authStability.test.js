@@ -93,6 +93,34 @@ describe('change password error classification (regression)', () => {
     expect(result.message).not.toMatch(/Firebase/i);
   });
 
+  // SESSION_FINALIZATION_FAILED is a 500 the backend returns *after* the
+  // password credential has already been updated. Telling the tenant the
+  // change failed would invite them to redo a change that already succeeded.
+  test('SESSION_FINALIZATION_FAILED tells the tenant the password did change', () => {
+    const result = classifyChangePasswordError({
+      response: { status: 500, data: { code: 'SESSION_FINALIZATION_FAILED' } },
+    });
+
+    expect(result.type).toBe('password-changed');
+    expect(result.message).toBe(AUTH_MESSAGES.passwordChangedSessionsNotCleared);
+    // It must not read as a failed change or a retry instruction.
+    expect(result.message).not.toMatch(/failed/i);
+    expect(result.message).not.toMatch(/try again/i);
+    expect(result.message).toMatch(/has been changed/i);
+    // ...and it must not leak internals.
+    expect(result.message).not.toMatch(/session|token|securityVersion|SESSION_FINALIZATION/i);
+  });
+
+  test('SESSION_FINALIZATION_FAILED is not swallowed by the generic 500 handling', () => {
+    const generic = classifyChangePasswordError({ response: { status: 500, data: {} } });
+    const finalization = classifyChangePasswordError({
+      response: { status: 500, data: { code: 'SESSION_FINALIZATION_FAILED' } },
+    });
+
+    expect(finalization.type).not.toBe(generic.type);
+    expect(finalization.message).not.toBe(generic.message);
+  });
+
   test('400 with a single curated backend detail is shown verbatim (backend validation stays authoritative)', () => {
     const result = classifyChangePasswordError({
       response: { status: 400, data: { detail: 'New password must be different from your current password' } },
