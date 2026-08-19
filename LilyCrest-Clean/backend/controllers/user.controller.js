@@ -4,7 +4,6 @@ const { v4: uuidv4 } = require('uuid');
 const { normalizeUser, sanitizeUserForClient } = require('../utils/normalizeUser');
 const { admin, resolveStorageBucket } = require('../config/firebase');
 const { resolveTenantBranch } = require('../services/branchLocation.service');
-const { extractMoveInFinancials } = require('../domain/billing/moveInFinancials');
 const { authorizeTenantStorageObject } = require('../services/documentStorageAuthorization.service');
 
 const firstValue = (...values) => values.find((value) => value !== undefined && value !== null && String(value).trim() !== '');
@@ -189,24 +188,22 @@ async function buildTenantProfile(db, user) {
     if (branchError?.code === 'BRANCH_ASSIGNMENT_CONFLICT') throw branchError;
   }
 
-  const generatedContract = await findTenantVisibleContract(db, user);
-  const contractDocument = tenantContractDocument(generatedContract);
-  const moveInFinancials = reservation ? extractMoveInFinancials(reservation) : null;
   normalized.branch = branch;
-  normalized.contract = contractDocument ? {
-    status: contractDocument.status,
-    startDate: contractDocument.contractPeriod.startDate,
-    endDate: contractDocument.contractPeriod.endDate,
-    roomNumber: contractDocument.roomNumber,
-    property: contractDocument.branchName,
-    branch: branch || null,
-    leaseType: contractDocument.leaseType,
-    documentId: contractDocument.doc_id,
-    fileAvailable: true,
-    generatedDate: contractDocument.uploaded_at,
-    documentVersion: generatedContract.version || null,
-    moveInFinancials,
-  } : null;
+  // GET /users/me deliberately does NOT return a `contract` field.
+  //
+  // It used to compute one on every profile fetch from this backend's own
+  // `generatedContracts` collection — the QA-only publishTenantTestContract
+  // pipeline that has no production trigger (see the comment in
+  // getUserDocuments below, and useTenantContract.js's own warning). No
+  // screen ever read it: profile.jsx uses useTenantContract() and the
+  // canonical Capstone-Website bridge (GET /contracts/current) for its
+  // Contract Status card, which is the single source of truth for contract
+  // lifecycle and documents.
+  //
+  // It is removed rather than left in place because a future engineer wiring
+  // a new screen to getProfile().contract would have silently reintroduced
+  // exactly the non-authoritative, test-only contract path this codebase is
+  // explicit about never duplicating.
   normalized.survey = null;
   return sanitizeUserForClient(normalized);
 }

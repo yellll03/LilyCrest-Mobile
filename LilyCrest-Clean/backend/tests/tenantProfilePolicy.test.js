@@ -61,3 +61,35 @@ test('Philippine local mobile number is normalized to canonical +63 format', () 
   assert.equal(__test.normalizePhilippinePhone('+639283182050'), '+639283182050');
   assert.equal(__test.normalizePhilippinePhone('invalid'), 'invalid');
 });
+
+// GET /users/me used to compute a `contract` field from this backend's own
+// `generatedContracts` collection — the QA-only publishTenantTestContract
+// pipeline with no production trigger. No screen read it (profile.jsx uses
+// useTenantContract()/the canonical Capstone-Website bridge), but leaving it
+// in the response invited a future screen to bind to the non-authoritative
+// contract data this codebase is explicit about never duplicating.
+test('the profile response no longer carries a legacy generatedContracts contract field', () => {
+  const source = fs.readFileSync(path.join(__dirname, '..', 'controllers', 'user.controller.js'), 'utf8');
+  const profileBody = source.slice(
+    source.indexOf('async function buildTenantProfile'),
+    source.indexOf('// Get current user profile'),
+  );
+  assert.ok(profileBody.length > 0, 'buildTenantProfile must still be present');
+  assert.doesNotMatch(profileBody, /normalized\.contract\s*=/);
+  assert.doesNotMatch(profileBody, /findTenantVisibleContract\(/);
+  assert.doesNotMatch(profileBody, /tenantContractDocument\(/);
+});
+
+test('the canonical contract bridge is still the only contract source mobile consumes', () => {
+  const hook = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'frontend', 'src', 'hooks', 'useTenantContract.js'),
+    'utf8',
+  );
+  assert.match(hook, /getCurrentContract\(/);
+  const profileScreen = fs.readFileSync(
+    path.join(__dirname, '..', '..', 'frontend', 'app', '(tabs)', 'profile.jsx'),
+    'utf8',
+  );
+  assert.match(profileScreen, /useTenantContract\(\)/);
+  assert.doesNotMatch(profileScreen, /profile\.contract|user\.contract/);
+});
