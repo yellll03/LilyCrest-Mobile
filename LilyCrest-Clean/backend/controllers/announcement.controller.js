@@ -259,6 +259,34 @@ async function dismissAnnouncement(req, res) {
   return res.json({ status: 'dismissed', announcement_id: announcementId });
 }
 
+// Exact inverse of dismissAnnouncement: removes this tenant's dismissal row
+// so the announcement reappears in their News tab. Backs the "Undo" toast the
+// News tab shows immediately after a dismiss. Like dismiss, it only ever
+// touches the per-tenant announcement_dismissals junction — the shared
+// `announcements` document is never read-modified-written here, so a restore
+// can neither resurrect nor alter admin content.
+//
+// Idempotent: restoring an announcement that was never dismissed is a no-op
+// success, so a retried/duplicated Undo cannot fail. `restored` reports
+// whether a dismissal row actually existed.
+async function restoreAnnouncement(req, res) {
+  const userId = req.user?.user_id;
+  const announcementId = String(req.params.announcementId || '').trim();
+  if (!announcementId) return res.status(400).json({ detail: 'announcementId is required.' });
+  const db = getDb();
+  const exists = await db.collection('announcements').findOne(announcementIdFilter(announcementId));
+  if (!exists) return res.status(404).json({ detail: 'Announcement not found.' });
+  const result = await db.collection('announcement_dismissals').deleteOne({
+    user_id: userId,
+    announcement_id: announcementId,
+  });
+  return res.json({
+    status: 'restored',
+    announcement_id: announcementId,
+    restored: (result?.deletedCount || 0) > 0,
+  });
+}
+
 // Matches both id forms getAllAnnouncements can hand back: the explicit
 // `ann_<hex>` field set at creation, or a legacy doc's raw ObjectId string.
 const ANNOUNCEMENT_ID_PATTERN = /^(ann_[a-f0-9]{1,32}|[a-f0-9]{24})$/i;
@@ -307,6 +335,7 @@ module.exports = {
   getAllAnnouncements,
   createAnnouncement,
   dismissAnnouncement,
+  restoreAnnouncement,
   dismissAnnouncementsBulk,
   // exported for unit testing of branch-visibility rules in isolation
   isAnnouncementVisibleForBranch,
