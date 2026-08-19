@@ -1,6 +1,8 @@
 const { ObjectId } = require('mongodb');
 const { getDb } = require('../config/database');
 const { resolveTenantBranch, normalizedBranchReference } = require('../services/branchLocation.service');
+const { authorizeTenantStorageObject } = require('../services/documentStorageAuthorization.service');
+const { resolveStorageBucket } = require('../config/firebase');
 
 // Matches chatbot.controller.js's MAX_CHAT_MESSAGE_CHARS and the single
 // client-side cap the mobile UI already applies to both the AI assistant and
@@ -20,6 +22,37 @@ const VALID_CATEGORIES = new Set([
 ]);
 const VALID_PRIORITIES = new Set(['normal', 'high', 'urgent']);
 const ADMIN_ROLES = new Set(['admin', 'superadmin']);
+
+// Support-chat attachments reuse the one durable storage pipeline this
+// backend already has: the client uploads bytes through
+// POST /upload/firebase-storage (which derives the tenant path segment
+// server-side from req.user and enforces its own MIME/size ceilings against
+// the decoded buffer), then registers the returned metadata here. Nothing
+// about the bytes is trusted from the client at this step — only the
+// server-issued downloadUrl/storagePath pair, re-proven below to be this
+// caller's own object via the same authorizeTenantStorageObject invariant
+// the /users/documents pipeline uses. There is deliberately no second
+// storage system and no multipart parser.
+const SUPPORT_ATTACHMENT_FOLDER = 'support-attachments';
+const MAX_SUPPORT_ATTACHMENTS = 3;
+// Matches INQUIRY_ATTACHMENT_MAX_BYTES in maintenance.controller.js so a
+// tenant-submitted attachment obeys one cap across every support surface.
+const SUPPORT_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
+const SUPPORT_ATTACHMENT_MIME_TYPES = new Set([
+  'image/jpeg',
+  'image/jpg',
+  'image/png',
+  'image/gif',
+  'image/webp',
+  'image/bmp',
+  'image/heic',
+  'image/heif',
+  'application/pdf',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'text/plain',
+  'text/csv',
+]);
 
 function createHttpError(message, statusCode = 400, code = 'CHAT_ERROR') {
   const error = new Error(message);
@@ -103,6 +136,78 @@ function normalizeMessage(rawMessage) {
   return message;
 }
 
+// Validates one already-uploaded attachment's metadata and proves the object
+// belongs to the caller. Fails closed on anything ambiguous.
+function normalizeSupportAttachment(entry, userId) {
+  const downloadUrl = String(entry?.downloadUrl || entry?.uri || '').trim();
+  const storagePath = String(entry?.storagePath || '').trim().slice(0, 500);
+  const mimeType = String(entry?.mimeType || entry?.type || '').trim().toLowerCase();
+  const originalName = String(entry?.originalName || entry?.name || 'attachment').trim().slice(0, 200);
+  const size = Number(entry?.size);
+
+  if (!downloadUrl || !storagePath) {
+    throw createHttpError('Attachment storage details are required.', 400, 'ATTACHMENT_INVALID');
+  }
+  if (!SUPPORT_ATTACHMENT_MIME_TYPES.has(mimeType)) {
+    throw createHttpError('Attachments must be images, PDFs, documents, text, or CSV files.', 400, 'ATTACHMENT_UNSUPPORTED_TYPE');
+  }
+  // Reject outright when size is missing or non-numeric — a client must not be
+  // able to bypass the cap by omitting the field the upload endpoint returned.
+  if (!Number.isFinite(size) || size <= 0 || size > SUPPORT_ATTACHMENT_MAX_BYTES) {
+    throw createHttpError('Attachment exceeds the 5 MB limit.', 400, 'ATTACHMENT_TOO_LARGE');
+  }
+
+  const authorization = authorizeTenantStorageObject({
+    downloadUrl,
+    storagePath,
+    userId,
+    configuredBucket: resolveStorageBucket(),
+    folder: SUPPORT_ATTACHMENT_FOLDER,
+  });
+  if (!authorization.authorized) {
+    throw createHttpError('Attachment storage location could not be verified.', 400, 'ATTACHMENT_UNAUTHORIZED');
+  }
+
+  return {
+    downloadUrl,
+    storagePath,
+    originalName,
+    mimeType,
+    size,
+    provider: 'firebase-storage',
+    uploadedAt: new Date(),
+  };
+}
+
+// Attachments already registered through uploadConversationAttachment are
+// re-validated when they are attached to a message, so a message can never
+// carry an object this sender does not own.
+function normalizeSupportAttachments(rawAttachments, userId) {
+  if (rawAttachments === undefined || rawAttachments === null) return [];
+  if (!Array.isArray(rawAttachments)) {
+    throw createHttpError('Attachments must be a list.', 400, 'ATTACHMENT_INVALID');
+  }
+  if (rawAttachments.length > MAX_SUPPORT_ATTACHMENTS) {
+    throw createHttpError(`You can attach up to ${MAX_SUPPORT_ATTACHMENTS} files per message.`, 400, 'ATTACHMENT_LIMIT');
+  }
+  return rawAttachments.map((entry) => normalizeSupportAttachment(entry, userId));
+}
+
+function serializeAttachment(doc = {}) {
+  return {
+    downloadUrl: doc.downloadUrl || '',
+    uri: doc.downloadUrl || '',
+    storagePath: doc.storagePath || '',
+    originalName: doc.originalName || 'attachment',
+    name: doc.originalName || 'attachment',
+    mimeType: doc.mimeType || '',
+    type: doc.mimeType || '',
+    size: Number.isFinite(Number(doc.size)) ? Number(doc.size) : null,
+    provider: doc.provider || 'firebase-storage',
+    uploadedAt: doc.uploadedAt || null,
+  };
+}
+
 function normalizeCategory(rawCategory) {
   const normalized = String(rawCategory || '').trim().toLowerCase().replace(/[\s-]+/g, '_');
   if (!VALID_CATEGORIES.has(normalized)) {
@@ -165,6 +270,7 @@ function serializeMessage(doc = {}) {
     senderName: doc.senderName || '',
     senderRole: doc.senderRole || 'tenant',
     message: doc.message || '',
+    attachments: Array.isArray(doc.attachments) ? doc.attachments.map(serializeAttachment) : [],
     readAt: doc.readAt || null,
     createdAt: doc.createdAt || null,
     updatedAt: doc.updatedAt || null,
@@ -603,7 +709,13 @@ async function sendTenantMessage(req, res) {
       throw createHttpError('This conversation is closed.', 400, 'CONVERSATION_CLOSED');
     }
 
-    const message = normalizeMessage(req.body?.message);
+    const attachments = normalizeSupportAttachments(req.body?.attachments, req.user?.user_id);
+    // An attachment-only message is legitimate (the composer allows sending a
+    // photo with no caption), so the non-empty text rule only applies when
+    // there is nothing else to deliver.
+    const message = attachments.length && !String(req.body?.message || '').trim()
+      ? ''
+      : normalizeMessage(req.body?.message);
     const now = new Date();
     const messageDoc = {
       conversationId: conversation._id,
@@ -612,6 +724,7 @@ async function sendTenantMessage(req, res) {
       senderName: displayName(req.user, 'Tenant'),
       senderRole: 'tenant',
       message,
+      attachments,
       readAt: null,
       createdAt: now,
       updatedAt: now,
@@ -636,7 +749,9 @@ async function sendTenantMessage(req, res) {
       {
         $set: {
           status: 'open',
-          lastMessage: message,
+          // The conversation-list preview must still say something useful for
+          // an attachment-only message.
+          lastMessage: message || (attachments.length ? `Sent ${attachments.length} attachment${attachments.length > 1 ? 's' : ''}` : ''),
           lastMessageAt: now,
           unreadAdminCount,
           unreadTenantCount: 0,
@@ -692,6 +807,136 @@ async function closeConversation(req, res) {
     return res.json({ conversation: serializeConversation(updatedConversation || conversation) });
   } catch (error) {
     return sendError(res, error, 'Failed to close support chat.');
+  }
+}
+
+// Registers one already-uploaded file against a conversation the caller owns.
+// The bytes reached Firebase Storage through POST /upload/firebase-storage,
+// which derived the tenant path segment from the authenticated session; this
+// step re-proves ownership of that exact object before it can ever be
+// referenced from a message. Returns the normalized attachment the composer
+// then passes back to POST /chat/:id/messages.
+async function uploadConversationAttachment(req, res) {
+  try {
+    const db = getDb();
+    const conversation = await findConversationForTenant(db, req.params.conversationId, req.user);
+
+    if (conversation.status === 'closed') {
+      throw createHttpError('This conversation is closed.', 400, 'CONVERSATION_CLOSED');
+    }
+
+    const source = req.body?.attachment && typeof req.body.attachment === 'object'
+      ? req.body.attachment
+      : req.body;
+    const attachment = normalizeSupportAttachment(source, req.user?.user_id);
+
+    return res.status(201).json({ attachment: serializeAttachment(attachment) });
+  } catch (error) {
+    return sendError(res, error, 'Failed to attach that file to your support conversation.');
+  }
+}
+
+// Tenant's answer to "was this resolved?" — the counterpart to the admin
+// moving a conversation to waiting_tenant. Confirming settles it at
+// `resolved` (the tenant can still reopen); declining returns it to `open`
+// so admin support picks it back up. Optional satisfaction rating/feedback
+// is recorded on the conversation, never as a chat message.
+async function confirmConversationResolution(req, res) {
+  try {
+    const db = getDb();
+    const conversation = await findConversationForTenant(db, req.params.conversationId, req.user);
+
+    if (conversation.status === 'closed') {
+      throw createHttpError('This conversation is closed.', 400, 'CONVERSATION_CLOSED');
+    }
+    if (typeof req.body?.resolved !== 'boolean') {
+      throw createHttpError('A resolution choice is required.', 400, 'RESOLUTION_REQUIRED');
+    }
+
+    const resolved = req.body.resolved;
+    const now = new Date();
+    const note = String(req.body?.note || '').trim().slice(0, 1000)
+      || (resolved ? 'Tenant confirmed the concern is resolved.' : 'Tenant reports the concern is not resolved yet.');
+    const nextStatus = resolved ? 'resolved' : 'open';
+
+    const rawRating = Number(req.body?.rating);
+    const rating = Number.isInteger(rawRating) && rawRating >= 1 && rawRating <= 5 ? rawRating : null;
+    const feedback = String(req.body?.feedback || '').trim().slice(0, 1000);
+
+    const statusHistory = Array.isArray(conversation.statusHistory) ? [...conversation.statusHistory] : [];
+    statusHistory.push({
+      status: nextStatus,
+      note,
+      actorId: req.user._id || null,
+      actorName: displayName(req.user, 'Tenant'),
+      createdAt: now,
+    });
+
+    const update = {
+      status: nextStatus,
+      statusHistory,
+      updatedAt: now,
+      tenantResolutionConfirmed: resolved,
+      tenantResolutionAt: now,
+    };
+    if (resolved) {
+      update.resolvedAt = now;
+    }
+    if (rating !== null) update.satisfactionRating = rating;
+    if (feedback) update.satisfactionFeedback = feedback;
+
+    await db.collection('chat_conversations').updateOne({ _id: conversation._id }, { $set: update });
+
+    const updatedConversation = await db.collection('chat_conversations').findOne({ _id: conversation._id });
+    return res.json({ conversation: serializeConversation(updatedConversation || conversation) });
+  } catch (error) {
+    return sendError(res, error, 'Unable to save your resolution choice.');
+  }
+}
+
+// Reopens a resolved or closed conversation in place, rather than starting a
+// new one, so the whole history stays on a single thread. Branch/admin
+// assignment is preserved exactly as it was, so reopening cannot leak the
+// conversation to a different branch's admins.
+async function reopenConversation(req, res) {
+  try {
+    const db = getDb();
+    const conversation = await findConversationForTenant(db, req.params.conversationId, req.user);
+
+    if (!['resolved', 'closed', 'waiting_tenant'].includes(conversation.status)) {
+      throw createHttpError('This conversation is already open.', 400, 'CONVERSATION_ALREADY_OPEN');
+    }
+
+    const now = new Date();
+    const note = String(req.body?.note || '').trim().slice(0, 1000)
+      || 'Tenant reopened this concern from the mobile app.';
+    const statusHistory = Array.isArray(conversation.statusHistory) ? [...conversation.statusHistory] : [];
+    statusHistory.push({
+      status: 'open',
+      note,
+      actorId: req.user._id || null,
+      actorName: displayName(req.user, 'Tenant'),
+      createdAt: now,
+    });
+
+    await db.collection('chat_conversations').updateOne(
+      { _id: conversation._id },
+      {
+        $set: {
+          status: 'open',
+          statusHistory,
+          updatedAt: now,
+          tenantResolutionConfirmed: false,
+          reopenedAt: now,
+        },
+        $unset: { closedAt: '', closedBy: '', closingNote: '' },
+      }
+    );
+
+    const updatedConversation = await db.collection('chat_conversations').findOne({ _id: conversation._id });
+    return res.json({ conversation: serializeConversation(updatedConversation || conversation) });
+  } catch (error) {
+    return sendError(res, error, 'Failed to reopen this support conversation.');
   }
 }
 
@@ -754,6 +999,10 @@ async function sendAdminMessage(req, res) {
       senderName: adminName,
       senderRole,
       message,
+      // Admin-side attachments are validated with the same rule as tenant
+      // ones, scoped to the sending admin's own upload prefix, so the tenant
+      // app can render and open them through the existing viewer.
+      attachments: normalizeSupportAttachments(req.body?.attachments, req.user?.user_id),
       readAt: null,
       createdAt: now,
       updatedAt: now,
@@ -854,9 +1103,20 @@ module.exports = {
   getConversationMessages,
   sendTenantMessage,
   closeConversation,
+  uploadConversationAttachment,
+  confirmConversationResolution,
+  reopenConversation,
   getAdminConversations,
   getAdminConversationMessages,
   sendAdminMessage,
   updateAdminConversationStatus,
-  __test: { normalizeMessage, MAX_MESSAGE_CHARS },
+  __test: {
+    normalizeMessage,
+    MAX_MESSAGE_CHARS,
+    normalizeSupportAttachment,
+    normalizeSupportAttachments,
+    SUPPORT_ATTACHMENT_FOLDER,
+    SUPPORT_ATTACHMENT_MAX_BYTES,
+    MAX_SUPPORT_ATTACHMENTS,
+  },
 };

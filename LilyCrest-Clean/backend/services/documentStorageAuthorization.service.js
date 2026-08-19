@@ -71,9 +71,15 @@ function decodeFirebaseDownloadUrl(url) {
   return { bucket, objectPath };
 }
 
-function tenantDocumentPrefix(userId) {
+// `folder` is the top-level upload folder POST /upload/firebase-storage was
+// called with. It defaults to tenant-documents so every existing caller is
+// unchanged; support-chat attachments pass their own folder so they are
+// authorized against the same prefix rule rather than needing a second,
+// parallel authorization implementation.
+function tenantDocumentPrefix(userId, folder = TENANT_DOCUMENT_FOLDER) {
   const tenant = safeSegment(userId);
-  return tenant ? `${TENANT_DOCUMENT_FOLDER}/${tenant}/` : '';
+  const scope = safeSegment(folder);
+  return tenant && scope ? `${scope}/${tenant}/` : '';
 }
 
 // Proves that `storagePath` (as submitted by the client, or as previously
@@ -81,9 +87,9 @@ function tenantDocumentPrefix(userId) {
 // under that tenant's upload prefix, and the download URL must decode to
 // the exact same bucket + object path. Ambiguity of any kind is a denial —
 // never a best-effort allow.
-function authorizeTenantStorageObject({ downloadUrl, storagePath, userId, configuredBucket } = {}) {
+function authorizeTenantStorageObject({ downloadUrl, storagePath, userId, configuredBucket, folder = TENANT_DOCUMENT_FOLDER } = {}) {
   const submittedPath = String(storagePath || '').trim();
-  const prefix = tenantDocumentPrefix(userId);
+  const prefix = tenantDocumentPrefix(userId, folder);
 
   if (!submittedPath || !configuredBucket || !prefix) {
     return { authorized: false, reason: 'missing_input' };
