@@ -50,6 +50,24 @@ async function authMiddleware(req, res, next) {
       return res.status(403).json({ code: 'ACCOUNT_INACTIVE', detail: 'Access denied. Your account is inactive. Please contact admin.' });
     }
 
+    // Session security-version gate. createSession() (auth.controller.js)
+    // stamps the account's securityVersion onto every session it mints, and a
+    // password change advances that version (finalizePasswordSessions). Any
+    // session whose stamped version no longer matches the account is revoked
+    // here, so a stolen/pre-change token cannot outlive the credential it was
+    // issued against even if physical session deletion failed. This mirrors
+    // Capstone-Website's mobileTenantAuth, which already enforces the same
+    // rule on the shared user_sessions/users collections — without this check
+    // the two halves of the platform disagreed about what "revoked" means.
+    const sessionSecurityVersion = Number(session.security_version ?? 0);
+    const userSecurityVersion = Number(user.securityVersion ?? user.security_version ?? 0);
+    if (!Number.isSafeInteger(sessionSecurityVersion)
+      || !Number.isSafeInteger(userSecurityVersion)
+      || sessionSecurityVersion !== userSecurityVersion) {
+      await db.collection('user_sessions').deleteOne({ _id: session._id }).catch(() => {});
+      return res.status(401).json({ detail: 'Your session has expired. Please sign in again.' });
+    }
+
     req.user = normalizeUser(user);
     next();
   } catch (error) {
