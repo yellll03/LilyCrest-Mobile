@@ -19,6 +19,11 @@ router.patch('/:conversationId/close', tenantMiddleware, chatController.closeCon
 // Register an already-uploaded file (bytes went through
 // POST /upload/firebase-storage) against a conversation the tenant owns.
 router.post('/:conversationId/attachments', tenantMiddleware, chatController.uploadConversationAttachment);
+// The one protected read path for attachment bytes. Authenticated, scoped to
+// the tenant's own conversations, and bound to the conversation the
+// attachment was registered against. There is deliberately no unauthenticated
+// or storage-URL alternative.
+router.get('/:conversationId/attachments/:attachmentId', tenantMiddleware, chatController.downloadConversationAttachment);
 // Tenant's answer to the admin's "was this resolved?" prompt.
 router.patch('/:conversationId/resolution', tenantMiddleware, chatController.confirmConversationResolution);
 // Reopen a resolved/closed concern on the same thread.
@@ -30,5 +35,10 @@ router.get('/admin/conversations', adminMiddleware, chatController.getAdminConve
 router.get('/admin/:conversationId/messages', adminMiddleware, chatController.getAdminConversationMessages);
 router.post('/admin/:conversationId/messages', adminMiddleware, chatController.sendAdminMessage);
 router.patch('/admin/:conversationId/status', adminMiddleware, chatController.updateAdminConversationStatus);
+router.post('/admin/:conversationId/attachments', adminMiddleware, chatController.uploadAdminConversationAttachment);
+// Admin read path. Same conversation-bound attachment resolution, but the
+// conversation is located through buildAdminConversationFilter, so a
+// branch-scoped admin still cannot reach another branch's attachment.
+router.get('/admin/:conversationId/attachments/:attachmentId', adminMiddleware, chatController.downloadAdminConversationAttachment);
 
 module.exports = router;

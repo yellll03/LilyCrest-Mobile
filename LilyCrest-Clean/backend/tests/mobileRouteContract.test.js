@@ -152,9 +152,45 @@ test('the support-chat endpoints the mobile UI exposes buttons for are registere
     'PATCH /chat/:conversationId/resolution',
     'PATCH /chat/:conversationId/reopen',
     'POST /chat/:conversationId/attachments',
+    // The one protected read path. MessageBubble builds
+    // `${MOBILE_API_BASE_URL}${attachment.url}` with a bearer header and
+    // chatAttachmentViewer.openChatAttachment downloads through it, so an
+    // unregistered route here means every attachment tile silently fails.
+    'GET /chat/:conversationId/attachments/:attachmentId',
     'PATCH /chat/:conversationId/close',
   ]) {
     assert.ok(registered.has(route), `${route} must be registered`);
+  }
+});
+
+test('attachment bytes have no unauthenticated or storage-URL alternative', () => {
+  const registered = collectRegisteredRoutes();
+  const attachmentReads = [...registered].filter((route) => /^GET .*attachments/.test(route));
+  assert.deepEqual(
+    attachmentReads.sort(),
+    [
+      'GET /chat/:conversationId/attachments/:attachmentId',
+      'GET /chat/admin/:conversationId/attachments/:attachmentId',
+    ],
+    'the only ways to read attachment bytes are the two authenticated, conversation-bound routes',
+  );
+
+  // Neither the serializer nor the client contract may hand out a provider URL.
+  const controller = fs.readFileSync(
+    path.join(BACKEND_ROOT, 'controllers', 'chat.controller.js'),
+    'utf8',
+  );
+  assert.match(
+    controller,
+    /function serializeAttachment[\s\S]*?\n}/,
+    'serializeAttachment must exist',
+  );
+  const serializer = controller.match(/function serializeAttachment[\s\S]*?\n}/)[0];
+  for (const leak of ['storagePath', 'downloadUrl', 'storageUrl', 'bucket']) {
+    assert.ok(
+      !serializer.includes(leak),
+      `serializeAttachment must not expose ${leak} to a client`,
+    );
   }
 });
 
