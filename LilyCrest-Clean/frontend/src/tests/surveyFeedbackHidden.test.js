@@ -23,6 +23,7 @@ jest.mock('../context/AuthContext', () => ({
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn(), back: jest.fn() }),
+  useLocalSearchParams: () => ({}),
   useFocusEffect: (cb) => {
     const React = require('react');
     // eslint-disable-next-line react-hooks/exhaustive-deps

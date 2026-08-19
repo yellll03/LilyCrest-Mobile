@@ -366,6 +366,7 @@ export function resolveNotificationRoute(data = {}) {
   const messageId = data?.message_id || data?.messageId;
   const requestId = data?.request_id || data?.requestId;
   const contractId = data?.contract_id || data?.contractId;
+  const announcementId = data?.announcement_id || data?.announcementId;
   const explicitScreen = typeof data?.screen === 'string' ? data.screen.trim().toLowerCase() : '';
   const type = typeof data?.type === 'string' ? data.type.trim().toLowerCase() : '';
   const category = typeof data?.category === 'string' ? data.category.trim().toLowerCase() : '';
@@ -414,6 +415,14 @@ export function resolveNotificationRoute(data = {}) {
     case 'billing':
     case 'payment':
     case 'payments':
+    case 'bill_generated':
+    case 'bill_released':
+    case 'billing_released':
+    case 'utility_bill_released':
+    case 'bill_due_reminder':
+    case 'penalty_applied':
+    case 'payment_approved':
+    case 'payment_rejected':
       return billingId
         ? { pathname: '/bill-details', params: { billId: String(billingId) } }
         : '/(tabs)/billing';
@@ -422,9 +431,14 @@ export function resolveNotificationRoute(data = {}) {
     case 'news':
     case 'notification':
     case 'notifications':
-      return '/(tabs)/announcements';
+      return announcementId
+        ? { pathname: '/(tabs)/announcements', params: { announcementId: String(announcementId) } }
+        : '/(tabs)/announcements';
     case 'maintenance':
     case 'services':
+    case 'maintenance_update':
+    case 'maintenance_status_changed':
+    case 'maintenance_status':
       return requestId
         ? { pathname: '/(tabs)/services', params: { requestId: String(requestId) } }
         : '/(tabs)/services';

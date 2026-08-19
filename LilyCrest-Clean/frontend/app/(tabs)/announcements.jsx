@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { format, formatDistanceToNow } from 'date-fns';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, FlatList, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
@@ -22,6 +22,7 @@ import {
   normalizeNotificationCategory as normalizeCategoryKey,
   sortNotifications,
 } from '../../src/utils/notificationFilters';
+import { getAnnouncementCategoryPresentation } from '../../src/utils/announcementPresentation';
 
 function safeFormat(dateStr, fmt) {
   try {
@@ -51,6 +52,9 @@ const CATEGORY_LABELS = {
   promo: 'Promo',
   event: 'Event',
   general: 'General',
+  policy: 'Policy',
+  alert: 'Alert',
+  reminder: 'Reminder',
 };
 
 function categoryLabel(key) {
@@ -68,6 +72,10 @@ function isNew(dateStr) {
 
 export default function AnnouncementsScreen() {
   const router = useRouter();
+  const { announcementId: announcementIdParam } = useLocalSearchParams();
+  const linkedAnnouncementId = Array.isArray(announcementIdParam)
+    ? announcementIdParam[0]
+    : announcementIdParam;
   const { colors } = useTheme();
   // The News tab reads the backend's canonical announcement list. Home's
   // notification center remains a separate AuthContext-owned collection.
@@ -371,6 +379,18 @@ export default function AnnouncementsScreen() {
   const [selectedIds, setSelectedIds] = useState(() => new Set());
   const [undoDismissal, setUndoDismissal] = useState(null);
   const undoTimerRef = useRef(null);
+  const handledLinkedAnnouncementRef = useRef('');
+
+  useEffect(() => {
+    const targetId = String(linkedAnnouncementId || '').trim();
+    if (!targetId || handledLinkedAnnouncementRef.current === targetId) return;
+    const ownedAnnouncement = feedItems.find(
+      (announcement) => getCanonicalAnnouncementId(announcement) === targetId,
+    );
+    if (!ownedAnnouncement) return;
+    handledLinkedAnnouncementRef.current = targetId;
+    setSelectedAnn(ownedAnnouncement);
+  }, [feedItems, linkedAnnouncementId]);
 
   useEffect(() => () => {
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
@@ -489,24 +509,6 @@ export default function AnnouncementsScreen() {
     }
   };
 
-  const getCategoryColor = (category) => {
-    switch (category?.toLowerCase()) {
-      case 'announcement': return { bg: '#F1F5F9', text: '#2563EB', icon: 'megaphone' };
-      case 'billing':     return { bg: '#EFF6FF', text: '#2563EB', icon: 'card' };
-      case 'maintenance': return { bg: '#FFFBEB', text: '#D97706', icon: 'construct' };
-      case 'assistant':   return { bg: '#FBF7EA', text: '#B9921F', icon: 'chatbubble-ellipses' };
-      case 'security':    return { bg: '#FEF2F2', text: '#DC2626', icon: 'shield-checkmark' };
-      case 'reservation': return { bg: '#ECFDF5', text: '#059669', icon: 'calendar' };
-      case 'survey':      return { bg: '#EFF6FF', text: '#2563EB', icon: 'chatbox-ellipses' };
-      case 'rules':       return { bg: '#F1F5F9', text: '#2563EB', icon: 'document-text' };
-      case 'promo':       return { bg: '#ECFDF5', text: '#059669', icon: 'pricetag' };
-      case 'event':       return { bg: '#EFF6FF', text: '#2563EB', icon: 'calendar' };
-      default:            return { bg: '#F1F5F9', text: '#4B5563', icon: 'megaphone' };
-    }
-  };
-
-  const getCategoryIcon = (category) => getCategoryColor(category).icon;
-
   const categories = useMemo(
     () => ['all', ...new Set(feedItems.map((item) => normalizeCategoryKey(item.category)))],
     [feedItems]
@@ -555,7 +557,7 @@ export default function AnnouncementsScreen() {
   }, []);
 
   const renderAnnouncementItem = useCallback(({ item: announcement }) => {
-    const catColor = getCategoryColor(announcement.category || 'General');
+    const catColor = getAnnouncementCategoryPresentation(announcement.category || 'General');
     const prioColor = getPriorityColor(announcement.priority);
     const announcementDate = getAnnouncementDateValue(announcement);
     const isRecent = isNew(announcementDate);
@@ -889,7 +891,7 @@ export default function AnnouncementsScreen() {
                         {selected ? <View style={styles.radioInner} /> : null}
                       </View>
                       <Ionicons
-                        name={category === 'all' ? 'apps-outline' : getCategoryIcon(category)}
+                        name={category === 'all' ? 'apps-outline' : getAnnouncementCategoryPresentation(category).icon}
                         size={17}
                         color={selected ? colors.accent : colors.textMuted}
                       />
@@ -990,7 +992,7 @@ export default function AnnouncementsScreen() {
             </View>
 
             {selectedAnn && (() => {
-              const catColor = getCategoryColor(selectedAnn.category || 'General');
+              const catColor = getAnnouncementCategoryPresentation(selectedAnn.category || 'General');
               const prioColor = getPriorityColor(selectedAnn.priority);
               return (
                 <>

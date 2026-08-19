@@ -9,13 +9,8 @@ import { publishCanonicalNotification, resetCanonicalEventDedupeForTests } from 
 // include contract.tenantDocument — the backend's own resolved answer to
 // "which document should the tenant see right now" (see
 // contractPresentation.js's preferredContractDocument(), which reads it as
-// the primary source of truth). This hook itself does no document-selection
-// logic — it only fetches and passes the raw contract object through — so
-// these fixtures deliberately use the older preparedDocument/finalDocument
-// shape to keep this file's tests focused on refresh/race/stale/auth-clearing
-// behavior, which is agnostic to which document-shape variant is fetched.
-// See "full pipeline" below for a fixture that includes tenantDocument and
-// proves the shape survives this hook unmodified into the presentation layer.
+// the only source of truth). This hook does no document-selection logic; it
+// fetches and passes the canonical contract object through.
 
 const mockAppStateListeners = new Set();
 
@@ -46,8 +41,7 @@ function draftResponse() {
       contract: {
         id: '507f1f77bcf86cd799439011',
         status: 'generated',
-        preparedDocument: { available: true, currentVersion: 1, generatedAt: '2026-08-01' },
-        finalDocument: { available: false },
+        tenantDocument: { available: true, type: 'generated_draft', isFinal: false, version: 1, generatedAt: '2026-08-01' },
       },
       state: 'CONTRACT_AVAILABLE',
     },
@@ -60,8 +54,7 @@ function finalResponse() {
       contract: {
         id: '507f1f77bcf86cd799439011',
         status: 'active',
-        preparedDocument: { available: true, currentVersion: 1, generatedAt: '2026-08-01' },
-        finalDocument: { available: true, publishedAt: '2026-08-10' },
+        tenantDocument: { available: true, type: 'final_notarized', isFinal: true, version: 1, publishedAt: '2026-08-10' },
       },
       state: 'CONTRACT_AVAILABLE',
     },
@@ -79,13 +72,13 @@ describe('useTenantContract refresh/error lifecycle against the real canonical r
     resetCanonicalEventDedupeForTests();
   });
 
-  test('loads the canonical preparedDocument/finalDocument shape on initial focus', async () => {
+  test('loads the canonical tenantDocument shape on initial focus', async () => {
     apiService.getCurrentContract.mockResolvedValueOnce(draftResponse());
     const { result } = renderHook(() => useTenantContract());
 
     await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.contract.preparedDocument.available).toBe(true);
-    expect(result.current.contract.finalDocument.available).toBe(false);
+    expect(result.current.contract.tenantDocument.type).toBe('generated_draft');
+    expect(result.current.contract.tenantDocument.available).toBe(true);
     expect(result.current.state).toBe('CONTRACT_AVAILABLE');
   });
 
@@ -103,12 +96,12 @@ describe('useTenantContract refresh/error lifecycle against the real canonical r
       .mockResolvedValueOnce(draftResponse())
       .mockResolvedValueOnce(finalResponse());
     const { result } = renderHook(() => useTenantContract());
-    await waitFor(() => expect(result.current.contract?.finalDocument.available).toBe(false));
+    await waitFor(() => expect(result.current.contract?.tenantDocument.type).toBe('generated_draft'));
 
     act(() => emitAppState('background'));
     act(() => emitAppState('active'));
 
-    await waitFor(() => expect(result.current.contract?.finalDocument.available).toBe(true));
+    await waitFor(() => expect(result.current.contract?.tenantDocument.type).toBe('final_notarized'));
     expect(apiService.getCurrentContract).toHaveBeenCalledTimes(2);
   });
 
@@ -117,14 +110,14 @@ describe('useTenantContract refresh/error lifecycle against the real canonical r
       .mockResolvedValueOnce(draftResponse())
       .mockResolvedValueOnce(finalResponse());
     const { result } = renderHook(() => useTenantContract());
-    await waitFor(() => expect(result.current.contract?.finalDocument.available).toBe(false));
+    await waitFor(() => expect(result.current.contract?.tenantDocument.type).toBe('generated_draft'));
 
     act(() => publishCanonicalNotification({
       type: 'contract_document_ready',
       data: { type: 'contract_document_ready', contract_id: '507f1f77bcf86cd799439011' },
     }));
 
-    await waitFor(() => expect(result.current.contract?.finalDocument.available).toBe(true));
+    await waitFor(() => expect(result.current.contract?.tenantDocument.type).toBe('final_notarized'));
     expect(apiService.getCurrentContract).toHaveBeenCalledTimes(2);
   });
 
@@ -141,7 +134,7 @@ describe('useTenantContract refresh/error lifecycle against the real canonical r
     });
 
     expect(result.current.refreshing).toBe(false);
-    expect(result.current.contract.preparedDocument.available).toBe(true);
+    expect(result.current.contract.tenantDocument.type).toBe('generated_draft');
   });
 
   test('a request that resolves after a newer one must not overwrite the newer result', async () => {
@@ -151,12 +144,12 @@ describe('useTenantContract refresh/error lifecycle against the real canonical r
 
     apiService.getCurrentContract.mockResolvedValueOnce(finalResponse());
     await act(async () => { await result.current.reload(); });
-    expect(result.current.contract.finalDocument.available).toBe(true);
+    expect(result.current.contract.tenantDocument.type).toBe('final_notarized');
 
     // The stale first request (started before the reload above) now resolves
     // with older draft-only data — it must be ignored.
     await act(async () => { resolveFirst(draftResponse()); });
-    expect(result.current.contract.finalDocument.available).toBe(true);
+    expect(result.current.contract.tenantDocument.type).toBe('final_notarized');
   });
 
   test('transient network/upstream failure after a successful load preserves the last safe presentation', async () => {
@@ -167,7 +160,7 @@ describe('useTenantContract refresh/error lifecycle against the real canonical r
     apiService.getCurrentContract.mockRejectedValueOnce({ response: { status: 502 } });
     await act(async () => result.current.reload());
 
-    expect(result.current.contract.preparedDocument.available).toBe(true);
+    expect(result.current.contract.tenantDocument.type).toBe('generated_draft');
     expect(result.current.state).toBe('STALE');
     expect(result.current.error).toBeTruthy();
   });

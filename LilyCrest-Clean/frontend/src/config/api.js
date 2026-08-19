@@ -1,11 +1,4 @@
 const MOBILE_BACKEND_URL = 'https://api.lilycrest.space';
-// Historical/retired host (old LilyCrest-Mobile backend on Render), kept only
-// as a named reference for engineers investigating old logs/crash reports.
-// Not read by any runtime resolver, and as of the host-lock allowlist in
-// isDisallowedMobileRuntimeUrl() below, EXPO_PUBLIC_BACKEND_URL can no longer
-// be configured to point production traffic at this host even explicitly —
-// resolveBackendUrl() will force it back to the canonical host.
-export const ROLLBACK_BACKEND_URL = 'https://mobile-api.lilycrest.space';
 
 export const normalizeBackendUrl = (value) => String(value || '').trim().replace(/\/+$/, '');
 
@@ -39,9 +32,8 @@ export function isLocalOrPrivateBackendUrl(value) {
 
 // Production runtime host allowlist. This is intentionally an allowlist
 // (only the canonical API host resolves) rather than a denylist of known-bad
-// hosts — a denylist only blocks hosts we've already thought of (e.g. the
-// retired mobile-api.lilycrest.space Render host, onrender.com,
-// trycloudflare.com tunnels) and silently lets anything else through
+// hosts — a denylist only blocks hosts already known to us and silently lets
+// anything else through
 // unnoticed if EXPO_PUBLIC_BACKEND_URL is ever misconfigured. There is no
 // runtime failover: a request to the canonical host that fails is retried
 // against that same host (see services/api.js) or surfaced as an error —

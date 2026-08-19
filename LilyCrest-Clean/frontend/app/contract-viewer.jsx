@@ -100,10 +100,14 @@ export default function ContractViewer() {
             <SurfaceCard style={styles.card}>
               <SectionHeader
                 icon="shield-checkmark-outline"
-                title="Contract Summary"
-                trailing={<StatusBadge status={summary.lifecycleState} label={summary.status} tone={summary.lifecycleState === 'final' ? 'success' : summary.lifecycleState === 'draft' ? 'warning' : 'info'} />}
+                title="Contract Status"
+                trailing={<StatusBadge status={summary.lifecycleState} label={summary.lifecycleBadgeLabel} tone={summary.lifecycleState === 'final' ? 'success' : summary.lifecycleState === 'draft' ? 'warning' : 'info'} />}
               />
-              <Text style={[styles.lifecycleMessage, { color: colors.textSecondary }]}>{summary.message}</Text>
+              <Text style={[styles.lifecycleStatus, { color: colors.heading }]}>{summary.status}</Text>
+              <View style={[styles.nextAction, { backgroundColor: colors.surfaceSecondary }]}>
+                <Ionicons name="arrow-forward-circle-outline" size={18} color={colors.accentHover} />
+                <Text style={[styles.lifecycleMessage, { color: colors.textSecondary }]}>{summary.message}</Text>
+              </View>
               {summary.fields.map((field, index) => (
                 <DataRow key={field.key} label={field.label} value={field.value} last={index === summary.fields.length - 1} />
               ))}
@@ -119,7 +123,7 @@ export default function ContractViewer() {
             >
               {summary.canOpenPdf ? (
                 <ActionButton
-                  label="View Contract"
+                  label={summary.documentActionLabel}
                   icon="document-text-outline"
                   onPress={() => router.push({
                     pathname: '/document-viewer',
@@ -172,8 +176,10 @@ const styles = StyleSheet.create({
   root: { flex: 1 },
   content: { padding: 18, paddingBottom: 42 },
   empty: { alignItems: 'center', paddingTop: 100, gap: 16 },
-  card: { gap: 12, marginBottom: 16 },
-  lifecycleMessage: { fontSize: 13, lineHeight: 19, marginTop: -6 },
+  card: { gap: 10, marginBottom: 16 },
+  lifecycleStatus: { fontSize: 16, lineHeight: 22, fontWeight: '700' },
+  nextAction: { flexDirection: 'row', alignItems: 'flex-start', gap: 9, borderRadius: 10, padding: 11 },
+  lifecycleMessage: { flex: 1, fontSize: 13, lineHeight: 19 },
   staleWarning: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 14 },
   staleWarningText: { flex: 1, fontSize: 12, lineHeight: 17 },
   staleWarningRetry: { fontSize: 13, fontWeight: '700' },

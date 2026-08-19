@@ -17,8 +17,10 @@ import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { FlatList } from 'react-native';
 import AnnouncementsScreen from '../../app/(tabs)/announcements';
 
+let mockLocalSearchParams = {};
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
+  useLocalSearchParams: () => mockLocalSearchParams,
   useFocusEffect: (cb) => { require('react').useEffect(cb, []); },
 }));
 
@@ -95,6 +97,7 @@ function announcement(overrides = {}) {
 describe('announcements list virtualization and behavior (regression)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockLocalSearchParams = {};
     mockStoreState = { announcements: [], hasLoadedOnce: true, fetchError: null };
   });
 
@@ -125,5 +128,13 @@ describe('announcements list virtualization and behavior (regression)', () => {
     fireEvent.press(getByText('Tap me'));
     // The card title and the modal's title both render "Tap me" once opened.
     await waitFor(() => expect(getAllByText('Tap me').length).toBeGreaterThanOrEqual(2));
+  });
+
+  it('opens an owned announcement from its notification deep link', async () => {
+    mockLocalSearchParams = { announcementId: 'ann-linked' };
+    setStoreAnnouncements([announcement({ announcement_id: 'ann-linked', title: 'Linked announcement' })]);
+    const { getAllByText } = render(<AnnouncementsScreen />);
+
+    await waitFor(() => expect(getAllByText('Linked announcement').length).toBeGreaterThanOrEqual(2));
   });
 });
