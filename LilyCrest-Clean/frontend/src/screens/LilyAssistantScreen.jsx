@@ -37,6 +37,7 @@ import {
   supportStatusGroup,
   supportStatusLabel,
 } from '../utils/supportConversationPresentation';
+import { getLilyTopicSuggestions, LILY_TOPICS } from '../utils/lilyTopicSuggestions';
 
 const ASSISTANT_UPLOAD_MIME_TYPES = [...IMAGE_UPLOAD_MIME_TYPES, 'application/pdf'];
 const SUPPORT_UPLOAD_MIME_TYPES = [
@@ -154,34 +155,10 @@ const typingStyles = StyleSheet.create({
   },
 });
 
-const QUICK_ACTIONS = [
-  { id: 'billing', label: 'Billing', icon: 'card-outline', prompt: 'How much do I need to pay this month?' },
-  { id: 'maintenance', label: 'Maintenance', icon: 'construct-outline', prompt: 'I need maintenance help.' },
-  { id: 'documents', label: 'Documents', icon: 'document-text-outline', prompt: 'How do I download my contract?' },
-  { id: 'rules', label: 'House Rules', icon: 'shield-checkmark-outline', prompt: 'What are the quiet hours?' },
-  { id: 'penalties', label: 'Penalties', icon: 'warning-outline', prompt: 'Explain penalty rules.' },
-  { id: 'admin', label: 'Talk to Admin', icon: 'headset-outline', prompt: 'Connect me to an admin.' },
-];
-
 const FILTERS = [
   { id: 'all', label: 'All' },
   { id: 'pending', label: 'Pending' },
   { id: 'solved', label: 'Solved' },
-];
-
-const HERO_TOPICS = [
-  { id: 'billing', label: 'Billing', prompt: 'Show my latest bill and how to pay.' },
-  { id: 'maintenance', label: 'Maintenance', prompt: 'I need to report a maintenance issue.' },
-  { id: 'documents', label: 'Documents', prompt: 'How do I download my lease contract?' },
-  { id: 'house-rules', label: 'House Rules', prompt: 'What are the house rules and curfew?' },
-  { id: 'account', label: 'Account & Support', prompt: 'Help me update my account or contact admin.' },
-];
-
-const SUGGESTED_QUESTIONS = [
-  'How much do I need to pay this month?',
-  'Comply with move-in requirements',
-  'Curfew and visitor policy',
-  'File a complaint to admin',
 ];
 
 const ADMIN_KEYWORDS = [
@@ -408,6 +385,7 @@ export default function LilyAssistantScreen() {
   const [isEscalating, setIsEscalating] = useState(false);
   const [networkError, setNetworkError] = useState(null);
   const [hasInteracted, setHasInteracted] = useState(false);
+  const [selectedTopic, setSelectedTopic] = useState(null);
   const [messages, setMessages] = useState([]);
   const [inquiries, setInquiries] = useState([]);
   const [selectedInquiry, setSelectedInquiry] = useState(null);
@@ -419,6 +397,10 @@ export default function LilyAssistantScreen() {
   );
   const chat = useAssistantChat(initialSession);
   const tabBarHeight = useBottomTabBarHeight();
+  const suggestedQuestions = useMemo(
+    () => getLilyTopicSuggestions(selectedTopic),
+    [selectedTopic],
+  );
 
   const markInteracted = () => {
     if (!hasInteracted) setHasInteracted(true);
@@ -1199,13 +1181,6 @@ export default function LilyAssistantScreen() {
     setAttachments((prev) => prev.filter((item) => getAttachmentDisplayName(item) !== name));
   };
 
-  const handleQuickAction = (action) => {
-    const prompt = action.prompt || '';
-    setInputValue(prompt);
-    markInteracted();
-    handleSend(prompt);
-  };
-
   const reopenSelectedInquiry = (conversationId = selectedInquiry?.id) => {
     if (!conversationId || isReopeningInquiry) return;
     Alert.alert(
@@ -1573,11 +1548,6 @@ export default function LilyAssistantScreen() {
     [filter, inquiries]
   );
 
-  const hasStartedChat = useMemo(
-    () => hasInteracted || messages.length > 0 || inputValue.trim().length > 0 || attachments.length > 0,
-    [attachments.length, hasInteracted, inputValue, messages.length]
-  );
-
   const isInputDisabled = isSending
     || isEscalating
     || chatMode === CHAT_MODE.RESOLVED
@@ -1684,13 +1654,16 @@ export default function LilyAssistantScreen() {
                     </View>
 
                     <View style={styles.heroTopics}>
-                      {HERO_TOPICS.map((topic) => (
+                      {LILY_TOPICS.map((topic) => (
                         <Pressable
                           key={topic.id}
-                          style={styles.heroTopic}
-                          onPress={() => handleSend(topic.prompt)}
+                          style={[styles.heroTopic, selectedTopic === topic.id && styles.heroTopicSelected]}
+                          onPress={() => setSelectedTopic(topic.id)}
+                          accessibilityRole="button"
+                          accessibilityState={{ selected: selectedTopic === topic.id }}
+                          accessibilityLabel={`${topic.label} topic`}
                         >
-                          <Text style={styles.heroTopicText}>{topic.label}</Text>
+                          <Text style={[styles.heroTopicText, selectedTopic === topic.id && styles.heroTopicTextSelected]}>{topic.label}</Text>
                         </Pressable>
                       ))}
                     </View>
@@ -1699,7 +1672,7 @@ export default function LilyAssistantScreen() {
                   <View style={styles.suggestSection}>
                     <Text style={styles.suggestLabel}>You may want to ask:</Text>
                     <View style={styles.suggestChips}>
-                      {SUGGESTED_QUESTIONS.map((question) => (
+                      {suggestedQuestions.map((question) => (
                         <Pressable
                           key={question}
                           style={styles.suggestChip}
@@ -1735,25 +1708,6 @@ export default function LilyAssistantScreen() {
 
                 <View style={styles.bottomZone}>
                   {renderSupportBanner()}
-
-                  {!hasStartedChat && chatMode === CHAT_MODE.AI ? (
-                    <ScrollView
-                      horizontal
-                      showsHorizontalScrollIndicator={false}
-                      contentContainerStyle={styles.quickActions}
-                    >
-                      {QUICK_ACTIONS.map((action) => (
-                        <Pressable
-                          key={action.id}
-                          style={styles.quickAction}
-                          onPress={() => handleQuickAction(action)}
-                        >
-                          <Ionicons name={action.icon} size={15} color="#D4AF37" />
-                          <Text style={styles.quickActionText}>{action.label}</Text>
-                        </Pressable>
-                      ))}
-                    </ScrollView>
-                  ) : null}
 
                   {attachments.length ? (
                     <View style={styles.attachmentRow}>
@@ -2121,10 +2075,17 @@ function createAssistantStyles(c, dark) {
     borderWidth: 1,
     borderColor: c.border,
   },
+  heroTopicSelected: {
+    backgroundColor: dark ? '#3D3214' : '#FFFBEB',
+    borderColor: '#D4AF37',
+  },
   heroTopicText: {
     fontSize: 12,
     fontWeight: '700',
     color: c.text,
+  },
+  heroTopicTextSelected: {
+    color: dark ? '#F6D86B' : '#7C5D0B',
   },
   suggestSection: {
     marginBottom: 16,
@@ -2306,26 +2267,6 @@ function createAssistantStyles(c, dark) {
   },
   supportDangerButtonText: {
     color: '#991B1B',
-    fontWeight: '700',
-    fontSize: 12,
-  },
-  quickActions: {
-    gap: 8,
-    paddingVertical: 2,
-  },
-  quickAction: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 7,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    backgroundColor: '#FFFBEB',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#F3E4B0',
-  },
-  quickActionText: {
-    color: '#92400E',
     fontWeight: '700',
     fontSize: 12,
   },

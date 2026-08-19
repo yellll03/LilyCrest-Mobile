@@ -3,9 +3,6 @@ import {
   buildContractSummary,
   contractLifecycleState,
   contractStatusLabel,
-  hasAuthorizedContractPdf,
-  hasFinalContractPdf,
-  hasPreparedContractPdf,
 } from '../utils/contractPresentation';
 
 // These fixtures mirror the shape returned by GET /api/m/contracts/current,
@@ -32,8 +29,7 @@ describe('controlled contract presentation', () => {
       displayStatus: 'Prepared Contract Available',
       leaseStartDate: '2026-07-20',
       leaseEndDate: '2027-01-20',
-      preparedDocument: { available: false },
-      finalDocument: { available: false },
+      tenantDocument: { available: false, type: null },
     });
     expect(summary.status).toBe('Prepared Contract Available');
     expect(summary.fields).toHaveLength(1);
@@ -42,19 +38,17 @@ describe('controlled contract presentation', () => {
     expect(summary.canOpenPdf).toBe(false);
   });
 
-  test('PDF availability is driven entirely by the server-reported document flags', () => {
-    expect(hasPreparedContractPdf({ preparedDocument: { available: true } })).toBe(true);
-    expect(hasPreparedContractPdf({ preparedDocument: { available: false } })).toBe(false);
-    expect(hasFinalContractPdf({ finalDocument: { available: true } })).toBe(true);
-    expect(hasAuthorizedContractPdf({ preparedDocument: { available: false }, finalDocument: { available: true } })).toBe(true);
-    expect(hasAuthorizedContractPdf({ preparedDocument: { available: false }, finalDocument: { available: false } })).toBe(false);
+  test('PDF availability is driven entirely by the canonical tenantDocument resolver output', () => {
+    expect(buildContractSummary({ tenantDocument: { available: true, type: 'generated_draft', version: 1 } }).canOpenPdf).toBe(true);
+    expect(buildContractSummary({ tenantDocument: { available: true, type: 'final_notarized', version: 1 } }).canOpenPdf).toBe(true);
+    expect(buildContractSummary({ tenantDocument: { available: false, type: null } }).canOpenPdf).toBe(false);
+    expect(buildContractSummary({ tenantDocument: { available: true, type: 'unknown' } }).canOpenPdf).toBe(false);
   });
 
   test('summary prefers the final document over the prepared one once both exist', () => {
     const summary = buildContractSummary({
       displayStatus: 'Final Signed and Notarized Contract Available',
-      preparedDocument: { available: true, currentVersion: 2, generatedAt: '2026-06-01' },
-      finalDocument: { available: true, publishedAt: '2026-07-01' },
+      tenantDocument: { available: true, type: 'final_notarized', isFinal: true, version: 2, publishedAt: '2026-07-01' },
     });
     expect(summary.canOpenPdf).toBe(true);
     expect(summary.documentVariant).toBe('final');
@@ -64,8 +58,7 @@ describe('controlled contract presentation', () => {
     const summary = buildContractSummary({
       status: 'draft',
       displayStatus: 'Contract is being prepared.',
-      preparedDocument: { available: false },
-      finalDocument: { available: false },
+      tenantDocument: { available: false, type: null },
     });
     expect(summary).not.toBeNull();
     expect(summary.status).toBe('Contract is being prepared.');
@@ -76,8 +69,7 @@ describe('controlled contract presentation', () => {
     const summary = buildContractSummary({
       status: 'draft',
       displayStatus: 'Prepared Contract Available',
-      preparedDocument: { available: true, currentVersion: 1, generatedAt: '2026-08-01' },
-      finalDocument: { available: false },
+      tenantDocument: { available: true, type: 'generated_draft', version: 1, generatedAt: '2026-08-01' },
     });
     expect(summary.canOpenPdf).toBe(true);
     expect(summary.documentVariant).toBe('prepared');
@@ -87,10 +79,8 @@ describe('controlled contract presentation', () => {
     const signedContract = {
       status: 'signed',
       displayStatus: 'Physical signing and in-person notarization are in progress.',
-      preparedDocument: { available: true, currentVersion: 1 },
-      finalDocument: { available: false },
+      tenantDocument: { available: true, type: 'generated_draft', version: 1 },
     };
-    expect(hasFinalContractPdf(signedContract)).toBe(false);
     const summary = buildContractSummary(signedContract);
     expect(summary.documentVariant).toBe('prepared');
     expect(summary.canOpenPdf).toBe(true);
@@ -119,8 +109,7 @@ describe('controlled contract presentation', () => {
 // Web tenant page reads (web/src/features/tenant/utils/tenantContractUi.mjs).
 // These tests lock mobile's presentation rule to that field so mobile can
 // never disagree with Web about which document is current for the same
-// contract. preparedDocument/finalDocument are only a fallback for a
-// response that omits tenantDocument entirely.
+// contract. Mobile does not reconstruct document priority from legacy fields.
 describe('canonical tenantDocument-driven presentation rule', () => {
   test('tenantDocument final selects final regardless of prepared availability', () => {
     const contract = {
@@ -153,12 +142,12 @@ describe('canonical tenantDocument-driven presentation rule', () => {
     expect(contractLifecycleState(contract)).toBe('preparing');
   });
 
-  test('falls back to preparedDocument/finalDocument flags when tenantDocument is entirely absent', () => {
+  test('does not fall back to obsolete preparedDocument/finalDocument flags', () => {
     const contract = {
       preparedDocument: { available: true, currentVersion: 1 },
       finalDocument: { available: true, publishedAt: '2026-08-01' },
     };
-    expect(contractLifecycleState(contract)).toBe('final');
+    expect(contractLifecycleState(contract)).toBe('preparing');
   });
 
   test('neither tenantDocument nor legacy flags available resolves to preparing', () => {
@@ -207,32 +196,30 @@ describe('canonical tenantDocument-driven presentation rule', () => {
     expect(preparingSummary.lifecycleLabel).toBe('Preparing Contract');
   });
 
-  test('preparing message reflects the canonical displayStatus instead of a generic placeholder', () => {
+  test('preparing keeps canonical status separate from the next-action message', () => {
     const awaitingSignature = buildContractSummary({
       displayStatus: 'Physical signing and in-person notarization are in progress.',
-      preparedDocument: { available: false },
-      finalDocument: { available: false },
+      tenantDocument: { available: false, type: null },
     });
-    expect(awaitingSignature.message).toBe(
-      "Physical signing and in-person notarization are in progress. You'll be notified as soon as it's ready.",
-    );
+    expect(awaitingSignature.status).toBe('Physical signing and in-person notarization are in progress.');
+    expect(awaitingSignature.lifecycleBadgeLabel).toBe('Preparing');
+    expect(awaitingSignature.message).toBe("You'll be notified when the current document is ready.");
   });
 
   test('preparing message falls back to the generic copy when displayStatus is absent (older deployment)', () => {
     const noDisplayStatus = buildContractSummary({
-      preparedDocument: { available: false },
-      finalDocument: { available: false },
+      tenantDocument: { available: false, type: null },
     });
-    expect(noDisplayStatus.message).toBe("Your contract is being prepared. You'll be notified as soon as it's ready.");
+    expect(noDisplayStatus.message).toBe("You'll be notified when the current document is ready.");
   });
 
   test('draft and final messages are unaffected by displayStatus (only the preparing bucket is enriched)', () => {
     const draft = buildContractSummary({
       displayStatus: 'Prepared Contract Available',
-      preparedDocument: { available: true, currentVersion: 1, generatedAt: '2026-08-01' },
-      finalDocument: { available: false },
+      tenantDocument: { available: true, type: 'generated_draft', version: 1, generatedAt: '2026-08-01' },
     });
-    expect(draft.message).toBe('Your generated contract is ready for review and in-person signing. The final notarized copy will replace this document once uploaded by the admin.');
+    expect(draft.message).toBe('Review the prepared contract below. The final notarized copy will appear when it is published.');
+    expect(draft.documentActionLabel).toBe('View Draft Contract');
   });
 });
 
@@ -261,6 +248,8 @@ describe('version-aware document cache key', () => {
     expect(draft.documentCacheKey).not.toBe(final.documentCacheKey);
     expect(draft.documentKind).toBe('contract-prepared');
     expect(final.documentKind).toBe('contract-final');
+    expect(draft.documentActionLabel).toBe('View Draft Contract');
+    expect(final.documentActionLabel).toBe('View Final Contract');
   });
 
   test('an unchanged prepared version keeps a stable cache key', () => {

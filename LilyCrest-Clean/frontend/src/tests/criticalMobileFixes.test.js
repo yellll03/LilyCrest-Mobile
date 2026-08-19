@@ -6,10 +6,12 @@ const root = path.resolve(__dirname, '../..');
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'utf8');
 
 describe('critical mobile fixes', () => {
-  test('billing quick action sends an account billing question', () => {
+  test('welcome topics drive contextual prompts without a duplicate quick-action row', () => {
     const source = read('src/screens/LilyAssistantScreen.jsx');
-    expect(source).toContain("prompt: 'How much do I need to pay this month?'");
-    expect(source).toContain('onPress={() => handleQuickAction(action)}');
+    const topicSource = read('src/utils/lilyTopicSuggestions.js');
+    expect(source).toContain('onPress={() => setSelectedTopic(topic.id)}');
+    expect(source).not.toContain('handleQuickAction');
+    expect(topicSource).toContain("'How much do I need to pay?'");
   });
 
   test('profile uses server-provided username cooldown metadata', () => {

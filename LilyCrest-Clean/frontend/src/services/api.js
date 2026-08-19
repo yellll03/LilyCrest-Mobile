@@ -325,7 +325,6 @@ export const apiService = {
   getMaintenance: (requestId) => api.get(`/maintenance/${requestId}`),
   createMaintenance: (data) => api.post('/maintenance', data),
   sendMaintenanceReply: (requestId, data) => api.post(`/maintenance/${requestId}/replies`, data),
-  markMaintenanceRead: (requestId) => api.patch(`/maintenance/${requestId}/read`),
   confirmMaintenanceResolved: (requestId) => api.patch(`/maintenance/${requestId}/confirm-resolved`),
   updateMaintenance: (requestId, data) => api.put(`/maintenance/${requestId}`, data),
   cancelMaintenance: (requestId) => api.patch(`/maintenance/${requestId}/cancel`),

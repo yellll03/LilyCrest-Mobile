@@ -3,6 +3,7 @@ import AnnouncementsScreen from '../../app/(tabs)/announcements';
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
+  useLocalSearchParams: () => ({}),
   useFocusEffect: (cb) => { require('react').useEffect(cb, []); },
 }));
 

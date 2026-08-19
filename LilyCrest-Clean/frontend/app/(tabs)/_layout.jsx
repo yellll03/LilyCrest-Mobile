@@ -31,6 +31,7 @@ export default function TabLayout() {
   const styles = useMemo(() => createStyles(colors), [colors]);
   return (
     <Tabs
+      initialRouteName="home"
       backBehavior="history"
       screenOptions={{
         headerShown: false,

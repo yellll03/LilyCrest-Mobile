@@ -8,11 +8,8 @@
 // Web and Mobile consume this single source of truth for document
 // selection"). Capstone-Website's own tenant contract page
 // (web/src/features/tenant/utils/tenantContractUi.mjs) selects its displayed
-// document by tenantDocument.type, not by independently comparing
-// preparedDocument/finalDocument availability — this file must do the same
-// so mobile and web can never disagree about which document is current for
-// the same tenant. preparedDocument/finalDocument are consulted only as a
-// fallback for a response that omits tenantDocument entirely.
+// document by tenantDocument.type, not by independently comparing legacy
+// prepared/final flags. Mobile intentionally consumes only this result.
 
 const BRANCH_LABELS = Object.freeze({
   'gil-puyat': 'Gil Puyat',
@@ -26,18 +23,6 @@ function branchLabel(value) {
 
 export function contractStatusLabel(contract) {
   return contract?.displayStatus || 'Contract Status Unavailable';
-}
-
-export function hasPreparedContractPdf(contract) {
-  return Boolean(contract?.preparedDocument?.available);
-}
-
-export function hasFinalContractPdf(contract) {
-  return Boolean(contract?.finalDocument?.available);
-}
-
-export function hasAuthorizedContractPdf(contract) {
-  return hasPreparedContractPdf(contract) || hasFinalContractPdf(contract);
 }
 
 export function formatContractDate(value, locale) {
@@ -73,31 +58,23 @@ function formatPeso(value, locale) {
 // different (stricter) final-availability test than the resolver does, so
 // re-deriving locally can disagree with what tenantDocument — and therefore
 // Web — actually shows for the same contract. Normalized to the same
-// document field names (currentVersion/generatedAt/publishedAt) that the
-// legacy fallback below produces, so downstream code needs no branching.
+// document field names downstream code already consumes.
 export function preferredContractDocument(contract) {
   const tenantDoc = contract?.tenantDocument;
-  if (tenantDoc) {
-    if (!tenantDoc.available) return null;
-    return {
-      variant: tenantDoc.isFinal || tenantDoc.type === 'final_notarized' ? 'final' : 'prepared',
-      document: {
-        currentVersion: tenantDoc.version,
-        generatedAt: tenantDoc.generatedAt,
-        publishedAt: tenantDoc.publishedAt,
-        fileName: tenantDoc.fileName,
-        fileSize: tenantDoc.fileSize,
-        viewUrl: tenantDoc.viewUrl,
-        downloadUrl: tenantDoc.downloadUrl,
-      },
-    };
-  }
-  // Legacy fallback for a response that omits tenantDocument entirely (older
-  // deployment). Never blended with tenantDocument fields above — a response
-  // that has tenantDocument always uses it exclusively.
-  if (hasFinalContractPdf(contract)) return { variant: 'final', document: contract.finalDocument };
-  if (hasPreparedContractPdf(contract)) return { variant: 'prepared', document: contract.preparedDocument };
-  return null;
+  if (!tenantDoc?.available) return null;
+  if (!['final_notarized', 'generated_draft'].includes(tenantDoc.type)) return null;
+  return {
+    variant: tenantDoc.type === 'final_notarized' ? 'final' : 'prepared',
+    document: {
+      currentVersion: tenantDoc.version,
+      generatedAt: tenantDoc.generatedAt,
+      publishedAt: tenantDoc.publishedAt,
+      fileName: tenantDoc.fileName,
+      fileSize: tenantDoc.fileSize,
+      viewUrl: tenantDoc.viewUrl,
+      downloadUrl: tenantDoc.downloadUrl,
+    },
+  };
 }
 
 // Tenant-facing lifecycle derived from preferredContractDocument() above.
@@ -117,10 +94,16 @@ const LIFECYCLE_LABELS = Object.freeze({
   preparing: 'Preparing Contract',
 });
 
+const LIFECYCLE_BADGE_LABELS = Object.freeze({
+  final: 'Final',
+  draft: 'Draft Ready',
+  preparing: 'Preparing',
+});
+
 const LIFECYCLE_MESSAGES = Object.freeze({
-  final: 'This is the final notarized copy of your current contract.',
-  draft: 'Your generated contract is ready for review and in-person signing. The final notarized copy will replace this document once uploaded by the admin.',
-  preparing: 'Your contract is being prepared.',
+  final: 'Your final notarized contract is available below.',
+  draft: 'Review the prepared contract below. The final notarized copy will appear when it is published.',
+  preparing: "You'll be notified when the current document is ready.",
 });
 
 // The generic bucket message above ("preparing") is the same for every
@@ -132,12 +115,6 @@ const LIFECYCLE_MESSAGES = Object.freeze({
 // copy means this can never drift from what Web already tells the tenant for
 // the same contract. Falls back to the generic message if the field is absent
 // (older deployment) so this never regresses to a blank message.
-function preparingStatusMessage(contract) {
-  const canonical = String(contract?.displayStatus || '').trim();
-  const base = canonical || LIFECYCLE_MESSAGES.preparing;
-  return `${base} You'll be notified as soon as it's ready.`;
-}
-
 // Cache identity for the local PDF store. Must change whenever the canonical
 // document a tenant is entitled to changes shape or version, so a stale
 // cached PDF is never shown for a newer prepared version or after final
@@ -171,11 +148,13 @@ export function buildContractSummary(contract, locale) {
     status: contractStatusLabel(contract),
     lifecycleState,
     lifecycleLabel: LIFECYCLE_LABELS[lifecycleState],
-    message: lifecycleState === 'preparing' ? preparingStatusMessage(contract) : LIFECYCLE_MESSAGES[lifecycleState],
+    lifecycleBadgeLabel: LIFECYCLE_BADGE_LABELS[lifecycleState],
+    message: LIFECYCLE_MESSAGES[lifecycleState],
     fields: fields.filter((field) => field.value),
     hasMissingDetails: fields.some((field) => !field.value),
     canOpenPdf: Boolean(preferred),
     documentVariant: preferred?.variant || null,
+    documentActionLabel: preferred?.variant === 'final' ? 'View Final Contract' : preferred?.variant === 'prepared' ? 'View Draft Contract' : null,
     documentKind: preferred ? (preferred.variant === 'final' ? 'contract-final' : 'contract-prepared') : null,
     documentCacheKey: contractDocumentCacheKey(contract, preferred),
     documentInfo: preferred ? [

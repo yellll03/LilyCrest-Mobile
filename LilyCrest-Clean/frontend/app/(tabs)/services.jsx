@@ -197,14 +197,14 @@ const RESOLUTION_ESTIMATES = {
   high: 'Within 24 hours',
 };
 
-const STATUS_STEPS = ['pending', 'viewed', 'in_progress', 'assigned', 'scheduled', 'resolved'];
+const STATUS_STEPS = ['pending', 'pending_review', 'reviewed', 'provider_assigned', 'scheduled', 'in_progress', 'waiting_tenant', 'resolved'];
 const MIN_DESCRIPTION_LENGTH = 10;
 // Mirrors backend/controllers/maintenance.controller.js DESCRIPTION_MAX.
 // Frontend enforcement here is UX only — the backend remains authoritative.
 const MAX_DESCRIPTION_LENGTH = 1000;
-const ACTIVE_STATUSES = ['pending', 'viewed', 'in_progress', 'assigned', 'scheduled'];
-const RESOLVED_STATUSES = ['completed', 'resolved', 'rejected'];
-const CLOSED_REPLY_STATUSES = ['cancelled', 'rejected'];
+const ACTIVE_STATUSES = ['pending', 'pending_review', 'provider_assigned', 'scheduled', 'viewed', 'reviewed', 'in_progress', 'waiting_tenant', 'reopened'];
+const RESOLVED_STATUSES = ['completed', 'resolved', 'rejected', 'closed'];
+const CLOSED_REPLY_STATUSES = ['cancelled', 'rejected', 'closed'];
 const MAX_MAINTENANCE_ATTACHMENTS = 4;
 // Every inquiry attachment (image, PDF, or other supported document type) is
 // capped at 5MB, regardless of the generic upload endpoint's own larger
@@ -215,14 +215,20 @@ const INQUIRY_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
 function getStatusNextStep(status, request = {}) {
   switch ((status || '').toLowerCase()) {
     case 'pending': return 'Your request has been received and is waiting for admin review.';
+    case 'pending_review': return 'Your request is waiting for admin review.';
     case 'viewed': return 'Admin has viewed your request.';
+    case 'reviewed': return 'Admin has reviewed your request.';
     case 'in_progress': return 'Your request is currently being handled.';
-    case 'assigned': return 'A service provider has been assigned.';
+    case 'assigned':
+    case 'provider_assigned': return 'A service provider has been assigned.';
     case 'scheduled': return 'A maintenance visit has been scheduled.';
+    case 'waiting_tenant': return 'The maintenance team is waiting for your response.';
+    case 'reopened': return 'This request was reopened because the issue still needs attention.';
     case 'resolved': return 'This request has been marked as resolved.';
     case 'completed': return request.tenant_confirmed_resolved ? 'You confirmed that this request is resolved.' : 'This request has been completed.';
     case 'rejected': return 'This request was rejected. Please review the reason below.';
     case 'cancelled': return 'This request was cancelled.';
+    case 'closed': return 'This request is closed.';
     default: return 'A maintenance update is available.';
   }
 }
@@ -230,14 +236,20 @@ function getStatusNextStep(status, request = {}) {
 function getNextStepDetail(status, request = {}) {
   switch ((status || '').toLowerCase()) {
     case 'pending': return 'Please wait while the team reviews the details.';
+    case 'pending_review': return 'Please wait while the team reviews the details.';
     case 'viewed': return 'The team will share the next action here.';
+    case 'reviewed': return 'The team will share the next action here.';
     case 'in_progress': return 'Watch this thread for repair notes, files, or visit details.';
-    case 'assigned': return request.assigned_to ? `${request.assigned_to} is assigned to this request.` : 'The assigned provider will handle the repair.';
+    case 'assigned':
+    case 'provider_assigned': return request.assigned_to ? `${request.assigned_to} is assigned to this request.` : 'The assigned provider will handle the repair.';
     case 'scheduled': return request.scheduled_for ? `Scheduled for ${request.scheduled_for}.` : 'The visit schedule will be shared here.';
+    case 'waiting_tenant': return 'Reply in this thread with the requested information.';
+    case 'reopened': return 'Watch this thread for the next repair update.';
     case 'resolved': return 'Please confirm if the issue is fixed, or report that it is still an issue.';
     case 'completed': return 'No action is needed right now.';
     case 'rejected': return 'You can submit a new request if you need another review.';
     case 'cancelled': return 'You can submit a new request if you still need help.';
+    case 'closed': return 'No action is needed right now.';
     default: return 'Review the latest update below.';
   }
 }
@@ -660,13 +672,18 @@ export default function ServicesScreen() {
   const getStatusColor = (status) => {
     switch ((status || '').toLowerCase()) {
       case 'viewed': return { bg: STATUS.info.background, text: STATUS.info.text, solid: STATUS.info.solid, label: 'Viewed', icon: 'eye' };
+      case 'reviewed': return { bg: STATUS.info.background, text: STATUS.info.text, solid: STATUS.info.solid, label: 'Reviewed', icon: 'eye' };
       case 'in_progress': case 'in process': return { bg: STATUS.info.background, text: STATUS.info.text, solid: STATUS.info.solid, label: 'In Progress', icon: 'construct' };
-      case 'assigned': return { bg: STATUS.info.background, text: STATUS.info.text, solid: STATUS.info.solid, label: 'Assigned', icon: 'person' };
+      case 'assigned': case 'provider_assigned': return { bg: STATUS.info.background, text: STATUS.info.text, solid: STATUS.info.solid, label: 'Provider Assigned', icon: 'person' };
       case 'scheduled': return { bg: STATUS.info.background, text: STATUS.info.text, solid: STATUS.info.solid, label: 'Scheduled', icon: 'calendar' };
+      case 'waiting_tenant': return { bg: STATUS.warning.background, text: STATUS.warning.text, solid: STATUS.warning.solid, label: 'Waiting for You', icon: 'chatbubble-ellipses' };
+      case 'reopened': return { bg: STATUS.warning.background, text: STATUS.warning.text, solid: STATUS.warning.solid, label: 'Reopened', icon: 'refresh-circle' };
       case 'resolved': return { bg: STATUS.success.background, text: STATUS.success.text, solid: STATUS.success.solid, label: 'Resolved', icon: 'checkmark-done-circle' };
       case 'completed': return { bg: STATUS.success.background, text: STATUS.success.text, solid: STATUS.success.solid, label: 'Completed', icon: 'checkmark-circle' };
       case 'rejected': return { bg: STATUS.danger.background, text: STATUS.danger.text, solid: STATUS.danger.solid, label: 'Rejected', icon: 'close-circle' };
       case 'cancelled': return { bg: STATUS.danger.background, text: STATUS.danger.text, solid: STATUS.danger.solid, label: 'Cancelled', icon: 'ban' };
+      case 'closed': return { bg: STATUS.neutral.background, text: STATUS.neutral.text, solid: STATUS.neutral.solid, label: 'Closed', icon: 'lock-closed' };
+      case 'pending_review': return { bg: STATUS.warning.background, text: STATUS.warning.text, solid: STATUS.warning.solid, label: 'Pending Review', icon: 'time' };
       case 'pending': return { bg: STATUS.warning.background, text: STATUS.warning.text, solid: STATUS.warning.solid, label: 'Pending', icon: 'time' };
       default: return { bg: STATUS.neutral.background, text: STATUS.neutral.text, solid: STATUS.neutral.solid, label: status || 'Pending', icon: 'help-circle' };
     }
@@ -690,10 +707,6 @@ export default function ServicesScreen() {
       const response = await apiService.getMaintenance(request.request_id);
       const detail = response?.data || request;
       setDetailRequest(detail);
-      const readResponse = await apiService.markMaintenanceRead(request.request_id).catch(() => null);
-      if (readResponse?.data) {
-        setDetailRequest(readResponse.data);
-      }
       fetchRequests();
     } catch (error) {
       showBannerMessage('error', error?.response?.data?.detail || 'Failed to load maintenance details.');
@@ -938,34 +951,24 @@ export default function ServicesScreen() {
     if (activeTab === 'cancelled') return cancelledRequests;
     return activeRequests;
   }, [activeRequests, activeTab, cancelledRequests, resolvedRequests]);
-  const totalUnreadMaintenance = useMemo(() => requests.reduce((sum, request) => sum + Number(request.unreadTenantCount || 0), 0), [requests]);
-
   const requestKeyExtractor = useCallback((request) => request.request_id, []);
 
   const renderRequestItem = useCallback(({ item: request }) => {
     const typeInfo = getTypeInfo(request.request_type);
     const statusColor = getStatusColor(request.status);
     const urgencyInfo = URGENCY_LEVELS.find(u => u.id === request.urgency) || URGENCY_LEVELS[1];
-    const unreadCount = Number(request.unreadTenantCount || 0);
     const latestUpdate = request.latestTenantVisibleUpdate || null;
     const lastActivity = request.latestActivityAt || request.lastActivityAt || request.updated_at || request.created_at;
     const hasNewAttachment = latestUpdate?.hasAttachments;
     const locationParts = [request.branch, request.room_id || request.roomId].filter(Boolean);
     return (
-      <TouchableOpacity style={[styles.requestCard, { borderLeftColor: unreadCount > 0 ? colors.accent : statusColor.solid }]} onPress={() => openDetail(request)} activeOpacity={0.85}>
+      <TouchableOpacity style={[styles.requestCard, { borderLeftColor: statusColor.solid }]} onPress={() => openDetail(request)} activeOpacity={0.85}>
         <View style={styles.requestHeader}>
           <View style={[styles.requestIcon, { backgroundColor: colors.accentSubtle }]}>
             <Ionicons name={typeInfo.icon} size={20} color={typeInfo.color} />
           </View>
           <View style={styles.requestInfo}>
-            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <Text style={styles.requestType}>{typeInfo.label}</Text>
-              {unreadCount > 0 ? (
-                <View style={{ backgroundColor: colors.accent, borderRadius: 999, paddingHorizontal: 7, paddingVertical: 2 }}>
-                  <Text style={{ color: '#0A1628', fontSize: 9, fontWeight: '800' }}>{unreadCount > 9 ? '9+' : unreadCount} new</Text>
-                </View>
-              ) : null}
-            </View>
+            <Text style={styles.requestType}>{typeInfo.label}</Text>
             <Text style={styles.requestDate}>Last update {safeFormat(lastActivity, 'MMM dd, yyyy • h:mm a')}</Text>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: statusColor.bg, borderColor: statusColor.solid }]}>
@@ -980,10 +983,10 @@ export default function ServicesScreen() {
           </View>
         ) : null}
         {latestUpdate ? (
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, backgroundColor: unreadCount > 0 ? '#EFF6FF' : colors.surfaceSecondary, borderRadius: 9, paddingVertical: 7, paddingHorizontal: 9 }}>
-            <Ionicons name={hasNewAttachment ? 'attach' : 'chatbubble-ellipses-outline'} size={13} color={unreadCount > 0 ? '#2563EB' : colors.textMuted} />
-            <Text style={{ flex: 1, fontSize: 11, color: unreadCount > 0 ? '#1E40AF' : colors.textMuted, fontWeight: unreadCount > 0 ? '700' : '500' }} numberOfLines={1}>
-              {unreadCount > 0 ? (hasNewAttachment ? 'New attachment available' : latestUpdate.senderRole === 'admin' ? 'Admin replied' : 'New update available') : latestUpdate.preview}
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 8, backgroundColor: colors.surfaceSecondary, borderRadius: 9, paddingVertical: 7, paddingHorizontal: 9 }}>
+            <Ionicons name={hasNewAttachment ? 'attach' : 'chatbubble-ellipses-outline'} size={13} color={colors.textMuted} />
+            <Text style={{ flex: 1, fontSize: 11, color: colors.textMuted, fontWeight: '500' }} numberOfLines={1}>
+              {latestUpdate.preview}
             </Text>
           </View>
         ) : null}
@@ -1090,9 +1093,6 @@ export default function ServicesScreen() {
       <View style={styles.header}>
         <View>
           <Text style={styles.headerTitle}>Services & Inquiries</Text>
-          {totalUnreadMaintenance > 0 ? (
-          <Text style={styles.headerSubtitle}>{totalUnreadMaintenance} maintenance update{totalUnreadMaintenance > 1 ? 's' : ''} unread</Text>
-          ) : null}
         </View>
         <TouchableOpacity
           style={styles.refreshIndicator}
@@ -1313,7 +1313,7 @@ export default function ServicesScreen() {
                   })()}
 
                   {/* Estimated Resolution */}
-                  {!editMode && !['resolved', 'completed', 'rejected', 'cancelled'].includes((detailRequest.status || '').toLowerCase()) && (
+                  {!editMode && !['resolved', 'completed', 'rejected', 'cancelled', 'closed'].includes((detailRequest.status || '').toLowerCase()) && (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#EFF6FF', borderRadius: 10, padding: 12, marginBottom: 14 }}>
                       <Ionicons name="timer-outline" size={18} color="#2563EB" />
                       <Text style={{ fontSize: 13, color: '#1e40af', fontWeight: '500' }}>Estimated: {RESOLUTION_ESTIMATES[detailRequest.urgency] || RESOLUTION_ESTIMATES.normal}</Text>
