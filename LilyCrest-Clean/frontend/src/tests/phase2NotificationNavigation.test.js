@@ -10,7 +10,10 @@ describe('Phase 2 canonical notification destinations', () => {
       type: 'contract_document_ready',
       contract_id: 'contract-1',
       url: '/contract-viewer',
-    })).toBe('/contract-viewer');
+    })).toEqual({
+      pathname: '/contract-viewer',
+      params: { contractId: 'contract-1' },
+    });
 
     expect(resolveNotificationRoute({
       type: 'contract_document_ready',
@@ -26,11 +29,24 @@ describe('Phase 2 canonical notification destinations', () => {
       type: 'chat_reply',
       screen: 'chat',
       conversation_id: 'conversation-1',
+      message_id: 'message-1',
       url: '/(tabs)/chatbot',
     })).toEqual({
       pathname: '/(tabs)/chatbot',
-      params: { conversationId: 'conversation-1' },
+      params: { conversationId: 'conversation-1', messageId: 'message-1' },
     });
+  });
+
+  it('routes canonical events by type even when screen and URL hints are absent', () => {
+    expect(resolveNotificationRoute({
+      type: 'chat_reply', conversation_id: 'conversation-2', message_id: 'message-2',
+    })).toEqual({
+      pathname: '/(tabs)/chatbot',
+      params: { conversationId: 'conversation-2', messageId: 'message-2' },
+    });
+    expect(resolveNotificationRoute({
+      type: 'contract_document_ready', contract_id: 'contract-3',
+    })).toEqual({ pathname: '/contract-viewer', params: { contractId: 'contract-3' } });
   });
 
   it('routes billing events to the canonical bill', () => {
@@ -79,6 +95,7 @@ describe('Phase 2 destination ownership guards', () => {
     expect(appHeaderSource).toMatch(/resolveNotificationRoute\(\{/);
     expect(appHeaderSource).toMatch(/router\.push\(destination\)/);
     expect(appHeaderSource).toMatch(/markNotificationRead\(notification\.notification_id\)/);
+    expect(appHeaderSource).toContain('message_id: notification?.message_id');
   });
 
   it('opens a chat deep link only after the target appears in the authenticated tenant conversation list', () => {

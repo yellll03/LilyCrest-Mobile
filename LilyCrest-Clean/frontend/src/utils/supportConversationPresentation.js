@@ -16,3 +16,22 @@ export function tenantMessageDeliveryStatus(message) {
   if (message?.sender !== 'user') return '';
   return message.readAt ? 'Seen' : 'Sent';
 }
+
+const SUPPORT_STATUS_LABELS = Object.freeze({
+  open: 'Open',
+  in_review: 'In Review',
+  waiting_tenant: 'Waiting for You',
+  resolved: 'Resolved',
+  closed: 'Closed',
+});
+
+export function supportStatusLabel(status) {
+  const normalized = String(status || '').trim().toLowerCase();
+  return SUPPORT_STATUS_LABELS[normalized] || 'Open';
+}
+
+export function supportStatusGroup(status) {
+  return ['resolved', 'closed'].includes(String(status || '').trim().toLowerCase())
+    ? 'solved'
+    : 'pending';
+}

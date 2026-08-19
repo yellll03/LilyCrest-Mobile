@@ -10,6 +10,13 @@ export function getChatErrorMessage(error, fallback = 'Chat is unavailable right
   if (code === 'BRANCH_REQUIRED' || code === 'TENANT_CONTEXT_REQUIRED' || code === 'TENANT_NOT_FOUND') {
     return 'We could not resolve your active tenant and branch. Please contact LilyCrest support.';
   }
+  if (status === 409) return 'This conversation changed on the server. Refresh it and try again.';
+  if (status === 413 || code === 'ATTACHMENT_TOO_LARGE') {
+    return 'This attachment is too large. Choose a file smaller than 5 MB.';
+  }
+  if (status === 422 || code === 'UNSUPPORTED_FILE_TYPE' || code === 'INVALID_CHAT_ATTACHMENT') {
+    return 'This attachment could not be accepted. Choose a supported image or PDF and try again.';
+  }
   if (status === 429) return 'Too many chat requests. Please wait a moment and try again.';
   if (
     error?.code === 'network_error'

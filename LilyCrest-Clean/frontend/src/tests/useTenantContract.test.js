@@ -3,6 +3,7 @@ import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { apiService } from '../services/api';
 import { useTenantContract } from '../hooks/useTenantContract';
 import { buildContractSummary } from '../utils/contractPresentation';
+import { publishCanonicalNotification, resetCanonicalEventDedupeForTests } from '../services/canonicalEvents';
 
 // The canonical API (GET /api/m/contracts/current on Capstone-Website) does
 // include contract.tenantDocument — the backend's own resolved answer to
@@ -75,6 +76,7 @@ describe('useTenantContract refresh/error lifecycle against the real canonical r
   beforeEach(() => {
     jest.clearAllMocks();
     mockAppStateListeners.clear();
+    resetCanonicalEventDedupeForTests();
   });
 
   test('loads the canonical preparedDocument/finalDocument shape on initial focus', async () => {
@@ -105,6 +107,22 @@ describe('useTenantContract refresh/error lifecycle against the real canonical r
 
     act(() => emitAppState('background'));
     act(() => emitAppState('active'));
+
+    await waitFor(() => expect(result.current.contract?.finalDocument.available).toBe(true));
+    expect(apiService.getCurrentContract).toHaveBeenCalledTimes(2);
+  });
+
+  test('contract_document_ready invalidates the open contract without logout or refocus', async () => {
+    apiService.getCurrentContract
+      .mockResolvedValueOnce(draftResponse())
+      .mockResolvedValueOnce(finalResponse());
+    const { result } = renderHook(() => useTenantContract());
+    await waitFor(() => expect(result.current.contract?.finalDocument.available).toBe(false));
+
+    act(() => publishCanonicalNotification({
+      type: 'contract_document_ready',
+      data: { type: 'contract_document_ready', contract_id: '507f1f77bcf86cd799439011' },
+    }));
 
     await waitFor(() => expect(result.current.contract?.finalDocument.available).toBe(true));
     expect(apiService.getCurrentContract).toHaveBeenCalledTimes(2);

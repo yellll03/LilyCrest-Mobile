@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -7,6 +7,7 @@ import { useTheme } from '../src/context/ThemeContext';
 import { useTenantContract } from '../src/hooks/useTenantContract';
 import { buildContractSummary } from '../src/utils/contractPresentation';
 import { safeBack } from '../src/utils/navigation';
+import { apiService } from '../src/services/api';
 import {
   ActionButton,
   DataRow,
@@ -20,14 +21,49 @@ import {
 
 export default function ContractViewer() {
   const router = useRouter();
+  const { contractId: requestedContractIdParam } = useLocalSearchParams();
+  const requestedContractId = Array.isArray(requestedContractIdParam)
+    ? requestedContractIdParam[0]
+    : requestedContractIdParam;
   const { colors } = useTheme();
   const [showDocumentInfo, setShowDocumentInfo] = useState(false);
+  const [startingSupport, setStartingSupport] = useState(false);
+  const [supportError, setSupportError] = useState('');
   const { contract, state, loading, refreshing, error, reload, refresh } = useTenantContract();
-  const summary = buildContractSummary(contract);
+  const requestedContractMismatch = Boolean(
+    requestedContractId
+    && contract?.id
+    && String(requestedContractId) !== String(contract.id),
+  );
+  const summary = buildContractSummary(requestedContractMismatch ? null : contract);
   // STALE: a refresh after a prior successful load failed transiently — the
   // last safe presentation stays on screen with a dismissible warning
   // instead of being replaced by an empty/error screen.
   const showStaleWarning = state === 'STALE' && Boolean(summary);
+
+  const contactSupport = async () => {
+    if (!contract?.id || startingSupport || requestedContractMismatch) return;
+    setStartingSupport(true);
+    setSupportError('');
+    try {
+      const response = await apiService.startSupportChat({
+        category: 'general_inquiry',
+        priority: 'normal',
+        context: {
+          entityType: 'contract',
+          entityId: contract.id,
+          sourceModule: 'contract',
+        },
+      });
+      const conversationId = response.data?.conversation?.id;
+      if (!conversationId) throw new Error('Support did not return a conversation.');
+      router.push({ pathname: '/chatbot', params: { conversationId } });
+    } catch (_supportError) {
+      setSupportError('Unable to open contract support right now. Please try again.');
+    } finally {
+      setStartingSupport(false);
+    }
+  };
 
   return (
     <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]}>
@@ -40,11 +76,13 @@ export default function ContractViewer() {
           <View style={styles.empty}>
             <ActivityIndicator color={colors.accent} />
           </View>
-        ) : error && !summary ? (
+        ) : (error || requestedContractMismatch) && !summary ? (
           <EmptyState
             icon="cloud-offline-outline"
             title="Contract unavailable"
-            description={error}
+            description={requestedContractMismatch
+              ? 'The contract linked by this notification is not your current visible contract.'
+              : error}
             action={<ActionButton label="Retry" onPress={reload} />}
           />
         ) : !summary ? (
@@ -96,6 +134,19 @@ export default function ContractViewer() {
               ) : <Text style={[styles.documentPending, { color: colors.textSecondary }]}>The current PDF is not available yet. Pull down to refresh.</Text>}
             </DocumentActionCard>
 
+            <SurfaceCard style={styles.supportCard}>
+              <SectionHeader icon="headset-outline" title="Contract Support" />
+              <Text style={[styles.supportCopy, { color: colors.textSecondary }]}>Ask LilyCrest about this contract. The existing conversation for this exact contract will be reused when available.</Text>
+              {supportError ? <Text style={[styles.supportError, { color: colors.errorText }]}>{supportError}</Text> : null}
+              <ActionButton
+                label={startingSupport ? 'Opening Support...' : 'Contact Support'}
+                icon="chatbubble-ellipses-outline"
+                onPress={contactSupport}
+                disabled={startingSupport}
+                variant="secondary"
+              />
+            </SurfaceCard>
+
             {summary.documentInfo.length ? (
               <View style={[styles.documentInfo, { borderColor: colors.border }]}>
                 <TouchableOpacity style={styles.documentInfoToggle} onPress={() => setShowDocumentInfo((value) => !value)}>
@@ -129,6 +180,9 @@ const styles = StyleSheet.create({
   label: { fontSize: 12, fontWeight: '600' },
   finalizing: { paddingTop: 14, borderTopWidth: StyleSheet.hairlineWidth, fontSize: 13, lineHeight: 19 },
   documentPending: { fontSize: 13, lineHeight: 19, marginTop: 12 },
+  supportCard: { gap: 12, marginTop: 16 },
+  supportCopy: { fontSize: 13, lineHeight: 19 },
+  supportError: { fontSize: 12, lineHeight: 17 },
   documentInfo: { marginTop: 18, borderWidth: 1, borderRadius: 12, padding: 14 },
   documentInfoToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   documentInfoTitle: { fontSize: 14, fontWeight: '700' },

@@ -33,6 +33,9 @@ describe('chat tenant/auth reconciliation', () => {
     expect(getChatErrorMessage({ request: {}, message: 'Network Error' })).toMatch(/check your connection/i);
     expect(getChatErrorMessage({ status: 401, backendCode: 'TOKEN_EXPIRED' })).toMatch(/session expired/i);
     expect(getChatErrorMessage({ code: 'network_error', network: true })).toMatch(/check your connection/i);
+    expect(getChatErrorMessage({ response: { status: 409 } })).toMatch(/changed on the server/i);
+    expect(getChatErrorMessage({ response: { status: 413 } })).toMatch(/smaller than 5 MB/i);
+    expect(getChatErrorMessage({ response: { status: 422 } })).toMatch(/supported image or PDF/i);
   });
 
   it('does not expose an arbitrary backend detail or stack string to the tenant', () => {
