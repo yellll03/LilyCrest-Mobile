@@ -30,7 +30,6 @@ import {
 } from '../services/firebaseStorageUpload';
 import { pickDocument, pickFromCamera, pickFromLibrary } from '../utils/attachmentPicker';
 import { openChatAttachment } from '../utils/chatAttachmentViewer';
-import { subscribeCanonicalRealtime } from '../services/realtime';
 import {
   getLatestOutgoingMessageId,
   inquiryTicketLabel,
@@ -806,31 +805,11 @@ export default function LilyAssistantScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supportConversationId, chatMode]);
 
-  useEffect(() => {
-    if (!user?.user_id) return undefined;
-    const refreshFromRealtime = async (payload = {}) => {
-      const conversationId = String(payload.conversationId || payload.id || '').trim();
-      const messageId = String(payload.message?.id || '').trim();
-      if (messageId && seenSupportMsgIds.current.has(messageId)) return;
-      if (messageId) seenSupportMsgIds.current.add(messageId);
-      await loadSupportInquiries().catch(() => undefined);
-      const visibleConversationId = selectedInquiry?.id || supportConversationId;
-      if (conversationId && conversationId === visibleConversationId) {
-        await refreshSupportConversation(conversationId, {
-          replaceMainFeed: !selectedInquiry && conversationId === supportConversationId,
-          scroll: true,
-        }).catch(() => undefined);
-      }
-    };
-    const unsubscribeMessage = subscribeCanonicalRealtime('chat:message-new', refreshFromRealtime);
-    const unsubscribeConversation = subscribeCanonicalRealtime('chat:conversation-updated', refreshFromRealtime);
-    return () => {
-      unsubscribeMessage();
-      unsubscribeConversation();
-    };
-    // Rebind only when the visible canonical conversation changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedInquiry?.id, supportConversationId, user?.user_id]);
+  // A socket-fed refresh effect used to sit here, listening for
+  // 'chat:message-new'/'chat:conversation-updated'. No Socket.IO server has
+  // ever existed in this platform, so it never fired. Live delivery for an
+  // open conversation is the LIVE_CHAT_POLL_MS poll above; delivery to a
+  // backgrounded app is OS push. See services/realtime.js removal.
 
   const handleSend = async (presetText) => {
     if (sendGuardRef.current || isEscalating) return;

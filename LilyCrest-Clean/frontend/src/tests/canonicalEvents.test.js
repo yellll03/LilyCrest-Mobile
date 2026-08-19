@@ -18,7 +18,10 @@ describe('canonical push/realtime event reconciliation', () => {
     });
   });
 
-  test('push and socket copies of one canonical event present once', () => {
+  // The de-dupe window still earns its place after the dead Socket.IO client
+  // was removed: one business event can still arrive twice, e.g. an OS push
+  // and the locally-published copy AuthContext emits for the same event.
+  test('two copies of one canonical event present once', () => {
     const listener = jest.fn();
     const unsubscribe = subscribeCanonicalNotifications(listener);
     const event = {
