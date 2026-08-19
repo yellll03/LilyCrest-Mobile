@@ -200,7 +200,13 @@ const RESOLUTION_ESTIMATES = {
 const STATUS_STAGES = [
   { label: 'Pending Review', cardTitle: 'Request Received', detail: 'Awaiting Admin Review', statuses: ['pending', 'pending_review'] },
   { label: 'Under Review', cardTitle: 'Admin Reviewing', detail: 'Being Reviewed by Admin', statuses: ['viewed', 'reviewed'] },
-  { label: 'In Progress', cardTitle: 'Repair In Progress', detail: 'Provider Assigned & Working', statuses: ['provider_assigned', 'scheduled', 'in_progress', 'waiting_tenant', 'reopened'] },
+  // `assigned` is the status backend/controllers/maintenance.controller.js
+  // actually writes (VALID_STATUSES / ADMIN_STATUS_TRANSITIONS); the
+  // `provider_assigned` spelling is only ever produced by the web admin.
+  // Both must map here — omitting `assigned` made the whole stage hub render
+  // nothing for a request an admin had just assigned to a provider, because
+  // findIndex returned -1.
+  { label: 'In Progress', cardTitle: 'Repair In Progress', detail: 'Provider Assigned & Working', statuses: ['assigned', 'provider_assigned', 'scheduled', 'in_progress', 'waiting_tenant', 'reopened'] },
   { label: 'Resolved', cardTitle: 'Work Resolved', detail: 'Awaiting Tenant Feedback & Verification', statuses: ['resolved'] },
   { label: 'Completed', cardTitle: 'Request Completed', detail: 'Confirmed & Closed', statuses: ['completed'] },
 ];
@@ -208,7 +214,10 @@ const MIN_DESCRIPTION_LENGTH = 10;
 // Mirrors backend/controllers/maintenance.controller.js DESCRIPTION_MAX.
 // Frontend enforcement here is UX only — the backend remains authoritative.
 const MAX_DESCRIPTION_LENGTH = 1000;
-const ACTIVE_STATUSES = ['pending', 'pending_review', 'provider_assigned', 'scheduled', 'viewed', 'reviewed', 'in_progress', 'waiting_tenant', 'reopened'];
+// Same `assigned` vs `provider_assigned` split as STATUS_STAGES above: the
+// backend writes `assigned`, the web admin writes `provider_assigned`. Both
+// belong in Active, or an assigned request disappears from the tenant's list.
+const ACTIVE_STATUSES = ['pending', 'pending_review', 'assigned', 'provider_assigned', 'scheduled', 'viewed', 'reviewed', 'in_progress', 'waiting_tenant', 'reopened'];
 const RESOLVED_STATUSES = ['completed', 'resolved', 'rejected', 'closed'];
 const CLOSED_REPLY_STATUSES = ['cancelled', 'rejected', 'closed'];
 const MAX_MAINTENANCE_ATTACHMENTS = 4;
