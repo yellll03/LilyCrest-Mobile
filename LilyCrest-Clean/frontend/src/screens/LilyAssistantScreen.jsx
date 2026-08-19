@@ -198,7 +198,20 @@ const ADMIN_KEYWORDS = [
 ];
 
 const MAX_CHAT_INPUT_CHARS = 800;
-const MAX_ATTACHMENT_COUNT = 3;
+// Human support chat and the Lily AI assistant are two different surfaces
+// sharing this one composer, and they have genuinely different server-side
+// caps — so the composer picks the cap for the mode it is in rather than
+// enforcing one number that would be wrong for the other half.
+//
+// Support: must equal MAX_SUPPORT_ATTACHMENTS in
+// backend/constants/supportAttachments.js, which in turn matches the admin
+// web repository's own cap of 5. Any mix of the supported types counts toward
+// the same 5 (e.g. 3 images + 2 PDFs is allowed; a 6th of anything is not).
+const MAX_SUPPORT_ATTACHMENT_COUNT = 5;
+// Assistant: bounded by MAX_ATTACHMENTS in
+// backend/services/assistantAttachment.service.js, which inlines each file
+// into a model request. Deliberately left at 3.
+const MAX_ASSISTANT_ATTACHMENT_COUNT = 3;
 const MAX_ASSISTANT_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const MAX_SUPPORT_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 // Must match SUPPORT_ATTACHMENT_FOLDER in backend/controllers/chat.controller.js
@@ -812,6 +825,21 @@ export default function LilyAssistantScreen() {
   // open conversation is the LIVE_CHAT_POLL_MS poll above; delivery to a
   // backgrounded app is OS push. See services/realtime.js removal.
 
+  // Best effort, and deliberately never allowed to mask the original upload
+  // failure — the tenant needs to see why the send failed, not why cleanup did.
+  const discardRegisteredAttachments = async (conversationId, registered = []) => {
+    if (!conversationId || !registered.length) return;
+    for (const attachment of registered) {
+      const attachmentId = attachment?.attachmentId || attachment?.id;
+      if (!attachmentId) continue;
+      try {
+        await apiService.discardSupportAttachment(conversationId, attachmentId);
+      } catch (error) {
+        console.warn('[Support Chat] Attachment rollback failed:', error?.message);
+      }
+    }
+  };
+
   const handleSend = async (presetText) => {
     if (sendGuardRef.current || isEscalating) return;
 
@@ -858,22 +886,32 @@ export default function LilyAssistantScreen() {
           // resulting metadata is registered against this conversation, which
           // re-proves ownership before the file can be referenced by a
           // message. There is no separate multipart upload path.
+          // All-or-nothing: every file is uploaded and registered before any
+          // message exists, so a failure part-way through never produces a
+          // message claiming attachments that did not make it. The registered
+          // records from the successful files are then discarded so a failed
+          // send leaves no orphaned bytes behind.
           uploadedAttachments = [];
-          for (let index = 0; index < attachments.length; index += 1) {
-            setAttachmentUploadStatus(`Uploading attachment ${index + 1} of ${attachments.length}...`);
-            const [stored] = await ensureFirebaseStorageAttachments([attachments[index]], {
-              allowedMimeTypes: SUPPORT_UPLOAD_MIME_TYPES,
-              conversationId: supportConversationId,
-              context: 'support-chat',
-              entityId: supportConversationId,
-              folder: SUPPORT_ATTACHMENT_FOLDER,
-              maxBytes: MAX_SUPPORT_ATTACHMENT_BYTES,
-              tenantId: user?.user_id || user?.id || 'unknown-tenant',
-            });
-            if (!stored) throw new Error('Attachment upload did not complete.');
-            const response = await apiService.registerSupportAttachment(supportConversationId, stored);
-            if (!response.data?.attachment) throw new Error('Attachment upload did not complete.');
-            uploadedAttachments.push(response.data.attachment);
+          try {
+            for (let index = 0; index < attachments.length; index += 1) {
+              setAttachmentUploadStatus(`Uploading attachment ${index + 1} of ${attachments.length}...`);
+              const [stored] = await ensureFirebaseStorageAttachments([attachments[index]], {
+                allowedMimeTypes: SUPPORT_UPLOAD_MIME_TYPES,
+                conversationId: supportConversationId,
+                context: 'support-chat',
+                entityId: supportConversationId,
+                folder: SUPPORT_ATTACHMENT_FOLDER,
+                maxBytes: MAX_SUPPORT_ATTACHMENT_BYTES,
+                tenantId: user?.user_id || user?.id || 'unknown-tenant',
+              });
+              if (!stored) throw new Error('Attachment upload did not complete.');
+              const response = await apiService.registerSupportAttachment(supportConversationId, stored);
+              if (!response.data?.attachment) throw new Error('Attachment upload did not complete.');
+              uploadedAttachments.push(response.data.attachment);
+            }
+          } catch (uploadError) {
+            await discardRegisteredAttachments(supportConversationId, uploadedAttachments);
+            throw uploadError;
           }
         } else {
           uploadedAttachments = await ensureFirebaseStorageAttachments(attachments, {
@@ -1141,6 +1179,9 @@ export default function LilyAssistantScreen() {
         return;
       }
 
+      const maxAttachmentCount = isSupportMode(chatMode)
+        ? MAX_SUPPORT_ATTACHMENT_COUNT
+        : MAX_ASSISTANT_ATTACHMENT_COUNT;
       const maxAttachmentBytes = isSupportMode(chatMode)
         ? MAX_SUPPORT_ATTACHMENT_BYTES
         : MAX_ASSISTANT_ATTACHMENT_BYTES;
@@ -1156,8 +1197,8 @@ export default function LilyAssistantScreen() {
           setNetworkError('That attachment is already added.');
           return prev;
         }
-        if (prev.length >= MAX_ATTACHMENT_COUNT) {
-          setNetworkError(`You can attach up to ${MAX_ATTACHMENT_COUNT} files only.`);
+        if (prev.length >= maxAttachmentCount) {
+          setNetworkError(`You can attach up to ${maxAttachmentCount} files per message.`);
           return prev;
         }
         setAttachmentUploadStatus('');
@@ -1551,6 +1592,11 @@ export default function LilyAssistantScreen() {
   const canAttach = chatMode === CHAT_MODE.AI
     || chatMode === CHAT_MODE.WAITING
     || chatMode === CHAT_MODE.ACTIVE;
+  // Same mode-aware cap handleAttach enforces, surfaced so the tenant can see
+  // how many of the allowance they have used before hitting the limit.
+  const attachmentCountLimit = isSupportMode(chatMode)
+    ? MAX_SUPPORT_ATTACHMENT_COUNT
+    : MAX_ASSISTANT_ATTACHMENT_COUNT;
   const latestSupportOutgoingMessageId = getLatestOutgoingMessageId(
     messages.filter((message) => String(message.id || '').startsWith('support-')),
   );
@@ -1707,6 +1753,9 @@ export default function LilyAssistantScreen() {
 
                   {attachments.length ? (
                     <View style={styles.attachmentRow}>
+                      <Text style={styles.attachmentCountText} testID="attachment-remaining-count">
+                        {`${attachments.length} of ${attachmentCountLimit} attached`}
+                      </Text>
                       {attachments.map((file) => (
                         <Pressable
                           key={attachmentKey(file)}
@@ -2251,6 +2300,12 @@ function createAssistantStyles(c, dark) {
     borderWidth: 1,
     borderColor: c.border,
     padding: 10,
+  },
+  attachmentCountText: {
+    width: '100%',
+    fontSize: 11,
+    fontWeight: '600',
+    color: c.textMuted,
   },
   attachmentChip: {
     paddingHorizontal: 10,

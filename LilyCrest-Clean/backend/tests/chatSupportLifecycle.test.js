@@ -114,6 +114,18 @@ function fakeDb({ conversation, attachments = [] }) {
         return {
           async insertOne(doc) { messages.push(doc); return { insertedId: objectIdLike(`msg-${messages.length}`) }; },
           async updateMany() { return { modifiedCount: 0 }; },
+          async countDocuments(filter = {}) {
+            const wantedAttachment = filter['attachments.attachmentId']
+              ? String(filter['attachments.attachmentId'])
+              : null;
+            const conversationId = filter.conversationId ? String(filter.conversationId) : null;
+            return messages.filter((doc) => (
+              (!conversationId || String(doc.conversationId) === conversationId)
+              && (!wantedAttachment || (doc.attachments || []).some(
+                (entry) => String(entry.attachmentId) === wantedAttachment,
+              ))
+            )).length;
+          },
         };
       }
       if (name === 'chat_attachments') {
@@ -137,6 +149,13 @@ function fakeDb({ conversation, attachments = [] }) {
             return attachmentDocs.find((doc) => String(doc._id) === wanted
               && (!conversationId || String(doc.conversationId) === conversationId)) || null;
           },
+          async deleteOne(filter) {
+            const wanted = filter?._id ? String(filter._id) : null;
+            const index = attachmentDocs.findIndex((doc) => String(doc._id) === wanted);
+            if (index === -1) return { deletedCount: 0 };
+            attachmentDocs.splice(index, 1);
+            return { deletedCount: 1 };
+          },
         };
       }
       return { async findOne() { return null; }, async updateOne() { return { matchedCount: 0 }; } };
@@ -147,13 +166,14 @@ function fakeDb({ conversation, attachments = [] }) {
 // Minimal stand-in for firebase-admin's storage surface. `readStream` decides
 // whether the object exists, so a missing storage object can be exercised as a
 // controlled response rather than only as a happy path.
-function fakeFirebaseAdmin({ configured = true, readStream } = {}) {
+function fakeFirebaseAdmin({ configured = true, readStream, deleted } = {}) {
   return {
     apps: configured ? [{}] : [],
     storage: () => ({
       bucket: () => ({
         file: (storagePath) => ({
           createReadStream: () => (readStream ? readStream(storagePath) : Readable.from([Buffer.from('bytes')])),
+          async delete() { if (deleted) deleted.push(storagePath); },
         }),
       }),
     }),
@@ -446,17 +466,72 @@ test('a message with no text and no attachments is still rejected', async () => 
   assert.equal(res.statusCode, 400);
 });
 
-test('more attachments than the per-message cap are refused', async () => {
+// The canonical per-message cap is 5 and it is a cap on the *total*, not a
+// per-type quota — the three-vs-five split against the admin repo is the exact
+// mismatch this pass exists to close.
+test('a mixed set of exactly five attachments (3 images + 2 PDFs) is accepted', async () => {
   const db = fakeDb({ conversation: conversationDoc({ status: 'open' }) });
   const controller = loadController(db);
-  const registered = (await registerAttachment(controller)).body.attachment;
+
+  const registered = [];
+  for (let index = 0; index < 3; index += 1) {
+    const stored = storedAttachment({
+      storagePath: `support-attachments/${TENANT_ID}/conv-1/image-${index}.jpg`,
+    });
+    registered.push((await registerAttachment(controller, stored)).body.attachment);
+  }
+  for (let index = 0; index < 2; index += 1) {
+    const stored = storedPdf({
+      storagePath: `support-attachments/${TENANT_ID}/conv-1/doc-${index}.pdf`,
+    });
+    registered.push((await registerAttachment(controller, stored)).body.attachment);
+  }
+  assert.equal(registered.length, 5);
 
   const res = fakeResponse();
-  await controller.sendTenantMessage(tenantReq({
-    message: 'many',
-    attachments: [registered, registered, registered, registered],
-  }), res);
+  await controller.sendTenantMessage(tenantReq({ message: 'five files', attachments: registered }), res);
+
+  assert.equal(res.statusCode, 200);
+  assert.equal(res.body.message.attachments.length, 5);
+  assert.equal(db.messages[0].attachments.length, 5);
+  assert.equal(
+    res.body.message.attachments.filter((entry) => entry.mimeType === 'application/pdf').length,
+    2,
+    'the cap counts every type against the same allowance',
+  );
+});
+
+test('a sixth attachment on one message is refused with a clean 400', async () => {
+  const db = fakeDb({ conversation: conversationDoc({ status: 'open' }) });
+  const controller = loadController(db);
+
+  const registered = [];
+  for (let index = 0; index < 6; index += 1) {
+    const stored = storedAttachment({
+      storagePath: `support-attachments/${TENANT_ID}/conv-1/file-${index}.jpg`,
+    });
+    registered.push((await registerAttachment(controller, stored)).body.attachment);
+  }
+
+  const res = fakeResponse();
+  await controller.sendTenantMessage(tenantReq({ message: 'too many', attachments: registered }), res);
+
+  assert.equal(res.statusCode, 400);
   assert.equal(res.body.code, 'ATTACHMENT_LIMIT');
+  assert.match(res.body.error || res.body.detail || '', /5 files/);
+  // The frontend is never trusted: a payload that bypassed the compose UI must
+  // leave nothing half-created behind.
+  assert.equal(db.messages.length, 0, 'no partial or corrupted message is created');
+});
+
+test('the enforced cap is the shared constant, not a local literal', () => {
+  const { MAX_SUPPORT_ATTACHMENTS } = require('../constants/supportAttachments');
+  assert.equal(MAX_SUPPORT_ATTACHMENTS, 5);
+  assert.equal(
+    require('../controllers/chat.controller').__test.MAX_SUPPORT_ATTACHMENTS,
+    MAX_SUPPORT_ATTACHMENTS,
+    'the controller must not carry its own copy of the number',
+  );
 });
 
 test('a message referencing an unregistered attachment is rejected', async () => {
@@ -694,4 +769,188 @@ test('no serialized attachment anywhere exposes a storage provider URL', async (
     'a client payload must never contain a storage provider URL');
   assert.ok(!payload.includes('support-attachments/'),
     'a client payload must never contain a storage path');
+});
+
+// ── MIME allow-list parity with the admin repository ────────────────────────
+
+test('the support MIME allow-list is exactly the admin repository set', () => {
+  const { SUPPORT_ATTACHMENT_MIME_TYPES } = require('../constants/supportAttachments');
+  // Capstone-Website server/routes/chatRoutes.js CHAT_ATTACHMENT_MIME_TYPES,
+  // plus the `image/jpg` alias some Android pickers report for a JPEG.
+  assert.deepEqual(
+    [...SUPPORT_ATTACHMENT_MIME_TYPES].sort(),
+    [
+      'application/pdf',
+      'image/heic',
+      'image/heif',
+      'image/jpeg',
+      'image/jpg',
+      'image/png',
+      'image/webp',
+    ],
+  );
+});
+
+test('document and text types the admin console cannot render are refused', async () => {
+  const db = fakeDb({ conversation: conversationDoc({ status: 'open' }) });
+  const { uploadConversationAttachment } = loadController(db);
+
+  for (const mimeType of [
+    'text/plain',
+    'text/csv',
+    'image/gif',
+    'image/bmp',
+    'application/msword',
+    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  ]) {
+    const res = fakeResponse();
+    await uploadConversationAttachment(tenantReq({ attachment: storedAttachment({ mimeType }) }), res);
+    assert.equal(res.body.code, 'ATTACHMENT_UNSUPPORTED_TYPE', `${mimeType} must not be accepted`);
+    assert.equal(db.attachments.length, 0, 'a refused type must not create a record');
+  }
+});
+
+test('an executable renamed to a permitted extension cannot claim a permitted type', async () => {
+  const db = fakeDb({ conversation: conversationDoc({ status: 'open' }) });
+  const { uploadConversationAttachment } = loadController(db);
+
+  // The declared mimeType is what this layer validates, so the registration
+  // path refuses the honest declaration...
+  const declared = fakeResponse();
+  await uploadConversationAttachment(tenantReq({
+    attachment: storedAttachment({ originalName: 'invoice.pdf', mimeType: 'application/x-msdownload' }),
+  }), declared);
+  assert.equal(declared.body.code, 'ATTACHMENT_UNSUPPORTED_TYPE');
+
+  // ...and the *bytes* are what routes/upload.routes.js validates, so a lie
+  // about the type is caught before the storage object ever exists.
+  const { matchesDeclaredContent } = require('../routes/upload.routes').__test;
+  assert.equal(matchesDeclaredContent(Buffer.from('MZ executable'), 'application/pdf'), false);
+});
+
+// ── Partial-upload rollback ─────────────────────────────────────────────────
+
+test('an unsent attachment can be discarded, removing both the record and the object', async () => {
+  const deleted = [];
+  const db = fakeDb({ conversation: conversationDoc({ status: 'open' }) });
+  const controller = loadController(db, fakeFirebaseAdmin({ deleted }));
+  const registered = (await registerAttachment(controller)).body.attachment;
+  assert.equal(db.attachments.length, 1);
+
+  const req = tenantReq({});
+  req.params.attachmentId = registered.attachmentId;
+  const res = fakeResponse();
+  await controller.deleteConversationAttachment(req, res);
+
+  assert.equal(res.body.discarded, true);
+  assert.equal(db.attachments.length, 0, 'no orphaned record survives a failed send');
+  assert.deepEqual(
+    deleted,
+    [`support-attachments/${TENANT_ID}/conv-1/1700000000000-photo.jpg`],
+    'the storage object written before the failure is cleaned up too',
+  );
+});
+
+test('an attachment already referenced by a message cannot be discarded', async () => {
+  const db = fakeDb({ conversation: conversationDoc({ status: 'open' }) });
+  const controller = loadController(db);
+  const registered = (await registerAttachment(controller)).body.attachment;
+
+  const sent = fakeResponse();
+  await controller.sendTenantMessage(tenantReq({ message: 'sent', attachments: [registered] }), sent);
+  assert.equal(sent.statusCode, 200);
+
+  const req = tenantReq({});
+  req.params.attachmentId = registered.attachmentId;
+  const res = fakeResponse();
+  await controller.deleteConversationAttachment(req, res);
+
+  assert.equal(res.statusCode, 409);
+  assert.equal(res.body.code, 'ATTACHMENT_ALREADY_SENT');
+  assert.equal(db.attachments.length, 1, 'sent chat history is never deleted by rollback');
+});
+
+test('a caller who did not upload the attachment cannot discard it', async () => {
+  const db = fakeDb({ conversation: conversationDoc({ status: 'open' }) });
+  const controller = loadController(db);
+  const registered = (await registerAttachment(controller)).body.attachment;
+
+  // A same-branch admin can *read* this attachment but is not its uploader.
+  const req = adminReq({ params: { attachmentId: registered.attachmentId } });
+  const res = fakeResponse();
+  await controller.deleteAdminConversationAttachment(req, res);
+
+  assert.equal(res.statusCode, 404, 'non-uploaders get the same 404 as non-existent');
+  assert.equal(db.attachments.length, 1);
+});
+
+// ── IDOR / cross-branch negatives ───────────────────────────────────────────
+
+test('a guessed attachment id or tampered conversation id resolves to nothing', async () => {
+  const db = fakeDb({ conversation: conversationDoc({ status: 'open' }) });
+  const controller = loadController(db);
+  const registered = (await registerAttachment(controller)).body.attachment;
+
+  // Real attachment id, but pointed at a conversation this tenant does not own.
+  const req = tenantReq({}, OTHER_CONVERSATION_ID);
+  req.params.attachmentId = registered.attachmentId;
+  const res = fakeResponse();
+  await controller.downloadConversationAttachment(req, res);
+  assert.equal(res.statusCode, 404, 'a tampered conversationId must not widen reach');
+
+  // Correct conversation, fabricated attachment id.
+  const guessed = tenantReq({});
+  guessed.params.attachmentId = '507f1f77bcf86cd799439999';
+  const guessedRes = fakeResponse();
+  await controller.downloadConversationAttachment(guessed, guessedRes);
+  assert.equal(guessedRes.statusCode, 404);
+});
+
+test('a wrong-branch admin gains nothing from knowing the id, conversation or filename', async () => {
+  const db = fakeDb({ conversation: conversationDoc({ status: 'open' }) });
+  const controller = loadController(db);
+  const registered = (await registerAttachment(controller)).body.attachment;
+
+  const req = adminReq({ branch: 'guadalupe', params: { attachmentId: registered.attachmentId } });
+  // Everything a leaked payload could hand them, supplied deliberately.
+  req.body = {
+    storagePath: `support-attachments/${TENANT_ID}/conv-1/1700000000000-photo.jpg`,
+    url: registered.url,
+    fileName: registered.name,
+  };
+
+  const res = fakeResponse();
+  await controller.downloadAdminConversationAttachment(req, res);
+  assert.equal(res.statusCode, 404);
+  assert.ok(
+    !JSON.stringify(res.body).includes('support-attachments'),
+    'the refusal must not echo a storage path back',
+  );
+});
+
+test('every attachment route is role-gated and the only reads are the two protected ones', () => {
+  const routes = require('../routes/chat.routes');
+  const layers = routes.stack
+    .filter((layer) => layer.route)
+    .map((layer) => ({
+      path: layer.route.path,
+      methods: Object.keys(layer.route.methods),
+      handlers: layer.route.stack.length,
+    }))
+    .filter((entry) => entry.path.includes('attachments'));
+
+  assert.equal(layers.length, 6, 'tenant + admin upload, download and discard — nothing else');
+  for (const layer of layers) {
+    // Each attachment route carries its own tenant/admin guard on top of the
+    // router-level authMiddleware, so none is reachable unauthenticated.
+    assert.ok(layer.handlers >= 2, `${layer.path} must be gated by role middleware`);
+  }
+  const reads = layers
+    .filter((entry) => entry.methods.includes('get'))
+    .map((entry) => entry.path)
+    .sort();
+  assert.deepEqual(reads, [
+    '/:conversationId/attachments/:attachmentId',
+    '/admin/:conversationId/attachments/:attachmentId',
+  ]);
 });
