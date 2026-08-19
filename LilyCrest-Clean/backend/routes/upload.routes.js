@@ -104,6 +104,44 @@ function requestedMimeTypes(body = {}) {
   );
 }
 
+// Content-signature check. A client declares its own mimeType, and
+// safeFileName keeps whatever extension the file already had — so renaming
+// `payload.exe` to `payload.pdf` (or simply declaring `application/pdf` for
+// arbitrary bytes) would otherwise store executable content under a trusted
+// content type that two clients then render inline.
+//
+// These signatures are checked against the *decoded buffer*, never against a
+// client-supplied field. Only formats with an unambiguous magic number are
+// listed; HEIC/HEIF and the office/text types have no reliable short prefix,
+// so they are deliberately not asserted here rather than guessed at. This
+// narrows what is accepted — it never widens the allow-list.
+const MIME_TYPE_SIGNATURES = {
+  'image/jpeg': [[0xff, 0xd8, 0xff]],
+  'image/jpg': [[0xff, 0xd8, 0xff]],
+  'image/png': [[0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]],
+  'image/gif': [[0x47, 0x49, 0x46, 0x38, 0x37, 0x61], [0x47, 0x49, 0x46, 0x38, 0x39, 0x61]],
+  'image/bmp': [[0x42, 0x4d]],
+  'application/pdf': [[0x25, 0x50, 0x44, 0x46, 0x2d]],
+};
+
+function matchesDeclaredContent(buffer, mimeType) {
+  // WebP is RIFF????WEBP — a prefix plus a check at offset 8.
+  if (mimeType === 'image/webp') {
+    return buffer.length >= 12
+      && buffer.subarray(0, 4).equals(Buffer.from('RIFF', 'ascii'))
+      && buffer.subarray(8, 12).equals(Buffer.from('WEBP', 'ascii'));
+  }
+
+  const signatures = MIME_TYPE_SIGNATURES[mimeType];
+  // Unknown-to-us but allow-listed type (HEIC/HEIF, doc/docx, txt, csv):
+  // no assertion is made rather than a wrong one.
+  if (!signatures) return true;
+  return signatures.some(
+    (signature) => buffer.length >= signature.length
+      && buffer.subarray(0, signature.length).equals(Buffer.from(signature))
+  );
+}
+
 // The cap for this mime type is authoritative; a client-supplied maxBytes
 // can only tighten it further, never loosen it (e.g. an image can't be
 // pushed past MAX_IMAGE_UPLOAD_BYTES by requesting a larger maxBytes).
@@ -134,6 +172,9 @@ router.post('/firebase-storage', authMiddleware, tenantMiddleware, async (req, r
     }
     if (buffer.length > maxBytes) {
       return res.status(400).json({ detail: `Attachment exceeds ${Math.round(maxBytes / (1024 * 1024))} MB limit.` });
+    }
+    if (!matchesDeclaredContent(buffer, mimeType)) {
+      return res.status(400).json({ detail: 'This file does not match the file type it claims to be.' });
     }
 
     const bucketName = resolveStorageBucket();
@@ -190,6 +231,7 @@ router.post('/firebase-storage', authMiddleware, tenantMiddleware, async (req, r
 });
 
 router.__test = {
+  matchesDeclaredContent,
   resolveUploadMaxBytes,
   decodeBase64Payload,
   MAX_IMAGE_UPLOAD_BYTES,

@@ -401,6 +401,13 @@ export const apiService = {
   // records the metadata.
   registerSupportAttachment: (conversationId, attachment = {}) =>
     api.post(`/chat/${encodeURIComponent(conversationId)}/attachments`, { attachment }),
+  // Rollback for a multi-file send that failed part-way. Only the uploader can
+  // discard, and only while no message references the attachment yet, so this
+  // can never delete sent chat history.
+  discardSupportAttachment: (conversationId, attachmentId) =>
+    api.delete(
+      `/chat/${encodeURIComponent(conversationId)}/attachments/${encodeURIComponent(attachmentId)}`,
+    ),
   confirmSupportResolution: (conversationId, resolved, note = '', satisfaction = {}) =>
     api.patch(`/chat/${conversationId}/resolution`, {
       resolved,

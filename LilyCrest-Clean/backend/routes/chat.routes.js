@@ -24,6 +24,10 @@ router.post('/:conversationId/attachments', tenantMiddleware, chatController.upl
 // attachment was registered against. There is deliberately no unauthenticated
 // or storage-URL alternative.
 router.get('/:conversationId/attachments/:attachmentId', tenantMiddleware, chatController.downloadConversationAttachment);
+// Rollback for a send that failed part-way through a multi-file upload.
+// Only the uploader, only their own conversation, and only while nothing has
+// referenced the attachment yet — see discardConversationAttachment.
+router.delete('/:conversationId/attachments/:attachmentId', tenantMiddleware, chatController.deleteConversationAttachment);
 // Tenant's answer to the admin's "was this resolved?" prompt.
 router.patch('/:conversationId/resolution', tenantMiddleware, chatController.confirmConversationResolution);
 // Reopen a resolved/closed concern on the same thread.
@@ -40,5 +44,6 @@ router.post('/admin/:conversationId/attachments', adminMiddleware, chatControlle
 // conversation is located through buildAdminConversationFilter, so a
 // branch-scoped admin still cannot reach another branch's attachment.
 router.get('/admin/:conversationId/attachments/:attachmentId', adminMiddleware, chatController.downloadAdminConversationAttachment);
+router.delete('/admin/:conversationId/attachments/:attachmentId', adminMiddleware, chatController.deleteAdminConversationAttachment);
 
 module.exports = router;

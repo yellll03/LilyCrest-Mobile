@@ -4,12 +4,19 @@ const { resolveTenantBranch, normalizedBranchReference } = require('../services/
 const { authorizeTenantStorageObject } = require('../services/documentStorageAuthorization.service');
 const { resolveStorageBucket, admin } = require('../config/firebase');
 const {
+  CHAT_ATTACHMENT_COLLECTION,
   buildAttachmentUrl,
   createChatAttachment,
   findConversationAttachment,
   findConversationAttachments,
   serializeAttachmentRecord,
 } = require('../services/chatAttachment.service');
+const {
+  MAX_SUPPORT_ATTACHMENTS,
+  SUPPORT_ATTACHMENT_FOLDER,
+  SUPPORT_ATTACHMENT_MAX_BYTES,
+  SUPPORT_ATTACHMENT_MIME_TYPES,
+} = require('../constants/supportAttachments');
 
 // Matches chatbot.controller.js's MAX_CHAT_MESSAGE_CHARS and the single
 // client-side cap the mobile UI already applies to both the AI assistant and
@@ -40,26 +47,10 @@ const ADMIN_ROLES = new Set(['admin', 'superadmin']);
 // caller's own object via the same authorizeTenantStorageObject invariant
 // the /users/documents pipeline uses. There is deliberately no second
 // storage system and no multipart parser.
-const SUPPORT_ATTACHMENT_FOLDER = 'support-attachments';
-const MAX_SUPPORT_ATTACHMENTS = 3;
-// Matches INQUIRY_ATTACHMENT_MAX_BYTES in maintenance.controller.js so a
-// tenant-submitted attachment obeys one cap across every support surface.
-const SUPPORT_ATTACHMENT_MAX_BYTES = 5 * 1024 * 1024;
-const SUPPORT_ATTACHMENT_MIME_TYPES = new Set([
-  'image/jpeg',
-  'image/jpg',
-  'image/png',
-  'image/gif',
-  'image/webp',
-  'image/bmp',
-  'image/heic',
-  'image/heif',
-  'application/pdf',
-  'application/msword',
-  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-  'text/plain',
-  'text/csv',
-]);
+//
+// The count/size/MIME limits themselves live in ../constants/supportAttachments
+// so this controller, the compose UI and the admin repository all state the
+// same numbers in one named place each rather than as scattered literals.
 
 function createHttpError(message, statusCode = 400, code = 'CHAT_ERROR') {
   const error = new Error(message);
@@ -156,12 +147,16 @@ function normalizeSupportAttachment(entry, userId) {
     throw createHttpError('Attachment storage details are required.', 400, 'ATTACHMENT_INVALID');
   }
   if (!SUPPORT_ATTACHMENT_MIME_TYPES.has(mimeType)) {
-    throw createHttpError('Attachments must be images, PDFs, documents, text, or CSV files.', 400, 'ATTACHMENT_UNSUPPORTED_TYPE');
+    throw createHttpError('Support attachments must be a JPG, PNG, WebP, HEIC/HEIF image, or PDF.', 400, 'ATTACHMENT_UNSUPPORTED_TYPE');
   }
   // Reject outright when size is missing or non-numeric — a client must not be
   // able to bypass the cap by omitting the field the upload endpoint returned.
   if (!Number.isFinite(size) || size <= 0 || size > SUPPORT_ATTACHMENT_MAX_BYTES) {
-    throw createHttpError('Attachment exceeds the 5 MB limit.', 400, 'ATTACHMENT_TOO_LARGE');
+    throw createHttpError(
+      `Attachment exceeds the ${Math.round(SUPPORT_ATTACHMENT_MAX_BYTES / (1024 * 1024))} MB limit.`,
+      400,
+      'ATTACHMENT_TOO_LARGE'
+    );
   }
 
   const authorization = authorizeTenantStorageObject({
@@ -968,6 +963,81 @@ function downloadAdminConversationAttachment(req, res) {
   return streamConversationAttachment(req, res, { admin: true });
 }
 
+// Rollback for a partially-completed multi-file send.
+//
+// Sending is atomic by construction: every file is uploaded and registered
+// *before* any ChatMessage is created, and normalizeSupportAttachments
+// validates the whole set, so a message that claims N attachments always has
+// N resolvable records. What a mid-way failure does leave behind is registered
+// records (and their storage objects) that no message ever referenced. This
+// endpoint lets the composer discard exactly those, so a failed send does not
+// accumulate orphaned bytes.
+//
+// It is deliberately narrow, because deletion is the dangerous direction:
+//   * the conversation must resolve through the caller's own scope filter,
+//   * the attachment must be bound to that conversation,
+//   * the caller must be the uploader — an admin cannot delete a tenant's file
+//     and vice versa,
+//   * and it must not be referenced by any message. A referenced attachment is
+//     chat history and is refused with a 409, never quietly removed.
+async function discardConversationAttachment(req, res, { admin: asAdmin = false } = {}) {
+  try {
+    const db = getDb();
+    const conversation = asAdmin
+      ? await findConversationForAdmin(db, req.params.conversationId, req.user)
+      : await findConversationForTenant(db, req.params.conversationId, req.user);
+
+    const attachment = await findConversationAttachment(db, conversation._id, req.params.attachmentId);
+    if (!attachment) {
+      throw createHttpError('Attachment not found.', 404, 'ATTACHMENT_NOT_FOUND');
+    }
+
+    if (String(attachment.uploadedBy) !== String(req.user?._id || '')) {
+      // Same 404 convention the rest of this controller uses for
+      // "exists, but not yours" — it reveals nothing extra.
+      throw createHttpError('Attachment not found.', 404, 'ATTACHMENT_NOT_FOUND');
+    }
+
+    const referenced = await db.collection('chat_messages').countDocuments(
+      { conversationId: conversation._id, 'attachments.attachmentId': attachment._id },
+      { limit: 1 },
+    );
+    if (referenced) {
+      throw createHttpError('This attachment has already been sent.', 409, 'ATTACHMENT_ALREADY_SENT');
+    }
+
+    // Best effort on the bytes: the record is what makes the file reachable,
+    // so a storage object that outlives a failed delete is unreadable rather
+    // than exposed. The record is only removed once we have tried the object.
+    const bucketName = resolveStorageBucket();
+    if (bucketName && admin.apps.length && attachment.storagePath) {
+      try {
+        await admin.storage().bucket(bucketName).file(attachment.storagePath).delete();
+      } catch (_storageError) {
+        // Already gone, or storage is refusing — the record removal below
+        // still leaves nothing referencing it.
+      }
+    }
+
+    await db.collection(CHAT_ATTACHMENT_COLLECTION).deleteOne({
+      _id: attachment._id,
+      conversationId: conversation._id,
+    });
+
+    return res.json({ discarded: true, attachmentId: String(attachment._id) });
+  } catch (error) {
+    return sendError(res, error, 'Failed to discard that attachment.');
+  }
+}
+
+function deleteConversationAttachment(req, res) {
+  return discardConversationAttachment(req, res, { admin: false });
+}
+
+function deleteAdminConversationAttachment(req, res) {
+  return discardConversationAttachment(req, res, { admin: true });
+}
+
 // Tenant's answer to "was this resolved?" — the counterpart to the admin
 // moving a conversation to waiting_tenant. Confirming settles it at
 // `resolved` (the tenant can still reopen); declining returns it to `open`
@@ -1240,6 +1310,7 @@ module.exports = {
   closeConversation,
   uploadConversationAttachment,
   downloadConversationAttachment,
+  deleteConversationAttachment,
   confirmConversationResolution,
   reopenConversation,
   getAdminConversations,
@@ -1248,6 +1319,7 @@ module.exports = {
   updateAdminConversationStatus,
   uploadAdminConversationAttachment,
   downloadAdminConversationAttachment,
+  deleteAdminConversationAttachment,
   __test: {
     normalizeMessage,
     MAX_MESSAGE_CHARS,
