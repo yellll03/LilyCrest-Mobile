@@ -851,6 +851,64 @@ function isNetworkFailure(error) {
     && Boolean(error?.request || /network|timeout|timed out|econn/i.test(String(error?.message || error?.code || '')));
 }
 
+// Terminal step of any credential change. Two independent mechanisms revoke
+// the old sessions, so a partial infrastructure failure cannot leave a
+// pre-change session usable:
+//   1. securityVersion is advanced on the user document. authMiddleware (and
+//      Capstone-Website's mobileTenantAuth, which reads the same collections)
+//      rejects any session whose stamped security_version no longer matches.
+//   2. The user_sessions rows are physically deleted.
+// Succeeding at either one is sufficient; failing both is a hard error the
+// caller must surface rather than silently returning 200.
+async function finalizePasswordSessions(db, userId) {
+  if (!userId) throw new Error('Missing user identity for session finalization');
+
+  let owner = null;
+  try {
+    owner = await db.collection('users').findOne(
+      { user_id: userId },
+      { projection: { securityVersion: 1, security_version: 1 } },
+    );
+  } catch (_) {
+    owner = null;
+  }
+  const currentVersion = Number(owner?.securityVersion ?? owner?.security_version ?? 0);
+  const nextVersion = Number.isSafeInteger(currentVersion) && currentVersion >= 0
+    ? currentVersion + 1
+    : 1;
+
+  let versionAdvanced = false;
+  let sessionsDeleted = false;
+  try {
+    const result = await db.collection('users').updateOne(
+      { user_id: userId },
+      {
+        $set: {
+          securityVersion: nextVersion,
+          security_version: nextVersion,
+          password_changed_at: new Date(),
+        },
+      },
+    );
+    versionAdvanced = result?.matchedCount !== 0;
+  } catch (_) {
+    versionAdvanced = false;
+  }
+
+  try {
+    await db.collection('user_sessions').deleteMany({ user_id: userId });
+    sessionsDeleted = true;
+  } catch (_) {
+    sessionsDeleted = false;
+  }
+
+  if (!versionAdvanced && !sessionsDeleted) {
+    throw new Error('Unable to finalize password sessions');
+  }
+
+  return { nextVersion, sessionsDeleted, versionAdvanced };
+}
+
 async function changePassword(req, res) {
   try {
     const { current_password, new_password, notify_email, notify_app } = req.body;
@@ -910,6 +968,10 @@ async function changePassword(req, res) {
     }
     try {
       await admin.auth().updateUser(uid, { password: new_password });
+      // The old Firebase refresh token must die with the old password;
+      // otherwise api.js's silent refreshGoogleSession() could mint a brand
+      // new backend session from a credential the tenant just replaced.
+      await admin.auth().revokeRefreshTokens(uid).catch(() => {});
     } catch (providerError) {
       console.error('[ChangePassword] Firebase update failed:', providerError?.code || providerError?.message);
       return res.status(502).json({ code: 'PASSWORD_PROVIDER_FAILURE', detail: 'We could not update your password right now. Please try again.' });
@@ -924,11 +986,16 @@ async function changePassword(req, res) {
     // strand the current user before Firebase has accepted the new password.
     let sessionCleanupComplete = true;
     try {
-      await db.collection('user_sessions').deleteMany({ user_id: userId });
-      console.log(`[ChangePassword] Sessions cleared for user_id=${userId}`);
+      await finalizePasswordSessions(db, userId);
+      console.log(`[ChangePassword] Sessions finalized for user_id=${userId}`);
     } catch (sessionError) {
       sessionCleanupComplete = false;
       console.error('[ChangePassword] Password changed; session finalization incomplete:', sessionError?.code || sessionError?.message);
+      return res.status(500).json({
+        code: 'SESSION_FINALIZATION_FAILED',
+        sessionCleanupComplete,
+        detail: 'Your password was updated, but existing sessions could not be signed out. Please contact support before continuing.',
+      });
     }
 
     // ── In-app audit announcement ─────────────────────────────────────────
@@ -1429,13 +1496,17 @@ async function resetPassword(req, res) {
       { $set: { used: true, usedAt: new Date() }, $unset: { processingId: '', processingAt: '' } },
     );
 
-    // Invalidate all active sessions for this user.
-    // Auth middleware validates against the user_sessions collection.
+    // Invalidate all active sessions for this user. Same two-mechanism
+    // finalization as changePassword: advance securityVersion (which
+    // authMiddleware enforces) and delete the session rows.
     try {
-      await db.collection('user_sessions').deleteMany({ user_id: record.user_id });
+      await finalizePasswordSessions(db, record.user_id);
     } catch (sessionError) {
       console.warn('[ResetPassword] Failed to invalidate active sessions:', sessionError?.message);
     }
+    try {
+      await admin.auth().revokeRefreshTokens(record.uid);
+    } catch (_) { /* provider-side revocation is best-effort */ }
 
     // Send confirmation email
     sendPasswordChangedEmail(record.email, 'Tenant', 'app').catch(() => {});
@@ -1472,6 +1543,9 @@ module.exports = {
   // Exported only for direct unit testing of the password-reset link's
   // production-domain guarantee (see tests/passwordResetLink.test.js).
   buildPasswordResetLink,
+  // Exported for direct unit testing of the credential-change session
+  // revocation contract (see tests/sessionSecurityVersion.test.js).
+  finalizePasswordSessions,
   // Exported only for direct unit testing that the status check and the
   // actual reset share one eligibility rule (see tests/resetTokenStatus.test.js).
   hashAuthSecret,
