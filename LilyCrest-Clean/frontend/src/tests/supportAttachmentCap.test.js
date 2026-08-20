@@ -35,7 +35,12 @@ describe('support-chat attachment cap parity', () => {
   });
 
   test('the composer picks its cap from the mode it is in, not one shared literal', () => {
-    expect(screen).toContain('const maxAttachmentCount = isSupportMode(chatMode)');
+    // A selected inquiry thread (opened from "My Inquiries") is always an
+    // admin-support conversation but does not drive the shared `chatMode`
+    // state machine, so the mode check is widened to also recognize that
+    // context rather than keying on `chatMode` alone.
+    expect(screen).toContain('const isSupportAttachmentContext = isSupportMode(chatMode) || Boolean(selectedInquiry);');
+    expect(screen).toContain('const maxAttachmentCount = isSupportAttachmentContext');
     expect(screen).toContain('? MAX_SUPPORT_ATTACHMENT_COUNT');
     expect(screen).toContain(': MAX_ASSISTANT_ATTACHMENT_COUNT;');
     // No stale single-cap constant may survive.
@@ -51,7 +56,17 @@ describe('support-chat attachment cap parity', () => {
   test('the tenant is shown how much of the allowance is used', () => {
     expect(screen).toContain('attachmentCountLimit');
     expect(screen).toContain('${attachments.length} of ${attachmentCountLimit} attached');
-    expect(screen).toContain('const attachmentCountLimit = isSupportMode(chatMode)');
+    expect(screen).toContain('const attachmentCountLimit = isSupportAttachmentContext');
+  });
+
+  test('a selected inquiry thread can attach and send files, not just text', () => {
+    // This is the composer reached from "My Inquiries" — a distinct render
+    // branch from the main chat composer above. It must reuse the same
+    // upload-then-register pipeline and cap/MIME rules, not a second one.
+    expect(screen).toContain("placeholder=\"Reply to admin support...\"");
+    expect(screen).toMatch(/onPress=\{\(\) => setShowAttachMenu\(\(value\) => !value\)\}\s*\n\s*disabled=\{isSendingReply\}/);
+    expect(screen).toContain('await apiService.sendSupportMessage(conversationId, text, uploadedAttachments);');
+    expect(screen).toMatch(/if \(\(!text && !attachments\.length\) \|\| !selectedInquiry \|\| replyGuardRef\.current\) return;/);
   });
 
   test('the cap counts every supported type against one allowance', () => {
