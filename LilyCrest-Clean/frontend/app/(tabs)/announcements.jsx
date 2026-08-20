@@ -117,12 +117,12 @@ export default function AnnouncementsScreen() {
     headerSubtitle: { fontSize: 12, color: '#D0D7E2', marginTop: 2 },
     toolbarRow: {
       flexDirection: 'row', alignItems: 'center',
-      paddingHorizontal: 16, paddingTop: 6, paddingBottom: 10, gap: 8,
+      paddingHorizontal: 14, paddingTop: 12, paddingBottom: 12, gap: 8,
     },
     toolbarButton: {
-      flex: 1, height: 40, paddingHorizontal: 6, borderRadius: 10,
+      flex: 1, minHeight: 42, paddingHorizontal: 12, borderRadius: 10,
       backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: 'transparent',
-      flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 5,
+      flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6,
     },
     toolbarButtonActive: {
       backgroundColor: dark ? c.surfaceSecondary : '#FBF7EA',
