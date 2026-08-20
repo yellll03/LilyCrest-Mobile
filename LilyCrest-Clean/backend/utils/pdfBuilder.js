@@ -7,8 +7,11 @@ const RIGHT = 48;
 const TOP = 92;
 const BOTTOM = 62;
 const WIDTH = PAGE_W - LEFT - RIGHT;
-const NAVY = '0.078 0.212 0.353';
-const GOLD = '0.831 0.408 0.165';
+// Matches frontend/src/theme/tokens.js BRAND.primary (#0A1628) and
+// BRAND.accent (#D4AF37) exactly, so generated PDFs use the same navy/gold
+// as the rest of the app rather than an unrelated, uncalibrated palette.
+const NAVY = '0.039 0.086 0.157';
+const GOLD = '0.831 0.686 0.216';
 const DARK = '0.25 0.25 0.25';
 const MID = '0.45 0.45 0.45';
 const LIGHT = '0.941 0.957 0.973';
