@@ -56,8 +56,9 @@ async function fetchUserDocumentPdf({ userId, id, onProgress }) {
   }
 
   try {
-    const info = await validatePdf(uri, result.headers);
-    return { uri, size: info.size, cached: false };
+    const info = await validateDocumentFile(uri, result.headers);
+    await writeSidecar(uri, info);
+    return { uri, size: info.size, mimeType: info.mimeType, extension: info.kind, cached: false };
   } catch (error) {
     await FileSystem.deleteAsync(uri, { idempotent: true });
     throw error;
@@ -140,29 +141,69 @@ export async function evictStaleDocumentCache() {
   }
 }
 
-export async function validatePdf(uri, headers = {}) {
+// The backend accepts PDF, JPG/JPEG, or PNG for a wet-signed contract scan
+// (see CONTRACT_MOBILE_DISPLAY_WORKFLOW.md — the standard signing path
+// uploads whatever format the admin scanned), so a "current document" is not
+// always a PDF. Detected from the file's own magic bytes rather than trusted
+// content-type alone, matching the existing PDF-only check's approach.
+const DOCUMENT_SIGNATURES = [
+  { prefix: 'JVBERi0', mimeType: 'application/pdf', extension: 'pdf', rawBytes: 5 },
+  { prefix: '/9j/', mimeType: 'image/jpeg', extension: 'jpg', rawBytes: 3 },
+  { prefix: 'iVBORw0KGgo', mimeType: 'image/png', extension: 'png', rawBytes: 8 },
+];
+const SIGNATURE_PROBE_BYTES = Math.max(...DOCUMENT_SIGNATURES.map((sig) => sig.rawBytes));
+
+function detectDocumentSignature(base64Prefix) {
+  return DOCUMENT_SIGNATURES.find((sig) => base64Prefix.startsWith(sig.prefix)) || null;
+}
+
+export async function validateDocumentFile(uri, headers = {}) {
   const info = await FileSystem.getInfoAsync(uri);
   if (!info.exists) throw new Error('MISSING_FILE');
   if (!info.size) throw new Error('EMPTY_FILE');
   if (info.size > MAX_PDF_BYTES) throw new Error('FILE_TOO_LARGE');
-  const contentType = String(headers['content-type'] || headers['Content-Type'] || '').toLowerCase();
-  if (contentType && !contentType.includes('application/pdf') && !contentType.includes('octet-stream')) {
-    throw new Error('WRONG_MIME');
-  }
   const prefix = await FileSystem.readAsStringAsync(uri, {
     encoding: FileSystem.EncodingType.Base64,
     position: 0,
-    length: 5,
+    length: SIGNATURE_PROBE_BYTES,
   });
-  if (!prefix.startsWith('JVBERi0')) throw new Error('INVALID_PDF');
-  return info;
+  const signature = detectDocumentSignature(prefix);
+  if (!signature) throw new Error('INVALID_PDF');
+  const contentType = String(headers['content-type'] || headers['Content-Type'] || '').toLowerCase();
+  if (contentType && !contentType.includes(signature.mimeType) && !contentType.includes('octet-stream')) {
+    throw new Error('WRONG_MIME');
+  }
+  return { ...info, kind: signature.extension, mimeType: signature.mimeType };
+}
+
+// Cache lookups must know the file's real kind (pdf vs jpg vs png) without a
+// network round trip, so the detected mimeType/extension is written to a
+// small sidecar file alongside the cached document the first time it's
+// validated (see fetchPdf/fetchUserDocumentPdf below).
+function sidecarPath(uri) {
+  return `${uri}.kind`;
+}
+
+async function writeSidecar(uri, signature) {
+  await FileSystem.writeAsStringAsync(sidecarPath(uri), `${signature.mimeType}|${signature.extension}`).catch(() => {});
+}
+
+async function readSidecar(uri) {
+  try {
+    const raw = await FileSystem.readAsStringAsync(sidecarPath(uri));
+    const [mimeType, extension] = raw.split('|');
+    return { mimeType, extension };
+  } catch (_) {
+    return { mimeType: 'application/pdf', extension: 'pdf' };
+  }
 }
 
 export async function getCachedPdf(userId, kind, id, cacheKey) {
   const uri = cachedDocumentPath(userId, kind, id, cacheKey);
   try {
-    await validatePdf(uri);
-    return uri;
+    await validateDocumentFile(uri);
+    const { mimeType, extension } = await readSidecar(uri);
+    return { uri, mimeType, extension };
   } catch (_) {
     return null;
   }
@@ -194,8 +235,9 @@ export async function fetchPdf({ userId, kind, id, cacheKey, onProgress }) {
     throw error;
   }
   try {
-    const info = await validatePdf(result.uri, result.headers);
-    return { uri: result.uri, size: info.size, cached: false };
+    const info = await validateDocumentFile(result.uri, result.headers);
+    await writeSidecar(result.uri, info);
+    return { uri: result.uri, size: info.size, mimeType: info.mimeType, extension: info.kind, cached: false };
   } catch (error) {
     await FileSystem.deleteAsync(uri, { idempotent: true });
     throw error;
@@ -203,27 +245,27 @@ export async function fetchPdf({ userId, kind, id, cacheKey, onProgress }) {
 }
 
 export async function sharePdf(uri, title) {
-  await validatePdf(uri);
+  const info = await validateDocumentFile(uri);
   if (!(await Sharing.isAvailableAsync())) throw new Error('SHARING_UNAVAILABLE');
   await Sharing.shareAsync(uri, {
-    mimeType: 'application/pdf',
-    UTI: 'com.adobe.pdf',
+    mimeType: info.mimeType,
+    UTI: info.kind === 'pdf' ? 'com.adobe.pdf' : `public.${info.kind === 'jpg' ? 'jpeg' : info.kind}`,
     dialogTitle: title,
   });
 }
 
 export async function getPdfMetadata(uri) {
-  const info = await validatePdf(uri);
-  return { size: info.size || 0, modifiedAt: info.modificationTime ? new Date(info.modificationTime * 1000) : null };
+  const info = await validateDocumentFile(uri);
+  return { size: info.size || 0, modifiedAt: info.modificationTime ? new Date(info.modificationTime * 1000) : null, mimeType: info.mimeType, extension: info.kind };
 }
 
 export async function downloadPdf(uri, title = 'document') {
-  await validatePdf(uri);
-  const filename = `${safePart(title)}_${new Date().toISOString().replace(/[:.]/g, '-')}.pdf`;
+  const info = await validateDocumentFile(uri);
+  const filename = `${safePart(title)}_${new Date().toISOString().replace(/[:.]/g, '-')}.${info.kind}`;
   if (FileSystem.StorageAccessFramework?.requestDirectoryPermissionsAsync) {
     const permission = await FileSystem.StorageAccessFramework.requestDirectoryPermissionsAsync();
     if (!permission.granted) throw new Error('DOWNLOAD_CANCELLED');
-    const destination = await FileSystem.StorageAccessFramework.createFileAsync(permission.directoryUri, filename, 'application/pdf');
+    const destination = await FileSystem.StorageAccessFramework.createFileAsync(permission.directoryUri, filename, info.mimeType);
     const base64 = await FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
     await FileSystem.writeAsStringAsync(destination, base64, { encoding: FileSystem.EncodingType.Base64 });
     return { uri: destination, filename };
@@ -239,8 +281,8 @@ export function documentErrorMessage(error, hasNetwork = true) {
   if (error?.status === 403 || code === 'HTTP_403') return 'You do not have permission to view this document.';
   if (error?.status === 404 || code === 'HTTP_404' || code === 'MISSING_FILE') return 'The requested document could not be found.';
   if (error?.status === 410 || code === 'HTTP_410') return 'Unable to load document at this time. Please try again later.';
-  if (['EMPTY_FILE', 'WRONG_MIME', 'INVALID_PDF'].includes(code)) return 'This file is damaged or is not a valid PDF.';
-  if (code === 'FILE_TOO_LARGE') return 'This PDF is too large to open safely on this device.';
+  if (['EMPTY_FILE', 'WRONG_MIME', 'INVALID_PDF'].includes(code)) return 'This file is damaged or in an unsupported format.';
+  if (code === 'FILE_TOO_LARGE') return 'This document is too large to open safely on this device.';
   if (code === 'DOWNLOAD_CANCELLED') return 'Download cancelled.';
   if (code === 'INVALID_ID') return 'This document link is invalid.';
   if (code === 'UNAUTHENTICATED') return 'Please sign in again to view this document.';
