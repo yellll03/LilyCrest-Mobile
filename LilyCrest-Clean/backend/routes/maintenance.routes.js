@@ -6,6 +6,7 @@ const { authMiddleware, adminMiddleware, tenantMiddleware } = require('../middle
 // Admin routes
 router.get('/admin/all', authMiddleware, adminMiddleware, maintenanceController.adminGetAll);
 router.patch('/admin/:requestId/status', authMiddleware, adminMiddleware, maintenanceController.adminUpdateStatus);
+router.patch('/admin/:requestId/read', authMiddleware, adminMiddleware, maintenanceController.adminMarkRead);
 
 // Tenant routes
 router.get('/me', authMiddleware, tenantMiddleware, maintenanceController.getMyMaintenance);
