@@ -19,6 +19,13 @@ import {
   SurfaceCard,
 } from '../src/components/ui/LilycrestUI';
 
+// Contract Number/Branch/Room/Lease Period identify the contract at a
+// glance; the rest (lease type, rate, deposits, fees) already appear in the
+// PDF itself one tap away via "View Contract" — showing them here too reads
+// as duplicated content, so they're tucked behind a collapsible section
+// instead of always-visible rows.
+const ESSENTIAL_FIELD_KEYS = ['number', 'branch', 'room', 'period'];
+
 export default function ContractViewer() {
   const router = useRouter();
   const { contractId: requestedContractIdParam } = useLocalSearchParams();
@@ -27,6 +34,7 @@ export default function ContractViewer() {
     : requestedContractIdParam;
   const { colors } = useTheme();
   const [showDocumentInfo, setShowDocumentInfo] = useState(false);
+  const [showMoreDetails, setShowMoreDetails] = useState(false);
   const [startingSupport, setStartingSupport] = useState(false);
   const [supportError, setSupportError] = useState('');
   const { contract, state, loading, refreshing, error, reload, refresh } = useTenantContract();
@@ -36,6 +44,8 @@ export default function ContractViewer() {
     && String(requestedContractId) !== String(contract.id),
   );
   const summary = buildContractSummary(requestedContractMismatch ? null : contract);
+  const essentialFields = summary?.fields.filter((field) => ESSENTIAL_FIELD_KEYS.includes(field.key)) || [];
+  const moreFields = summary?.fields.filter((field) => !ESSENTIAL_FIELD_KEYS.includes(field.key)) || [];
   // STALE: a refresh after a prior successful load failed transiently — the
   // last safe presentation stays on screen with a dismissible warning
   // instead of being replaced by an empty/error screen.
@@ -112,15 +122,22 @@ export default function ContractViewer() {
                 trailing={<StatusBadge status={summary.lifecycleState} label={summary.lifecycleBadgeLabel} tone={summary.lifecycleState === 'final' ? 'success' : summary.lifecycleState === 'draft' ? 'warning' : 'info'} />}
               />
               <Text style={[styles.lifecycleStatus, { color: colors.heading }]}>{summary.status}</Text>
-              <View style={[styles.nextAction, { backgroundColor: colors.surfaceSecondary }]}>
-                <Ionicons name="arrow-forward-circle-outline" size={18} color={colors.accentHover} />
-                <Text style={[styles.lifecycleMessage, { color: colors.textSecondary }]}>{summary.message}</Text>
-              </View>
-              {summary.fields.map((field, index) => (
-                <DataRow key={field.key} label={field.label} value={field.value} last={index === summary.fields.length - 1} />
+              {essentialFields.map((field, index) => (
+                <DataRow key={field.key} label={field.label} value={field.value} last={index === essentialFields.length - 1 && !moreFields.length} />
               ))}
               {summary.hasMissingDetails ? (
                 <Text style={[styles.finalizing, { color: colors.textSecondary }]}>Some contract details are still being finalized.</Text>
+              ) : null}
+              {moreFields.length ? (
+                <View style={[styles.moreDetails, { borderTopColor: colors.border }]}>
+                  <TouchableOpacity style={styles.documentInfoToggle} onPress={() => setShowMoreDetails((value) => !value)}>
+                    <Text style={[styles.documentInfoTitle, { color: colors.text }]}>Lease &amp; Payment Details</Text>
+                    <Ionicons name={showMoreDetails ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textSecondary} />
+                  </TouchableOpacity>
+                  {showMoreDetails ? moreFields.map((field, index) => (
+                    <DataRow key={field.key} label={field.label} value={field.value} last={index === moreFields.length - 1} />
+                  )) : null}
+                </View>
               ) : null}
             </SurfaceCard>
 
@@ -147,11 +164,9 @@ export default function ContractViewer() {
             </DocumentActionCard>
 
             <SurfaceCard style={styles.supportCard}>
-              <SectionHeader icon="headset-outline" title="Contract Support" />
-              <Text style={[styles.supportCopy, { color: colors.textSecondary }]}>Ask LilyCrest about this contract. The existing conversation for this exact contract will be reused when available.</Text>
               {supportError ? <Text style={[styles.supportError, { color: colors.errorText }]}>{supportError}</Text> : null}
               <ActionButton
-                label={startingSupport ? 'Opening Support...' : 'Contact Support'}
+                label={startingSupport ? 'Opening Support...' : 'Questions? Contact Support'}
                 icon="chatbubble-ellipses-outline"
                 onPress={contactSupport}
                 disabled={startingSupport}
@@ -186,16 +201,14 @@ const styles = StyleSheet.create({
   empty: { alignItems: 'center', paddingTop: 100, gap: 16 },
   card: { gap: 10, marginBottom: 16 },
   lifecycleStatus: { fontSize: 16, lineHeight: 22, fontWeight: '700' },
-  nextAction: { flexDirection: 'row', alignItems: 'flex-start', gap: 9, borderRadius: 10, padding: 11 },
-  lifecycleMessage: { flex: 1, fontSize: 13, lineHeight: 19 },
   staleWarning: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 14 },
   staleWarningText: { flex: 1, fontSize: 12, lineHeight: 17 },
   staleWarningRetry: { fontSize: 13, fontWeight: '700' },
   label: { fontSize: 12, fontWeight: '600' },
   finalizing: { paddingTop: 14, borderTopWidth: StyleSheet.hairlineWidth, fontSize: 13, lineHeight: 19 },
+  moreDetails: { marginTop: 4, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth },
   documentPending: { fontSize: 13, lineHeight: 19, marginTop: 12 },
   supportCard: { gap: 12, marginTop: 16 },
-  supportCopy: { fontSize: 13, lineHeight: 19 },
   supportError: { fontSize: 12, lineHeight: 17 },
   documentInfo: { marginTop: 18, borderWidth: 1, borderRadius: 12, padding: 14 },
   documentInfoToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
