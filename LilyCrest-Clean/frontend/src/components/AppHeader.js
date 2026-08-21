@@ -5,6 +5,7 @@ import {
   Alert,
   Animated,
   Dimensions,
+  Image,
   Modal,
   Platform,
   Pressable,
@@ -221,6 +222,15 @@ export default function AppHeader() {
       },
       spacer: { width: 40 },
       titleContainer: { flex: 1, alignItems: 'center' },
+      titleRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+      },
+      logoMark: {
+        width: 26,
+        height: 26,
+      },
       title: {
         fontSize: 24,
         fontWeight: '800',
@@ -490,7 +500,15 @@ export default function AppHeader() {
       <View style={styles.header}>
         <View style={styles.spacer} />
         <View style={styles.titleContainer}>
-          <Text style={styles.title}>LilyCrest</Text>
+          <View style={styles.titleRow}>
+            <Image
+              source={require('../../assets/images/lilycrest-mark.png')}
+              style={styles.logoMark}
+              resizeMode="contain"
+              accessibilityLabel="LilyCrest logo"
+            />
+            <Text style={styles.title}>LilyCrest</Text>
+          </View>
           <Text style={styles.subtitle}>Tenant Portal</Text>
         </View>
         <TouchableOpacity
