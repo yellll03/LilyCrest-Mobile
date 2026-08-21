@@ -618,6 +618,7 @@ let liveChatMessages = [];
 let liveChatPoller = null;
 let liveChatListPoller = null;
 let ticketPoller = null;
+let maintenancePoller = null;
 const MAINT_ALLOWED_ATTACHMENT_TYPES = [
   'image/jpeg',
   'image/jpg',
@@ -742,6 +743,7 @@ async function bootApp() {
 function navigate(page) {
   stopLiveChatListPoller();
   stopTicketPoller();
+  stopMaintenancePoller();
   currentPage = page;
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   const nav = document.querySelector(`.nav-item[data-page="${page}"]`);
@@ -754,6 +756,7 @@ function navigate(page) {
   loadPage(page);
   if (page === 'livechat') startLiveChatListPoller();
   if (page === 'tickets') startTicketPoller();
+  if (page === 'maintenance') startMaintenancePoller();
 }
 
 function refreshPage() { loadPage(currentPage); }
@@ -1016,6 +1019,18 @@ function stopLiveChatListPoller() {
     clearInterval(liveChatListPoller);
     liveChatListPoller = null;
   }
+}
+
+function startMaintenancePoller() {
+  stopMaintenancePoller();
+  maintenancePoller = setInterval(() => {
+    if (currentPage === 'maintenance' && document.getElementById('maint-modal').classList.contains('hidden')) {
+      loadMaintenance();
+    }
+  }, 15000);
+}
+function stopMaintenancePoller() {
+  if (maintenancePoller) { clearInterval(maintenancePoller); maintenancePoller = null; }
 }
 
 async function loadLiveChats(silent = false) {
@@ -1461,6 +1476,7 @@ function openMaintModal(rid, currentStatus) {
   clearMaintAttachments();
   renderMaintThreadPreview(currentMaintRequest);
   document.getElementById('maint-modal').classList.remove('hidden');
+  apiFetch(`/maintenance/admin/${rid}/read`, { method: 'PATCH' }).catch(() => {});
 }
 
 function closeMaintModal() {

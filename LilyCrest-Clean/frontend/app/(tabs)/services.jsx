@@ -115,6 +115,7 @@ function buildRequestProgress(request) {
           isTenant: (entry?.senderRole || entry?.actor_role || '').toLowerCase() === 'tenant',
           isSummary: entry?.type === 'tenant_summary' || entry?.kind === 'tenant_summary' || Boolean(entry?.summary || entry?.tenantSummary),
           summary: entry?.summary || entry?.tenantSummary || null,
+          seenByAdmin: entry?.seenByAdmin === true,
         };
       })
       .sort((left, right) => {
@@ -172,6 +173,29 @@ function buildRequestProgress(request) {
   }
 
   return [];
+}
+
+// Groups flat, chronologically-ordered thread entries into chat "items" —
+// compact date separators plus a showSender flag so consecutive messages
+// from the same sender don't repeat a name/avatar header.
+function buildChatItems(entries = []) {
+  const items = [];
+  let lastDateKey = '';
+  let lastSenderKey = '';
+
+  entries.forEach((entry) => {
+    const dateKey = entry.timestamp ? safeFormat(entry.timestamp, 'yyyy-MM-dd') : '';
+    if (dateKey && dateKey !== lastDateKey) {
+      items.push({ kind: 'date', id: `date_${dateKey}`, label: safeFormat(entry.timestamp, 'MMMM d, yyyy') });
+      lastDateKey = dateKey;
+      lastSenderKey = '';
+    }
+    const senderKey = `${entry.isTenant ? 'tenant' : 'admin'}:${entry.actorLabel || ''}`;
+    items.push({ kind: 'message', id: entry.id, entry, showSender: senderKey !== lastSenderKey });
+    lastSenderKey = senderKey;
+  });
+
+  return items;
 }
 
 const REQUEST_TYPES = [
@@ -714,6 +738,9 @@ export default function ServicesScreen() {
       const detail = response?.data || request;
       setDetailRequest(detail);
       fetchRequests();
+      if (detail?.hasUnreadTenantUpdates || detail?.unreadTenantCount) {
+        apiService.markMaintenanceRead(request.request_id).catch(() => {});
+      }
     } catch (error) {
       showBannerMessage('error', error?.response?.data?.detail || 'Failed to load maintenance details.');
     } finally {
@@ -876,11 +903,10 @@ export default function ServicesScreen() {
       setReplyMessage('');
       setReplyAttachments([]);
       setReplyUploadStatus('');
-      showBannerMessage('success', 'Follow-up sent.');
       fetchRequests();
     } catch (error) {
       setReplyUploadStatus(replyAttachments.length ? 'Upload failed, please retry' : '');
-      showBannerMessage('error', error?.response?.data?.detail || error?.message || 'Failed to send follow-up.');
+      showBannerMessage('error', error?.response?.data?.detail || error?.message || 'Failed to send your message. Please try again.');
     } finally {
       setSendingReply(false);
     }
@@ -952,6 +978,13 @@ export default function ServicesScreen() {
   const detailProgressEntries = useMemo(() => buildRequestProgress(detailRequest), [detailRequest]);
   const detailTenantSummary = useMemo(() => detailRequest?.tenant_summary || detailRequest?.tenantSummary || null, [detailRequest]);
   const hasConversationSummary = useMemo(() => detailProgressEntries.some((entry) => entry.isSummary), [detailProgressEntries]);
+  const chatItems = useMemo(() => buildChatItems(detailProgressEntries), [detailProgressEntries]);
+  const latestTenantEntryId = useMemo(() => {
+    for (let i = detailProgressEntries.length - 1; i >= 0; i -= 1) {
+      if (detailProgressEntries[i].isTenant) return detailProgressEntries[i].id;
+    }
+    return null;
+  }, [detailProgressEntries]);
   const currentList = useMemo(() => {
     if (activeTab === 'resolved') return resolvedRequests;
     if (activeTab === 'cancelled') return cancelledRequests;
@@ -974,7 +1007,10 @@ export default function ServicesScreen() {
             <Ionicons name={typeInfo.icon} size={20} color={typeInfo.color} />
           </View>
           <View style={styles.requestInfo}>
-            <Text style={styles.requestType}>{typeInfo.label}</Text>
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={styles.requestType}>{typeInfo.label}</Text>
+              {request.hasUnreadTenantUpdates ? <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: '#DC2626' }} /> : null}
+            </View>
             <Text style={styles.requestDate}>Last update {safeFormat(lastActivity, 'MMM dd, yyyy • h:mm a')}</Text>
           </View>
           <View style={[styles.statusBadge, { backgroundColor: statusColor.bg, borderColor: statusColor.solid }]}>
@@ -1447,81 +1483,127 @@ export default function ServicesScreen() {
                     </View>
                   )}
 
-                  {/* Progress Updates */}
-                  {!editMode && detailProgressEntries.length > 0 && (
-                    <View style={{ marginBottom: 14 }}>
-                      <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text, marginBottom: 8 }}>Maintenance Thread</Text>
-                      <View style={{ gap: 10 }}>
-                        {detailProgressEntries.map((entry) => (
-                          <View key={entry.id} style={{ backgroundColor: entry.actorRole === 'tenant' ? '#ECFDF5' : colors.surfaceSecondary, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: entry.actorRole === 'tenant' ? '#059669' : '#E5E7EB' }}>
-                            <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 10, marginBottom: entry.message ? 6 : 0 }}>
-                              <View style={{ flex: 1 }}>
-                                <Text style={{ fontSize: 13, fontWeight: '700', color: colors.text }}>{entry.title}</Text>
-                                {entry.actorLabel ? (
-                                  <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 2 }}>{entry.actorLabel}</Text>
-                                ) : null}
-                              </View>
-                              {entry.timestamp ? (
-                                <Text style={{ fontSize: 11, color: colors.textMuted, textAlign: 'right' }}>
-                                  {safeFormat(entry.timestamp, 'MMM dd, yyyy • h:mm a')}
-                                </Text>
-                              ) : null}
-                            </View>
-                            {entry.message ? (
-                              <Text style={{ fontSize: 14, color: colors.text, lineHeight: 20 }}>{entry.message}</Text>
-                            ) : null}
-                            {entry.statusTo ? (
-                              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: entry.message ? 8 : 2 }}>
-                                <Ionicons name="git-branch-outline" size={13} color={colors.textMuted} />
-                                <Text style={{ fontSize: 11, color: colors.textMuted }}>
-                                  Status {entry.statusFrom ? `${formatStatusLabel(entry.statusFrom)} to ` : ''}{formatStatusLabel(entry.statusTo)}
-                                </Text>
-                              </View>
-                            ) : null}
-                            {entry.attachments?.length > 0 ? (
-                              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: 10 }}>
-                                <View style={{ flexDirection: 'row' }}>
-                                  {entry.attachments.map((att, idx) => (
-                                    <TouchableOpacity
-                                      key={`${getAttachmentDownloadUrl(att) || 'attachment'}_${idx}`}
-                                      style={{ width: 96, height: 96, borderRadius: 12, backgroundColor: colors.surface, marginRight: 10, overflow: 'hidden', borderWidth: 1, borderColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' }}
-                                      activeOpacity={0.85}
-                                      onPress={() => openAttachment(att)}
-                                    >
-                                      {getAttachmentDownloadUrl(att) && isImageAttachment(att) ? (
-                                        <Image source={{ uri: getAttachmentDownloadUrl(att) }} style={{ width: 96, height: 96 }} resizeMode="cover" onError={(event) => {
-                                          const message = sanitizeAttachmentErrorMessage(event?.nativeEvent?.error || 'Attachment preview could not be loaded.');
-                                          console.warn('[MaintenanceAttachment] image-preview-failure', { name: getAttachmentDisplayName(att, idx), mimeType: att?.mimeType || att?.type || 'image', hostname: (() => { try { return new URL(getAttachmentDownloadUrl(att)).hostname; } catch (_) { return ''; } })(), errorType: 'ReactNativeImageError', message });
-                                          showBannerMessage('error', /code=402|HTTP code.*402/i.test(message)
-                                            ? 'File storage is unavailable because Firebase billing is disabled. Please contact the administrator.'
-                                            : `Image could not be opened: ${message}`);
-                                        }} />
-                                      ) : (
-                                        <View style={{ paddingHorizontal: 8, alignItems: 'center', gap: 6 }}>
-                                          <Ionicons name={isOpenableAttachment(att) ? 'document-text-outline' : 'alert-circle-outline'} size={24} color={colors.textMuted} />
-                                          <Text style={{ fontSize: 11, color: colors.textMuted, textAlign: 'center' }} numberOfLines={2}>
-                                            {getAttachmentDisplayName(att, idx)}
-                                          </Text>
-                                          <Text style={{ fontSize: 10, color: colors.primary, fontWeight: '800' }}>
-                                            {isOpenableAttachment(att) ? 'Open document' : 'Unavailable'}
-                                          </Text>
-                                        </View>
-                                      )}
-                                    </TouchableOpacity>
-                                  ))}
+                  {/* Conversation */}
+                  {!editMode && (
+                    <View style={{ marginBottom: 14 }} testID="maintenance-conversation">
+                      <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text, marginBottom: 8 }}>Conversation</Text>
+                      {chatItems.length === 0 ? (
+                        <View style={{ backgroundColor: colors.surfaceSecondary, borderRadius: 12, padding: 18, alignItems: 'center', gap: 6 }}>
+                          <Ionicons name="chatbubbles-outline" size={22} color={colors.textMuted} />
+                          <Text style={{ fontSize: 13, color: colors.textMuted, textAlign: 'center', lineHeight: 19 }}>
+                            Your request has been submitted.{'\n'}Messages from Lilycrest staff will appear here.
+                          </Text>
+                        </View>
+                      ) : (
+                        <View style={{ gap: 4 }}>
+                          {chatItems.map((item) => {
+                            if (item.kind === 'date') {
+                              return (
+                                <View key={item.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginVertical: 6 }}>
+                                  <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
+                                  <Text style={{ fontSize: 10, color: colors.textMuted, fontWeight: '700' }}>{item.label}</Text>
+                                  <View style={{ flex: 1, height: 1, backgroundColor: colors.border }} />
                                 </View>
-                              </ScrollView>
-                            ) : null}
-                          </View>
-                        ))}
-                      </View>
+                              );
+                            }
+
+                            const entry = item.entry;
+                            const isTenant = entry.isTenant;
+                            const isStatusOnly = !entry.message && !entry.isSummary && Boolean(entry.statusTo) && !entry.attachments?.length;
+                            const showSeen = isTenant && entry.id === latestTenantEntryId;
+
+                            if (isStatusOnly) {
+                              return (
+                                <View key={item.id} style={{ alignItems: 'center', marginVertical: 4 }}>
+                                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colors.surfaceSecondary, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 5 }}>
+                                    <Ionicons name="git-branch-outline" size={11} color={colors.textMuted} />
+                                    <Text style={{ fontSize: 10, color: colors.textMuted, fontWeight: '600' }}>
+                                      {entry.title} • {entry.timestamp ? safeFormat(entry.timestamp, 'h:mm a') : ''}
+                                    </Text>
+                                  </View>
+                                </View>
+                              );
+                            }
+
+                            return (
+                              <View key={item.id} style={{ alignItems: isTenant ? 'flex-end' : 'flex-start', marginBottom: 6 }}>
+                                {item.showSender && !isTenant ? (
+                                  <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '700', marginBottom: 3, marginLeft: 4 }} numberOfLines={1}>
+                                    {entry.actorLabel || 'Lilycrest Staff'}
+                                  </Text>
+                                ) : null}
+                                <View
+                                  style={{
+                                    maxWidth: '82%',
+                                    backgroundColor: isTenant ? colors.primary : colors.surfaceSecondary,
+                                    borderRadius: 16,
+                                    borderBottomRightRadius: isTenant ? 4 : 16,
+                                    borderBottomLeftRadius: isTenant ? 16 : 4,
+                                    paddingVertical: 9,
+                                    paddingHorizontal: 12,
+                                  }}
+                                >
+                                  {entry.isSummary ? (
+                                    <Text style={{ fontSize: 11, fontWeight: '800', color: isTenant ? colors.surface : colors.text, marginBottom: 3, textTransform: 'uppercase', opacity: 0.8 }}>
+                                      Maintenance Summary
+                                    </Text>
+                                  ) : null}
+                                  {entry.message ? (
+                                    <Text style={{ fontSize: 14, color: isTenant ? colors.surface : colors.text, lineHeight: 20 }}>
+                                      {entry.message}
+                                    </Text>
+                                  ) : null}
+                                  {entry.attachments?.length > 0 ? (
+                                    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginTop: entry.message ? 8 : 0 }}>
+                                      <View style={{ flexDirection: 'row' }}>
+                                        {entry.attachments.map((att, idx) => (
+                                          <TouchableOpacity
+                                            key={`${getAttachmentDownloadUrl(att) || 'attachment'}_${idx}`}
+                                            style={{ width: 84, height: 84, borderRadius: 10, backgroundColor: colors.surface, marginRight: 8, overflow: 'hidden', borderWidth: 1, borderColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' }}
+                                            activeOpacity={0.85}
+                                            onPress={() => openAttachment(att)}
+                                          >
+                                            {getAttachmentDownloadUrl(att) && isImageAttachment(att) ? (
+                                              <Image source={{ uri: getAttachmentDownloadUrl(att) }} style={{ width: 84, height: 84 }} resizeMode="cover" onError={(event) => {
+                                                const message = sanitizeAttachmentErrorMessage(event?.nativeEvent?.error || 'Attachment preview could not be loaded.');
+                                                console.warn('[MaintenanceAttachment] image-preview-failure', { name: getAttachmentDisplayName(att, idx), mimeType: att?.mimeType || att?.type || 'image', hostname: (() => { try { return new URL(getAttachmentDownloadUrl(att)).hostname; } catch (_) { return ''; } })(), errorType: 'ReactNativeImageError', message });
+                                                showBannerMessage('error', /code=402|HTTP code.*402/i.test(message)
+                                                  ? 'File storage is unavailable because Firebase billing is disabled. Please contact the administrator.'
+                                                  : `Image could not be opened: ${message}`);
+                                              }} />
+                                            ) : (
+                                              <View style={{ paddingHorizontal: 6, alignItems: 'center', gap: 4 }}>
+                                                <Ionicons name={isOpenableAttachment(att) ? 'document-text-outline' : 'alert-circle-outline'} size={20} color={colors.textMuted} />
+                                                <Text style={{ fontSize: 10, color: colors.textMuted, textAlign: 'center' }} numberOfLines={2}>
+                                                  {getAttachmentDisplayName(att, idx)}
+                                                </Text>
+                                              </View>
+                                            )}
+                                          </TouchableOpacity>
+                                        ))}
+                                      </View>
+                                    </ScrollView>
+                                  ) : null}
+                                </View>
+                                <Text
+                                  accessibilityLabel={showSeen ? `Sent ${safeFormat(entry.timestamp, 'h:mm a')}, seen by staff` : undefined}
+                                  style={{ fontSize: 10, color: colors.textMuted, marginTop: 3, marginHorizontal: 4 }}
+                                >
+                                  {entry.timestamp ? safeFormat(entry.timestamp, 'h:mm a') : ''}
+                                  {showSeen ? ` • ${entry.seenByAdmin ? 'Seen' : 'Sent'}` : ''}
+                                </Text>
+                              </View>
+                            );
+                          })}
+                        </View>
+                      )}
                     </View>
                   )}
 
                   {/* Attachment Thumbnails */}
                   {!editMode && detailRequest.attachments?.length > 0 && (
                     <View style={{ marginBottom: 14 }}>
-                      <Text style={{ fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: 8 }}>Attachments ({detailRequest.attachments.length})</Text>
+                      <Text style={{ fontSize: 14, fontWeight: '600', color: colors.text, marginBottom: 8 }}>Original Request Attachments ({detailRequest.attachments.length})</Text>
                       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ gap: 8 }}>
                         {detailRequest.attachments.map((att, idx) => (
                           <TouchableOpacity key={idx} onPress={() => openAttachment(att)} style={{ width: 88, height: 88, borderRadius: 10, backgroundColor: colors.surfaceSecondary, marginRight: 8, overflow: 'hidden', justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: colors.border }}>
@@ -1551,18 +1633,9 @@ export default function ServicesScreen() {
                   )}
 
                   {!editMode && canReplyToRequest(detailRequest) && (
-                    <View style={{ backgroundColor: colors.surfaceSecondary, borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: colors.border }}>
-                      <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text, marginBottom: 10 }}>Reply / Follow-up</Text>
-                      <TextInput
-                        style={{ backgroundColor: colors.surface, borderRadius: 12, padding: 12, fontSize: 14, color: colors.text, minHeight: 84, textAlignVertical: 'top', borderWidth: 1, borderColor: colors.border }}
-                        placeholder="Add follow-up details..."
-                        placeholderTextColor={colors.textMuted}
-                        multiline
-                        value={replyMessage}
-                        onChangeText={setReplyMessage}
-                      />
+                    <View testID="maintenance-composer" style={{ marginTop: -6, marginBottom: 14 }}>
                       {replyAttachments.length > 0 ? (
-                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 }}>
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
                           {replyAttachments.map((file) => (
                             <TouchableOpacity key={getAttachmentDisplayName(file)} style={styles.previewChip} onLongPress={() => removeReplyAttachment(getAttachmentDisplayName(file))}>
                               <Text style={styles.previewText}>{getAttachmentDisplayName(file)}</Text>
@@ -1570,23 +1643,39 @@ export default function ServicesScreen() {
                           ))}
                         </View>
                       ) : null}
-                      {replyUploadStatus ? <Text style={{ color: colors.textMuted, fontSize: 12, marginTop: 8 }}>{replyUploadStatus}</Text> : null}
-                      <View style={{ flexDirection: 'row', gap: 8, marginTop: 12, flexWrap: 'wrap' }}>
-                        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }} onPress={() => handleReplyAttach(pickFromCamera)} disabled={sendingReply}>
-                          <Ionicons name="camera-outline" size={16} color={colors.text} />
-                          <Text style={{ color: colors.text, fontWeight: '700', fontSize: 12 }}>Photo</Text>
+                      {replyUploadStatus ? <Text style={{ color: replyUploadStatus.includes('failed') ? '#DC2626' : colors.textMuted, fontSize: 12, marginBottom: 6 }}>{replyUploadStatus}</Text> : null}
+                      <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 6, backgroundColor: colors.surfaceSecondary, borderRadius: 20, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 6, paddingVertical: 6 }}>
+                        <TouchableOpacity accessibilityLabel="Attach a photo" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 6 }} onPress={() => handleReplyAttach(pickFromCamera)} disabled={sendingReply}>
+                          <Ionicons name="camera-outline" size={19} color={colors.textMuted} />
                         </TouchableOpacity>
-                        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }} onPress={() => handleReplyAttach(pickFromLibrary)} disabled={sendingReply}>
-                          <Ionicons name="image-outline" size={16} color={colors.text} />
-                          <Text style={{ color: colors.text, fontWeight: '700', fontSize: 12 }}>Gallery</Text>
+                        <TouchableOpacity accessibilityLabel="Attach from gallery" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 6 }} onPress={() => handleReplyAttach(pickFromLibrary)} disabled={sendingReply}>
+                          <Ionicons name="image-outline" size={19} color={colors.textMuted} />
                         </TouchableOpacity>
-                        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }} onPress={() => handleReplyAttach(pickDocument)} disabled={sendingReply}>
-                          <Ionicons name="document-attach-outline" size={16} color={colors.text} />
-                          <Text style={{ color: colors.text, fontWeight: '700', fontSize: 12 }}>File</Text>
+                        <TouchableOpacity accessibilityLabel="Attach a document" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 6 }} onPress={() => handleReplyAttach(pickDocument)} disabled={sendingReply}>
+                          <Ionicons name="document-attach-outline" size={19} color={colors.textMuted} />
                         </TouchableOpacity>
-                        <TouchableOpacity style={{ marginLeft: 'auto', flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10, backgroundColor: colors.primary }} onPress={sendMaintenanceReply} disabled={sendingReply || (!replyMessage.trim() && replyAttachments.length === 0)}>
+                        <TextInput
+                          style={{ flex: 1, fontSize: 14, color: colors.text, maxHeight: 100, paddingVertical: 6, paddingHorizontal: 4 }}
+                          placeholder="Type a message..."
+                          placeholderTextColor={colors.textMuted}
+                          multiline
+                          value={replyMessage}
+                          onChangeText={setReplyMessage}
+                        />
+                        <TouchableOpacity
+                          accessibilityLabel="Send message"
+                          style={{
+                            width: 36,
+                            height: 36,
+                            borderRadius: 18,
+                            justifyContent: 'center',
+                            alignItems: 'center',
+                            backgroundColor: (sendingReply || (!replyMessage.trim() && replyAttachments.length === 0)) ? colors.border : colors.primary,
+                          }}
+                          onPress={sendMaintenanceReply}
+                          disabled={sendingReply || (!replyMessage.trim() && replyAttachments.length === 0)}
+                        >
                           {sendingReply ? <ActivityIndicator size="small" color={colors.surface} /> : <Ionicons name="send" size={16} color={colors.surface} />}
-                          <Text style={{ color: colors.surface, fontWeight: '800', fontSize: 12 }}>Send</Text>
                         </TouchableOpacity>
                       </View>
                     </View>
