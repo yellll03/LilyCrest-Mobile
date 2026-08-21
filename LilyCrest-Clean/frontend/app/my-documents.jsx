@@ -20,7 +20,7 @@ import {
 import { safeBack } from '../src/utils/navigation';
 import { getSessionToken } from '../src/services/secureCredentials';
 import { useTenantContract } from '../src/hooks/useTenantContract';
-import { contractStatusLabel } from '../src/utils/contractPresentation';
+import { buildContractSummary } from '../src/utils/contractPresentation';
 import { ScreenHeader } from '../src/components/ui/LilycrestUI';
 
 // ── Document types for upload picker ──
@@ -235,7 +235,7 @@ function statusColor(status) {
   if (['verified', 'active', 'available', 'approved', 'final notarized contract'].includes(normalized)) {
     return { bg: '#ECFDF5', text: '#065F46', solid: '#059669' };
   }
-  if (['pending', 'pending_review', 'under review'].includes(normalized)) {
+  if (['pending', 'pending_review', 'under review', 'generated draft — for signing'].includes(normalized)) {
     return { bg: '#FFFBEB', text: '#92400E', solid: '#D97706' };
   }
   if (normalized === 'rejected') return { bg: '#FEF2F2', text: '#991B1B', solid: '#DC2626' };
@@ -323,7 +323,12 @@ export default function MyDocumentsScreen() {
       const doc = sourceDoc.id === 'contract'
         ? {
             ...sourceDoc,
-            status: tenantContract ? contractStatusLabel(tenantContract) : 'Not Available',
+            // A short lifecycle label ("Final Notarized Contract" / "Preparing
+            // Contract"), not contract.displayStatus's full sentence — this
+            // renders inside a small status pill next to the title, and a
+            // long sentence there breaks the row layout (see statusColor()'s
+            // 'final notarized contract' case, sized for this short label).
+            status: tenantContract ? (buildContractSummary(tenantContract)?.lifecycleLabel || 'Available') : 'Not Available',
             description: tenantContract
               ? sourceDoc.description
               : (contractError || 'No current contract is available.'),
