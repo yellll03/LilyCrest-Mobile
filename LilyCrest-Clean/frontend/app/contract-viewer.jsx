@@ -42,7 +42,8 @@ export default function ContractViewer() {
   const showStaleWarning = state === 'STALE' && Boolean(summary);
 
   const contactSupport = async () => {
-    if (!contract?.id || startingSupport || requestedContractMismatch) return;
+    if (startingSupport) return;
+    if (state !== 'MULTIPLE_CONTRACTS' && (!contract?.id || requestedContractMismatch)) return;
     setStartingSupport(true);
     setSupportError('');
     try {
@@ -51,7 +52,7 @@ export default function ContractViewer() {
         priority: 'normal',
         context: {
           entityType: 'contract',
-          entityId: contract.id,
+          ...(contract?.id ? { entityId: contract.id } : {}),
           sourceModule: 'contract',
         },
       });
@@ -76,6 +77,13 @@ export default function ContractViewer() {
           <View style={styles.empty}>
             <ActivityIndicator color={colors.accent} />
           </View>
+        ) : state === 'MULTIPLE_CONTRACTS' ? (
+          <EmptyState
+            icon="alert-circle-outline"
+            title="Contract records need review"
+            description={supportError || error}
+            action={<ActionButton label={startingSupport ? 'Opening Support...' : 'Contact Support'} onPress={contactSupport} disabled={startingSupport} />}
+          />
         ) : (error || requestedContractMismatch) && !summary ? (
           <EmptyState
             icon="cloud-offline-outline"
