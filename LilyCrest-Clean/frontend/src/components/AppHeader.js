@@ -231,6 +231,9 @@ export default function AppHeader() {
         width: 26,
         height: 26,
       },
+      logoMarkSpacer: {
+        width: 26 + 8,
+      },
       title: {
         fontSize: 24,
         fontWeight: '800',
@@ -508,6 +511,11 @@ export default function AppHeader() {
               accessibilityLabel="LilyCrest logo"
             />
             <Text style={styles.title}>LilyCrest</Text>
+            {/* Balances the logo's width+gap on the other side so the
+                "LilyCrest" text itself stays centered over the "Tenant
+                Portal" subtitle below, instead of the whole row (logo+text)
+                centering as one block and pushing the text off-center. */}
+            <View style={styles.logoMarkSpacer} />
           </View>
           <Text style={styles.subtitle}>Tenant Portal</Text>
         </View>
