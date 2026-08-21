@@ -238,6 +238,7 @@ export function documentErrorMessage(error, hasNetwork = true) {
   if (!hasNetwork || /Network|timeout|HTTP_0/i.test(code)) return 'Internet connection required to load this document.';
   if (error?.status === 403 || code === 'HTTP_403') return 'You do not have permission to view this document.';
   if (error?.status === 404 || code === 'HTTP_404' || code === 'MISSING_FILE') return 'The requested document could not be found.';
+  if (error?.status === 410 || code === 'HTTP_410') return 'Unable to load document at this time. Please try again later.';
   if (['EMPTY_FILE', 'WRONG_MIME', 'INVALID_PDF'].includes(code)) return 'This file is damaged or is not a valid PDF.';
   if (code === 'FILE_TOO_LARGE') return 'This PDF is too large to open safely on this device.';
   if (code === 'DOWNLOAD_CANCELLED') return 'Download cancelled.';
