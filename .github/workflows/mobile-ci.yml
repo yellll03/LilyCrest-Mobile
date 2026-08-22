@@ -32,6 +32,10 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install backend dependencies for cross-layer tests
+        working-directory: LilyCrest-Clean/backend
+        run: npm ci --ignore-scripts
+
       - name: Run full frontend suite
         run: npm test -- --runInBand
 
@@ -95,6 +99,10 @@ jobs:
 
       - name: Verify release contract
         run: npm run verify:release-contract
+
+      - name: Make Gradle wrapper executable
+        working-directory: LilyCrest-Clean/frontend/android
+        run: chmod +x gradlew
 
       - name: Build release APK
         working-directory: LilyCrest-Clean/frontend/android
