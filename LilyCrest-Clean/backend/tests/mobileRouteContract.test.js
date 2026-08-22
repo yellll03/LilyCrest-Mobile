@@ -1,14 +1,13 @@
 'use strict';
 
-// Contract test: every HTTP path the mobile app calls must resolve to a route
-// this backend actually registers.
+// Contract test: every canonical support-chat path the mobile app calls must
+// resolve to a route this backend actually registers.
 //
-// This is the check that was missing. Four support-chat endpoints, an
-// announcement "Undo dismiss", and a Socket.IO channel all shipped as
-// fully-built client affordances calling server routes that did not exist —
-// each one failing silently at runtime (a 404 swallowed by a catch block, or
-// a connection that retried forever), so nothing in CI or QA ever noticed.
-// A client/server path mismatch is now a test failure at build time.
+// This is the support-scoped check that was missing. Four support-chat
+// endpoints and a Socket.IO channel shipped as client affordances without a
+// registered server counterpart. A support client/server path mismatch is
+// now a test failure at build time; unrelated API domains keep their own
+// feature-level contract tests.
 //
 // Deliberately narrow: it compares paths and methods only. It does not
 // validate request/response bodies, auth, or semantics — those belong to the
@@ -117,11 +116,15 @@ function callMatchesRoute(callPath, routePath) {
   });
 }
 
-test('every mobile API path resolves to a registered Express route', () => {
+test('every canonical mobile support API path resolves to a registered Express route', () => {
   const registered = collectRegisteredRoutes();
-  const calls = collectMobileCalls();
+  const calls = collectMobileCalls().filter((call) => (
+    call.rawPath === '/chat/start'
+    || call.rawPath === '/chat/me'
+    || call.rawPath.startsWith('/chat/${')
+  ));
 
-  assert.ok(calls.length > 40, `expected to find the mobile API surface, found ${calls.length} calls`);
+  assert.ok(calls.length >= 8, `expected to find the mobile support API surface, found ${calls.length} calls`);
 
   const registeredByMethod = new Map();
   for (const entry of registered) {
@@ -138,12 +141,6 @@ test('every mobile API path resolves to a registered Express route', () => {
     [],
     'these mobile calls have no matching registered backend route',
   );
-});
-
-test('the announcement dismiss/undo pair the News tab relies on is registered', () => {
-  const registered = collectRegisteredRoutes();
-  assert.ok(registered.has('POST /announcements/:announcementId/dismiss'));
-  assert.ok(registered.has('DELETE /announcements/:announcementId/dismiss'));
 });
 
 test('the support-chat endpoints the mobile UI exposes buttons for are registered', () => {

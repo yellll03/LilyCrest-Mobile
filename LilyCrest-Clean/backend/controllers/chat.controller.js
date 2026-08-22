@@ -9,6 +9,7 @@ const {
   createChatAttachment,
   findConversationAttachment,
   findConversationAttachments,
+  findIdempotentConversationAttachment,
   serializeAttachmentRecord,
 } = require('../services/chatAttachment.service');
 const {
@@ -36,6 +37,10 @@ const VALID_CATEGORIES = new Set([
 ]);
 const VALID_PRIORITIES = new Set(['normal', 'high', 'urgent']);
 const ADMIN_ROLES = new Set(['admin', 'superadmin']);
+const MAX_IDEMPOTENCY_KEY_CHARS = 120;
+const IDEMPOTENCY_KEY_PATTERN = /^[a-zA-Z0-9:_-]+$/;
+const DEFAULT_MESSAGE_PAGE_SIZE = 50;
+const MAX_MESSAGE_PAGE_SIZE = 100;
 
 // Support-chat attachments reuse the one durable storage pipeline this
 // backend already has: the client uploads bytes through
@@ -68,6 +73,68 @@ function sendError(res, error, fallback = 'Failed to process support chat reques
     error: statusCode >= 500 ? fallback : error.message,
     code: error.code || 'CHAT_ERROR',
   });
+}
+
+function normalizeIdempotencyKey(value, fieldName) {
+  if (value === undefined || value === null || value === '') return '';
+  const normalized = String(value).trim();
+  if (
+    !normalized
+    || normalized.length > MAX_IDEMPOTENCY_KEY_CHARS
+    || !IDEMPOTENCY_KEY_PATTERN.test(normalized)
+  ) {
+    throw createHttpError(
+      `${fieldName} must be ${MAX_IDEMPOTENCY_KEY_CHARS} characters or fewer and contain only letters, numbers, colon, underscore, or hyphen.`,
+      400,
+      'INVALID_IDEMPOTENCY_KEY',
+    );
+  }
+  return normalized;
+}
+
+function isDuplicateKeyError(error) {
+  return error?.code === 11000 || error?.codeName === 'DuplicateKey';
+}
+
+function normalizeMessagePageLimit(value) {
+  if (value === undefined || value === null || value === '') return DEFAULT_MESSAGE_PAGE_SIZE;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed < 1 || parsed > MAX_MESSAGE_PAGE_SIZE) {
+    throw createHttpError(
+      `limit must be an integer from 1 to ${MAX_MESSAGE_PAGE_SIZE}.`,
+      400,
+      'INVALID_PAGE_LIMIT',
+    );
+  }
+  return parsed;
+}
+
+async function loadConversationMessagePage(db, conversationId, query = {}) {
+  const limit = normalizeMessagePageLimit(query.limit);
+  const beforeValue = String(query.before || '').trim();
+  const before = beforeValue ? asObjectId(beforeValue) : null;
+  if (beforeValue && !before) {
+    throw createHttpError('before must be a valid message id.', 400, 'INVALID_PAGE_CURSOR');
+  }
+
+  const filter = { conversationId };
+  if (before) filter._id = { $lt: before };
+
+  let cursor = db.collection('chat_messages').find(filter).sort({ _id: -1 });
+  if (typeof cursor.limit === 'function') cursor = cursor.limit(limit + 1);
+  const rows = await cursor.toArray();
+  const newestFirst = rows.slice(0, limit + 1);
+  const hasMore = newestFirst.length > limit;
+  const page = newestFirst.slice(0, limit).reverse();
+
+  return {
+    messages: page,
+    pageInfo: {
+      hasMore,
+      nextCursor: hasMore && page.length ? String(page[0]._id) : null,
+      limit,
+    },
+  };
 }
 
 function displayName(user, fallback = 'Tenant') {
@@ -544,13 +611,63 @@ async function markTenantMessagesRead(db, conversationId) {
   );
 }
 
-async function seedInitialTenantMessage(db, conversation, user, initialMessage) {
+async function findIdempotentMessage(db, conversationId, senderUserId, clientMessageId) {
+  if (!clientMessageId) return null;
+  return db.collection('chat_messages').findOne({
+    conversationId,
+    senderUserId: senderUserId || '',
+    clientMessageId,
+  });
+}
+
+async function discardSupersededUpload(existingAttachment, source, userId) {
+  if (!existingAttachment || !source || typeof source !== 'object') return;
+
+  let replacement;
+  try {
+    replacement = normalizeSupportAttachment(source, userId);
+  } catch (_error) {
+    // An idempotent replay must still return the original successful result.
+    // Cleanup is only attempted for a second object whose ownership can be
+    // re-proven through the normal upload authorization contract.
+    return;
+  }
+
+  if (!replacement.storagePath || replacement.storagePath === existingAttachment.storagePath) return;
+  const bucketName = resolveStorageBucket();
+  if (!bucketName || !admin.apps.length) return;
+
+  try {
+    await admin.storage().bucket(bucketName).file(replacement.storagePath).delete({ ignoreNotFound: true });
+  } catch (_error) {
+    // The canonical attachment record remains the sole reachable object. A
+    // provider cleanup failure must not turn a successful retry into an error.
+  }
+}
+
+async function seedInitialTenantMessage(db, conversation, user, initialMessage, clientMessageId = '') {
   const normalized = typeof initialMessage === 'string' && initialMessage.trim()
     ? normalizeMessage(initialMessage)
     : '';
 
   if (!normalized) {
     return { conversation, createdMessage: null, inserted: false };
+  }
+
+  const existingIdempotentMessage = await findIdempotentMessage(
+    db,
+    conversation._id,
+    user.user_id,
+    clientMessageId,
+  );
+  if (existingIdempotentMessage) {
+    const freshConversation = await db.collection('chat_conversations').findOne({ _id: conversation._id });
+    return {
+      conversation: freshConversation || conversation,
+      createdMessage: existingIdempotentMessage,
+      inserted: false,
+      idempotentReplay: true,
+    };
   }
 
   const latestMessage = await db.collection('chat_messages')
@@ -577,8 +694,23 @@ async function seedInitialTenantMessage(db, conversation, user, initialMessage) 
     createdAt: now,
     updatedAt: now,
   };
+  if (clientMessageId) messageDoc.clientMessageId = clientMessageId;
 
-  const insertResult = await db.collection('chat_messages').insertOne(messageDoc);
+  let insertResult;
+  try {
+    insertResult = await db.collection('chat_messages').insertOne(messageDoc);
+  } catch (error) {
+    if (!clientMessageId || !isDuplicateKeyError(error)) throw error;
+    const winner = await findIdempotentMessage(db, conversation._id, user.user_id, clientMessageId);
+    if (!winner) throw error;
+    const freshConversation = await db.collection('chat_conversations').findOne({ _id: conversation._id });
+    return {
+      conversation: freshConversation || conversation,
+      createdMessage: winner,
+      inserted: false,
+      idempotentReplay: true,
+    };
+  }
   const statusHistory = Array.isArray(conversation.statusHistory) ? [...conversation.statusHistory] : [];
   statusHistory.push({
     status: 'open',
@@ -608,102 +740,152 @@ async function seedInitialTenantMessage(db, conversation, user, initialMessage) 
     conversation: freshConversation || conversation,
     createdMessage: { ...messageDoc, _id: insertResult.insertedId },
     inserted: true,
+    idempotentReplay: false,
+  };
+}
+
+async function ensureTenantSupportConversation(db, user, options = {}) {
+  const tenantContext = await resolveTenantContext(db, user);
+  const tenantName = displayName(user, 'Tenant');
+  const category = normalizeCategory(options.category);
+  const priority = normalizePriority(options.priority, category);
+  const assistantSessionId = typeof options.assistantSessionId === 'string'
+    ? options.assistantSessionId.trim().slice(0, 120)
+    : '';
+  const clientRequestId = normalizeIdempotencyKey(options.clientRequestId, 'clientRequestId');
+  const tenantFilter = buildTenantConversationFilter(user);
+  let reusedExisting = false;
+  let idempotentReplay = false;
+
+  let conversation = clientRequestId
+    ? await db.collection('chat_conversations').findOne({
+        ...tenantFilter,
+        startRequestIds: clientRequestId,
+      })
+    : null;
+
+  if (conversation) {
+    reusedExisting = true;
+    idempotentReplay = true;
+  } else {
+    conversation = await db.collection('chat_conversations').findOne(
+      {
+        ...tenantFilter,
+        status: { $in: ACTIVE_CONVERSATION_STATUSES },
+      },
+      { sort: { updatedAt: -1 } }
+    );
+  }
+
+  if (conversation) {
+    reusedExisting = true;
+    if (!idempotentReplay) {
+      const update = {
+        $set: {
+          tenantName,
+          tenantEmail: user.email || '',
+          branch: tenantContext.branch,
+          roomNumber: tenantContext.roomNumber,
+          roomBed: tenantContext.roomBed,
+          category: conversation.category && conversation.category !== 'general_inquiry'
+            ? conversation.category
+            : category,
+          priority: conversation.priority && conversation.priority !== 'normal'
+            ? conversation.priority
+            : priority,
+          assistantSessionId: assistantSessionId || conversation.assistantSessionId || '',
+          updatedAt: new Date(),
+        },
+      };
+      if (clientRequestId) update.$addToSet = { startRequestIds: clientRequestId };
+      await db.collection('chat_conversations').updateOne({ _id: conversation._id }, update);
+      conversation = await db.collection('chat_conversations').findOne({ _id: conversation._id });
+      if (!conversation?.assignedAdminId) {
+        conversation = await autoAssignConversation(db, conversation);
+      }
+    }
+  } else {
+    const now = new Date();
+    const newConversation = {
+      tenantId: asObjectId(user._id) || user._id,
+      tenantUserId: user.user_id || '',
+      tenantName,
+      tenantEmail: user.email || '',
+      branch: tenantContext.branch,
+      roomNumber: tenantContext.roomNumber,
+      roomBed: tenantContext.roomBed,
+      status: 'open',
+      category,
+      priority,
+      assistantSessionId,
+      startRequestIds: clientRequestId ? [clientRequestId] : [],
+      assignedAdminId: null,
+      assignedAdminName: '',
+      lastMessage: '',
+      lastMessageAt: null,
+      unreadAdminCount: 0,
+      unreadTenantCount: 0,
+      closedAt: null,
+      closedBy: null,
+      closingNote: '',
+      statusHistory: [
+        {
+          status: 'open',
+          note: 'Conversation started.',
+          actorId: user._id || null,
+          actorName: tenantName,
+          createdAt: now,
+        },
+      ],
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    try {
+      const result = await db.collection('chat_conversations').insertOne(newConversation);
+      conversation = { ...newConversation, _id: result.insertedId };
+      conversation = await autoAssignConversation(db, conversation);
+    } catch (error) {
+      if (!clientRequestId || !isDuplicateKeyError(error)) throw error;
+      conversation = await db.collection('chat_conversations').findOne({
+        ...tenantFilter,
+        startRequestIds: clientRequestId,
+      });
+      if (!conversation) throw error;
+      reusedExisting = true;
+      idempotentReplay = true;
+    }
+  }
+
+  const initialClientMessageId = clientRequestId ? `start:${clientRequestId}` : '';
+  const seeded = conversation.status === 'closed'
+    ? { conversation, createdMessage: null, inserted: false, idempotentReplay: true }
+    : await seedInitialTenantMessage(
+        db,
+        conversation,
+        user,
+        options.initialMessage,
+        initialClientMessageId,
+      );
+
+  return {
+    conversation: seeded.conversation,
+    reusedExisting,
+    idempotentReplay: idempotentReplay || seeded.idempotentReplay === true,
+    initialMessageCreated: seeded.inserted,
+    initialMessage: seeded.createdMessage,
   };
 }
 
 async function startConversation(req, res) {
   try {
-    const db = getDb();
-    const tenantContext = await resolveTenantContext(db, req.user);
-    const tenantName = displayName(req.user, 'Tenant');
-    const category = normalizeCategory(req.body?.category);
-    const priority = normalizePriority(req.body?.priority, category);
-    const assistantSessionId = typeof req.body?.assistantSessionId === 'string'
-      ? req.body.assistantSessionId.trim().slice(0, 120)
-      : '';
-    let reusedExisting = false;
-
-    let conversation = await db.collection('chat_conversations').findOne(
-      {
-        ...buildTenantConversationFilter(req.user),
-        status: { $in: ACTIVE_CONVERSATION_STATUSES },
-      },
-      { sort: { updatedAt: -1 } }
-    );
-
-    if (conversation) {
-      reusedExisting = true;
-      await db.collection('chat_conversations').updateOne(
-        { _id: conversation._id },
-        {
-          $set: {
-            tenantName,
-            tenantEmail: req.user.email || '',
-            branch: tenantContext.branch,
-            roomNumber: tenantContext.roomNumber,
-            roomBed: tenantContext.roomBed,
-            category: conversation.category && conversation.category !== 'general_inquiry'
-              ? conversation.category
-              : category,
-            priority: conversation.priority && conversation.priority !== 'normal'
-              ? conversation.priority
-              : priority,
-            assistantSessionId: assistantSessionId || conversation.assistantSessionId || '',
-            updatedAt: new Date(),
-          },
-        }
-      );
-      conversation = await db.collection('chat_conversations').findOne({ _id: conversation._id });
-      if (!conversation?.assignedAdminId) {
-        conversation = await autoAssignConversation(db, conversation);
-      }
-    } else {
-      const now = new Date();
-      const newConversation = {
-        tenantId: asObjectId(req.user._id) || req.user._id,
-        tenantUserId: req.user.user_id || '',
-        tenantName,
-        tenantEmail: req.user.email || '',
-        branch: tenantContext.branch,
-        roomNumber: tenantContext.roomNumber,
-        roomBed: tenantContext.roomBed,
-        status: 'open',
-        category,
-        priority,
-        assistantSessionId,
-        assignedAdminId: null,
-        assignedAdminName: '',
-        lastMessage: '',
-        lastMessageAt: null,
-        unreadAdminCount: 0,
-        unreadTenantCount: 0,
-        closedAt: null,
-        closedBy: null,
-        closingNote: '',
-        statusHistory: [
-          {
-            status: 'open',
-            note: 'Conversation started.',
-            actorId: req.user._id || null,
-            actorName: tenantName,
-            createdAt: now,
-          },
-        ],
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      const result = await db.collection('chat_conversations').insertOne(newConversation);
-      conversation = { ...newConversation, _id: result.insertedId };
-      conversation = await autoAssignConversation(db, conversation);
-    }
-
-    const seeded = await seedInitialTenantMessage(db, conversation, req.user, req.body?.initialMessage);
+    const result = await ensureTenantSupportConversation(getDb(), req.user, req.body || {});
     return res.json({
-      conversation: serializeConversation(seeded.conversation),
-      reusedExisting,
-      initialMessageCreated: seeded.inserted,
-      initialMessage: seeded.createdMessage ? serializeMessage(seeded.createdMessage) : null,
+      conversation: serializeConversation(result.conversation),
+      reusedExisting: result.reusedExisting,
+      idempotentReplay: result.idempotentReplay,
+      initialMessageCreated: result.initialMessageCreated,
+      initialMessage: result.initialMessage ? serializeMessage(result.initialMessage) : null,
     });
   } catch (error) {
     return sendError(res, error, 'Failed to start support chat.');
@@ -733,15 +915,13 @@ async function getConversationMessages(req, res) {
     const conversation = await findConversationForTenant(db, req.params.conversationId, req.user);
     await markAdminMessagesRead(db, conversation._id);
 
-    const messages = await db.collection('chat_messages')
-      .find({ conversationId: conversation._id })
-      .sort({ createdAt: 1 })
-      .toArray();
+    const page = await loadConversationMessagePage(db, conversation._id, req.query);
 
     const freshConversation = await db.collection('chat_conversations').findOne({ _id: conversation._id });
     return res.json({
       conversation: serializeConversation(freshConversation || conversation),
-      messages: messages.map(serializeMessage),
+      messages: page.messages.map(serializeMessage),
+      pageInfo: page.pageInfo,
     });
   } catch (error) {
     return sendError(res, error, 'Failed to load support chat messages.');
@@ -752,6 +932,21 @@ async function sendTenantMessage(req, res) {
   try {
     const db = getDb();
     const conversation = await findConversationForTenant(db, req.params.conversationId, req.user);
+    const clientMessageId = normalizeIdempotencyKey(req.body?.clientMessageId, 'clientMessageId');
+
+    const existingMessage = await findIdempotentMessage(
+      db,
+      conversation._id,
+      req.user.user_id,
+      clientMessageId,
+    );
+    if (existingMessage) {
+      return res.json({
+        message: serializeMessage(existingMessage),
+        conversation: serializeConversation(conversation),
+        idempotentReplay: true,
+      });
+    }
 
     if (conversation.status === 'closed') {
       throw createHttpError('This conversation is closed.', 400, 'CONVERSATION_CLOSED');
@@ -777,8 +972,27 @@ async function sendTenantMessage(req, res) {
       createdAt: now,
       updatedAt: now,
     };
+    if (clientMessageId) messageDoc.clientMessageId = clientMessageId;
 
-    const insertResult = await db.collection('chat_messages').insertOne(messageDoc);
+    let insertResult;
+    try {
+      insertResult = await db.collection('chat_messages').insertOne(messageDoc);
+    } catch (error) {
+      if (!clientMessageId || !isDuplicateKeyError(error)) throw error;
+      const winner = await findIdempotentMessage(
+        db,
+        conversation._id,
+        req.user.user_id,
+        clientMessageId,
+      );
+      if (!winner) throw error;
+      const freshConversation = await db.collection('chat_conversations').findOne({ _id: conversation._id });
+      return res.json({
+        message: serializeMessage(winner),
+        conversation: serializeConversation(freshConversation || conversation),
+        idempotentReplay: true,
+      });
+    }
     const unreadAdminCount = Number(conversation.unreadAdminCount || 0) + 1;
 
     const statusHistory = Array.isArray(conversation.statusHistory) ? [...conversation.statusHistory] : [];
@@ -813,6 +1027,7 @@ async function sendTenantMessage(req, res) {
     return res.json({
       message: serializeMessage({ ...messageDoc, _id: insertResult.insertedId }),
       conversation: serializeConversation(updatedConversation || conversation),
+      idempotentReplay: false,
     });
   } catch (error) {
     return sendError(res, error, 'Failed to send support message.');
@@ -878,19 +1093,56 @@ async function registerConversationAttachment(req, res, { admin: asAdmin = false
       throw createHttpError('This conversation is closed.', 400, 'CONVERSATION_CLOSED');
     }
 
+    const clientAttachmentId = normalizeIdempotencyKey(
+      req.body?.clientAttachmentId || req.body?.attachment?.clientAttachmentId,
+      'clientAttachmentId',
+    );
     const source = req.body?.attachment && typeof req.body.attachment === 'object'
       ? req.body.attachment
       : req.body;
+    const existingAttachment = await findIdempotentConversationAttachment(
+      db,
+      conversation._id,
+      req.user?._id,
+      clientAttachmentId,
+    );
+    if (existingAttachment) {
+      await discardSupersededUpload(existingAttachment, source, req.user?.user_id);
+      return res.json({
+        attachment: serializeAttachmentRecord(existingAttachment, conversation._id),
+        idempotentReplay: true,
+      });
+    }
+
     const attachment = normalizeSupportAttachment(source, req.user?.user_id);
-    const record = await createChatAttachment(db, {
-      conversation,
-      uploader: req.user,
-      uploaderRole: asAdmin ? normalizeRole(req.user?.role) || 'admin' : 'tenant',
-      attachment,
-    });
+    let record;
+    try {
+      record = await createChatAttachment(db, {
+        conversation,
+        uploader: req.user,
+        uploaderRole: asAdmin ? normalizeRole(req.user?.role) || 'admin' : 'tenant',
+        attachment,
+        clientAttachmentId,
+      });
+    } catch (error) {
+      if (!clientAttachmentId || !isDuplicateKeyError(error)) throw error;
+      record = await findIdempotentConversationAttachment(
+        db,
+        conversation._id,
+        req.user?._id,
+        clientAttachmentId,
+      );
+      if (!record) throw error;
+      await discardSupersededUpload(record, source, req.user?.user_id);
+      return res.json({
+        attachment: serializeAttachmentRecord(record, conversation._id),
+        idempotentReplay: true,
+      });
+    }
 
     return res.status(201).json({
       attachment: serializeAttachmentRecord(record, conversation._id),
+      idempotentReplay: false,
     });
   } catch (error) {
     return sendError(res, error, 'Failed to attach that file to your support conversation.');
@@ -1166,15 +1418,13 @@ async function getAdminConversationMessages(req, res) {
     const conversation = await findConversationForAdmin(db, req.params.conversationId, req.user);
     await markTenantMessagesRead(db, conversation._id);
 
-    const messages = await db.collection('chat_messages')
-      .find({ conversationId: conversation._id })
-      .sort({ createdAt: 1 })
-      .toArray();
+    const page = await loadConversationMessagePage(db, conversation._id, req.query);
 
     const freshConversation = await db.collection('chat_conversations').findOne({ _id: conversation._id });
     return res.json({
       conversation: serializeConversation(freshConversation || conversation),
-      messages: messages.map(serializeMessage),
+      messages: page.messages.map(serializeMessage),
+      pageInfo: page.pageInfo,
     });
   } catch (error) {
     return sendError(res, error, 'Failed to load admin support messages.');
@@ -1185,6 +1435,21 @@ async function sendAdminMessage(req, res) {
   try {
     const db = getDb();
     const conversation = await findConversationForAdmin(db, req.params.conversationId, req.user);
+    const clientMessageId = normalizeIdempotencyKey(req.body?.clientMessageId, 'clientMessageId');
+
+    const existingMessage = await findIdempotentMessage(
+      db,
+      conversation._id,
+      req.user.user_id,
+      clientMessageId,
+    );
+    if (existingMessage) {
+      return res.json({
+        message: serializeMessage(existingMessage),
+        conversation: serializeConversation(conversation),
+        idempotentReplay: true,
+      });
+    }
 
     if (conversation.status === 'closed') {
       throw createHttpError('This conversation is closed.', 400, 'CONVERSATION_CLOSED');
@@ -1212,8 +1477,27 @@ async function sendAdminMessage(req, res) {
       createdAt: now,
       updatedAt: now,
     };
+    if (clientMessageId) messageDoc.clientMessageId = clientMessageId;
 
-    const insertResult = await db.collection('chat_messages').insertOne(messageDoc);
+    let insertResult;
+    try {
+      insertResult = await db.collection('chat_messages').insertOne(messageDoc);
+    } catch (error) {
+      if (!clientMessageId || !isDuplicateKeyError(error)) throw error;
+      const winner = await findIdempotentMessage(
+        db,
+        conversation._id,
+        req.user.user_id,
+        clientMessageId,
+      );
+      if (!winner) throw error;
+      const freshConversation = await db.collection('chat_conversations').findOne({ _id: conversation._id });
+      return res.json({
+        message: serializeMessage(winner),
+        conversation: serializeConversation(freshConversation || conversation),
+        idempotentReplay: true,
+      });
+    }
     const statusHistory = Array.isArray(conversation.statusHistory) ? [...conversation.statusHistory] : [];
     statusHistory.push({
       status: 'waiting_tenant',
@@ -1244,6 +1528,7 @@ async function sendAdminMessage(req, res) {
     return res.json({
       message: serializeMessage({ ...messageDoc, _id: insertResult.insertedId }),
       conversation: serializeConversation(updatedConversation || conversation),
+      idempotentReplay: false,
     });
   } catch (error) {
     return sendError(res, error, 'Failed to send admin support message.');
@@ -1303,6 +1588,7 @@ async function updateAdminConversationStatus(req, res) {
 }
 
 module.exports = {
+  ensureTenantSupportConversation,
   startConversation,
   getMyConversations,
   getConversationMessages,
@@ -1325,6 +1611,9 @@ module.exports = {
     MAX_MESSAGE_CHARS,
     normalizeSupportAttachment,
     normalizeSupportAttachments,
+    normalizeIdempotencyKey,
+    normalizeMessagePageLimit,
+    loadConversationMessagePage,
     serializeAttachment,
     serializeMessage,
     SUPPORT_ATTACHMENT_FOLDER,

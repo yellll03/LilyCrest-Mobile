@@ -10,6 +10,8 @@
     "billing:reconcile": "node scripts/reconcileBillingDuplicates.js",
     "billing:migrate-to-bills": "node scripts/migrateBillingToBills.js",
     "maintenance:migrate-to-primary": "node scripts/migrateMaintenanceToPrimary.js",
+    "support:audit-legacy": "node scripts/auditLegacySupportWorkItems.js",
+    "support:link-legacy": "node scripts/auditLegacySupportWorkItems.js --apply-links",
     "surveys:seed-sample:dry-run": "node scripts/seedSampleSurvey.js",
     "surveys:seed-sample": "node scripts/seedSampleSurvey.js --confirm",
     "users:migrate-normalized-identities": "node scripts/migrateNormalizedUserIdentities.js",

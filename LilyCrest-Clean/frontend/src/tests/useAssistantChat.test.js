@@ -27,6 +27,10 @@ describe('useAssistantChat', () => {
     });
 
     expect(apiService.sendChatMessage).toHaveBeenCalledTimes(2);
+    const firstClientMessageId = apiService.sendChatMessage.mock.calls[0][3];
+    const retryClientMessageId = apiService.sendChatMessage.mock.calls[1][3];
+    expect(firstClientMessageId).toMatch(/^assistant-message:/);
+    expect(retryClientMessageId).toBe(firstClientMessageId);
     expect(output.response).toBe('hi');
     expect(output.metadata.intent).toBe('greet');
   });

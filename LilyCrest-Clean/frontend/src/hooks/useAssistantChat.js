@@ -6,6 +6,10 @@ import { useAsyncCall } from './useAsyncCall';
 const MAX_RETRIES = 2;
 const RATE_LIMIT_MS = 900; // debounce to prevent spam submits
 
+function createAssistantMessageId() {
+  return `assistant-message:${Date.now().toString(36)}:${Math.random().toString(36).slice(2, 12)}`;
+}
+
 function detectTypingIntent(text = '') {
   const lower = String(text || '').toLowerCase();
   if (/\b(bill|balance|unpaid|bayarin|bayad|rent|due|payment|paymongo|paid already|already paid)\b/.test(lower)) return 'billing';
@@ -53,6 +57,7 @@ export function useAssistantChat(initialSessionId) {
       setTypingIntent(detectTypingIntent(text));
       let attempt = 0;
       let lastError = null;
+      const clientMessageId = createAssistantMessageId();
 
       while (attempt < MAX_RETRIES) {
         const backoffMs = attempt === 0 ? 0 : 350 * Math.pow(2, attempt - 1); // 0, 350
@@ -60,7 +65,7 @@ export function useAssistantChat(initialSessionId) {
         attempt += 1;
 
         const { data, error } = await run(`chat-${sessionId}-${attempt}`, async () =>
-          apiService.sendChatMessage(text, sessionId, attachments)
+          apiService.sendChatMessage(text, sessionId, attachments, clientMessageId)
         );
 
         if (!error) {

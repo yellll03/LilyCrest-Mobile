@@ -67,6 +67,7 @@ async function createChatAttachment(db, {
   uploader,
   uploaderRole,
   attachment,
+  clientAttachmentId = '',
 } = {}) {
   const conversationId = toObjectId(conversation?._id);
   const uploadedBy = toObjectId(uploader?._id);
@@ -97,9 +98,26 @@ async function createChatAttachment(db, {
     createdAt: attachment.uploadedAt instanceof Date ? attachment.uploadedAt : now,
     updatedAt: now,
   };
+  if (clientAttachmentId) doc.clientAttachmentId = clientAttachmentId;
 
   const result = await db.collection(CHAT_ATTACHMENT_COLLECTION).insertOne(doc);
   return { ...doc, _id: result.insertedId };
+}
+
+async function findIdempotentConversationAttachment(
+  db,
+  conversationId,
+  uploadedBy,
+  clientAttachmentId,
+) {
+  const conversation = toObjectId(conversationId);
+  const uploader = toObjectId(uploadedBy);
+  if (!conversation || !uploader || !clientAttachmentId) return null;
+  return db.collection(CHAT_ATTACHMENT_COLLECTION).findOne({
+    conversationId: conversation,
+    uploadedBy: uploader,
+    clientAttachmentId,
+  });
 }
 
 // Resolves attachment records that are bound to this exact conversation.
@@ -152,6 +170,7 @@ module.exports = {
   createChatAttachment,
   findConversationAttachment,
   findConversationAttachments,
+  findIdempotentConversationAttachment,
   normalizeUploaderRole,
   serializeAttachmentRecord,
 };

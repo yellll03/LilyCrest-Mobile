@@ -65,7 +65,7 @@ describe('support-chat attachment cap parity', () => {
     // upload-then-register pipeline and cap/MIME rules, not a second one.
     expect(screen).toContain("placeholder=\"Reply to admin support...\"");
     expect(screen).toMatch(/onPress=\{\(\) => setShowAttachMenu\(\(value\) => !value\)\}\s*\n\s*disabled=\{isSendingReply\}/);
-    expect(screen).toContain('await apiService.sendSupportMessage(conversationId, text, uploadedAttachments);');
+    expect(screen).toMatch(/await apiService\.sendSupportMessage\(\s*conversationId,\s*text,\s*uploadedAttachments,\s*replyMessageRequestRef\.current\.id,\s*\);/);
     expect(screen).toMatch(/if \(\(!text && !attachments\.length\) \|\| !selectedInquiry \|\| replyGuardRef\.current\) return;/);
   });
 

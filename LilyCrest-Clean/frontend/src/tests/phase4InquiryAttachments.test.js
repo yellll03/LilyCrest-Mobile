@@ -46,9 +46,9 @@ describe('Phase 4 inquiry, archive, and attachment reconciliation', () => {
     expect(screen).toContain("folder: SUPPORT_ATTACHMENT_FOLDER");
     expect(api).not.toContain("form.append('file'");
     expect(api).toContain('registerSupportAttachment:');
-    expect(api).toContain('/attachments`, { attachment }');
+    expect(api).toContain('/attachments`, { attachment, clientAttachmentId }');
     expect(screen).toContain('attachments: Array.isArray(message.attachments)');
-    expect(api).toContain('sendSupportMessage: (conversationId, message, attachments = [])');
+    expect(api).toContain("sendSupportMessage: (conversationId, message, attachments = [], clientMessageId = '')");
     expect(bubble).toContain('onOpen?.(file)');
     expect(bubble).toContain('attachmentThumbnail');
     expect(screen).toContain('text,');

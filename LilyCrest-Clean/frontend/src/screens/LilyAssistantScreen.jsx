@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Crypto from 'expo-crypto';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -49,6 +50,19 @@ const SUPPORT_UPLOAD_MIME_TYPES = [
   'image/heif',
   'application/pdf',
 ];
+
+function createClientOperationId(prefix) {
+  return `${prefix}:${Crypto.randomUUID()}`;
+}
+
+function supportMessageFingerprint(text, attachments = []) {
+  return JSON.stringify({
+    text: String(text || ''),
+    attachments: attachments.map((item) => (
+      item?.attachmentId || item?.id || item?.clientAttachmentId || attachmentKey(item)
+    )),
+  });
+}
 
 function FollowupChips({ suggestions, onSelect }) {
   if (!suggestions?.length) return null;
@@ -308,6 +322,16 @@ const toSupportThreadMessage = (message) => ({
   readAt: message.readAt || null,
 });
 
+const mergeSupportThread = (older = [], current = []) => {
+  const seen = new Set();
+  return [...older, ...current].filter((item) => {
+    const id = String(item?.id || '');
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+};
+
 const toInquiryCard = (conversation) => {
   const created = conversation.createdAt ? new Date(conversation.createdAt) : new Date();
   const last = conversation.lastMessageAt ? new Date(conversation.lastMessageAt) : created;
@@ -370,10 +394,14 @@ export default function LilyAssistantScreen() {
   const sendGuardRef = useRef(false);
   const escalationGuardRef = useRef(false);
   const replyGuardRef = useRef(false);
+  const escalationRequestIdRef = useRef('');
+  const supportMessageRequestRef = useRef(null);
+  const replyMessageRequestRef = useRef(null);
   const reopenGuardRef = useRef(false);
   const resolutionGuardRef = useRef(false);
   const sendCooldownRef = useRef(0);
   const handledNotificationConversationRef = useRef('');
+  const preserveDetailScrollRef = useRef(false);
   const { user, authReady } = useAuth();
   const { colors } = useTheme();
   const styles = useThemedStyles(createAssistantStyles);
@@ -406,6 +434,8 @@ export default function LilyAssistantScreen() {
   const [inquiries, setInquiries] = useState([]);
   const [selectedInquiry, setSelectedInquiry] = useState(null);
   const [refreshingSupport, setRefreshingSupport] = useState(false);
+  const [conversationPages, setConversationPages] = useState({});
+  const [isLoadingEarlier, setIsLoadingEarlier] = useState(false);
 
   const initialSession = useMemo(
     () => `${user?.user_id || 'guest'}-chat-${Date.now()}`,
@@ -525,6 +555,10 @@ export default function LilyAssistantScreen() {
     const conversation = data?.conversation || null;
     const rawMessages = Array.isArray(data?.messages) ? data.messages : [];
     const thread = rawMessages.map(toSupportThreadMessage);
+    setConversationPages((prev) => ({
+      ...prev,
+      [conversationId]: data?.pageInfo || { hasMore: false, nextCursor: null },
+    }));
 
     if (replaceMainFeed) {
       rawMessages.forEach((item) => seenSupportMsgIds.current.add(item.id));
@@ -551,6 +585,41 @@ export default function LilyAssistantScreen() {
     }
 
     return { conversation, thread };
+  };
+
+  const loadEarlierSupportMessages = async () => {
+    const conversationId = selectedInquiry?.id;
+    const pageInfo = conversationPages[conversationId];
+    if (!conversationId || !pageInfo?.hasMore || !pageInfo.nextCursor || isLoadingEarlier) return;
+
+    setIsLoadingEarlier(true);
+    setNetworkError(null);
+    try {
+      const { data } = await apiService.getSupportChatMessages(conversationId, {
+        before: pageInfo.nextCursor,
+        limit: 50,
+      });
+      const older = (Array.isArray(data?.messages) ? data.messages : []).map(toSupportThreadMessage);
+      preserveDetailScrollRef.current = true;
+      setSelectedInquiry((prev) => (
+        prev?.id === conversationId
+          ? { ...prev, thread: mergeSupportThread(older, prev.thread || []) }
+          : prev
+      ));
+      setInquiries((prev) => prev.map((item) => (
+        item.id === conversationId
+          ? { ...item, thread: mergeSupportThread(older, item.thread || []) }
+          : item
+      )));
+      setConversationPages((prev) => ({
+        ...prev,
+        [conversationId]: data?.pageInfo || { hasMore: false, nextCursor: null },
+      }));
+    } catch (error) {
+      setNetworkError(getChatErrorMessage(error, 'Unable to load earlier support messages.'));
+    } finally {
+      setIsLoadingEarlier(false);
+    }
   };
 
   const handlePullToRefresh = async (view = activeTab) => {
@@ -600,12 +669,16 @@ export default function LilyAssistantScreen() {
       const normalizedIntent = options.intent || pendingAdminIntent || 'general';
       const category = normalizeSupportCategory(normalizedReason, normalizedIntent);
       const priority = normalizeSupportPriority(category, normalizedReason);
+      if (!escalationRequestIdRef.current) {
+        escalationRequestIdRef.current = createClientOperationId('support-start');
+      }
 
       const { data } = await apiService.startSupportChat({
         category,
         priority,
         initialMessage: normalizedReason || undefined,
         assistantSessionId: chat.sessionId,
+        clientRequestId: escalationRequestIdRef.current,
       });
 
       const conversation = data?.conversation;
@@ -628,6 +701,7 @@ export default function LilyAssistantScreen() {
 
       await refreshSupportConversation(conversation.id, { replaceMainFeed: false, scroll: true });
       await loadSupportInquiries();
+      escalationRequestIdRef.current = '';
     } catch (error) {
       setChatMode(CHAT_MODE.UNAVAILABLE);
       setNetworkError(getChatErrorMessage(error, 'Admin support could not be started right now.'));
@@ -736,11 +810,24 @@ export default function LilyAssistantScreen() {
     sendCooldownRef.current = now;
     setIsSending(true);
     setNetworkError(null);
+    const fingerprint = supportMessageFingerprint(text, supportAttachments);
+    if (supportMessageRequestRef.current?.fingerprint !== fingerprint) {
+      supportMessageRequestRef.current = {
+        fingerprint,
+        id: createClientOperationId('support-message'),
+      };
+    }
 
     try {
-      await apiService.sendSupportMessage(supportConversationId, text, supportAttachments);
+      await apiService.sendSupportMessage(
+        supportConversationId,
+        text,
+        supportAttachments,
+        supportMessageRequestRef.current.id,
+      );
       await refreshSupportConversation(supportConversationId, { replaceMainFeed: false, scroll: true });
       await loadSupportInquiries();
+      supportMessageRequestRef.current = null;
     } catch (error) {
       setNetworkError(getChatErrorMessage(error, 'Failed to send your message to admin support.'));
       throw error;
@@ -905,7 +992,11 @@ export default function LilyAssistantScreen() {
                 tenantId: user?.user_id || user?.id || 'unknown-tenant',
               });
               if (!stored) throw new Error('Attachment upload did not complete.');
-              const response = await apiService.registerSupportAttachment(supportConversationId, stored);
+              const response = await apiService.registerSupportAttachment(
+                supportConversationId,
+                stored,
+                attachments[index].clientAttachmentId,
+              );
               if (!response.data?.attachment) throw new Error('Attachment upload did not complete.');
               uploadedAttachments.push(response.data.attachment);
             }
@@ -1029,6 +1120,13 @@ export default function LilyAssistantScreen() {
     const conversationId = selectedInquiry.id;
     let uploadedAttachments = attachments;
     let optimisticMessageId = '';
+    const fingerprint = supportMessageFingerprint(text, attachments);
+    if (replyMessageRequestRef.current?.fingerprint !== fingerprint) {
+      replyMessageRequestRef.current = {
+        fingerprint,
+        id: createClientOperationId('support-reply'),
+      };
+    }
 
     try {
       if (attachments.length) {
@@ -1053,7 +1151,11 @@ export default function LilyAssistantScreen() {
               tenantId: user?.user_id || user?.id || 'unknown-tenant',
             });
             if (!stored) throw new Error('Attachment upload did not complete.');
-            const response = await apiService.registerSupportAttachment(conversationId, stored);
+            const response = await apiService.registerSupportAttachment(
+              conversationId,
+              stored,
+              attachments[index].clientAttachmentId,
+            );
             if (!response.data?.attachment) throw new Error('Attachment upload did not complete.');
             uploadedAttachments.push(response.data.attachment);
           }
@@ -1082,9 +1184,15 @@ export default function LilyAssistantScreen() {
           : prev
       ));
 
-      await apiService.sendSupportMessage(conversationId, text, uploadedAttachments);
+      await apiService.sendSupportMessage(
+        conversationId,
+        text,
+        uploadedAttachments,
+        replyMessageRequestRef.current.id,
+      );
       await refreshSupportConversation(conversationId, { replaceMainFeed: false, scroll: true });
       await loadSupportInquiries();
+      replyMessageRequestRef.current = null;
     } catch (error) {
       setReplyText(text);
       setNetworkError(getChatErrorMessage(error, 'Failed to send your message to admin support.'));
@@ -1256,7 +1364,10 @@ export default function LilyAssistantScreen() {
         }
         setAttachmentUploadStatus('');
         setNetworkError(null);
-        return [...prev, file];
+        return [...prev, {
+          ...file,
+          clientAttachmentId: file.clientAttachmentId || createClientOperationId('support-attachment'),
+        }];
       });
       markInteracted();
     } catch (error) {
@@ -1539,7 +1650,13 @@ export default function LilyAssistantScreen() {
           style={styles.detailMessages}
           contentContainerStyle={styles.detailMessagesContent}
           showsVerticalScrollIndicator={false}
-          onContentSizeChange={() => adminScrollRef.current?.scrollToEnd({ animated: false })}
+          onContentSizeChange={() => {
+            if (preserveDetailScrollRef.current) {
+              preserveDetailScrollRef.current = false;
+              return;
+            }
+            adminScrollRef.current?.scrollToEnd({ animated: false });
+          }}
           refreshControl={(
             <RefreshControl
               refreshing={refreshingSupport}
@@ -1561,6 +1678,18 @@ export default function LilyAssistantScreen() {
             <View style={styles.errorBanner}>
               <Text style={styles.errorBannerText}>{networkError}</Text>
             </View>
+          ) : null}
+
+          {conversationPages[selectedInquiry.id]?.hasMore ? (
+            <Pressable
+              style={[styles.supportGhostButton, isLoadingEarlier && styles.buttonDisabled]}
+              onPress={loadEarlierSupportMessages}
+              disabled={isLoadingEarlier}
+            >
+              <Text style={styles.supportGhostButtonText}>
+                {isLoadingEarlier ? 'Loading earlier messages...' : 'Load Earlier Messages'}
+              </Text>
+            </Pressable>
           ) : null}
 
           {selectedInquiry.thread.map((item) => (
