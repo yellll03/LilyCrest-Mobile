@@ -35,6 +35,12 @@ function generateSessionToken() {
   return `session_${uuidv4().replace(/-/g, '')}`;
 }
 
+function generateRefreshToken() {
+  return `refresh_${crypto.randomBytes(32).toString('base64url')}`;
+}
+
+const SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
+
 const PASSWORD_LOCK_THRESHOLD = 3;
 const PASSWORD_LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 const PASSWORD_WHITESPACE_MESSAGE = 'Password must not contain spaces.';
@@ -60,10 +66,11 @@ function isValidEmail(email = '') {
   return Boolean(email) && email.length <= EMAIL_MAX_LENGTH && EMAIL_REGEX.test(email);
 }
 
-/** Create a new session and return { session_token, expires_at } */
+/** Create a new refreshable session and return only client-safe credentials. */
 async function createSession(db, userId) {
   const token = generateSessionToken();
-  const expiresAt = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+  const refreshToken = generateRefreshToken();
+  const expiresAt = new Date(Date.now() + SESSION_LIFETIME_MS);
 
   // Capstone-Website's mobileTenantAuth (the shared gate for the contracts/
   // billing/documents/surveys/PayMongo bridge routes — see
@@ -86,12 +93,19 @@ async function createSession(db, userId) {
   await db.collection('user_sessions').insertOne({
     user_id: userId,
     session_token: token,
+    refresh_token_hash: hashAuthSecret(refreshToken),
     security_version: Number.isSafeInteger(securityVersion) && securityVersion >= 0 ? securityVersion : 0,
     expires_at: expiresAt,
+    refresh_expires_at: expiresAt,
     created_at: new Date(),
   });
 
-  return { session_token: token, expires_at: expiresAt };
+  return {
+    session_token: token,
+    refresh_token: refreshToken,
+    expires_at: expiresAt,
+    refresh_expires_at: expiresAt,
+  };
 }
 
 /** Non-blocking audit log */
@@ -373,7 +387,7 @@ async function login(req, res) {
     const userData = await getCleanUser(db, adminUser.user_id);
     logAttempt(db, emailRaw, true, 'admin_login_success', req);
     console.log(`[Login] ✓ Admin login for user_id=${adminUser.user_id}`);
-    return res.json({ user: userData, session_token: session.session_token });
+    return res.json({ user: userData, ...session });
   }
 
   // Step 2b: Find MongoDB tenant by exact email (NOT google_email — that's for Google sign-in only)
@@ -529,7 +543,7 @@ async function verifyOtp(req, res) {
   const user = await getCleanUser(db, record.user_id);
   logAttempt(db, record.email, true, 'success', req);
   console.log(`[VerifyOtp] ✓ user_id=${record.user_id}`);
-  res.json({ user, session_token: session.session_token });
+  res.json({ user, ...session });
 }
 
 // ─── RESEND LOGIN OTP ───────────────────────────────────────────────────────
@@ -686,7 +700,7 @@ async function googleSignIn(req, res) {
 
     const user = await getCleanUser(db, tenant.user_id);
     console.log(`[GoogleSignIn] ✓ user_id=${tenant.user_id} email=${user?.email} name=${user?.name}`);
-    res.json({ user, session_token: session.session_token });
+    res.json({ user, ...session });
   } catch (error) {
     console.error('Google auth error:', error);
     res.status(500).json({ detail: 'Authentication service error' });
@@ -772,6 +786,125 @@ async function register(req, res) {
 
 async function getMe(req, res) {
   res.json(sanitizeUserForClient(normalizeUser(req.user)));
+}
+
+// Method-neutral session rotation. Every successful sign-in path (Google and
+// email/password + OTP) receives the same opaque refresh credential, stored
+// only as a hash server-side. Refresh rotates the bearer session token and
+// renews the seven-day idle window without depending on Firebase client state.
+async function refreshSession(req, res) {
+  const rawRefreshToken = typeof req.body?.refresh_token === 'string'
+    ? req.body.refresh_token.trim()
+    : '';
+
+  if (!rawRefreshToken) {
+    return res.status(401).json({
+      code: 'REFRESH_TOKEN_MISSING',
+      detail: 'A refresh credential is required. Please sign in again.',
+      retryable: false,
+    });
+  }
+
+  try {
+    const db = getDb();
+    const refreshTokenHash = hashAuthSecret(rawRefreshToken);
+    const session = await db.collection('user_sessions').findOne({ refresh_token_hash: refreshTokenHash });
+
+    if (!session) {
+      return res.status(401).json({
+        code: 'REFRESH_TOKEN_INVALID',
+        detail: 'This session can no longer be refreshed. Please sign in again.',
+        retryable: false,
+      });
+    }
+
+    const refreshExpiresAt = parseDateSafe(session.refresh_expires_at || session.expires_at);
+    if (!refreshExpiresAt || refreshExpiresAt <= new Date()) {
+      await db.collection('user_sessions').deleteOne({ _id: session._id }).catch(() => {});
+      return res.status(401).json({
+        code: 'REFRESH_TOKEN_EXPIRED',
+        detail: 'Your session has expired. Please sign in again.',
+        retryable: false,
+      });
+    }
+
+    if (!session.user_id) {
+      await db.collection('user_sessions').deleteOne({ _id: session._id }).catch(() => {});
+      return res.status(401).json({
+        code: 'SESSION_INVALID',
+        detail: 'Invalid session. Please sign in again.',
+        retryable: false,
+      });
+    }
+
+    const user = await db.collection('users').findOne({ user_id: session.user_id });
+    if (!user) {
+      await db.collection('user_sessions').deleteOne({ _id: session._id }).catch(() => {});
+      return res.status(401).json({
+        code: 'AUTH_ACCOUNT_NOT_FOUND',
+        detail: 'User not found. Please sign in again.',
+        retryable: false,
+      });
+    }
+
+    if (!isAccountActive(user)) {
+      await db.collection('user_sessions').deleteMany({ user_id: session.user_id }).catch(() => {});
+      return res.status(403).json({
+        code: 'ACCOUNT_INACTIVE',
+        detail: 'Access denied. Your account is inactive. Please contact admin.',
+        retryable: false,
+      });
+    }
+
+    const sessionSecurityVersion = Number(session.security_version ?? 0);
+    const userSecurityVersion = Number(user.securityVersion ?? user.security_version ?? 0);
+    if (!Number.isSafeInteger(sessionSecurityVersion)
+      || !Number.isSafeInteger(userSecurityVersion)
+      || sessionSecurityVersion !== userSecurityVersion) {
+      await db.collection('user_sessions').deleteOne({ _id: session._id }).catch(() => {});
+      return res.status(401).json({
+        code: 'SESSION_REVOKED',
+        detail: 'Your session has been revoked. Please sign in again.',
+        retryable: false,
+      });
+    }
+
+    const nextSessionToken = generateSessionToken();
+    const nextExpiresAt = new Date(Date.now() + SESSION_LIFETIME_MS);
+    const rotated = await db.collection('user_sessions').updateOne(
+      { _id: session._id, refresh_token_hash: refreshTokenHash },
+      {
+        $set: {
+          session_token: nextSessionToken,
+          expires_at: nextExpiresAt,
+          refresh_expires_at: nextExpiresAt,
+          refreshed_at: new Date(),
+        },
+      },
+    );
+
+    if (rotated.matchedCount !== 1) {
+      return res.status(401).json({
+        code: 'REFRESH_TOKEN_INVALID',
+        detail: 'This session can no longer be refreshed. Please sign in again.',
+        retryable: false,
+      });
+    }
+
+    res.cookie('session_token', nextSessionToken, cookieOptions());
+    return res.json({
+      session_token: nextSessionToken,
+      expires_at: nextExpiresAt,
+      refresh_expires_at: nextExpiresAt,
+    });
+  } catch (error) {
+    console.error('Session refresh error:', error);
+    return res.status(503).json({
+      code: 'AUTH_SERVICE_UNAVAILABLE',
+      detail: 'Authentication service is temporarily unavailable. Please try again.',
+      retryable: true,
+    });
+  }
 }
 
 // ─── LOGOUT ─────────────────────────────────────────────────────────────────
@@ -968,9 +1101,9 @@ async function changePassword(req, res) {
     }
     try {
       await admin.auth().updateUser(uid, { password: new_password });
-      // The old Firebase refresh token must die with the old password;
-      // otherwise api.js's silent refreshGoogleSession() could mint a brand
-      // new backend session from a credential the tenant just replaced.
+      // Revoke provider-side refresh state as defense in depth. LilyCrest's
+      // method-neutral backend refresh is independently revoked by the
+      // security-version advance and user_sessions deletion below.
       await admin.auth().revokeRefreshTokens(uid).catch(() => {});
     } catch (providerError) {
       console.error('[ChangePassword] Firebase update failed:', providerError?.code || providerError?.message);
@@ -1527,6 +1660,7 @@ module.exports = {
   verifyOtp,
   resendOtp,
   getMe,
+  refreshSession,
   logout,
   sessionTeardown,
   changePassword,
@@ -1550,4 +1684,6 @@ module.exports = {
   // actual reset share one eligibility rule (see tests/resetTokenStatus.test.js).
   hashAuthSecret,
   resetTokenEligibilityFilter,
+  createSession,
+  SESSION_LIFETIME_MS,
 };

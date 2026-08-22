@@ -65,6 +65,7 @@ jest.mock('../services/api', () => ({
     patch: jest.fn().mockResolvedValue({ data: {} }),
   },
   getApiErrorMessage: (error, fallback) => fallback,
+  getConfirmedSessionInvalidation: jest.fn(() => null),
   teardownExpiredSession: jest.fn().mockResolvedValue(true),
 }));
 
@@ -112,7 +113,13 @@ describe('AuthContext.signInWithGoogle connect-failure retry', () => {
     mockPost
       .mockRejectedValueOnce(connectionTimeoutError())
       .mockResolvedValueOnce({
-        data: { user: { user_id: 'tenant-a', role: 'tenant' }, session_token: 'session_retry_success' },
+        data: {
+          user: { user_id: 'tenant-a', role: 'tenant' },
+          session_token: 'session_retry_success',
+          refresh_token: 'refresh_retry_success',
+          expires_at: '2026-08-29T00:00:00.000Z',
+          refresh_expires_at: '2026-08-29T00:00:00.000Z',
+        },
       });
 
     let latest;
@@ -128,6 +135,12 @@ describe('AuthContext.signInWithGoogle connect-failure retry', () => {
     expect(mockPost).toHaveBeenCalledTimes(2);
     expect(mockPost).toHaveBeenNthCalledWith(1, '/auth/google', { idToken: 'firebase-id-token' });
     expect(mockPost).toHaveBeenNthCalledWith(2, '/auth/google', { idToken: 'firebase-id-token' });
+    const { setSessionToken } = require('../services/secureCredentials');
+    expect(setSessionToken).toHaveBeenCalledWith('session_retry_success', {
+      refreshToken: 'refresh_retry_success',
+      expiresAt: '2026-08-29T00:00:00.000Z',
+      refreshExpiresAt: '2026-08-29T00:00:00.000Z',
+    });
   });
 
   it('does not retry when the server actually responded (e.g. 403)', async () => {

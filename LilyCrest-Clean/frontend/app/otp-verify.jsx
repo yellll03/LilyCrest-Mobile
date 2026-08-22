@@ -61,7 +61,6 @@ export default function OtpVerifyScreen() {
   const resendGuardRef = useRef(false);
   const otpToken = pendingLogin?.otpToken || '';
   const maskedEmail = pendingLogin?.maskedEmail || routeMaskedEmail || 'your email';
-  const rememberMe = pendingLogin?.rememberMe === true;
   const savedEmail = pendingLogin?.email || '';
 
   useEffect(() => {
@@ -161,7 +160,7 @@ export default function OtpVerifyScreen() {
     setError(null);
 
     try {
-      const result = await verifyLoginOtp(otpToken, code, rememberMe);
+      const result = await verifyLoginOtp(otpToken, code);
 
       if (!result.success) {
         setError(result.error || 'Invalid code. Please try again.');
@@ -172,14 +171,6 @@ export default function OtpVerifyScreen() {
       }
 
       await clearPendingLogin();
-
-    // Persist remember-me and biometric preferences post-OTP
-      await AsyncStorage.setItem('remember_me', rememberMe ? 'true' : 'false');
-      if (rememberMe && savedEmail) {
-        await AsyncStorage.setItem('last_email', savedEmail);
-      } else {
-        await AsyncStorage.removeItem('last_email');
-      }
 
     // Offer biometric if available and not yet enabled
       const hasHardware = await LocalAuthentication.hasHardwareAsync();

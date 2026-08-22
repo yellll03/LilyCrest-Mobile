@@ -19,6 +19,7 @@ router.post('/login', authLimiter, authController.login);
 router.post('/login/verify-otp', authLimiter, authController.verifyOtp);
 router.post('/login/resend-otp', authLimiter, authController.resendOtp);
 router.get('/me', authMiddleware, authController.getMe);
+router.post('/session/refresh', authLimiter, authController.refreshSession);
 router.post('/logout', authMiddleware, authController.logout);
 router.post('/session-teardown', authLimiter, authMiddlewareRecentSession, authController.sessionTeardown);
 router.post('/change-password', authLimiter, authMiddleware, tenantPasswordMiddleware, authController.changePassword);

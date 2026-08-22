@@ -70,10 +70,8 @@ function patchAdminAuth(updateUserImpl, revokedUids = []) {
     configurable: true,
     value: () => ({
       updateUser: updateUserImpl || (async () => {}),
-      // Revoking the provider-side refresh token is part of the change, so
-      // the fake must model it — otherwise the test passes against a build
-      // where api.js's silent refreshGoogleSession() could still re-mint a
-      // backend session from the pre-change Firebase credential.
+      // Provider-side revocation remains defense in depth alongside the
+      // backend session security-version gate.
       revokeRefreshTokens: async (uid) => { revokedUids.push(uid); },
     }),
   });

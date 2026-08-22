@@ -82,6 +82,7 @@ jest.mock('../services/api', () => ({
     patch: jest.fn().mockResolvedValue({ data: {} }),
   },
   getApiErrorMessage: (error, fallback) => fallback,
+  getConfirmedSessionInvalidation: (error) => error?.response?.data?.code === 'SESSION_REVOKED' ? 'session_invalid' : null,
   teardownExpiredSession: jest.fn().mockResolvedValue(true),
 }));
 
@@ -112,6 +113,18 @@ describe('AuthContext branch persistence across profile refreshes (regression)',
     mockSessionToken = 'valid-session-token';
     mockUsersMeError = null;
     mockUsersMeResponse = { data: { user_id: 'tenant-a', name: 'Tenant A', branch: GOOD_BRANCH } };
+  });
+
+  it('cold-start outage with a secure token shows retryable restore instead of Login', async () => {
+    const { clearCredentials, getSessionToken } = require('../services/secureCredentials');
+    mockUsersMeError = { response: { status: 503, data: { code: 'AUTH_SERVICE_UNAVAILABLE', retryable: true } } };
+
+    const screen = renderAuth(() => {});
+
+    await waitFor(() => expect(screen.getByText('Still restoring your session')).toBeTruthy());
+    expect(screen.getByText(/secure session is still saved/i)).toBeTruthy();
+    expect(getSessionToken).toHaveBeenCalled();
+    expect(clearCredentials).not.toHaveBeenCalled();
   });
 
   it('successful hydration replaces stale AsyncStorage/default/Firebase profile values with /users/me', async () => {
@@ -252,6 +265,23 @@ describe('AuthContext branch persistence across profile refreshes (regression)',
 
     expect(latest.authStatus).toBe('authenticated');
     expect(latest.user?.user_id).toBe('tenant-a');
+    expect(latest.sessionState).toBe('retryable');
     expect(clearCredentials).not.toHaveBeenCalled();
+  });
+
+  it('checkAuth() clears only a machine-confirmed revoked session', async () => {
+    const { clearCredentials } = require('../services/secureCredentials');
+    let latest;
+    renderAuth((state) => { latest = state; });
+    await waitFor(() => expect(latest.authStatus).toBe('authenticated'));
+
+    mockUsersMeError = { response: { status: 401, data: { code: 'SESSION_REVOKED', retryable: false } } };
+    await act(async () => {
+      await latest.checkAuth();
+    });
+
+    expect(latest.authStatus).toBe('unauthenticated');
+    expect(latest.user).toBeNull();
+    expect(clearCredentials).toHaveBeenCalledWith({ disableBiometric: false });
   });
 });
