@@ -70,19 +70,31 @@ for (const [input, expected] of greetingTests) {
 }
 console.log('  Greeting tests ........... OK');
 
-// Verify system prompt contains key knowledge areas
+// Verify the prompt is grounded in current tenant-scoped sources instead of
+// embedding mutable operational facts or placeholder contact information.
 const promptChecks = [
-  ['Room rates', /Standard.*5,400/],
-  ['Payment due date', /5th of every month/],
-  ['Curfew', /11.*PM/i],
-  ['Visitor hours', /8.*AM.*9.*PM/],
-  ['Emergency contact', /912 345 6789/],
+  ['Tenant context', /authenticated tenant context/i],
+  ['Current billing', /current tenant billing context/i],
+  ['Canonical contract', /canonical contract context/i],
+  ['No invented facts', /Never fill a missing operational fact/i],
+  ['Admin support', /canonical Admin Support conversation/i],
   ['Escalation marker', /\[NEEDS_ADMIN\]/],
 ];
 for (const [label, regex] of promptChecks) {
   const found = regex.test(presets.CHATBOT_SYSTEM_PROMPT);
   console.log(`  Prompt: ${label} ${'.'.repeat(20 - label.length)} ${found ? 'OK' : 'MISSING'}`);
   if (!found) { allOk = false; }
+}
+
+const unsafePromptChecks = [
+  ['Placeholder phone', /912 345 6789/],
+  ['Placeholder bank account', /1234-5678-9012|9876-5432-1098/],
+  ['Embedded room rate', /₱(?:5,400|7,200|9,000)/],
+];
+for (const [label, regex] of unsafePromptChecks) {
+  const absent = !regex.test(presets.CHATBOT_SYSTEM_PROMPT);
+  console.log(`  Prompt safety: ${label} ${'.'.repeat(Math.max(1, 20 - label.length))} ${absent ? 'OK' : 'FAIL'}`);
+  if (!absent) { allOk = false; process.exitCode = 1; }
 }
 
 console.log(allOk ? '\nAll checks passed!' : '\nSome checks failed!');
