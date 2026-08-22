@@ -6,6 +6,7 @@ const { authMiddleware, adminMiddleware, tenantMiddleware } = require('../middle
 // Regular chatbot routes — tenant-only. Tenant middleware keeps an
 // authenticated admin/superadmin session from using this surface, consistent
 // with every other tenant-scoped router.
+router.get('/suggestions', authMiddleware, tenantMiddleware, chatbotController.getSuggestions);
 router.post('/message', authMiddleware, tenantMiddleware, chatbotController.sendMessage);
 router.post('/request-admin', authMiddleware, tenantMiddleware, chatbotController.requestAdmin);
 router.post('/reset', authMiddleware, tenantMiddleware, chatbotController.resetSession);

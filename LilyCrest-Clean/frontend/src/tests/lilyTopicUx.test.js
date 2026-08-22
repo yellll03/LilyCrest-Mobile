@@ -35,7 +35,23 @@ describe('Lily topic selection UX', () => {
 
   test('topic selection updates suggestions without sending a duplicate category prompt', () => {
     expect(source).toContain('onPress={() => setSelectedTopic(topic.id)}');
-    expect(source).toContain('getLilyTopicSuggestions(selectedTopic)');
+    expect(source).toContain('getLilyTopicSuggestions(selectedTopic, suggestionContext)');
     expect(source).not.toMatch(/onPress=\{\(\) => handleSend\(topic\.prompt\)\}/);
+  });
+
+  test('resident and pre-move-in document suggestions are different', () => {
+    const resident = getLilyTopicSuggestions('documents', { tenantState: 'resident' });
+    const preMoveIn = getLilyTopicSuggestions('documents', { tenantState: 'pre_move_in' });
+
+    expect(resident).toContain('What documents are available to me?');
+    expect(resident.join(' ')).not.toMatch(/still required|move-in date/i);
+    expect(preMoveIn).toContain('What documents are still required?');
+    expect(preMoveIn).toContain('What move-in date is on my account?');
+  });
+
+  test('unresolved fallback never assumes the tenant still needs onboarding', () => {
+    const suggestions = getLilyTopicSuggestions(null);
+    expect(suggestions.join(' ')).not.toMatch(/move-in requirements|move-in date|still required/i);
+    expect(source).toContain('apiService.getChatbotSuggestions()');
   });
 });

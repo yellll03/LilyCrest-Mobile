@@ -439,6 +439,7 @@ export const apiService = {
       attachments,
       client_message_id: clientMessageId,
     }),
+  getChatbotSuggestions: () => api.get('/chatbot/suggestions'),
   resetChatSession: (sessionId) =>
     api.post('/chatbot/reset', { session_id: sessionId }),
 

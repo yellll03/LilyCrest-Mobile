@@ -436,6 +436,10 @@ export default function LilyAssistantScreen() {
   const [refreshingSupport, setRefreshingSupport] = useState(false);
   const [conversationPages, setConversationPages] = useState({});
   const [isLoadingEarlier, setIsLoadingEarlier] = useState(false);
+  const [suggestionContext, setSuggestionContext] = useState({
+    tenantState: 'unresolved',
+    suggestions: [],
+  });
 
   const initialSession = useMemo(
     () => `${user?.user_id || 'guest'}-chat-${Date.now()}`,
@@ -444,9 +448,35 @@ export default function LilyAssistantScreen() {
   const chat = useAssistantChat(initialSession);
   const tabBarHeight = useBottomTabBarHeight();
   const suggestedQuestions = useMemo(
-    () => getLilyTopicSuggestions(selectedTopic),
-    [selectedTopic],
+    () => getLilyTopicSuggestions(selectedTopic, suggestionContext),
+    [selectedTopic, suggestionContext],
   );
+
+  useEffect(() => {
+    setSuggestionContext({ tenantState: 'unresolved', suggestions: [] });
+    if (!user?.user_id) return undefined;
+
+    let cancelled = false;
+
+    apiService.getChatbotSuggestions()
+      .then((response) => {
+        if (cancelled) return;
+        const payload = response?.data?.data || response?.data || {};
+        setSuggestionContext({
+          tenantState: payload.state || 'unresolved',
+          suggestions: Array.isArray(payload.suggestions) ? payload.suggestions : [],
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSuggestionContext({ tenantState: 'unresolved', suggestions: [] });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.user_id]);
 
   const markInteracted = () => {
     if (!hasInteracted) setHasInteracted(true);

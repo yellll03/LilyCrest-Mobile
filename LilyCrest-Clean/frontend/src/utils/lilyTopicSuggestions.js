@@ -6,11 +6,23 @@ export const LILY_TOPICS = Object.freeze([
   Object.freeze({ id: 'account', label: 'Account & Support' }),
 ]);
 
-const DEFAULT_SUGGESTIONS = Object.freeze([
+const UNRESOLVED_SUGGESTIONS = Object.freeze([
   'How much do I need to pay this month?',
-  'Comply with move-in requirements',
-  'Curfew and visitor policy',
-  'File a complaint to admin',
+  'Check my maintenance request.',
+  'What documents are available to me?',
+  'Continue a concern with admin support.',
+]);
+
+const RESIDENT_DOCUMENT_SUGGESTIONS = Object.freeze([
+  'View my contract.',
+  'What is my current contract status?',
+  'What documents are available to me?',
+]);
+
+const PRE_MOVE_IN_DOCUMENT_SUGGESTIONS = Object.freeze([
+  'What is my current contract status?',
+  'What move-in date is on my account?',
+  'What documents are still required?',
 ]);
 
 export const LILY_TOPIC_SUGGESTIONS = Object.freeze({
@@ -42,6 +54,20 @@ export const LILY_TOPIC_SUGGESTIONS = Object.freeze({
   ]),
 });
 
-export function getLilyTopicSuggestions(topicId) {
-  return LILY_TOPIC_SUGGESTIONS[topicId] || DEFAULT_SUGGESTIONS;
+export function getLilyTopicSuggestions(topicId, options = {}) {
+  const tenantState = options?.tenantState || 'unresolved';
+  const initialSuggestions = Array.isArray(options?.initialSuggestions)
+    ? options.initialSuggestions.filter((suggestion) => typeof suggestion === 'string' && suggestion.trim())
+    : [];
+
+  if (!topicId) {
+    return initialSuggestions.length ? initialSuggestions : UNRESOLVED_SUGGESTIONS;
+  }
+
+  if (topicId === 'documents') {
+    if (tenantState === 'resident') return RESIDENT_DOCUMENT_SUGGESTIONS;
+    if (tenantState === 'pre_move_in') return PRE_MOVE_IN_DOCUMENT_SUGGESTIONS;
+  }
+
+  return LILY_TOPIC_SUGGESTIONS[topicId] || UNRESOLVED_SUGGESTIONS;
 }

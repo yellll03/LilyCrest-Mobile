@@ -25,6 +25,10 @@ const { fetchCurrentContractForRequest, fetchContractDocumentForRequest } = requ
 const { loadRequestsAcrossCollections, buildUserMaintenanceFilter, buildTenantRequestResponse: buildMaintenanceTenantResponse } = require('./maintenance.controller');
 const { loadVisibleAnnouncementsForTenant } = require('../services/announcementAudience.service');
 const { extractContractDocumentText, findRelevantContractExcerpts } = require('../domain/contracts/contractDocumentQA');
+const {
+  classifyTenantAssistantState,
+  getTenantAssistantSuggestions,
+} = require('../services/tenantAssistantSuggestions.service');
 
 function sanitizeResponse(text = '') {
   const withoutFences = text.replace(/```[\s\S]*?```/g, (block) => block.replace(/```/g, ''));
@@ -612,6 +616,21 @@ async function buildBillingResponse(db, user, message = '') {
   const bills = await fetchUserBills(db, user, { limit: 20 });
   const language = detectLanguageStyle(message);
   const currentBill = resolveCurrentBill(bills, new Date());
+  const asksHowToPay = /\b(how (?:can|do) i pay|where (?:can|do) i pay|payment (?:method|methods|option|options|channel|channels)|pay via|bank transfer|gcash|maya|paymongo)\b/i.test(message);
+
+  if (asksHowToPay) {
+    const currentBillText = currentBill
+      ? 'Open your current bill in Billing and choose its payment action to see the channels currently enabled for that bill.'
+      : 'I do not see a current bill to pay. When one is posted, Billing will show the channels enabled for that bill.';
+    return {
+      message: `${currentBillText} I cannot safely provide a bank account, wallet number, or cash-office instruction that is not present in the current authenticated payment flow.`,
+      intent: SUPPORTED_INTENTS.BILLING,
+      suggestions: [
+        { label: 'Current balance', prompt: 'How much do I need to pay this month?' },
+        { label: 'Billing help', prompt: 'Connect me to admin about my payment options.' },
+      ],
+    };
+  }
 
   if (!currentBill) {
     return {
@@ -982,6 +1001,30 @@ function pickFollowups(knowledgeEntries, intent) {
   return DEFAULT_FOLLOWUPS;
 }
 
+function buildOperationalGroundingResponse(knowledgeEntries = [], accountContext = {}) {
+  const intents = new Set(knowledgeEntries.map((entry) => entry?.intent).filter(Boolean));
+
+  if (intents.has('house_rules')) {
+    return 'I cannot confirm current rule schedules, visitor limits, or penalties from an approved policy source in this chat. Please open Documents for the current tenant-visible policies, or use Admin Support to confirm the rule with your branch team.';
+  }
+  if (intents.has('amenities')) {
+    return 'I cannot confirm current branch amenities, inclusions, or opening hours from an approved source in this chat. Please check your branch announcements or use Admin Support for the current information.';
+  }
+  if (intents.has('room_types')) {
+    return accountContext.monthlyRent != null
+      ? `The approved monthly rate on your current contract is ${formatPesoCompact(accountContext.monthlyRent)}. I cannot confirm other room prices or availability without a current approved source.`
+      : 'I cannot confirm current room prices, inclusions, or availability without an approved current source. Your own assignment and approved rate will appear in your contract; Admin Support can help with availability questions.';
+  }
+  if (intents.has('move_in_requirements')) {
+    if (classifyTenantAssistantState(accountContext) === 'resident') {
+      return 'Your account is already recorded as a current resident, so I will not assume move-in onboarding still applies to you. If you need a specific contract term or document, open your Contract/Documents screen or ask Admin Support.';
+    }
+    return 'I cannot confirm a current move-in checklist from an approved source in this chat. Check the dates and requirements shown in your contract and Documents, or ask Admin Support to confirm what remains for your account.';
+  }
+
+  return '';
+}
+
 /**
  * Build a rich, context-aware prompt for Gemini.
  * This is the heart of the AI-first approach.
@@ -1019,6 +1062,19 @@ async function ensureCanonicalSupportConversation(db, sessionId, user, reason, c
     clientRequestId,
     initialMessage: reason || 'Requested admin assistance',
   });
+}
+
+async function getSuggestions(req, res) {
+  try {
+    const db = getDb();
+    const accountContext = await resolveTenantAccountContext(db, req.user);
+    return res.json(getTenantAssistantSuggestions(accountContext));
+  } catch (error) {
+    console.error('Chatbot suggestions error:', error);
+    return res.status(500).json({
+      detail: 'Assistant suggestions are temporarily unavailable.',
+    });
+  }
 }
 
 // ─────────────────────────────────────────────────────
@@ -1365,6 +1421,29 @@ async function sendMessage(req, res) {
     // Get conversation history for continuity
     const session = chatSessions.get(sessionId) || { history: [] };
     const conversationHistory = session.history || [];
+    const operationalGroundingResponse = !escalate
+      ? buildOperationalGroundingResponse(knowledgeHints, tenantAccount)
+      : '';
+
+    if (operationalGroundingResponse) {
+      session.history = session.history || [];
+      session.history.push({ role: 'user', content: userMessage });
+      session.history.push({ role: 'assistant', content: operationalGroundingResponse });
+      if (session.history.length > 30) session.history = session.history.slice(-30);
+      session.last_intent = normalizeAssistantIntent(meta.intent);
+      chatSessions.set(sessionId, session);
+      return res.json({
+        message: operationalGroundingResponse,
+        response: operationalGroundingResponse,
+        intent: normalizeAssistantIntent(meta.intent),
+        session_id: sessionId,
+        needs_admin: false,
+        live_chat_active: false,
+        fallback: false,
+        suggestions: followups,
+        meta: { ...meta, source: 'operational_grounding_guard' },
+      });
+    }
 
     // ── Generate response ──
     try {
@@ -1383,7 +1462,7 @@ async function sendMessage(req, res) {
           userMessage, contextLines, knowledgeHints, conversationHistory
         ) + '\n\nIMPORTANT: This message has been flagged for admin attention. Acknowledge the tenant\'s concern empathetically, let them know an admin will follow up shortly, and reassure them. Keep it short and warm.';
         const { text } = await sendGeminiMessage(sessionId, escalationPrompt, attachmentParts);
-        aiResponse = text || "I understand your concern po. I've flagged this for our admin team and they'll get back to you shortly. If it's urgent, you can also call +63 912 345 6789.";
+        aiResponse = text || "I understand your concern po. I've flagged it in Admin Support so your branch team can follow up. If anyone is in immediate danger, contact local emergency services now.";
       } else if (greetingMessage && userMessage.trim().split(/\s+/).length <= 4) {
         // Pure greeting (short message) — let AI generate a warm, personalized greeting
         const greetingPrompt = buildAIPrompt(
@@ -1425,7 +1504,7 @@ async function sendMessage(req, res) {
           : GEMINI_QUOTA_FALLBACK;
       } else {
         console.error('Chatbot AI error:', modelError);
-        aiResponse = "I'm having a bit of trouble right now po. Please try again in a moment, or you can reach the admin office directly at +63 912 345 6789.";
+        aiResponse = "I'm having a bit of trouble right now po. Please try again in a moment, or open Admin Support for help from your branch team.";
       }
     }
 
@@ -1481,7 +1560,7 @@ async function sendMessage(req, res) {
     }
     console.error('Chatbot error:', error);
     res.status(500).json({
-      response: "I'm having trouble connecting right now po. Please try again, or contact the admin office at +63 912 345 6789.",
+      response: "I'm having trouble connecting right now po. Please try again, or open Admin Support for help from your branch team.",
       detail: 'Service temporarily unavailable',
     });
   }
@@ -1600,6 +1679,7 @@ async function getChatHistory(req, res) {
 }
 
 module.exports = {
+  getSuggestions,
   sendMessage,
   requestAdmin,
   getLiveStatus,
@@ -1628,6 +1708,7 @@ module.exports = {
     classifyContractUnavailability,
     contractUnavailabilityResponse,
     fetchMaintenanceRequestsForUser,
+    buildOperationalGroundingResponse,
     chatSessions,
   },
 };
