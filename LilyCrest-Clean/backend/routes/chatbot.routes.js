@@ -3,20 +3,15 @@ const router = express.Router();
 const chatbotController = require('../controllers/chatbot.controller');
 const { authMiddleware, adminMiddleware, tenantMiddleware } = require('../middleware/auth');
 
-// Regular chatbot routes — tenant-only. Session ownership is separately
-// enforced inside the controller (normalizeSessionId + getOwnedLiveChat +
-// identity-fingerprint reset), but tenantMiddleware keeps an authenticated
-// admin/superadmin session from using this surface at all, consistent with
-// every other tenant-scoped router.
+// Regular chatbot routes — tenant-only. Tenant middleware keeps an
+// authenticated admin/superadmin session from using this surface, consistent
+// with every other tenant-scoped router.
 router.post('/message', authMiddleware, tenantMiddleware, chatbotController.sendMessage);
 router.post('/request-admin', authMiddleware, tenantMiddleware, chatbotController.requestAdmin);
 router.post('/reset', authMiddleware, tenantMiddleware, chatbotController.resetSession);
+// Compatibility-only legacy paths fail closed with 410 and direct upgraded
+// clients to /api/chat. They intentionally never read or mutate legacy data.
 router.get('/live-status/:sessionId', authMiddleware, tenantMiddleware, chatbotController.getLiveStatus);
-// Exception: closeLiveChat's controller has legitimate owner-OR-admin
-// semantics (an admin can also close a live chat they're handling), and no
-// separate /admin/live-chat/close route exists to move that case to — so
-// this one route intentionally keeps only authMiddleware. Ownership/role is
-// enforced inside the controller itself (isOwner || isAdmin check).
 router.post('/close-live-chat', authMiddleware, chatbotController.closeLiveChat);
 router.get('/history', authMiddleware, tenantMiddleware, chatbotController.getChatHistory);
 

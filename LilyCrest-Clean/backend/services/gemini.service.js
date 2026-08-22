@@ -2,7 +2,6 @@ const { GoogleGenerativeAI } = require('@google/generative-ai');
 
 // Chat session storage (in production, use Redis)
 const chatSessions = new Map();
-const liveChatQueue = new Map();
 
 let genAIClient;
 // Use a v1beta-supported default without models/ prefix (per integration requirements)
@@ -202,6 +201,5 @@ module.exports = {
   rephraseWithTone,
   resetSession,
   chatSessions,
-  liveChatQueue,
   isQuotaError,
 };

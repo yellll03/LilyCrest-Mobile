@@ -71,7 +71,6 @@ function stubGeminiService() {
       calls.push({ sessionId, prompt });
       return { text: 'Here is what I found for you po.' };
     },
-    liveChatQueue: new Map(),
     chatSessions: new Map(),
     isQuotaError: () => false,
   };
