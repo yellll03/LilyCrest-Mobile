@@ -21,6 +21,7 @@ import { ToastProvider } from '../context/ToastContext';
 jest.mock('expo-router', () => ({
   useRouter: () => ({ replace: jest.fn(), push: jest.fn() }),
   usePathname: () => '/(tabs)/home',
+  useSegments: () => ['(tabs)', 'home'],
 }));
 
 jest.mock('../config/firebase', () => ({

@@ -26,7 +26,7 @@ import {
   enableBiometricSession,
   getPendingLogin,
 } from '../src/services/secureCredentials';
-import { safeBack } from '../src/utils/navigation';
+import { resetToHome, safeBack } from '../src/utils/navigation';
 
 const OTP_LENGTH = 6;
 const RESEND_COOLDOWN = 60; // seconds
@@ -179,7 +179,7 @@ export default function OtpVerifyScreen() {
 
       if (hasHardware && isEnrolled && bioSetting === 'true') {
         await enableBiometricSession(savedEmail);
-        router.replace('/(tabs)/home');
+        resetToHome(router);
       } else if (hasHardware && isEnrolled && bioSetting !== 'true') {
         showAlert({
         title: 'Enable Biometric Login',
@@ -187,7 +187,7 @@ export default function OtpVerifyScreen() {
         type: 'info',
         icon: 'finger-print',
         buttons: [
-          { text: 'Not Now', style: 'cancel', onPress: () => router.replace('/(tabs)/home') },
+          { text: 'Not Now', style: 'cancel', onPress: () => resetToHome(router) },
           {
             text: 'Enable',
             onPress: async () => {
@@ -202,13 +202,13 @@ export default function OtpVerifyScreen() {
                   await enableBiometricSession(savedEmail);
                 }
               } catch (_) {}
-              router.replace('/(tabs)/home');
+              resetToHome(router);
             },
           },
         ],
         });
       } else {
-        router.replace('/(tabs)/home');
+        resetToHome(router);
       }
     } catch (error) {
       setError(getApiErrorMessage(error, 'Unable to finish verification. Please try again.'));

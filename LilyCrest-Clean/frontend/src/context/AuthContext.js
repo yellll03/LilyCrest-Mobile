@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
+import { usePathname, useRouter, useSegments } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, AppState, Platform, Pressable, StatusBar as RNStatusBar, StyleSheet, Text, View } from 'react-native';
 import { auth, getFreshIdToken, subscribeToAuthState } from '../config/firebase';
@@ -40,6 +40,11 @@ import {
 } from '../services/canonicalEvents';
 import { startCanonicalRealtime, stopCanonicalRealtime } from '../services/realtime';
 import { useToast } from './ToastContext';
+import {
+  isAuthenticatedNavigationReady,
+  navigateToNotificationDestination,
+  notificationDestinationKey,
+} from '../utils/navigation';
 
 const AuthContext = createContext(undefined);
 const SESSION_USER_KEY = 'session_user';
@@ -152,8 +157,12 @@ export function AuthProvider({ children }) {
   const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
   const [notificationBanner, setNotificationBanner] = useState(null);
   const router = useRouter();
+  const pathname = usePathname();
+  const segments = useSegments();
   const { showToast } = useToast();
   const routerRef = useRef(router);
+  const pathnameRef = useRef(pathname);
+  const segmentsRef = useRef(segments);
   const authStatusRef = useRef(authStatus);
   // Let logout/signInWithGoogle read the latest user/firebaseUser without
   // needing them in a useCallback dependency array — same technique already
@@ -170,11 +179,14 @@ export function AuthProvider({ children }) {
   // any await, so only the first of a burst of near-simultaneous events proceeds.
   const sessionExpiryHandlingRef = useRef(false);
   const pendingNotificationRef = useRef(null);
+  const lastNotificationNavigationRef = useRef({ key: '', at: 0 });
   const latestNotificationKeyRef = useRef('');
   const bannerHideTimerRef = useRef(null);
   const bannerOpacity = useRef(new Animated.Value(0)).current;
   const bannerTranslateY = useRef(new Animated.Value(-18)).current;
   routerRef.current = router;
+  pathnameRef.current = pathname;
+  segmentsRef.current = segments;
   authStatusRef.current = authStatus;
   userRef.current = user;
   firebaseUserRef.current = firebaseUser;
@@ -338,7 +350,22 @@ export function AuthProvider({ children }) {
     const destination = resolveNotificationRoute(data);
     if (!destination || !routerRef.current) return false;
 
-    routerRef.current.push(destination);
+    if (!isAuthenticatedNavigationReady(authStatusRef.current, pathnameRef.current, segmentsRef.current)) {
+      pendingNotificationRef.current = data;
+      return false;
+    }
+
+    const key = notificationDestinationKey(destination);
+    const now = Date.now();
+    const previous = lastNotificationNavigationRef.current;
+    if (key && previous.key === key && now - previous.at < 1500) {
+      pendingNotificationRef.current = null;
+      await clearLastNotificationResponse().catch(() => {});
+      return true;
+    }
+
+    if (!navigateToNotificationDestination(routerRef.current, destination)) return false;
+    lastNotificationNavigationRef.current = { key, at: now };
     pendingNotificationRef.current = null;
     await clearLastNotificationResponse().catch(() => {});
     return true;
@@ -347,7 +374,7 @@ export function AuthProvider({ children }) {
   const handleNotificationTap = useCallback(async (data) => {
     if (!data || typeof data !== 'object') return;
 
-    if (authStatusRef.current !== 'authenticated') {
+    if (!isAuthenticatedNavigationReady(authStatusRef.current, pathnameRef.current, segmentsRef.current)) {
       pendingNotificationRef.current = data;
       return;
     }
@@ -538,9 +565,9 @@ export function AuthProvider({ children }) {
   }, [handleNotificationTap]);
 
   useEffect(() => {
-    if (authStatus !== 'authenticated' || !pendingNotificationRef.current) return;
+    if (!isAuthenticatedNavigationReady(authStatus, pathname, segments) || !pendingNotificationRef.current) return;
     handleNotificationTap(pendingNotificationRef.current);
-  }, [authStatus, handleNotificationTap, user?.user_id]);
+  }, [authStatus, handleNotificationTap, pathname, segments, user?.user_id]);
 
   // Initial load + 60s poll while authenticated. Matches the cadence the old
   // per-surface tab-badge poller used, now feeding the one shared state.

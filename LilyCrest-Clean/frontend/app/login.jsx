@@ -28,7 +28,7 @@ import {
   hasStoredCredentials,
   savePendingLogin,
 } from '../src/services/secureCredentials';
-import { safeBack } from '../src/utils/navigation';
+import { resetToHome, safeBack } from '../src/utils/navigation';
 import { AUTH_MESSAGES, authErrorTypeForUi, normalizeEmail, validateEmail as validateAuthEmail } from '../src/utils/authStability';
 import { validateLoginPassword } from '../src/utils/passwordValidation';
 
@@ -190,7 +190,7 @@ export default function LoginScreen() {
           // (covers password-change scenario where old credentials were cleared)
           await enableBiometricSession(normalizedEmail);
           setCanUseBiometric(true);
-          router.replace('/(tabs)/home');
+          resetToHome(router);
         } else {
           // First time on this device — offer to enable biometric login
           showAlert({
@@ -202,7 +202,7 @@ export default function LoginScreen() {
               {
                 text: 'Not Now',
                 style: 'cancel',
-                onPress: () => router.replace('/(tabs)/home'),
+                onPress: () => resetToHome(router),
               },
               {
                 text: 'Enable',
@@ -219,14 +219,14 @@ export default function LoginScreen() {
                       setCanUseBiometric(true);
                     }
                   } catch (_) {}
-                  router.replace('/(tabs)/home');
+                  resetToHome(router);
                 },
               },
             ],
           });
         }
       } else {
-        router.replace('/(tabs)/home');
+        resetToHome(router);
       }
     } catch (error) {
       console.error('Login error:', error?.message || 'Unexpected error');
@@ -271,7 +271,7 @@ export default function LoginScreen() {
         const { success: backendSuccess, status, error: backendError } = backendResult;
 
         if (backendSuccess) {
-          router.replace('/(tabs)/home');
+          resetToHome(router);
         } else {
           const type = status === 403 ? 'access' : 'credentials';
           setLoginError({ message: backendError || 'Failed to create session.', type });
@@ -327,7 +327,7 @@ export default function LoginScreen() {
         return;
       }
 
-      router.replace('/(tabs)/home');
+      resetToHome(router);
     } catch (error) {
       console.error('Biometric login error:', error?.message || 'Unexpected error');
       setLoginError({ message: 'Biometric sign-in failed. Please use email or Google.', type: 'network' });

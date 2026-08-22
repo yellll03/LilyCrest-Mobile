@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
-import { usePathname, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
@@ -56,10 +56,7 @@ const ACCENT_LIGHT = '#B9921F';
 
 export default function OnboardingScreen() {
   const router = useRouter();
-  const pathname = usePathname();
-  const pathnameRef = useRef(pathname);
-  pathnameRef.current = pathname;
-  const { user, authStatus, checkAuth } = useAuth();
+  const { authStatus, checkAuth } = useAuth();
   const [isAutoBiometricLoading, setIsAutoBiometricLoading] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const flatListRef = useRef(null);
@@ -121,23 +118,6 @@ export default function OnboardingScreen() {
     };
   }, [authStatus, tryAutoBiometric]);
 
-  const hasRedirected = useRef(false);
-  useEffect(() => {
-    if (authStatus === 'authenticated' && user && !hasRedirected.current) {
-      // A cold-start notification is handled by AuthContext at the same time
-      // as session restoration. Do not let this normal root redirect fire a
-      // moment later and overwrite the notification's canonical destination.
-      const redirectTimer = setTimeout(() => {
-        if (pathnameRef.current !== '/') return;
-        hasRedirected.current = true;
-        router.replace('/(tabs)/home');
-      }, 100);
-
-      return () => clearTimeout(redirectTimer);
-    }
-    return undefined;
-  }, [authStatus, pathname, router, user]);
-
   const checking = authStatus === 'initializing' || isAutoBiometricLoading;
 
   // ── Slide render ─────────────────────────────────────────────────────────
@@ -160,7 +140,7 @@ export default function OnboardingScreen() {
     if (activeIndex < SLIDES.length - 1) {
       flatListRef.current?.scrollToIndex({ index: activeIndex + 1, animated: true });
     } else {
-      router.push('/login');
+      router.replace('/login');
     }
   }, [activeIndex, router]);
 
