@@ -1,6 +1,11 @@
 const { getDb } = require('../config/database');
 const { normalizeUser } = require('../utils/normalizeUser');
 const { isTenantMobileRole } = require('../utils/tenantEligibility');
+const {
+  clearAdminBrowserCookies,
+  extractRequestCredential,
+  verifyAdminBrowserCsrf,
+} = require('../utils/adminBrowserSession');
 
 function isAccountActive(user = {}) {
   if (user.deleted_at || user.deletedAt || user.is_deleted === true || user.isDeleted === true) return false;
@@ -17,10 +22,19 @@ const AUTH_ERROR_CODES = Object.freeze({
   ACCOUNT_NOT_FOUND: 'AUTH_ACCOUNT_NOT_FOUND',
   ACCOUNT_INACTIVE: 'ACCOUNT_INACTIVE',
   SERVICE_UNAVAILABLE: 'AUTH_SERVICE_UNAVAILABLE',
+  ADMIN_COOKIE_FORBIDDEN: 'ADMIN_COOKIE_FORBIDDEN',
+  CSRF_INVALID: 'CSRF_INVALID',
 });
 
 function authenticationError(res, status, code, detail, retryable = false) {
   return res.status(status).json({ code, detail, retryable });
+}
+
+function invalidatingAuthenticationError(req, res, status, code, detail) {
+  if (req.authTransport === 'admin_cookie') {
+    clearAdminBrowserCookies(res);
+  }
+  return authenticationError(res, status, code, detail, false);
 }
 
 function sessionHasExpired(session, now = new Date()) {
@@ -32,13 +46,10 @@ function sessionHasExpired(session, now = new Date()) {
 
 // Authentication middleware
 async function authMiddleware(req, res, next) {
-
-  const authHeader = req.headers.authorization;
-
-  let token = null;
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    token = authHeader.substring(7);
-  }
+  const credential = extractRequestCredential(req);
+  const { token } = credential;
+  req.authTransport = credential.transport;
+  req.authToken = token;
 
   if (!token) {
     return authenticationError(res, 401, AUTH_ERROR_CODES.TOKEN_MISSING, 'Not authenticated');
@@ -49,28 +60,28 @@ async function authMiddleware(req, res, next) {
     const session = await db.collection('user_sessions').findOne({ session_token: token });
 
     if (!session) {
-      return authenticationError(res, 401, AUTH_ERROR_CODES.SESSION_INVALID, 'Invalid session. Please sign in again.');
+      return invalidatingAuthenticationError(req, res, 401, AUTH_ERROR_CODES.SESSION_INVALID, 'Invalid session. Please sign in again.');
     }
 
     if (sessionHasExpired(session)) {
-      return authenticationError(res, 401, AUTH_ERROR_CODES.SESSION_EXPIRED, 'Your session has expired. Please sign in again.');
+      return invalidatingAuthenticationError(req, res, 401, AUTH_ERROR_CODES.SESSION_EXPIRED, 'Your session has expired. Please sign in again.');
     }
 
     // Guard against sessions created with missing user_id
     if (!session.user_id) {
       // Delete the broken session so the client gets a clean 401 and re-authenticates
       await db.collection('user_sessions').deleteOne({ _id: session._id }).catch(() => {});
-      return authenticationError(res, 401, AUTH_ERROR_CODES.SESSION_INVALID, 'Invalid session. Please sign in again.');
+      return invalidatingAuthenticationError(req, res, 401, AUTH_ERROR_CODES.SESSION_INVALID, 'Invalid session. Please sign in again.');
     }
 
     const user = await db.collection('users').findOne({ user_id: session.user_id });
     if (!user) {
       await db.collection('user_sessions').deleteOne({ _id: session._id }).catch(() => {});
-      return authenticationError(res, 401, AUTH_ERROR_CODES.ACCOUNT_NOT_FOUND, 'User not found. Please sign in again.');
+      return invalidatingAuthenticationError(req, res, 401, AUTH_ERROR_CODES.ACCOUNT_NOT_FOUND, 'User not found. Please sign in again.');
     }
     if (!isAccountActive(user)) {
       await db.collection('user_sessions').deleteMany({ user_id: session.user_id }).catch(() => {});
-      return authenticationError(res, 403, AUTH_ERROR_CODES.ACCOUNT_INACTIVE, 'Access denied. Your account is inactive. Please contact admin.');
+      return invalidatingAuthenticationError(req, res, 403, AUTH_ERROR_CODES.ACCOUNT_INACTIVE, 'Access denied. Your account is inactive. Please contact admin.');
     }
 
     // Session security-version gate. createSession() (auth.controller.js)
@@ -88,10 +99,30 @@ async function authMiddleware(req, res, next) {
       || !Number.isSafeInteger(userSecurityVersion)
       || sessionSecurityVersion !== userSecurityVersion) {
       await db.collection('user_sessions').deleteOne({ _id: session._id }).catch(() => {});
-      return authenticationError(res, 401, AUTH_ERROR_CODES.SESSION_REVOKED, 'Your session has been revoked. Please sign in again.');
+      return invalidatingAuthenticationError(req, res, 401, AUTH_ERROR_CODES.SESSION_REVOKED, 'Your session has been revoked. Please sign in again.');
+    }
+
+    if (req.authTransport === 'admin_cookie'
+      && !['admin', 'superadmin'].includes(String(user.role || '').toLowerCase())) {
+      return invalidatingAuthenticationError(
+        req,
+        res,
+        403,
+        AUTH_ERROR_CODES.ADMIN_COOKIE_FORBIDDEN,
+        'Admin browser access requires an administrator account.',
+      );
     }
 
     req.user = normalizeUser(user);
+    req.session = session;
+    if (!verifyAdminBrowserCsrf(req)) {
+      return authenticationError(
+        res,
+        403,
+        AUTH_ERROR_CODES.CSRF_INVALID,
+        'The admin request could not be verified. Refresh the page and try again.',
+      );
+    }
     next();
   } catch (error) {
     console.error('Auth middleware error:', error);

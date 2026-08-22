@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { sanitizeUserForClient, normalizeUser } = require('../utils/normalizeUser');
+const { sanitizeUserForClient, sanitizeUserForAdminList, normalizeUser } = require('../utils/normalizeUser');
 
 const RAW_LEGACY_USER = {
   _id: 'mongo-object-id',
@@ -72,4 +72,21 @@ test('sanitizeUserForClient is safe to call after normalizeUser', () => {
 test('sanitizeUserForClient handles null/undefined input', () => {
   assert.equal(sanitizeUserForClient(null), null);
   assert.equal(sanitizeUserForClient(undefined), undefined);
+});
+
+test('admin user lists use an allowlist and never expose authentication or internal fields', () => {
+  const safe = sanitizeUserForAdminList({
+    ...RAW_LEGACY_USER,
+    room_number: '204',
+    refresh_token_hash: 'refresh-secret-hash',
+    securityVersion: 7,
+  });
+
+  assert.equal(safe.user_id, 'user_abc123');
+  assert.equal(safe.email, 'tenant@example.com');
+  assert.equal(safe.room_number, '204');
+  assert.equal(safe.password_hash, undefined);
+  assert.equal(safe.refresh_token_hash, undefined);
+  assert.equal(safe.securityVersion, undefined);
+  assert.equal(safe.internal_admin_note, undefined);
 });
