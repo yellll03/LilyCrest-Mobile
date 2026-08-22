@@ -333,6 +333,18 @@ async function startServer() {
     await bills.createIndex({ legacyBillingId: 1 }, { sparse: true, name: 'bills_legacyBillingId' });
     await bills.createIndex({ paymongoSessionId: 1 }, { sparse: true, name: 'bills_paymongoSessionId' });
 
+    // Durable PayMongo webhook inbox: event IDs are the idempotency boundary,
+    // while status/lease indexes support retrying an interrupted settlement.
+    const paymongoWebhookEvents = db.collection('paymongo_webhook_events');
+    await paymongoWebhookEvents.createIndex(
+      { eventId: 1 },
+      { unique: true, name: 'paymongo_webhook_event_id_unique' },
+    );
+    await paymongoWebhookEvents.createIndex(
+      { status: 1, leaseExpiresAt: 1, updatedAt: 1 },
+      { name: 'paymongo_webhook_retry_queue' },
+    );
+
     // Maintenance indexes for the canonical + legacy dual-read migration window.
     for (const collectionName of ['maintenance_requests', 'maintenancerequests']) {
       const maintenance = db.collection(collectionName);

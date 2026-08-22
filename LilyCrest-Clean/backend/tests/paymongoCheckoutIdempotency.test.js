@@ -35,6 +35,17 @@ function makeBillDoc(overrides = {}) {
   };
 }
 
+function makeLegacyBillDoc(overrides = {}) {
+  return {
+    _id: new ObjectId(),
+    billing_id: BILL_ID,
+    user_id: USER.user_id,
+    status: 'pending',
+    remaining_amount: 1500,
+    ...overrides,
+  };
+}
+
 // Minimal Mongo-query matcher covering exactly the operators
 // paymongo.controller.js's filters use ($and/$or/$exists/$lt/equality,
 // including ObjectId comparison) — enough to exercise real atomicity
@@ -94,9 +105,16 @@ function makeFakeBillsCollection(store) {
 // Each test resets its *contents* in place (splice) rather than reseeding
 // the require.cache, since node:test runs this file's tests in one process.
 let store = [];
+let legacyStore = [];
 
 function resetStore(docs) {
   store.splice(0, store.length, ...docs);
+  legacyStore.splice(0, legacyStore.length);
+}
+
+function resetLegacyStore(docs) {
+  store.splice(0, store.length);
+  legacyStore.splice(0, legacyStore.length, ...docs);
 }
 
 if (!require.cache[dbModulePath]) {
@@ -108,6 +126,7 @@ if (!require.cache[dbModulePath]) {
       getDb: () => ({
         collection: (name) => {
           if (name === 'bills') return makeFakeBillsCollection(store);
+          if (name === 'billing') return makeFakeBillsCollection(legacyStore);
           return { async findOne() { return null; }, async updateOne() { return { matchedCount: 0 }; } };
         },
       }),
@@ -126,7 +145,7 @@ if (!require.cache[billingModulePath]) {
     loaded: true,
     exports: {
       BILL_UNAVAILABLE_MESSAGE: 'Bill not available',
-      fetchUserBills: async () => store.filter((d) => d.billing_id === BILL_ID),
+      fetchUserBills: async () => [...store, ...legacyStore].filter((d) => d.billing_id === BILL_ID),
       isPayableBill: () => true,
       mapRealBill: (doc) => doc,
     },
@@ -177,12 +196,52 @@ function mockPaymongoCreate(checkoutId = 'cs_test_1') {
 
 test('first checkout for a bill creates exactly one live session', async () => {
   resetStore([makeBillDoc()]);
-  await withMockedAxios({ post: mockPaymongoCreate('cs_first') }, async () => {
+  let requestHeaders = null;
+  let requestPayload = null;
+  const previousBackendUrl = process.env.BACKEND_URL;
+  delete process.env.BACKEND_URL;
+  await withMockedAxios({
+    post: async (_url, payload, options) => {
+      requestHeaders = options.headers;
+      requestPayload = payload;
+      return mockPaymongoCreate('cs_first')();
+    },
+  }, async () => {
+    try {
+      const res = fakeRes();
+      await createCheckoutSession(fakeReq(), res);
+      assert.equal(res.body.checkout_id, 'cs_first');
+      assert.equal(store[0].paymongoSessionId, 'cs_first');
+      assert.equal(store[0].checkoutClaimedAt, undefined); // claim cleared after success
+      assert.match(requestHeaders['Idempotency-Key'], /^[0-9a-f-]{36}$/i);
+      assert.equal(store[0].checkoutIdempotencyKey, requestHeaders['Idempotency-Key']);
+      assert.equal(
+        requestPayload.data.attributes.success_url,
+        'https://api.lilycrest.space/api/m/paymongo/redirect/success?billing_id=bill-1',
+        'redirects use the configured production origin, never a request Host header',
+      );
+    } finally {
+      if (previousBackendUrl === undefined) delete process.env.BACKEND_URL;
+      else process.env.BACKEND_URL = previousBackendUrl;
+    }
+  });
+});
+
+test('legacy billing rows use the same atomic claim and PayMongo idempotency boundary', async () => {
+  resetLegacyStore([makeLegacyBillDoc()]);
+  let requestHeaders = null;
+  await withMockedAxios({
+    post: async (_url, _payload, options) => {
+      requestHeaders = options.headers;
+      return mockPaymongoCreate('cs_legacy')();
+    },
+  }, async () => {
     const res = fakeRes();
     await createCheckoutSession(fakeReq(), res);
-    assert.equal(res.body.checkout_id, 'cs_first');
-    assert.equal(store[0].paymongoSessionId, 'cs_first');
-    assert.equal(store[0].checkoutClaimedAt, undefined); // claim cleared after success
+    assert.equal(res.body.checkout_id, 'cs_legacy');
+    assert.equal(legacyStore[0].paymongo_checkout_id, 'cs_legacy');
+    assert.equal(legacyStore[0].checkout_claimed_at, undefined);
+    assert.equal(legacyStore[0].checkout_idempotency_key, requestHeaders['Idempotency-Key']);
   });
 });
 
@@ -251,13 +310,74 @@ test('an expired existing checkout session is not reused — a fresh one is crea
   });
 });
 
+test('a provider-confirmed missing checkout can be replaced with a new idempotent attempt', async () => {
+  resetStore([makeBillDoc({
+    paymongoSessionId: 'cs_missing',
+    paymongoCheckoutUrl: 'https://checkout.paymongo.com/cs_missing',
+    checkoutIdempotencyKey: 'old-attempt-key',
+  })]);
+  let replacementKey = null;
+  await withMockedAxios({
+    get: async () => {
+      const error = new Error('not found');
+      error.response = { status: 404 };
+      throw error;
+    },
+    post: async (_url, _payload, options) => {
+      replacementKey = options.headers['Idempotency-Key'];
+      return mockPaymongoCreate('cs_after_404')();
+    },
+  }, async () => {
+    const res = fakeRes();
+    await createCheckoutSession(fakeReq(), res);
+    assert.equal(res.body.checkout_id, 'cs_after_404');
+    assert.notEqual(replacementKey, 'old-attempt-key');
+    assert.equal(store[0].checkoutIdempotencyKey, replacementKey);
+  });
+});
+
 test('a PayMongo create failure releases the claim so a retry is not permanently blocked', async () => {
   resetStore([makeBillDoc()]);
+  let firstKey = null;
   await withMockedAxios({ post: async () => { throw new Error('PayMongo unreachable'); } }, async () => {
     const res = fakeRes();
     await createCheckoutSession(fakeReq(), res);
-    assert.equal(res.statusCode, 500);
+    assert.equal(res.statusCode, 503);
+    assert.equal(res.body.retryable, true);
     assert.equal(store[0].checkoutClaimedAt, undefined, 'claim must be released on failure, not left dangling');
+    firstKey = store[0].checkoutIdempotencyKey;
+    assert.ok(firstKey, 'the uncertain provider request must retain its idempotency key');
+  });
+
+  await withMockedAxios({
+    post: async (_url, _payload, options) => {
+      assert.equal(options.headers['Idempotency-Key'], firstKey, 'retry must reuse the uncertain request key');
+      return mockPaymongoCreate('cs_replayed')();
+    },
+  }, async () => {
+    const retry = fakeRes();
+    await createCheckoutSession(fakeReq(), retry);
+    assert.equal(retry.body.checkout_id, 'cs_replayed');
+  });
+});
+
+test('temporary failure checking an existing session keeps it and never creates a duplicate', async () => {
+  resetStore([makeBillDoc({
+    paymongoSessionId: 'cs_existing_uncertain',
+    paymongoCheckoutUrl: 'https://checkout.paymongo.com/cs_existing_uncertain',
+    paymongoSessionCreatedAt: new Date(),
+  })]);
+  let createCalled = false;
+  await withMockedAxios({
+    get: async () => { throw new Error('provider timeout'); },
+    post: async () => { createCalled = true; return mockPaymongoCreate('cs_duplicate')(); },
+  }, async () => {
+    const res = fakeRes();
+    await createCheckoutSession(fakeReq(), res);
+    assert.equal(res.statusCode, 503);
+    assert.equal(res.body.code, 'PAYMONGO_STATUS_UNAVAILABLE');
+    assert.equal(createCalled, false);
+    assert.equal(store[0].paymongoSessionId, 'cs_existing_uncertain');
   });
 });
 
