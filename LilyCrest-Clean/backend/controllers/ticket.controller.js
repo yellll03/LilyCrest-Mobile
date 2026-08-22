@@ -122,6 +122,17 @@ async function getAllTickets(req, res) {
   }
 }
 
+async function getAdminTicket(req, res) {
+  try {
+    const db = getDb();
+    const ticket = await db.collection('tickets').findOne({ ticket_id: req.params.ticketId });
+    if (!ticket) return res.status(404).json({ detail: 'Ticket not found' });
+    return res.json({ ...ticket, _id: undefined });
+  } catch (error) {
+    return res.status(500).json({ detail: 'Failed to fetch ticket' });
+  }
+}
+
 // Admin: reply to a ticket
 async function adminReplyToTicket(req, res) {
   try {
@@ -206,6 +217,7 @@ module.exports = {
   respondToTicket,
   updateTicketStatus,
   getAllTickets,
+  getAdminTicket,
   adminReplyToTicket,
   adminUpdateTicketStatus,
 };

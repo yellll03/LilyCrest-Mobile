@@ -5,6 +5,7 @@ const { authMiddleware, adminMiddleware, tenantMiddleware } = require('../middle
 
 // Admin routes
 router.get('/admin/all', authMiddleware, adminMiddleware, ticketController.getAllTickets);
+router.get('/admin/:ticketId', authMiddleware, adminMiddleware, ticketController.getAdminTicket);
 router.post('/admin/:ticketId/reply', authMiddleware, adminMiddleware, ticketController.adminReplyToTicket);
 router.put('/admin/:ticketId/status', authMiddleware, adminMiddleware, ticketController.adminUpdateTicketStatus);
 

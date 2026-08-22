@@ -14,6 +14,7 @@ const { sendDueSoonReminders } = require('./services/surveyNotification.service'
 const { runAnnouncementDeliverySweep } = require('./services/announcementDelivery.service');
 const { initializeFirebase } = require('./config/firebase');
 const { cacheMiddleware } = require('./middleware/cache');
+const { commonSecurityHeaders, adminSecurityHeaders } = require('./middleware/securityHeaders');
 
 // Import routes
 const apiRoutes = require('./routes');
@@ -68,6 +69,8 @@ function noStorePrivateApiResponses(_req, res, next) {
   return next();
 }
 
+app.use(commonSecurityHeaders);
+
 // Middleware - CORS Configuration
 app.use(cors({
   origin: (origin, callback) => {
@@ -78,7 +81,14 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'If-None-Match'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'If-None-Match',
+    'X-LilyCrest-Admin',
+    'X-CSRF-Token',
+  ],
   exposedHeaders: ['Content-Range', 'X-Content-Range', 'ETag', 'X-Cache'],
   maxAge: 86400
 }));
@@ -160,7 +170,7 @@ app.use('/api', apiRoutes);
 app.use('/api/m', apiRoutes);
 
 // Serve admin panel static files
-app.use('/admin', express.static(path.join(__dirname, 'public', 'admin')));
+app.use('/admin', adminSecurityHeaders, express.static(path.join(__dirname, 'public', 'admin')));
 
 // Validate required environment variables before anything else starts
 function validateEnv() {

@@ -8,6 +8,15 @@ const { normalizeUser, sanitizeUserForClient } = require('../utils/normalizeUser
 const { isAccountActive } = require('../middleware/auth');
 const { validateNewPassword: validateCanonicalNewPassword } = require('../utils/passwordPolicy');
 const { isTenantMobileRole } = require('../utils/tenantEligibility');
+const {
+  ADMIN_CSRF_COOKIE,
+  adminCsrfTokenMatchesHash,
+  clearAdminBrowserCookies,
+  generateAdminCsrfToken,
+  hashAdminCsrfToken,
+  isAdminBrowserRequest,
+  issueAdminBrowserCookies,
+} = require('../utils/adminBrowserSession');
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────
 
@@ -383,10 +392,35 @@ async function login(req, res) {
       { $set: { firebase_uid: fbUid, last_login: new Date() } },
     ).catch(() => {});
     const session = await createSession(db, adminUser.user_id);
-    res.cookie('session_token', session.session_token, cookieOptions());
     const userData = await getCleanUser(db, adminUser.user_id);
     logAttempt(db, emailRaw, true, 'admin_login_success', req);
     console.log(`[Login] ✓ Admin login for user_id=${adminUser.user_id}`);
+    if (isAdminBrowserRequest(req)) {
+      try {
+        const csrfToken = generateAdminCsrfToken();
+        const csrfUpdate = await db.collection('user_sessions').updateOne(
+          { session_token: session.session_token, user_id: adminUser.user_id },
+          { $set: { admin_csrf_hash: hashAdminCsrfToken(csrfToken) } },
+        );
+        if (csrfUpdate.matchedCount !== 1) throw new Error('Admin session disappeared before CSRF binding');
+        issueAdminBrowserCookies(res, { sessionToken: session.session_token, csrfToken });
+        return res.json({
+          user: userData,
+          auth_transport: 'cookie',
+          csrf_token: csrfToken,
+          expires_at: session.expires_at,
+        });
+      } catch (error) {
+        await db.collection('user_sessions').deleteOne({ session_token: session.session_token }).catch(() => {});
+        console.error('Admin browser login session binding error:', error);
+        return res.status(503).json({
+          code: 'AUTH_SERVICE_UNAVAILABLE',
+          detail: 'The secure admin session could not be established. Please try again.',
+          retryable: true,
+        });
+      }
+    }
+    res.cookie('session_token', session.session_token, cookieOptions());
     return res.json({ user: userData, ...session });
   }
 
@@ -788,6 +822,54 @@ async function getMe(req, res) {
   res.json(sanitizeUserForClient(normalizeUser(req.user)));
 }
 
+async function getAdminBrowserSession(req, res) {
+  if (req.authTransport !== 'admin_cookie' || !isAdminBrowserRequest(req)) {
+    return res.status(400).json({
+      code: 'ADMIN_BROWSER_COOKIE_REQUIRED',
+      detail: 'Admin browser session cookie required.',
+      retryable: false,
+    });
+  }
+
+  try {
+    const db = getDb();
+    const cookieCsrfToken = req.cookies?.[ADMIN_CSRF_COOKIE];
+    const csrfToken = adminCsrfTokenMatchesHash(cookieCsrfToken, req.session?.admin_csrf_hash)
+      ? cookieCsrfToken
+      : generateAdminCsrfToken();
+
+    if (!adminCsrfTokenMatchesHash(csrfToken, req.session?.admin_csrf_hash)) {
+      const csrfUpdate = await db.collection('user_sessions').updateOne(
+        { _id: req.session._id, user_id: req.user.user_id },
+        { $set: { admin_csrf_hash: hashAdminCsrfToken(csrfToken) } },
+      );
+      if (csrfUpdate.matchedCount !== 1) {
+        clearAdminBrowserCookies(res);
+        return res.status(401).json({
+          code: 'SESSION_INVALID',
+          detail: 'Invalid session. Please sign in again.',
+          retryable: false,
+        });
+      }
+    }
+
+    issueAdminBrowserCookies(res, { sessionToken: req.authToken, csrfToken });
+    return res.json({
+      user: sanitizeUserForClient(normalizeUser(req.user)),
+      auth_transport: 'cookie',
+      csrf_token: csrfToken,
+      expires_at: req.session.expires_at,
+    });
+  } catch (error) {
+    console.error('Admin browser session restore error:', error);
+    return res.status(503).json({
+      code: 'AUTH_SERVICE_UNAVAILABLE',
+      detail: 'Authentication service is temporarily unavailable. Please try again.',
+      retryable: true,
+    });
+  }
+}
+
 // Method-neutral session rotation. Every successful sign-in path (Google and
 // email/password + OTP) receives the same opaque refresh credential, stored
 // only as a hash server-side. Refresh rotates the bearer session token and
@@ -919,6 +1001,7 @@ async function logout(req, res) {
       sameSite: isProduction ? 'none' : 'lax',
       path: '/',
     });
+    clearAdminBrowserCookies(res);
     res.json({ message: 'Logged out successfully' });
   } catch (error) {
     console.error('Logout error:', error);
@@ -1660,6 +1743,7 @@ module.exports = {
   verifyOtp,
   resendOtp,
   getMe,
+  getAdminBrowserSession,
   refreshSession,
   logout,
   sessionTeardown,
