@@ -239,7 +239,8 @@ async function restoreAnnouncement(req, res) {
   if (!announcementId) return res.status(400).json({ detail: 'announcementId is required.' });
   const db = getDb();
   const exists = await db.collection('announcements').findOne(announcementIdFilter(announcementId));
-  if (!exists) return res.status(404).json({ detail: 'Announcement not found.' });
+  const visible = exists ? await filterAnnouncementsForTenant(db, req.user, [exists]) : [];
+  if (!visible.length) return res.status(404).json({ detail: 'Announcement not found.' });
   const result = await db.collection('announcement_dismissals').deleteOne({
     user_id: userId,
     announcement_id: announcementId,

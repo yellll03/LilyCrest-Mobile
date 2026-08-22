@@ -187,6 +187,28 @@ test('restore rejects an unknown announcement rather than writing a phantom row'
   assert.equal(mongo.dismissals.length, 0);
 });
 
+test('restore fails closed for an announcement outside the tenant audience', async () => {
+  const mongo = makeFakeMongo({
+    announcements: [{
+      announcement_id: 'ann_private',
+      title: 'Private notice',
+      is_private: true,
+      user_id: 'tenant-b',
+    }],
+  });
+  mongo.dismissals.push({ user_id: 'tenant-a', announcement_id: 'ann_private' });
+  currentDb = mongo.db;
+
+  const res = fakeRes();
+  await restoreAnnouncement(req('tenant-a', 'ann_private'), res);
+
+  assert.equal(res.statusCode, 404);
+  assert.ok(
+    mongo.dismissalFor('tenant-a', 'ann_private'),
+    'an out-of-audience restore must not mutate the caller dismissal row',
+  );
+});
+
 test('restore requires an announcement id', async () => {
   const mongo = makeFakeMongo(SEED);
   currentDb = mongo.db;
