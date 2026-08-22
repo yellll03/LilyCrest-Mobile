@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
   Alert,
   Animated,
@@ -10,7 +11,6 @@ import {
   Platform,
   Pressable,
   ScrollView,
-  StatusBar as RNStatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -88,6 +88,7 @@ function getCategoryMeta(notification = {}) {
 export default function AppHeader() {
   const router = useRouter();
   const { isDarkMode } = useTheme();
+  const insets = useSafeAreaInsets();
   const {
     notifications, notificationUnreadCount, hasUnreadNotifications,
     markNotificationRead, clearNotificationUnread, dismissNotification,
@@ -212,8 +213,8 @@ export default function AppHeader() {
       header: {
         backgroundColor: c.headerBg,
         paddingHorizontal: 16,
-        paddingBottom: 14,
-        paddingTop: Platform.OS === 'ios' ? 56 : (RNStatusBar.currentHeight || 24) + 12,
+        paddingBottom: 10,
+        paddingTop: insets.top + 8,
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
@@ -257,7 +258,7 @@ export default function AppHeader() {
         alignItems: 'center',
         position: 'absolute',
         right: 16,
-        bottom: 14,
+        bottom: 10,
       },
       badgeDot: {
         position: 'absolute',
@@ -494,7 +495,7 @@ export default function AppHeader() {
       },
 
       safeAreaPad: {
-        height: Platform.OS === 'ios' ? 20 : 6,
+        height: Math.max(insets.bottom, Platform.OS === 'ios' ? 12 : 6),
       },
     })
   );

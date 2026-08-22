@@ -27,6 +27,13 @@ import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
 import { apiService, getApiErrorMessage } from '../../src/services/api';
 import { subscribeBillingRefresh } from '../../src/services/billingState';
 import { getBillingInsightPanel } from '../../src/utils/billingInsights';
+import {
+  formatHomeCurrency,
+  formatRoomCapacity,
+  formatRoomFloor,
+  formatRoomNumber,
+  formatRoomType,
+} from '../../src/utils/homePresentation';
 
 // ── Helpers ──────────────────────────────────────────────────
 function safeFormatDate(dateStr, fmt = 'MMM dd, yyyy') {
@@ -41,9 +48,7 @@ function safeFormatDate(dateStr, fmt = 'MMM dd, yyyy') {
 }
 
 function safeCurrency(amount) {
-  const n = Number(amount);
-  if (!Number.isFinite(n)) return '₱0';
-  return `₱${n.toLocaleString()}`;
+  return formatHomeCurrency(amount);
 }
 
 function getAssignmentMoveInDate(assignment) {
@@ -102,14 +107,18 @@ export default function HomeScreen() {
   const [debouncedQuery, setDebouncedQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [loadError, setLoadError] = useState(null);
+  const [dashboardOwnerId, setDashboardOwnerId] = useState(null);
   const [modalData, setModalData] = useState({ visible: false, title: '', message: '', type: 'info' });
   // Shared by both room and property photos — only one lightbox can be
   // visible at a time, so one instance/state covers both (see ImageLightbox).
   const [imagePreview, setImagePreview] = useState({ visible: false, images: [], index: 0 });
   const searchInputRef = useRef(null);
-  const latestDashboardRequestRef = useRef(0);
-  const isFetchingRef = useRef(false);
   const userId = user?.user_id || null;
+  const latestDashboardRequestRef = useRef(0);
+  const activeDashboardRequestRef = useRef(null);
+  const requestedDashboardUserIdRef = useRef(null);
+  const activeUserIdRef = useRef(userId);
+  activeUserIdRef.current = userId;
 
   // FAB pulse animation
   const fabScale = useRef(new Animated.Value(1)).current;
@@ -405,7 +414,13 @@ export default function HomeScreen() {
     quickActionSearch.forEach((a) => { if (matchText(a.title) || matchText(a.subtitle)) results.push(a); });
 
     if (matchText('room') || matchText(tenancyRoom?.room_number) || matchText(tenancyRoom?.room_type) || matchText(tenancyRoom?.bed_type)) {
-      results.push({ category: 'Room', title: `Room ${tenancyRoom?.room_number || '---'}`, subtitle: `${tenancyRoom?.room_type || 'Standard'} • Floor ${tenancyRoom?.floor || 1}`, route: '/(tabs)/home', icon: 'bed' });
+      results.push({
+        category: 'Room',
+        title: formatRoomNumber(tenancyRoom?.room_number),
+        subtitle: `${formatRoomType(tenancyRoom?.room_type)} • ${formatRoomFloor(tenancyRoom?.floor)}`,
+        route: '/(tabs)/home',
+        icon: 'bed',
+      });
     }
 
     (Array.isArray(bills) ? bills : []).forEach((b) => {
@@ -471,10 +486,12 @@ export default function HomeScreen() {
 
   // ── Data fetching ──
   const fetchDashboard = useCallback(async (force = false) => {
-    if (!force && isFetchingRef.current) return;
-    isFetchingRef.current = true;
+    const requestUserId = activeUserIdRef.current;
+    if (!requestUserId) return;
+    if (!force && activeDashboardRequestRef.current !== null) return;
     const requestId = latestDashboardRequestRef.current + 1;
     latestDashboardRequestRef.current = requestId;
+    activeDashboardRequestRef.current = requestId;
     try {
       setLoadError(null);
       // Notifications are no longer fetched here — AuthContext already owns
@@ -512,16 +529,17 @@ export default function HomeScreen() {
             ? [{ title: 'Maintenance', description: 'Service tickets', status: `${dashboard.active_maintenance_count} active` }]
             : [];
 
-      if (latestDashboardRequestRef.current !== requestId) return;
+      if (latestDashboardRequestRef.current !== requestId || activeUserIdRef.current !== requestUserId) return;
       setDashboardData({ ...dashboard, billing: billingItems, maintenance: mItems });
       setBillingHistory(billingItems);
+      setDashboardOwnerId(requestUserId);
     } catch (error) {
       console.error('Dashboard fetch error:', error?.message || error);
-      if (latestDashboardRequestRef.current !== requestId) return;
+      if (latestDashboardRequestRef.current !== requestId || activeUserIdRef.current !== requestUserId) return;
       setLoadError(getApiErrorMessage(error, 'Unable to load dashboard. Pull to retry.'));
     } finally {
-      isFetchingRef.current = false;
-      if (latestDashboardRequestRef.current !== requestId) return;
+      if (latestDashboardRequestRef.current !== requestId || activeUserIdRef.current !== requestUserId) return;
+      activeDashboardRequestRef.current = null;
       setIsLoading(false);
       setRefreshing(false);
     }
@@ -530,16 +548,31 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!authReady || authLoading) return;
     if (!userId) {
+      latestDashboardRequestRef.current += 1;
+      activeDashboardRequestRef.current = null;
+      requestedDashboardUserIdRef.current = null;
       setDashboardData(null);
       setBillingHistory([]);
+      setDashboardOwnerId(null);
       setIsLoading(false);
       setLoadError('Please sign in to load your dashboard.');
       return;
     }
-    // User just became available (login) — clear any stale error and fetch
+    const userChanged = requestedDashboardUserIdRef.current !== userId;
+    if (userChanged) {
+      // Never keep one tenant's saved dashboard visible while another tenant
+      // is signing in or while their first request is still in flight.
+      latestDashboardRequestRef.current += 1;
+      activeDashboardRequestRef.current = null;
+      requestedDashboardUserIdRef.current = userId;
+      setDashboardData(null);
+      setBillingHistory([]);
+      setDashboardOwnerId(null);
+    }
+    // User just became available (login) — clear any stale error and fetch.
     setLoadError(null);
     setIsLoading(true);
-    fetchDashboard();
+    fetchDashboard(userChanged);
   }, [authLoading, authReady, fetchDashboard, userId]);
 
   useEffect(() => {
@@ -571,8 +604,10 @@ export default function HomeScreen() {
     if (url && await Linking.canOpenURL(url)) await Linking.openURL(url);
   };
 
+  const hasCurrentDashboard = Boolean(dashboardData && dashboardOwnerId === userId);
+
   // ── Loading state ──
-  if (!authReady || isLoading) {
+  if (!authReady || isLoading || (dashboardData && !hasCurrentDashboard)) {
     return (
       <View style={styles.container}>
         <AppHeader />
@@ -587,14 +622,40 @@ export default function HomeScreen() {
     );
   }
 
+  if (loadError && !hasCurrentDashboard) {
+    return (
+      <View style={styles.container}>
+        <AppHeader />
+        <ScrollView
+          style={styles.scrollView}
+          contentContainerStyle={styles.loadErrorContent}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
+        >
+          <View style={styles.loadErrorState} accessibilityRole="alert">
+            <View style={styles.loadErrorIcon}>
+              <Ionicons name="cloud-offline-outline" size={26} color={colors.error} />
+            </View>
+            <Text style={styles.loadErrorTitle}>Home could not be loaded</Text>
+            <Text style={styles.loadErrorMessage}>{loadError}</Text>
+            <TouchableOpacity style={styles.loadErrorRetry} onPress={() => fetchDashboard(true)} accessibilityRole="button">
+              <Text style={styles.loadErrorRetryText}>Try again</Text>
+            </TouchableOpacity>
+          </View>
+        </ScrollView>
+      </View>
+    );
+  }
+
   return (
     <View style={styles.container}>
       <AppHeader />
-      {loadError ? (
-        <View style={styles.errorBanner}>
-          <Ionicons name="warning" size={16} color="#991B1B" />
-          <Text style={styles.errorText}>{loadError}</Text>
-          <TouchableOpacity onPress={fetchDashboard}><Text style={styles.retryText}>Retry</Text></TouchableOpacity>
+      {loadError && hasCurrentDashboard ? (
+        <View style={styles.staleBanner} accessibilityRole="alert">
+          <Ionicons name="cloud-offline-outline" size={15} color={colors.textMuted} />
+          <Text style={styles.staleText}>Showing saved information. Pull to refresh.</Text>
+          <TouchableOpacity onPress={() => fetchDashboard(true)} accessibilityRole="button">
+            <Text style={styles.staleRetryText}>Try again</Text>
+          </TouchableOpacity>
         </View>
       ) : null}
 
@@ -725,15 +786,24 @@ export default function HomeScreen() {
                 setImagePreview({ visible: true, images: tenancyRoom.images, index: 0 });
               }}
             >
-              <Image
-                source={tenancyRoom?.images?.[0] ? { uri: tenancyRoom.images[0] } : require('../../assets/images/Pic-quad.jpg')}
-                style={styles.roomImage}
-                cachePolicy="memory-disk"
-                contentFit="cover"
-              />
-              <View style={styles.roomTypeBadge}>
-                <Text style={styles.roomTypeText}>{tenancyRoom?.room_type || 'Standard'}</Text>
-              </View>
+              {tenancyRoom?.images?.[0] ? (
+                <Image
+                  source={{ uri: tenancyRoom.images[0] }}
+                  style={styles.roomImage}
+                  cachePolicy="memory-disk"
+                  contentFit="cover"
+                />
+              ) : (
+                <View style={styles.roomImageFallback}>
+                  <Ionicons name="image-outline" size={24} color={colors.textMuted} />
+                  <Text style={styles.roomImageFallbackText}>No room photo</Text>
+                </View>
+              )}
+              {tenancyRoom?.room_type ? (
+                <View style={styles.roomTypeBadge}>
+                  <Text style={styles.roomTypeText}>{formatRoomType(tenancyRoom.room_type)}</Text>
+                </View>
+              ) : null}
               {tenancyRoom?.images?.length ? (
                 <View style={styles.roomViewBadge}>
                   <Ionicons name="expand-outline" size={12} color="#ffffff" />
@@ -748,12 +818,12 @@ export default function HomeScreen() {
                 const room = tenancyRoom;
                 setModalData({
                   visible: true,
-                  title: room?.room_number ? `Room ${room.room_number}` : 'Room information unavailable',
+                  title: formatRoomNumber(room?.room_number),
                   message: [
-                    `Type: ${room?.room_type || 'Standard'}`,
+                    `Type: ${formatRoomType(room?.room_type)}`,
                     `Bed: ${room?.bed_type || 'Bed not assigned'}`,
-                    `Capacity: ${room?.capacity || 0} pax`,
-                    `Floor: ${room?.floor || 1}`,
+                    `Capacity: ${formatRoomCapacity(room?.capacity)}`,
+                    formatRoomFloor(room?.floor),
                     `Monthly Rate: ${safeCurrency(room?.price)}`,
                     '',
                     room?.amenities?.length ? `Amenities: ${room.amenities.join(', ')}` : '',
@@ -763,19 +833,23 @@ export default function HomeScreen() {
                 });
               }}
             >
-              <Text style={styles.roomNumber}>{tenancyRoom?.room_number ? `Room ${tenancyRoom.room_number}` : 'Room information unavailable'}</Text>
+              <Text style={styles.roomNumber}>{formatRoomNumber(tenancyRoom?.room_number)}</Text>
               <View style={styles.roomInfoGrid}>
+                <View style={styles.roomInfoItem}>
+                  <Ionicons name="home-outline" size={15} color={colors.textSecondary} />
+                  <Text style={styles.roomInfoText}>{formatRoomType(tenancyRoom?.room_type)}</Text>
+                </View>
                 <View style={styles.roomInfoItem}>
                   <Ionicons name="bed-outline" size={15} color={colors.textSecondary} />
                   <Text style={styles.roomInfoText}>{tenancyRoom?.bed_type || 'Bed not assigned'}</Text>
                 </View>
                 <View style={styles.roomInfoItem}>
                   <Ionicons name="people-outline" size={15} color={colors.textSecondary} />
-                  <Text style={styles.roomInfoText}>{tenancyRoom?.capacity || 0} pax</Text>
+                  <Text style={styles.roomInfoText}>{formatRoomCapacity(tenancyRoom?.capacity)}</Text>
                 </View>
                 <View style={styles.roomInfoItem}>
                   <Ionicons name="layers-outline" size={15} color={colors.textSecondary} />
-                  <Text style={styles.roomInfoText}>Floor {tenancyRoom?.floor || 1}</Text>
+                  <Text style={styles.roomInfoText}>{formatRoomFloor(tenancyRoom?.floor)}</Text>
                 </View>
               </View>
               <View style={styles.priceRow}>
@@ -1098,9 +1172,16 @@ function createStyles(c) {
     container: { flex: 1, backgroundColor: c.background },
     scrollView: { flex: 1 },
     scrollContent: { padding: 16, paddingTop: 12 },
-    errorBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 10, marginHorizontal: 16, marginBottom: 8, borderRadius: 12, backgroundColor: c.surface, borderWidth: 1, borderColor: c.error },
-    errorText: { flex: 1, color: c.error, fontWeight: '700', fontSize: 12 },
-    retryText: { color: c.error, fontWeight: '700', fontSize: 12 },
+    loadErrorContent: { flexGrow: 1, justifyContent: 'center', padding: 24 },
+    loadErrorState: { alignItems: 'center', padding: 24, borderRadius: 16, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border },
+    loadErrorIcon: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', backgroundColor: c.errorBg || c.surfaceSecondary, marginBottom: 14 },
+    loadErrorTitle: { color: c.text, fontSize: 17, fontWeight: '700', textAlign: 'center' },
+    loadErrorMessage: { color: c.textSecondary, fontSize: 13, lineHeight: 19, textAlign: 'center', marginTop: 6 },
+    loadErrorRetry: { marginTop: 18, minHeight: 42, minWidth: 112, borderRadius: 10, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 18, backgroundColor: c.primary },
+    loadErrorRetryText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
+    staleBanner: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 12, paddingVertical: 8, marginHorizontal: 16, marginTop: 8, borderRadius: 10, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border },
+    staleText: { flex: 1, color: c.textSecondary, fontWeight: '500', fontSize: 11, lineHeight: 15 },
+    staleRetryText: { color: c.primary, fontWeight: '700', fontSize: 11 },
 
     // Search
     searchContainer: {
@@ -1153,6 +1234,8 @@ function createStyles(c) {
     tenancyContent: { flexDirection: 'row', marginBottom: 14 },
     roomImageContainer: { width: 105, height: 105, borderRadius: 12, overflow: 'hidden', marginRight: 14, position: 'relative' },
     roomImage: { width: '100%', height: '100%' },
+    roomImageFallback: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 6, padding: 8, backgroundColor: c.surfaceSecondary },
+    roomImageFallbackText: { color: c.textMuted, fontSize: 10, fontWeight: '600', textAlign: 'center' },
     roomTypeBadge: { position: 'absolute', bottom: 6, left: 6, backgroundColor: c.headerBg, paddingVertical: 3, paddingHorizontal: 8, borderRadius: 6 },
     roomTypeText: { fontSize: 10, fontWeight: '600', color: '#ffffff' },
     roomViewBadge: { position: 'absolute', top: 6, right: 6, width: 24, height: 24, borderRadius: 6, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center' },
