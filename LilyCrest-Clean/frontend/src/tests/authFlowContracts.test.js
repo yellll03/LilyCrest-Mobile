@@ -49,11 +49,16 @@ describe('auth flow implementation contracts', () => {
     expect(read('src/config/firebase.js')).toContain('globalForFirebase.auth');
   });
 
-  test('auth restoration renders a loading state before protected content', () => {
+  test('auth restoration blocks protected content while the pre-login entry owns the text-free loader', () => {
     const context = read('src/context/AuthContext.js');
     const layout = read('app/_layout.jsx');
+    const index = read('app/index.jsx');
     expect(context).toContain("authStatus === 'initializing'");
-    expect(layout).toContain('if (isLoading || !authReady');
+    expect(layout).toContain('(!authReady && !preLoginEntryPath)');
+    expect(layout).not.toContain('Preparing LilyCrest');
+    expect(index).toContain('if (checking)');
+    expect(index).toContain('<ActivityIndicator');
+    expect(index).toContain("authStatus === 'unauthenticated' && !minimumLoadingComplete");
   });
 
   test('expired session clears storage and returns unauthenticated', () => {

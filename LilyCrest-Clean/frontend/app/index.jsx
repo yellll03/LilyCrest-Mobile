@@ -53,11 +53,13 @@ const SLIDES = [
 const NAVY = '#0A1628';
 const ACCENT = '#D4AF37';
 const ACCENT_LIGHT = '#B9921F';
+const PRE_LOGIN_LOADING_MIN_MS = 900;
 
 export default function OnboardingScreen() {
   const router = useRouter();
   const { authStatus, checkAuth } = useAuth();
   const [isAutoBiometricLoading, setIsAutoBiometricLoading] = useState(false);
+  const [minimumLoadingComplete, setMinimumLoadingComplete] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const flatListRef = useRef(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
@@ -89,6 +91,11 @@ export default function OnboardingScreen() {
   }, [checkAuth]);
 
   useEffect(() => {
+    const timer = setTimeout(() => setMinimumLoadingComplete(true), PRE_LOGIN_LOADING_MIN_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
+  useEffect(() => {
     Animated.parallel([
       Animated.timing(fadeAnim, { toValue: 1, duration: 900, useNativeDriver: true }),
       Animated.timing(slideUpAnim, { toValue: 0, duration: 900, useNativeDriver: true }),
@@ -118,7 +125,9 @@ export default function OnboardingScreen() {
     };
   }, [authStatus, tryAutoBiometric]);
 
-  const checking = authStatus === 'initializing' || isAutoBiometricLoading;
+  const checking = authStatus === 'initializing'
+    || isAutoBiometricLoading
+    || (authStatus === 'unauthenticated' && !minimumLoadingComplete);
 
   // ── Slide render ─────────────────────────────────────────────────────────
   const renderSlide = useCallback(({ item }) => (

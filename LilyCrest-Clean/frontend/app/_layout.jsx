@@ -2,7 +2,7 @@ import { Stack, usePathname, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react';
-import { ActivityIndicator, Platform, Text, TextInput, View } from 'react-native';
+import { Platform, Text, TextInput, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AlertProvider } from '../src/context/AlertContext';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
@@ -75,11 +75,12 @@ function LayoutContent() {
   // An anchored Home tab can have the collapsed pathname "/". Its group
   // segment still marks it as authenticated application content.
   const protectedPath = isProtectedPath(pathname) || segments.includes('(tabs)');
+  const preLoginEntryPath = pathname === '/' && !segments.includes('(tabs)');
   const authenticatedAuthPath = authStatus === 'authenticated' && isAuthenticationPath(pathname, segments);
   const unauthenticatedProtectedPath = authStatus === 'unauthenticated' && protectedPath;
 
   useEffect(() => {
-    if (!isLoading) SplashScreen.hideAsync();
+    if (!isLoading) SplashScreen.hideAsync().catch(() => {});
   }, [isLoading]);
 
   useEffect(() => {
@@ -99,15 +100,8 @@ function LayoutContent() {
     }
   }, [authReady, authenticatedAuthPath, router, unauthenticatedProtectedPath]);
 
-  if (isLoading || !authReady || authenticatedAuthPath || unauthenticatedProtectedPath) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, padding: 24 }}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={{ marginTop: 14, color: colors.textSecondary, fontSize: 14, fontWeight: '600' }}>
-          Preparing LilyCrest...
-        </Text>
-      </View>
-    );
+  if (isLoading || (!authReady && !preLoginEntryPath) || authenticatedAuthPath || unauthenticatedProtectedPath) {
+    return <View style={{ flex: 1, backgroundColor: colors.background }} />;
   }
 
   return (
