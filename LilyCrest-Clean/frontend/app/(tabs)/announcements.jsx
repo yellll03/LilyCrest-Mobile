@@ -117,10 +117,10 @@ export default function AnnouncementsScreen() {
     headerSubtitle: { fontSize: 12, color: '#D0D7E2', marginTop: 2 },
     toolbarRow: {
       flexDirection: 'row', alignItems: 'center',
-      paddingHorizontal: 14, paddingBottom: 12, gap: 8,
+      paddingHorizontal: 16, paddingTop: 6, paddingBottom: 10, gap: 8,
     },
     toolbarButton: {
-      flex: 1, minHeight: 42, paddingHorizontal: 8, borderRadius: 10,
+      flex: 1, height: 40, paddingHorizontal: 6, borderRadius: 10,
       backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: 'transparent',
       flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 5,
     },
@@ -137,7 +137,7 @@ export default function AnnouncementsScreen() {
 
     // ── Cards ──
     scrollView: { flex: 1 },
-    scrollContent: { padding: 14, paddingTop: 14, gap: 10 },
+    scrollContent: { padding: 16, paddingTop: 12, gap: 10 },
     announcementCard: {
       backgroundColor: c.surface,
       borderRadius: 12,
@@ -743,8 +743,8 @@ export default function AnnouncementsScreen() {
             accessibilityRole="button"
             accessibilityLabel={`Open announcement filters${activeFilterCount ? `, ${activeFilterCount} active` : ''}`}
           >
-            <Ionicons name="options-outline" size={16} color={hasActiveFilters ? colors.accent : colors.textSecondary} />
-            <Text style={[styles.toolbarButtonText, hasActiveFilters && styles.toolbarButtonTextActive]}>
+            <Ionicons name="options-outline" size={15} color={hasActiveFilters ? colors.accent : colors.textSecondary} />
+            <Text numberOfLines={1} style={[styles.toolbarButtonText, hasActiveFilters && styles.toolbarButtonTextActive]}>
               Filters{activeFilterCount ? ` · ${activeFilterCount}` : ''}
             </Text>
           </TouchableOpacity>
@@ -754,8 +754,8 @@ export default function AnnouncementsScreen() {
             accessibilityRole="button"
             accessibilityLabel={`Sort order: ${sortOrder === 'newest' ? 'Newest' : 'Oldest'}`}
           >
-            <Ionicons name={sortOrder === 'newest' ? 'arrow-down' : 'arrow-up'} size={13} color={colors.textSecondary} />
-            <Text style={styles.toolbarButtonText}>{sortOrder === 'newest' ? 'Newest' : 'Oldest'}</Text>
+            <Ionicons name={sortOrder === 'newest' ? 'arrow-down' : 'arrow-up'} size={15} color={colors.textSecondary} />
+            <Text numberOfLines={1} style={styles.toolbarButtonText}>{sortOrder === 'newest' ? 'Newest' : 'Oldest'}</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={[styles.toolbarButton, refreshing && styles.toolbarButtonDisabled]}
@@ -766,10 +766,10 @@ export default function AnnouncementsScreen() {
             accessibilityState={{ disabled: refreshing, busy: refreshing }}
           >
             {refreshing
-              ? <ActivityIndicator size={14} color={colors.primary} />
-              : <Ionicons name="refresh" size={16} color={colors.textMuted} />
+              ? <ActivityIndicator size={15} color={colors.primary} />
+              : <Ionicons name="refresh" size={15} color={colors.textMuted} />
             }
-            <Text style={styles.toolbarButtonText}>{refreshing ? 'Refreshing' : 'Refresh'}</Text>
+            <Text numberOfLines={1} style={styles.toolbarButtonText}>{refreshing ? 'Refreshing' : 'Refresh'}</Text>
           </TouchableOpacity>
         </View>}
       </View>

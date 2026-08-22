@@ -46,6 +46,7 @@ export function useTenantContract() {
     } catch (err) {
       if (requestId !== requestSequence.current) return;
       const authorizationFailed = err?.response?.status === 401 || err?.response?.status === 403;
+      const multipleCanonicalContracts = err?.response?.status === 409;
       if (authorizationFailed) {
         // Authorization was lost — never keep a previously-authorized private
         // contract/document presentation visible.
@@ -53,6 +54,16 @@ export function useTenantContract() {
         setContract(null);
         setState('ERROR');
         setError('Please sign in again to view your lease contract.');
+      } else if (multipleCanonicalContracts) {
+        // The backend intentionally refuses to guess between two candidate
+        // Contract records for this tenant (selectCanonicalTenantContract()
+        // throwing rather than picking one). Mobile must never resolve this
+        // itself — surface it as a distinct, blocking state instead of
+        // folding it into the generic error/stale copy.
+        hasLoadedOnce.current = false;
+        setContract(null);
+        setState('MULTIPLE_CONTRACTS');
+        setError("We found multiple active contract records associated with your account. Please contact Lilycrest support so the records can be reviewed.");
       } else if (hasLoadedOnce.current) {
         // Transient network/upstream failure after a successful load: keep
         // showing the last safe presentation, surface a retryable warning

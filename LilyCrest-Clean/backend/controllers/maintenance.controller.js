@@ -606,6 +606,7 @@ function buildUpdateEntry({
   senderLabel = null,
   summary = null,
   readByTenant = false,
+  readByAdmin = false,
   extra = {},
 } = {}) {
   const now = extra.created_at || extra.createdAt || new Date();
@@ -633,6 +634,7 @@ function buildUpdateEntry({
     summary: summary || null,
     tenantSummary: summary || null,
     readByTenant: readByTenant === true,
+    readByAdmin: readByAdmin === true,
     created_at: now,
     createdAt: now,
     ...extra,
@@ -668,6 +670,7 @@ function mapLegacyStatusHistoryEntry(entry = {}, index = 0) {
     status_to: entry.status || null,
     attachments,
     readByTenant: entry.readByTenant === true,
+    readByAdmin: entry.readByAdmin === true,
     visibleToTenant: true,
     visibility: 'tenant',
     created_at: timestamp,
@@ -701,6 +704,7 @@ function mapUpdateForTenant(entry = {}, index = 0) {
     summary,
     tenantSummary: summary,
     readByTenant: entry.readByTenant === true,
+    readByAdmin: entry.readByAdmin === true,
     visibleToTenant: true,
     visibility: 'tenant',
     created_at: timestamp,
@@ -822,6 +826,19 @@ function isUnreadForTenant(entry = {}, lastTenantSeenAt = null) {
   return timestamp > lastSeen;
 }
 
+// Whether a tenant-authored message has been read by admin/staff — used to
+// render the tenant's "Sent" / "Seen" read receipt. Falls back to comparing
+// against lastAdminSeenAt for entries created before the per-entry
+// readByAdmin flag existed.
+function isSeenByAdmin(entry = {}, lastAdminSeenAt = null) {
+  if (normalizeSenderRole(entry.senderRole || entry.actor_role) !== 'tenant') return null;
+  if (entry.readByAdmin === true) return true;
+  const timestamp = normalizeDate(getEntryTimestamp(entry));
+  const lastSeen = normalizeDate(lastAdminSeenAt);
+  if (!timestamp || !lastSeen) return false;
+  return timestamp <= lastSeen;
+}
+
 function getLatestTenantVisibleUpdate(thread = []) {
   return [...thread]
     .filter((entry) => entry.type !== 'tenant_submitted')
@@ -829,9 +846,14 @@ function getLatestTenantVisibleUpdate(thread = []) {
 }
 
 function buildTenantRequestResponse(request = {}, { includeThread = false } = {}) {
-  const thread = buildTenantThread(request);
-  const latestUpdate = getLatestTenantVisibleUpdate(thread);
+  const rawThread = buildTenantThread(request);
   const lastTenantSeenAt = request.lastTenantSeenAt || request.last_tenant_seen_at || null;
+  const lastAdminSeenAt = request.lastAdminSeenAt || request.last_admin_seen_at || null;
+  const thread = rawThread.map((entry) => ({
+    ...entry,
+    seenByAdmin: isSeenByAdmin(entry, lastAdminSeenAt),
+  }));
+  const latestUpdate = getLatestTenantVisibleUpdate(thread);
   const unreadTenantCount = thread.filter((entry) => isUnreadForTenant(entry, lastTenantSeenAt)).length;
   const tenantSummary = sanitizeTenantSummary(request.tenant_summary || request.tenantSummary);
 
@@ -853,6 +875,7 @@ function buildTenantRequestResponse(request = {}, { includeThread = false } = {}
     tenantSummary,
     tenant_confirmed_resolved: request.tenant_confirmed_resolved === true,
     lastTenantSeenAt,
+    lastAdminSeenAt,
     lastActivityAt: request.lastActivityAt || request.last_activity_at || request.updated_at || request.updatedAt || request.created_at || request.createdAt || null,
     latestActivityAt: request.lastActivityAt || request.last_activity_at || request.updated_at || request.updatedAt || request.created_at || request.createdAt || null,
     lastTenantVisibleActivityAt: request.lastTenantVisibleActivityAt || request.last_tenant_visible_activity_at || latestUpdate?.created_at || null,
@@ -940,6 +963,7 @@ function normalizeRequestForPrimary(request, user = {}) {
   normalized.lastActivityAt = normalized.lastActivityAt || normalized.last_activity_at || normalized.updated_at || now;
   normalized.lastTenantVisibleActivityAt = normalized.lastTenantVisibleActivityAt || normalized.last_tenant_visible_activity_at || normalized.created_at || now;
   normalized.lastTenantSeenAt = normalized.lastTenantSeenAt || normalized.last_tenant_seen_at || null;
+  normalized.lastAdminSeenAt = normalized.lastAdminSeenAt || normalized.last_admin_seen_at || null;
 
   normalized.cancelled_at = normalized.cancelled_at ?? null;
   normalized.reopened_at = normalized.reopened_at ?? null;
@@ -2012,6 +2036,49 @@ async function adminUpdateStatus(req, res) {
   }
 }
 
+// Admin: mark tenant-authored messages as read/seen (drives the tenant's
+// Sent/Seen read receipt). Called when an admin opens a request's thread.
+async function adminMarkRead(req, res) {
+  try {
+    const db = getDb();
+    const { requestId } = req.params;
+    const located = await findRequestForAdmin(db, requestId);
+
+    if (!located) {
+      return res.status(404).json({ detail: 'Request not found' });
+    }
+
+    const now = new Date();
+    const updates = Array.isArray(located.request.updates)
+      ? located.request.updates.map((entry) => (
+          normalizeSenderRole(entry.sender_role || entry.actor_role) === 'tenant'
+            ? { ...entry, readByAdmin: true, read_by_admin: true, readByAdminAt: now }
+            : entry
+        ))
+      : [];
+
+    await db.collection(located.collectionName).updateOne(
+      { request_id: requestId },
+      {
+        $set: {
+          updates,
+          lastAdminSeenAt: now,
+          last_admin_seen_at: now,
+        },
+      }
+    );
+
+    const updatedSource = await db.collection(located.collectionName).findOne({ request_id: requestId });
+    const updated = await promoteRequestToPrimary(db, updatedSource, req.user)
+      .catch(() => updatedSource);
+
+    res.json(stripInternalRequestFields(updated));
+  } catch (error) {
+    console.error('Admin mark maintenance read error:', error);
+    res.status(500).json({ detail: 'Failed to mark maintenance updates as read' });
+  }
+}
+
 // Admin: get all maintenance requests
 async function adminGetAll(req, res) {
   try {
@@ -2045,6 +2112,7 @@ module.exports = {
   reopenMaintenance,
   adminUpdateStatus,
   adminGetAll,
+  adminMarkRead,
   countActiveMaintenanceForUser,
   isMaintenanceTransitionAllowed,
   sanitizeAttachmentForTenant,
@@ -2053,4 +2121,11 @@ module.exports = {
   // (see tests/inquiryAttachmentSizeLimit.test.js).
   normalizeTenantAttachments,
   INQUIRY_ATTACHMENT_MAX_BYTES,
+  // Exported so other authenticated-tenant-scoped consumers (the AI
+  // assistant) can reuse the exact same tenant-owned maintenance
+  // lookup/visibility logic instead of re-implementing it — see
+  // chatbot.controller.js's fetchMaintenanceRequestsForUser.
+  loadRequestsAcrossCollections,
+  buildUserMaintenanceFilter,
+  resolveTenantContext,
 };

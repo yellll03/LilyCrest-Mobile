@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import {
@@ -216,24 +217,35 @@ export default function AppHeader() {
         flexDirection: 'row',
         alignItems: 'center',
         justifyContent: 'center',
+        position: 'relative',
         borderBottomWidth: 3,
         borderBottomColor: c.accent,
       },
-      spacer: { width: 40 },
-      titleContainer: { flex: 1, alignItems: 'center' },
+      brandGroup: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: 8,
+      },
+      brandTextStack: {
+        alignItems: 'flex-start',
+        gap: 1,
+      },
+      logoMark: {
+        width: 32,
+        height: 32,
+      },
       title: {
-        fontSize: 24,
+        fontSize: 22,
+        lineHeight: 23,
         fontWeight: '800',
         color: '#ffffff',
-        textAlign: 'center',
         letterSpacing: 1,
       },
       subtitle: {
-        fontSize: 13,
+        fontSize: 12,
+        lineHeight: 15,
         fontWeight: '500',
         color: 'rgba(255,255,255,0.7)',
-        textAlign: 'center',
-        marginTop: 2,
         letterSpacing: 0.5,
       },
       iconBtn: {
@@ -243,7 +255,9 @@ export default function AppHeader() {
         backgroundColor: 'rgba(255,255,255,0.1)',
         justifyContent: 'center',
         alignItems: 'center',
-        position: 'relative',
+        position: 'absolute',
+        right: 16,
+        bottom: 14,
       },
       badgeDot: {
         position: 'absolute',
@@ -488,10 +502,17 @@ export default function AppHeader() {
   return (
     <>
       <View style={styles.header}>
-        <View style={styles.spacer} />
-        <View style={styles.titleContainer}>
-          <Text style={styles.title}>LilyCrest</Text>
-          <Text style={styles.subtitle}>Tenant Portal</Text>
+        <View style={styles.brandGroup}>
+          <Image
+            source={require('../../assets/images/lilycrest-mark.png')}
+            style={styles.logoMark}
+            contentFit="contain"
+            accessibilityLabel="LilyCrest logo"
+          />
+          <View style={styles.brandTextStack}>
+            <Text style={styles.title}>LilyCrest</Text>
+            <Text style={styles.subtitle}>Tenant Portal</Text>
+          </View>
         </View>
         <TouchableOpacity
           style={styles.iconBtn}

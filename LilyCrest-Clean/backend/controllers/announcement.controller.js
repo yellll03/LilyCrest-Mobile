@@ -120,6 +120,34 @@ function isAnnouncementVisibleForBranch(doc, requesterBranchCode) {
   return normalizedBranchReference(branchRef) === requesterBranchCode;
 }
 
+// Mongo-level portion of tenant announcement visibility: active, not
+// archived, and either public or privately targeted at this exact userId.
+// Branch scoping (isAnnouncementVisibleForBranch) is applied afterward in JS
+// since it needs the requester's resolved branch code, not just their id.
+// Shared by getAllAnnouncements and any other authenticated-tenant-scoped
+// consumer (the AI assistant) that needs the identical visibility rule
+// instead of a second, divergent query.
+function buildTenantAnnouncementQuery(userId) {
+  // Handle both snake_case (app-created) and camelCase (admin-panel-created) documents.
+  // Web admin docs may lack is_active/isActive entirely — treat missing as active.
+  const activeFilter = {
+    $or: [
+      { is_active: true },
+      { isActive: true },
+      { is_active: { $exists: false }, isActive: { $exists: false } },
+    ],
+  };
+  // Exclude archived announcements (web admin uses isArchived)
+  const notArchivedFilter = { isArchived: { $ne: true } };
+  const visibilityFilter = {
+    $or: [
+      { is_private: { $ne: true }, isPrivate: { $ne: true } },
+      ...(userId ? [{ is_private: true, user_id: userId }, { isPrivate: true, userId }] : []),
+    ],
+  };
+  return { $and: [activeFilter, notArchivedFilter, visibilityFilter] };
+}
+
 // Get all announcements
 async function getAllAnnouncements(req, res) {
   try {
@@ -131,26 +159,8 @@ async function getAllAnnouncements(req, res) {
         .map((entry) => String(entry.announcement_id || '')).filter(Boolean))
       : new Set();
 
-    // Handle both snake_case (app-created) and camelCase (admin-panel-created) documents.
-    // Web admin docs may lack is_active/isActive entirely — treat missing as active.
-    const activeFilter = {
-      $or: [
-        { is_active: true },
-        { isActive: true },
-        { is_active: { $exists: false }, isActive: { $exists: false } },
-      ],
-    };
-    // Exclude archived announcements (web admin uses isArchived)
-    const notArchivedFilter = { isArchived: { $ne: true } };
-    const visibilityFilter = {
-      $or: [
-        { is_private: { $ne: true }, isPrivate: { $ne: true } },
-        ...(userId ? [{ is_private: true, user_id: userId }, { isPrivate: true, userId }] : []),
-      ],
-    };
-
     const announcements = (await db.collection('announcements')
-      .find({ $and: [activeFilter, notArchivedFilter, visibilityFilter] })
+      .find(buildTenantAnnouncementQuery(userId))
       .sort({ created_at: -1, createdAt: -1 })
       .toArray())
       .filter((doc) => isAnnouncementVisibleForBranch(doc, requesterBranchCode));
@@ -308,7 +318,9 @@ module.exports = {
   createAnnouncement,
   dismissAnnouncement,
   dismissAnnouncementsBulk,
-  // exported for unit testing of branch-visibility rules in isolation
+  // exported for unit testing of branch-visibility rules in isolation, and
+  // for reuse by other authenticated-tenant-scoped consumers (chatbot)
   isAnnouncementVisibleForBranch,
   resolveRequesterBranchCode,
+  buildTenantAnnouncementQuery,
 };

@@ -1070,7 +1070,7 @@ export default function HomeScreen() {
       <Link href="/(tabs)/chatbot" prefetch asChild>
         <TouchableOpacity activeOpacity={0.85}>
           <Animated.View style={[styles.chatbotButton, { transform: [{ scale: fabScale }] }]}>
-            <LilyFlowerIcon size={28} />
+            <LilyFlowerIcon size={42} imageScale={1.24} />
           </Animated.View>
         </TouchableOpacity>
       </Link>
@@ -1547,10 +1547,12 @@ function createStyles(c) {
       position: 'absolute',
       bottom: Platform.OS === 'ios' ? 110 : 90,
       right: 20,
-      width: 52,
-      height: 52,
-      borderRadius: 26,
+      width: 58,
+      height: 58,
+      borderRadius: 29,
       backgroundColor: c.accent,
+      borderWidth: 2,
+      borderColor: '#FFFFFF',
       justifyContent: 'center',
       alignItems: 'center',
       ...Platform.select({

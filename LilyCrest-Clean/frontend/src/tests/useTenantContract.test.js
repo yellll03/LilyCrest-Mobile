@@ -189,6 +189,28 @@ describe('useTenantContract refresh/error lifecycle against the real canonical r
     expect(result.current.contract).toBeNull();
     expect(result.current.state).toBe('ERROR');
   });
+
+  test('HTTP 409 MULTIPLE_CANONICAL_CONTRACTS surfaces a distinct blocking state instead of guessing a contract', async () => {
+    apiService.getCurrentContract.mockRejectedValueOnce({ response: { status: 409, data: { code: 'MULTIPLE_CANONICAL_CONTRACTS' } } });
+    const { result } = renderHook(() => useTenantContract());
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.contract).toBeNull();
+    expect(result.current.state).toBe('MULTIPLE_CONTRACTS');
+    expect(result.current.error).toMatch(/multiple active contract records/i);
+  });
+
+  test('HTTP 409 after a previously loaded contract still clears it rather than keeping a stale one visible', async () => {
+    apiService.getCurrentContract.mockResolvedValueOnce(draftResponse());
+    const { result } = renderHook(() => useTenantContract());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    apiService.getCurrentContract.mockRejectedValueOnce({ response: { status: 409 } });
+    await act(async () => result.current.reload());
+
+    expect(result.current.contract).toBeNull();
+    expect(result.current.state).toBe('MULTIPLE_CONTRACTS');
+  });
 });
 
 // Full-pipeline regression: a canonical API-shaped response (including

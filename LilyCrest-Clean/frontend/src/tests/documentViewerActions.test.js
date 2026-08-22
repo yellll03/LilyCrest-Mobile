@@ -7,12 +7,21 @@ const imageViewer = fs.readFileSync(path.resolve(__dirname, '../../app/image-vie
 const imageManager = fs.readFileSync(path.resolve(__dirname, '../services/imageDocumentManager.js'), 'utf8');
 
 describe('authenticated document viewer actions', () => {
-  test('PDF viewer exposes download, print, share, paging, and retry', () => {
-    expect(pdfViewer).toContain('Download PDF');
-    expect(pdfViewer).toContain('Print PDF');
-    expect(pdfViewer).toContain('Share PDF');
+  test('document viewer exposes download, print, share, paging, and retry', () => {
+    expect(pdfViewer).toContain('Download document');
+    expect(pdfViewer).toContain('Print document');
+    expect(pdfViewer).toContain('Share document');
     expect(pdfViewer).toContain('Page {page} of {pages}');
     expect(pdfViewer).toContain('load(true)');
+  });
+
+  // A wet-signed contract scan may be uploaded as a PDF or as a JPG/PNG image
+  // (see CONTRACT_MOBILE_DISPLAY_WORKFLOW.md) — this viewer must render
+  // whichever format the backend actually served, not assume PDF always.
+  test('document viewer renders images (jpg/png) as well as PDFs', () => {
+    expect(pdfViewer).toContain("extension === 'jpg' || extension === 'png'");
+    expect(pdfViewer).toContain('isImage ?');
+    expect(pdfViewer).toContain('<Image');
   });
 
   test('image viewer downloads to an owner-scoped cache and supports actions', () => {

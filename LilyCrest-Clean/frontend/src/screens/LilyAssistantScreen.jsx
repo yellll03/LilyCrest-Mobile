@@ -16,6 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import InquiryCard from '../components/assistant/InquiryCard';
+import AttachmentPickerSheet from '../components/AttachmentPickerSheet';
 import LilyFlowerIcon from '../components/assistant/LilyFlowerIcon';
 import MessageBubble from '../components/assistant/MessageBubble';
 import { useAuth } from '../context/AuthContext';
@@ -1573,7 +1574,7 @@ export default function LilyAssistantScreen() {
             <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
               <View style={styles.headerLeft}>
                 <View style={styles.headerAvatar}>
-                  <LilyFlowerIcon size={50} pulse={isSending} />
+                  <LilyFlowerIcon size={38} pulse={isSending} />
                 </View>
                 <View style={styles.headerTextWrap}>
                   <Text style={styles.headerTitle}>Lily</Text>
@@ -1641,7 +1642,7 @@ export default function LilyAssistantScreen() {
                   <View style={styles.heroCard}>
                     <View style={styles.heroRow}>
                       <View style={styles.heroBadge}>
-                        <LilyFlowerIcon size={58} pulse />
+                        <LilyFlowerIcon size={46} pulse />
                       </View>
                       <View style={styles.heroTextWrap}>
                         <Text style={styles.heroTitle}>
@@ -1732,8 +1733,10 @@ export default function LilyAssistantScreen() {
                         style={styles.attachButton}
                         onPress={() => setShowAttachMenu((value) => !value)}
                         disabled={isInputDisabled || !canAttach}
+                        accessibilityRole="button"
+                        accessibilityLabel="Add attachment"
                       >
-                        <Ionicons name="attach" size={20} color="#0A1628" />
+                        <Ionicons name="attach" size={19} color="#0A1628" />
                       </Pressable>
                     </View> : null}
 
@@ -1767,43 +1770,6 @@ export default function LilyAssistantScreen() {
                   </View>
                 </View>
 
-                {showAttachMenu && canAttach ? (
-                  <View pointerEvents="box-none" style={styles.attachOverlay}>
-                    <Pressable style={styles.attachBackdrop} onPress={() => setShowAttachMenu(false)} />
-                    <View style={styles.attachMenu}>
-                      <Pressable
-                        style={[styles.attachMenuItem, styles.attachMenuDivider]}
-                        onPress={() => handleAttach(pickFromLibrary)}
-                        disabled={isSending}
-                      >
-                        <View style={styles.attachMenuRow}>
-                          <Ionicons name="images-outline" size={18} color={colors.text} />
-                          <Text style={styles.attachMenuText}>Upload Image</Text>
-                        </View>
-                      </Pressable>
-                      <Pressable
-                        style={[styles.attachMenuItem, styles.attachMenuDivider]}
-                        onPress={() => handleAttach(pickDocument)}
-                        disabled={isSending}
-                      >
-                        <View style={styles.attachMenuRow}>
-                          <Ionicons name="document-text-outline" size={18} color={colors.text} />
-                          <Text style={styles.attachMenuText}>Upload Document</Text>
-                        </View>
-                      </Pressable>
-                      <Pressable
-                        style={styles.attachMenuItem}
-                        onPress={() => handleAttach(pickFromCamera)}
-                        disabled={isSending}
-                      >
-                        <View style={styles.attachMenuRow}>
-                          <Ionicons name="camera-outline" size={18} color={colors.text} />
-                          <Text style={styles.attachMenuText}>Take Photo</Text>
-                        </View>
-                      </Pressable>
-                    </View>
-                  </View>
-                ) : null}
               </View>
             ) : (
               <View style={styles.body}>
@@ -1884,6 +1850,14 @@ export default function LilyAssistantScreen() {
           </View>
         )}
       </KeyboardAvoidingView>
+      <AttachmentPickerSheet
+        visible={showAttachMenu && canAttach}
+        onClose={() => setShowAttachMenu(false)}
+        onTakePhoto={() => handleAttach(pickFromCamera)}
+        onChoosePhoto={() => handleAttach(pickFromLibrary)}
+        onChooseDocument={() => handleAttach(pickDocument)}
+        disabled={isSending}
+      />
     </View>
   );
 }
@@ -1915,18 +1889,18 @@ function createAssistantStyles(c, dark) {
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
+    gap: 10,
     flex: 1,
   },
   headerAvatar: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    backgroundColor: 'rgba(255,255,255,0.08)',
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: 'rgba(255,255,255,0.1)',
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#D4AF37',
+    borderColor: 'rgba(212,175,55,0.9)',
   },
   headerTextWrap: {
     flex: 1,
@@ -1948,9 +1922,9 @@ function createAssistantStyles(c, dark) {
     fontWeight: '500',
   },
   statusDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
+    width: 6,
+    height: 6,
+    borderRadius: 3,
     backgroundColor: '#059669',
   },
   newChatButton: {
@@ -2035,13 +2009,13 @@ function createAssistantStyles(c, dark) {
   heroRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    marginBottom: 16,
+    gap: 12,
+    marginBottom: 14,
   },
   heroBadge: {
-    width: 70,
-    height: 70,
-    borderRadius: 35,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
     backgroundColor: dark ? c.surfaceSecondary : '#FBF7EA',
     justifyContent: 'center',
     alignItems: 'center',
@@ -2068,12 +2042,14 @@ function createAssistantStyles(c, dark) {
     gap: 8,
   },
   heroTopic: {
-    paddingHorizontal: 14,
-    paddingVertical: 9,
+    height: 40,
+    paddingHorizontal: 12,
     backgroundColor: c.surfaceSecondary,
-    borderRadius: 8,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: c.border,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   heroTopicSelected: {
     backgroundColor: dark ? '#3D3214' : '#FFFBEB',
@@ -2099,15 +2075,15 @@ function createAssistantStyles(c, dark) {
     letterSpacing: 0.5,
   },
   suggestChips: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'flex-start',
     gap: 8,
   },
   suggestChip: {
+    maxWidth: '100%',
     paddingHorizontal: 14,
     paddingVertical: 10,
     backgroundColor: c.surface,
-    borderRadius: 8,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: c.border,
   },
@@ -2115,6 +2091,7 @@ function createAssistantStyles(c, dark) {
     color: c.text,
     fontWeight: '600',
     fontSize: 13,
+    lineHeight: 18,
   },
   bottomZone: {
     gap: 10,
@@ -2303,21 +2280,21 @@ function createAssistantStyles(c, dark) {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: c.surface,
-    borderRadius: 12,
+    borderRadius: 16,
     borderWidth: 1.5,
     borderColor: c.border,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    gap: 10,
+    paddingHorizontal: 6,
+    paddingVertical: 6,
+    gap: 8,
   },
   attachWrapper: {
     position: 'relative',
     zIndex: 5,
   },
   attachButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: c.surfaceSecondary,
@@ -2326,7 +2303,7 @@ function createAssistantStyles(c, dark) {
   },
   input: {
     flex: 1,
-    minHeight: 38,
+    minHeight: 36,
     maxHeight: 120,
     paddingVertical: 6,
     fontSize: 14,
@@ -2334,9 +2311,11 @@ function createAssistantStyles(c, dark) {
   },
   sendButton: {
     backgroundColor: '#0A1628',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 8,
+    minHeight: 36,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    borderRadius: 10,
+    justifyContent: 'center',
   },
   sendButtonText: {
     color: '#ffffff',
@@ -2345,45 +2324,6 @@ function createAssistantStyles(c, dark) {
   },
   buttonDisabled: {
     opacity: 0.5,
-  },
-  attachOverlay: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    top: 0,
-    bottom: 0,
-    zIndex: 30,
-  },
-  attachBackdrop: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: 'transparent',
-  },
-  attachMenu: {
-    position: 'absolute',
-    left: 16,
-    bottom: 100,
-    width: 210,
-    backgroundColor: c.cardBg,
-    borderRadius: 14,
-    paddingVertical: 6,
-  },
-  attachMenuItem: {
-    paddingVertical: 12,
-    paddingHorizontal: 14,
-  },
-  attachMenuDivider: {
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(255,255,255,0.06)',
-  },
-  attachMenuRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  attachMenuText: {
-    color: c.text,
-    fontWeight: '600',
-    fontSize: 14,
   },
   filterRow: {
     flexDirection: 'row',

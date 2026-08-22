@@ -23,10 +23,13 @@ const {
   notifyChatbotReply,
 } = require('../services/pushService');
 const { fetchUserBills, resolveCurrentBill, currentBillTiming, billStatusLabel } = require('./billing.controller');
-const { extractMoveInFinancials } = require('../domain/billing/moveInFinancials');
 const { normalizeUser } = require('../utils/normalizeUser');
 const { loadAttachmentParts } = require('../services/assistantAttachment.service');
 const { resolveTenantBranch } = require('../services/branchLocation.service');
+const { fetchCurrentContractForRequest, fetchContractDocumentForRequest } = require('../routes/contracts.routes');
+const { loadRequestsAcrossCollections, buildUserMaintenanceFilter, buildTenantRequestResponse: buildMaintenanceTenantResponse } = require('./maintenance.controller');
+const { buildTenantAnnouncementQuery, isAnnouncementVisibleForBranch, resolveRequesterBranchCode } = require('./announcement.controller');
+const { extractContractDocumentText, findRelevantContractExcerpts } = require('../domain/contracts/contractDocumentQA');
 
 function sanitizeResponse(text = '') {
   const withoutFences = text.replace(/```[\s\S]*?```/g, (block) => block.replace(/```/g, ''));
@@ -51,8 +54,6 @@ const MAX_CHAT_MESSAGE_CHARS = 800;
 const MAX_ADMIN_REASON_CHARS = 300;
 const MAX_SESSION_ID_CHARS = 120;
 const SESSION_ID_PATTERN = /^[a-zA-Z0-9_-]+$/;
-const PRIMARY_MAINTENANCE_COLLECTION = 'maintenance_requests';
-const LEGACY_MAINTENANCE_COLLECTION = 'maintenancerequests';
 const SUPPORTED_INTENTS = {
   BILLING: 'billing',
   MAINTENANCE: 'maintenance',
@@ -216,6 +217,24 @@ function isDormitoryFollowUp(message = '', session = {}) {
   return FOLLOW_UP_PATTERNS.some((pattern) => pattern.test(trimmed));
 }
 
+// Default posture: attempt to answer via the AI + tenant context. Only
+// refuse when there is a genuine out-of-scope signal (a known unrelated
+// topic like math trivia, weather, celebrity gossip) AND no countervailing
+// dormitory-scope signal exists. A message that simply doesn't match any of
+// the narrow regex-routed system-response paths below (billing/maintenance/
+// etc.) is NOT, by itself, a reason to refuse — that only means none of the
+// hand-built shortcuts applies, not that the question is unrelated to
+// LilyCrest. This is the single scope decision point for the whole request;
+// there must not be a second one later that re-derives "no signal matched"
+// as a refusal reason.
+function shouldRefuseAsOutOfScope(message, session) {
+  if (isAdminEscalationRequest(message)) return false;
+  if (hasDormitoryScopeSignal(message)) return false;
+  if (isDormitoryFollowUp(message, session)) return false;
+  if (!hasHighSignalOutOfScopeTopic(message)) return false;
+  return true;
+}
+
 function replyWithScopeGuard(res, sessionId, session, userMessage) {
   const cleanResponse = OUT_OF_SCOPE_RESPONSE;
   session.history = Array.isArray(session.history) ? session.history : [];
@@ -238,6 +257,18 @@ function replyWithScopeGuard(res, sessionId, session, userMessage) {
     suggestions: DEFAULT_FOLLOWUPS,
     meta: { intent: SUPPORTED_INTENTS.GENERAL, confidence: 1, source: 'scope_guard' },
   });
+}
+
+// Distinguishes "what does my contract say about X" (needs the actual
+// document text) from generic contract-status questions ("is my contract
+// available", "when does it expire") which buildContractResponse already
+// answers from structured fields without opening the document.
+function asksAboutContractDocumentContent(message = '') {
+  const lower = String(message || '').toLowerCase();
+  const mentionsContract = /\b(contract|lease)\b/.test(lower);
+  if (!mentionsContract) return false;
+  if (/\b(say|says|said|state|states|stated|clause|provision|allow|allowed|policy|term|terms|condition|conditions|according to)\b/.test(lower)) return true;
+  return /\b(visitor|termination|terminate|curfew|deposit refund)\s+(in|on)\s+my\s+(contract|lease)\b/.test(lower);
 }
 
 function detectSystemIntent(message = '') {
@@ -405,127 +436,44 @@ function summarizeBillForContext(bill = {}) {
   return `${type}: ${amount}, ${status}${dueDate ? `, due ${dueDate}` : ''}`;
 }
 
-function maintenanceEntryTimestamp(entry = {}) {
-  return entry.created_at || entry.createdAt || entry.timestamp || entry.updated_at || entry.updatedAt || null;
-}
-
-function maintenanceEntryMessage(entry = {}) {
-  return firstNonEmptyString(entry.message, entry.note, entry.content, entry.text);
-}
-
-function maintenanceEntryType(entry = {}) {
-  return String(entry.type || entry.kind || entry.event || '').trim().toLowerCase();
-}
-
-function maintenanceSenderRole(entry = {}) {
-  return String(entry.sender_role || entry.senderRole || entry.actor_role || entry.actorRole || entry.role || '').trim().toLowerCase();
-}
-
-function maintenanceAttachmentCount(entry = {}) {
-  return Array.isArray(entry.attachments) ? entry.attachments.filter(Boolean).length : 0;
-}
-
-function hasTenantFacingMaintenanceContent(entry = {}) {
-  return Boolean(
-    maintenanceEntryMessage(entry)
-    || maintenanceAttachmentCount(entry) > 0
-    || entry.summary
-    || entry.tenantSummary
-  );
-}
-
-function isTenantVisibleMaintenanceEntry(entry = {}) {
-  const visibility = String(entry.visibility || entry.audience || entry.scope || '').trim().toLowerCase();
-  if (['internal', 'admin', 'admin_only', 'private'].includes(visibility)) return false;
-  if (entry.internal === true || entry.adminOnly === true || entry.isInternal === true) return false;
-  if (entry.visibleToTenant === false || entry.isTenantVisible === false) return false;
-
-  const type = maintenanceEntryType(entry);
-  const role = maintenanceSenderRole(entry);
-  const publicTypes = new Set(['admin_reply', 'tenant_reply', 'tenant_summary', 'summary', 'public_reply', 'admin_update', 'status_change', 'status_changed', 'status_visible']);
-  const internalTypes = new Set(['viewed', 'viewed_history', 'workflow', 'processing_log', 'draft_saved', 'internal_note', 'admin_note']);
-
-  if (internalTypes.has(type)) return false;
-  if (type && !publicTypes.has(type)) return false;
-  if (role === 'system' && !['status_change', 'status_changed', 'status_visible'].includes(type)) return false;
-  return hasTenantFacingMaintenanceContent(entry);
-}
-
-function getTenantVisibleMaintenanceThread(request = {}) {
-  const sources = [];
-  const publicThread = [
-    ...(Array.isArray(request.publicReplies) ? request.publicReplies : []),
-    ...(Array.isArray(request.tenantReplies) ? request.tenantReplies : []),
-  ];
-  sources.push(...publicThread);
-  if (Array.isArray(request.thread)) sources.push(...request.thread);
-  if (Array.isArray(request.conversation)) sources.push(...request.conversation);
-  if (Array.isArray(request.updates)) sources.push(...request.updates);
-  if (Array.isArray(request.statusHistory)) {
-    sources.push(...request.statusHistory.filter((entry) => {
-      const type = maintenanceEntryType(entry);
-      return type === 'admin_reply'
-        || type === 'tenant_summary'
-        || type === 'summary'
-        || type === 'status_change'
-        || type === 'status_changed'
-        || type === 'status_visible';
-    }));
-  }
-
-  const seen = new Set();
-  return sources
-    .filter(isTenantVisibleMaintenanceEntry)
-    .filter((entry, index) => {
-      const key = entry.update_id || entry.id || `${maintenanceEntryType(entry)}:${maintenanceEntryTimestamp(entry) || index}`;
-      if (seen.has(key)) return false;
-      seen.add(key);
-      return true;
-    })
-    .sort((left, right) => dateTimeValue(maintenanceEntryTimestamp(left)) - dateTimeValue(maintenanceEntryTimestamp(right)));
-}
-
-function getLatestAdminVisibleMaintenanceEntry(thread = []) {
-  return [...thread].reverse().find((entry) => {
-    const type = maintenanceEntryType(entry);
-    const role = maintenanceSenderRole(entry);
-    return type === 'admin_reply'
-      || type === 'tenant_summary'
-      || type === 'summary'
-      || type === 'admin_update'
-      || ['admin', 'branch_admin', 'owner', 'superadmin'].includes(role);
-  }) || null;
-}
-
-function summarizeMaintenanceEntry(entry = {}) {
-  if (!entry) return '';
-  const role = maintenanceSenderRole(entry);
-  const sender = firstNonEmptyString(entry.sender_name, entry.senderName, entry.actor_name, entry.actorName)
-    || (role === 'owner' ? 'Owner' : role === 'branch_admin' ? 'Branch Admin' : 'Admin');
-  const message = maintenanceEntryMessage(entry);
-  const attachments = maintenanceAttachmentCount(entry);
-  const sentAt = formatShortDate(maintenanceEntryTimestamp(entry));
-  const summary = entry.summary || entry.tenantSummary || {};
-  const summaryText = firstNonEmptyString(
-    summary.next_step,
-    summary.action_taken,
-    summary.completion_note,
-    summary.current_status
-  );
-  const content = message || summaryText || (attachments ? `${attachments} attachment${attachments > 1 ? 's' : ''}` : 'an update');
+// Formats maintenance.controller.js's canonical `latestTenantVisibleUpdate`
+// shape ({ senderName, senderRole, preview, hasAttachments, attachmentCount,
+// created_at }) instead of re-deriving thread visibility rules locally.
+function summarizeMaintenanceUpdate(update) {
+  if (!update) return '';
+  const role = String(update.senderRole || '').toLowerCase();
+  const sender = update.senderName
+    || (role === 'owner' ? 'Owner' : role === 'branch_admin' ? 'Branch Admin' : role === 'tenant' ? 'You' : 'Admin');
+  const sentAt = formatShortDate(update.created_at);
+  const attachments = Number(update.attachmentCount) || 0;
+  const content = update.preview || (attachments ? `${attachments} attachment${attachments > 1 ? 's' : ''}` : 'an update');
   return `${sender}${sentAt ? ` on ${sentAt}` : ''}: ${content}${attachments ? ` (${attachments} attachment${attachments > 1 ? 's' : ''})` : ''}`;
 }
 
-function summarizeMaintenanceForContext(request = {}) {
-  const title = firstNonEmptyString(request.request_type, request.title, request.category, 'maintenance request')
-    .replace(/_/g, ' ');
-  const status = formatStatusLabel(request.status || 'pending');
-  const submitted = formatShortDate(request.created_at || request.createdAt);
-  const thread = getTenantVisibleMaintenanceThread(request);
-  const latestReply = getLatestAdminVisibleMaintenanceEntry(thread);
-  return `${title}: ${status}${submitted ? `, submitted ${submitted}` : ''}${latestReply ? `, latest tenant-visible update - ${summarizeMaintenanceEntry(latestReply)}` : ''}`;
+// The latest tenant-visible update may itself be the tenant's own message
+// (e.g. the tenant just sent a follow-up and no one has replied since) —
+// only treat it as an admin reply when the sender isn't the tenant.
+function latestAdminUpdateFrom(maintenanceResponse) {
+  const update = maintenanceResponse?.latestTenantVisibleUpdate;
+  if (!update || String(update.senderRole || '').toLowerCase() === 'tenant') return null;
+  return update;
 }
 
+function summarizeMaintenanceForContext(request = {}) {
+  const response = buildMaintenanceTenantResponse(request);
+  const title = firstNonEmptyString(response.request_type, 'maintenance request').replace(/_/g, ' ');
+  const status = formatStatusLabel(response.status || 'pending');
+  const submitted = formatShortDate(response.created_at);
+  const latestUpdate = latestAdminUpdateFrom(response);
+  return `${title}: ${status}${submitted ? `, submitted ${submitted}` : ''}${latestUpdate ? `, latest tenant-visible update - ${summarizeMaintenanceUpdate(latestUpdate)}` : ''}`;
+}
+
+// Branch/room/occupancy resolution only. Contract/lease fields (dates, rent,
+// deposit, document availability) come exclusively from
+// resolveCanonicalContractContext() below, which calls the same
+// CONTRACT_UPSTREAM_URL bridge the mobile Contract screen uses — never from
+// this local reservations/bedhistories derivation, which is a different,
+// unauthoritative data path for lease terms.
 async function resolveTenantAccountContext(db, user = {}) {
   const userObjectId = asObjectId(user._id);
   const userId = user.user_id;
@@ -540,14 +488,6 @@ async function resolveTenantAccountContext(db, user = {}) {
     roomBed: '',
     occupancyStatus: '',
     leaseStatus: '',
-    contractStart: firstNonEmptyString(user.contract?.startDate, user.contract_start_date),
-    contractEnd: firstNonEmptyString(user.contract?.endDate, user.contract_end_date),
-    leaseType: firstNonEmptyString(user.contract?.leaseType, user.lease_type),
-    monthlyRent: Number(user.contract?.monthlyRent || user.monthly_rent) || null,
-    securityDeposit: Number(user.contract?.securityDeposit || user.security_deposit) || null,
-    moveInFinancials: extractMoveInFinancials(user.contract || user) || null,
-    contractFileAvailable: Boolean(user.contract?.fileAvailable && user.contract?.documentId),
-    contractDocumentId: firstNonEmptyString(user.contract?.documentId),
   };
   try {
     const resolvedBranch = await resolveTenantBranch(db, user);
@@ -571,16 +511,6 @@ async function resolveTenantAccountContext(db, user = {}) {
     if (reservation) {
       context.occupancyStatus = firstNonEmptyString(reservation.status, reservation.occupancyStatus);
       context.leaseStatus = firstNonEmptyString(reservation.leaseStatus, reservation.contractStatus);
-      context.contractStart = context.contractStart || firstNonEmptyString(reservation.contractStartDate, reservation.contract_start_date, reservation.startDate);
-      context.contractEnd = context.contractEnd || firstNonEmptyString(reservation.contractEndDate, reservation.contract_end_date, reservation.endDate);
-      context.leaseType = context.leaseType || firstNonEmptyString(reservation.leaseType, reservation.lease_type);
-      context.monthlyRent = context.monthlyRent || Number(reservation.monthlyRent || reservation.monthly_rent) || null;
-      context.securityDeposit = context.securityDeposit || Number(reservation.securityDeposit || reservation.security_deposit) || null;
-      context.moveInFinancials = extractMoveInFinancials(reservation) || context.moveInFinancials;
-      const reservationContractUrl = firstNonEmptyString(reservation.contractFileUrl, reservation.contractUrl);
-      context.contractFileAvailable = context.contractFileAvailable || Boolean(reservationContractUrl);
-      context.contractDocumentId = context.contractDocumentId
-        || (reservationContractUrl ? `res_${reservation._id}_contract` : '');
       context.roomNumber = firstNonEmptyString(reservation.roomNumber, reservation.roomName, reservation.room?.roomNumber);
       context.roomBed = firstNonEmptyString(
         reservation.selectedBed?.position,
@@ -617,37 +547,82 @@ async function resolveTenantAccountContext(db, user = {}) {
   return context;
 }
 
-async function fetchMaintenanceRequestsForUser(db, user = {}) {
-  const userId = user.user_id;
-  const mongoId = asObjectId(user._id);
-  const filter = {
-    $or: [
-      { user_id: userId },
-      ...(mongoId ? [{ userId: mongoId }] : []),
-    ],
+// The authoritative source for a tenant's contract/lease is the external
+// Capstone-Website service, reached through the same server-to-server bridge
+// (routes/contracts.routes.js) the mobile Contract screen uses — never a
+// locally-derived guess. This always forwards the real request's bearer
+// token (via fetchCurrentContractForRequest -> forwardAuthHeader), so the
+// contract returned can only ever belong to the authenticated caller.
+// Mirrors the exact status-code classification the mobile Contract screen's
+// own canonical hook uses (frontend/src/hooks/useTenantContract.js): 409 is
+// an unresolved multiple-canonical-contracts data conflict (never guess —
+// tell the tenant to contact support), 401/403 means the session couldn't be
+// verified upstream, anything else failing (404/5xx/502/504/timeout/
+// misconfigured CONTRACT_UPSTREAM_URL) is a transient/unavailable bridge
+// failure. A successful response with no contract is the ordinary, expected
+// "no contract yet" case. These must stay distinct — collapsing them into
+// one message would tell a tenant "you have no contract" when the real
+// problem is a data conflict or an outage, which is misleading.
+function classifyContractUnavailability(result) {
+  if (result.ok) return 'not_found';
+  if (result.status === 409) return 'conflict';
+  if (result.status === 401 || result.status === 403) return 'unauthorized';
+  return 'unavailable';
+}
+
+async function resolveCanonicalContractContext(req) {
+  const result = await fetchCurrentContractForRequest(req);
+  if (!result.ok || !result.data?.contract) {
+    return {
+      available: false,
+      contract: null,
+      contractId: null,
+      errorKind: classifyContractUnavailability(result),
+      reason: result.detail || 'not_available',
+    };
+  }
+  const contract = result.data.contract;
+  const advanceRent = Number(contract.advanceRentAmount) || 0;
+  const securityDeposit = Number(contract.securityDepositAmount) || 0;
+  const reservationFee = Number(contract.reservationFeeAmount) || 0;
+  const totalDueBeforeMoveIn = advanceRent + securityDeposit;
+  const moveInFinancials = (advanceRent || securityDeposit || reservationFee)
+    ? {
+        advanceRent,
+        securityDeposit,
+        totalDueBeforeMoveIn,
+        reservationFeeAlreadyPaid: reservationFee,
+        remainingBalance: Math.max(totalDueBeforeMoveIn - reservationFee, 0),
+      }
+    : null;
+  return {
+    available: true,
+    contract,
+    contractId: contract.id || null,
+    displayStatus: contract.displayStatus || null,
+    contractStart: contract.leaseStartDate || null,
+    contractEnd: contract.leaseEndDate || null,
+    leaseType: contract.leaseType || null,
+    monthlyRent: Number.isFinite(Number(contract.approvedMonthlyRate)) ? Number(contract.approvedMonthlyRate) : null,
+    securityDeposit: Number.isFinite(securityDeposit) ? securityDeposit : null,
+    moveInFinancials,
+    documentAvailable: Boolean(contract.tenantDocument?.available),
+    documentKind: contract.tenantDocument?.type === 'final_notarized'
+      ? 'final'
+      : contract.tenantDocument?.type === 'generated_draft'
+        ? 'prepared'
+        : null,
   };
+}
 
-  const collections = [PRIMARY_MAINTENANCE_COLLECTION, LEGACY_MAINTENANCE_COLLECTION];
-  const records = [];
-
-  for (const collectionName of collections) {
-    try {
-      const docs = await db.collection(collectionName).find(filter).toArray();
-      records.push(...docs);
-    } catch (_error) {
-      // Ignore missing legacy collections.
-    }
-  }
-
-  const deduped = new Map();
-  for (const record of records) {
-    const key = record.request_id || String(record._id);
-    if (!deduped.has(key)) {
-      deduped.set(key, record);
-    }
-  }
-
-  return Array.from(deduped.values()).sort((left, right) => requestTimestampValue(right) - requestTimestampValue(left));
+// Thin wrapper around maintenance.controller.js's own tenant-owned lookup —
+// intentionally reuses the exact filter/collection logic the tenant-facing
+// GET /maintenance/me endpoint uses, rather than a second, divergent
+// implementation of "which maintenance records belong to this user."
+async function fetchMaintenanceRequestsForUser(db, user = {}) {
+  const filter = buildUserMaintenanceFilter(user);
+  if (!filter.$or.length) return [];
+  return loadRequestsAcrossCollections(db, filter);
 }
 
 async function buildBillingResponse(db, user, message = '') {
@@ -789,12 +764,11 @@ async function buildMaintenanceResponse(db, user, message = '') {
   const status = requestStatusValue(latestRequest).replace(/_/g, ' ');
   const submittedDate = formatShortDate(latestRequest.created_at || latestRequest.createdAt);
   const dateText = submittedDate ? ` It was submitted on ${submittedDate}.` : '';
-  const thread = getTenantVisibleMaintenanceThread(latestRequest);
-  const latestAdminReply = getLatestAdminVisibleMaintenanceEntry(thread);
+  const latestAdminReply = latestAdminUpdateFrom(buildMaintenanceTenantResponse(latestRequest));
 
   if (asksAboutReply) {
     const replyText = latestAdminReply
-      ? `Yes. The latest tenant-visible admin update I can see is: ${summarizeMaintenanceEntry(latestAdminReply)}. You can open the request in Services to view the full reply and attachments.`
+      ? `Yes. The latest tenant-visible admin update I can see is: ${summarizeMaintenanceUpdate(latestAdminReply)}. You can open the request in Services to view the full reply and attachments.`
       : "I don't see a tenant-visible admin reply on your latest maintenance request yet. You can still open Services to check the request details, or I can notify admin if you need a follow-up.";
     return {
       message: replyText,
@@ -806,7 +780,7 @@ async function buildMaintenanceResponse(db, user, message = '') {
     };
   }
 
-  const adminUpdateText = latestAdminReply ? ` Latest admin update: ${summarizeMaintenanceEntry(latestAdminReply)}.` : '';
+  const adminUpdateText = latestAdminReply ? ` Latest admin update: ${summarizeMaintenanceUpdate(latestAdminReply)}.` : '';
   const activeText = activeRequests.length ? 'still ' : '';
 
   return {
@@ -860,9 +834,41 @@ function buildBranchResponse(accountContext = {}, message = '') {
   };
 }
 
+// Shared messaging for the three "I can't tell you your contract status"
+// failure kinds (conflict/unauthorized/unavailable) that must never be
+// presented as "you have no contract" — see classifyContractUnavailability.
+// Returns null when errorKind is 'not_found' (or unset), meaning the caller
+// should fall through to its own genuine no-contract-yet copy.
+function contractUnavailabilityResponse(errorKind) {
+  if (errorKind === 'conflict') {
+    return {
+      message: "I found more than one active contract record on your account, so I can't safely tell which one is current. Please contact LilyCrest support so the records can be reviewed.",
+      intent: SUPPORTED_INTENTS.CONTRACT,
+      suggestions: [{ label: 'Talk to admin', prompt: 'Connect me to the admin about my contract records.' }],
+    };
+  }
+  if (errorKind === 'unauthorized') {
+    return {
+      message: "I couldn't verify your account to check your contract just now. Please sign in again and try asking me once more.",
+      intent: SUPPORTED_INTENTS.CONTRACT,
+      suggestions: [],
+    };
+  }
+  if (errorKind === 'unavailable') {
+    return {
+      message: "I can't check your contract right now — the contract service is temporarily unavailable. Please try again shortly.",
+      intent: SUPPORTED_INTENTS.CONTRACT,
+      suggestions: [{ label: 'Try again', prompt: 'When will my contract expire?' }],
+    };
+  }
+  return null;
+}
+
 function buildContractResponse(accountContext = {}, message = '') {
   const language = detectLanguageStyle(message);
   if (!accountContext.contractFileAvailable) {
+    const unavailability = contractUnavailabilityResponse(accountContext.contractErrorKind);
+    if (unavailability) return unavailability;
     const knownStart = formatShortDate(accountContext.contractStart);
     const detail = knownStart
       ? ` I can see a move-in date of ${knownStart}, but there is no approved contract end date or tenant-visible final PDF yet.`
@@ -891,9 +897,13 @@ function buildContractResponse(accountContext = {}, message = '') {
 }
 
 function buildDocumentsResponse(accountContext = {}) {
-  const contractText = accountContext.contractFileAvailable
-    ? 'Your approved lease contract is also available there.'
-    : 'No approved lease contract is available yet.';
+  let contractText = 'No approved lease contract is available yet.';
+  if (accountContext.contractFileAvailable) {
+    contractText = 'Your approved lease contract is also available there.';
+  } else {
+    const unavailability = contractUnavailabilityResponse(accountContext.contractErrorKind);
+    if (unavailability) contractText = unavailability.message;
+  }
   return {
     message: `Open Profile, then Documents, to view your submitted IDs and available PDFs. ${contractText}`,
     intent: SUPPORTED_INTENTS.DOCUMENTS,
@@ -1121,19 +1131,23 @@ async function sendMessage(req, res) {
     const courtesyMessage = isCourtesyMessage(userMessage);
     const scopedMessage = hasDormitoryScopeSignal(userMessage);
     const scopedFollowUp = isDormitoryFollowUp(userMessage, existingSession);
-    const outOfScopeTopic = hasHighSignalOutOfScopeTopic(userMessage);
     const routedIntent = detectSystemIntent(userMessage);
     const forceEscalation = isAdminEscalationRequest(userMessage)
       || ESCALATION_KEYWORDS.some((keyword) => lowerUserMessage.includes(keyword));
 
-    if (!forceEscalation && !greetingMessage && !courtesyMessage && !scopedMessage && outOfScopeTopic) {
+    if (!forceEscalation && !greetingMessage && !courtesyMessage && shouldRefuseAsOutOfScope(userMessage, existingSession)) {
       return replyWithScopeGuard(res, sessionId, existingSession, userMessage);
     }
 
     // Pull tenant context for grounded responses
     const db = getDb();
-    const [announcements, bills, activeSupportConversations, tenantAccount, recentMaintenanceRequests] = await Promise.all([
-      db.collection('announcements').find({ is_active: true }).sort({ created_at: -1 }).limit(3).toArray(),
+    const requesterBranchCode = await resolveRequesterBranchCode(db, req.user);
+    const [announcements, bills, activeSupportConversations, tenantAccount, recentMaintenanceRequests, canonicalContract] = await Promise.all([
+      db.collection('announcements')
+        .find(buildTenantAnnouncementQuery(userId))
+        .sort({ created_at: -1, createdAt: -1 })
+        .toArray()
+        .then((docs) => docs.filter((doc) => isAnnouncementVisibleForBranch(doc, requesterBranchCode)).slice(0, 3)),
       fetchUserBills(db, req.user, { limit: 5 }),
       db.collection('chat_conversations')
         .find({ tenantUserId: userId, status: { $in: ['open', 'in_review', 'waiting_tenant', 'resolved'] } })
@@ -1142,8 +1156,24 @@ async function sendMessage(req, res) {
         .toArray(),
       resolveTenantAccountContext(db, req.user),
       fetchMaintenanceRequestsForUser(db, req.user).then((requests) => requests.slice(0, 3)),
+      resolveCanonicalContractContext(req),
     ]);
     const pendingBills = bills.filter(isBillUnpaid).slice(0, 3);
+
+    // Merge canonical contract/lease fields (from the same CONTRACT_UPSTREAM_URL
+    // bridge the mobile Contract screen uses) into tenantAccount so downstream
+    // consumers (buildContractResponse, buildDocumentsResponse, context lines)
+    // need no further changes — they just read tenantAccount.contract* as before.
+    tenantAccount.contractStart = canonicalContract.contractStart || '';
+    tenantAccount.contractEnd = canonicalContract.contractEnd || '';
+    tenantAccount.leaseType = canonicalContract.leaseType || '';
+    tenantAccount.monthlyRent = canonicalContract.monthlyRent ?? null;
+    tenantAccount.securityDeposit = canonicalContract.securityDeposit ?? null;
+    tenantAccount.moveInFinancials = canonicalContract.moveInFinancials || null;
+    tenantAccount.contractFileAvailable = canonicalContract.documentAvailable === true;
+    tenantAccount.contractDocumentId = canonicalContract.contractId || '';
+    tenantAccount.contractDocumentKind = canonicalContract.documentKind || null;
+    tenantAccount.contractErrorKind = canonicalContract.available ? null : canonicalContract.errorKind;
 
     // Check if this is an active live chat (admin is responding)
     const liveChat = getOwnedLiveChat(sessionId, userId);
@@ -1214,6 +1244,41 @@ async function sendMessage(req, res) {
     if (announcements.length > 0) {
       const annSummary = announcements.map((a) => `- ${a.title || 'Announcement'}: ${a.content ? a.content.slice(0, 120) : ''}`).join('\n');
       contextLines.push(`Recent announcements:\n${annSummary}`);
+    }
+
+    // "What does my contract say about visitors/termination/etc." needs the
+    // AI to read from the tenant's own signed/generated document, not the
+    // canned status-only buildContractResponse below — so when detected,
+    // fetch a short grounded excerpt into contextLines and let this fall
+    // through to the normal AI-generation path instead of short-circuiting.
+    const wantsContractDocumentDetail = asksAboutContractDocumentContent(userMessage);
+    if (wantsContractDocumentDetail) {
+      const unavailability = !canonicalContract.available
+        ? contractUnavailabilityResponse(canonicalContract.errorKind)
+        : null;
+      if (unavailability) {
+        // Conflict/unauthorized/unavailable — a real problem accessing the
+        // contract, distinct from "no document yet." Reuse the exact same
+        // tenant-facing wording buildContractResponse uses for consistency.
+        contextLines.push(`Contract document: ${unavailability.message} Do not invent contract clause content.`);
+      } else if (!canonicalContract.available || !canonicalContract.documentAvailable) {
+        contextLines.push('Contract document: Not available yet. Tell the tenant their signed/generated lease document isn\'t available yet to check that clause, and suggest checking back later or with admin. Do not invent contract clause content.');
+      } else {
+        const docResult = await fetchContractDocumentForRequest(req, canonicalContract.contractId, canonicalContract.documentKind);
+        if (!docResult.ok) {
+          contextLines.push('Contract document: Could not be opened right now due to a temporary error. Tell the tenant to try again shortly. Do not invent contract clause content.');
+        } else {
+          const documentText = await extractContractDocumentText(docResult.buffer).catch(() => '');
+          const excerpts = findRelevantContractExcerpts(documentText, userMessage);
+          if (!excerpts.length) {
+            contextLines.push('Contract document: No matching clause was found for this question in the tenant\'s lease document. Tell them you looked but could not find that specific clause, and suggest confirming with admin. Do not invent contract clause content.');
+          } else {
+            contextLines.push(
+              `Contract document excerpt(s), taken directly from the tenant's own signed/generated lease. Only use this text to answer the question below; attribute the answer clearly (e.g. "According to your contract..."). If the excerpt does not actually answer the question, say the clause could not be found — never invent contract terms:\n${excerpts.join('\n---\n')}`
+            );
+          }
+        }
+      }
     }
 
     if (!forceEscalation && (scopedMessage || scopedFollowUp) && routedIntent === SUPPORTED_INTENTS.BILLING) {
@@ -1296,7 +1361,7 @@ async function sendMessage(req, res) {
       });
     }
 
-    if (!forceEscalation && (scopedMessage || scopedFollowUp) && routedIntent === SUPPORTED_INTENTS.CONTRACT) {
+    if (!forceEscalation && !wantsContractDocumentDetail && (scopedMessage || scopedFollowUp) && routedIntent === SUPPORTED_INTENTS.CONTRACT) {
       const contractResult = buildContractResponse(tenantAccount, userMessage);
       existingSession.history.push({ role: 'user', content: userMessage }, { role: 'assistant', content: contractResult.message });
       existingSession.last_intent = contractResult.intent;
@@ -1361,10 +1426,6 @@ async function sendMessage(req, res) {
     // Get conversation history for continuity
     const session = chatSessions.get(sessionId) || { history: [] };
     const conversationHistory = session.history || [];
-
-    if (!forceEscalation && !greetingMessage && !courtesyMessage && !scopedMessage && !scopedFollowUp && routedIntent === SUPPORTED_INTENTS.GENERAL) {
-      return replyWithScopeGuard(res, sessionId, session, userMessage);
-    }
 
     // ── Generate response ──
     try {
@@ -1746,12 +1807,22 @@ module.exports = {
     requestsOtherTenantInformation,
     detectSystemIntent,
     hasDormitoryScopeSignal,
+    hasHighSignalOutOfScopeTopic,
+    isDormitoryFollowUp,
+    isAdminEscalationRequest,
+    shouldRefuseAsOutOfScope,
+    asksAboutContractDocumentContent,
     buildContractResponse,
     buildDocumentsResponse,
     formatBillStatus,
     summarizeBillForContext,
     buildBillingResponse,
+    resolveCanonicalContractContext,
+    classifyContractUnavailability,
+    contractUnavailabilityResponse,
+    fetchMaintenanceRequestsForUser,
     getOwnedLiveChat,
     liveChatQueue,
+    chatSessions,
   },
 };
