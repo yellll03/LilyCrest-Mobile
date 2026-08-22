@@ -355,14 +355,17 @@ export default function ServicesScreen() {
     urgencyLabel: { fontSize: 14, fontWeight: '600', color: c.text },
     urgencyDesc: { fontSize: 12, color: c.textMuted },
     descriptionInput: { backgroundColor: c.surfaceSecondary, borderRadius: 12, padding: 16, fontSize: 15, color: c.text, minHeight: 120, marginBottom: 20 },
-    uploadPanel: { borderWidth: 1, borderStyle: 'dashed', borderColor: c.border, borderRadius: 12, padding: 14, alignItems: 'center', gap: 8, backgroundColor: c.surfaceSecondary, marginBottom: 10 },
-    uploadIcon: { width: 52, height: 52, borderRadius: 16, borderWidth: 1, borderColor: c.border, justifyContent: 'center', alignItems: 'center', backgroundColor: c.surface },
-    uploadTitle: { color: c.text, fontWeight: '800', fontSize: 15 },
-    uploadSubtitle: { color: c.textMuted, fontSize: 12, textAlign: 'center' },
-    uploadButtons: { width: '100%', gap: 10, marginTop: 4 },
-    uploadBtn: { paddingVertical: 12, paddingHorizontal: 12, borderRadius: 10, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, alignItems: 'center' },
-    uploadBtnText: { color: c.text, fontWeight: '700' },
-    uploadNote: { color: c.textMuted, fontSize: 12, textAlign: 'center' },
+    attachmentAction: { minHeight: 58, borderWidth: 1, borderColor: c.border, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.surfaceSecondary, marginBottom: 8 },
+    attachmentActionDisabled: { opacity: 0.58 },
+    attachmentActionIcon: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center', backgroundColor: c.surface },
+    attachmentActionContent: { flex: 1 },
+    attachmentActionTitle: { color: c.text, fontWeight: '800', fontSize: 14 },
+    attachmentActionHint: { color: c.textMuted, fontSize: 11, lineHeight: 16, marginTop: 2 },
+    attachmentCount: { color: c.textMuted, fontSize: 12, fontWeight: '700' },
+    attachmentUploadNote: { color: c.textMuted, fontSize: 12, marginBottom: 8 },
+    createAttachmentChip: { minHeight: 40, maxWidth: '100%', paddingLeft: 10, paddingRight: 6, borderRadius: 10, backgroundColor: c.surfaceSecondary, flexDirection: 'row', alignItems: 'center', gap: 7 },
+    createAttachmentName: { flexShrink: 1, maxWidth: 210, fontSize: 12, color: c.text },
+    removeAttachmentButton: { width: 32, height: 32, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
     attachmentPreview: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
     previewChip: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, backgroundColor: c.surfaceSecondary },
     previewText: { fontSize: 12, color: c.text },
@@ -421,6 +424,7 @@ export default function ServicesScreen() {
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
   const [attachmentUploadStatus, setAttachmentUploadStatus] = useState('');
+  const [showCreateAttachMenu, setShowCreateAttachMenu] = useState(false);
 
   // Detail modal state
   const [detailRequest, setDetailRequest] = useState(null);
@@ -665,6 +669,7 @@ export default function ServicesScreen() {
     setFieldTouched({ type: false, description: false });
     setFieldErrors({ type: '', description: '' });
     setHasAttemptedSubmit(false);
+    setShowCreateAttachMenu(false);
     submissionRequestIdRef.current = null;
   };
 
@@ -691,7 +696,7 @@ export default function ServicesScreen() {
       setAttachmentUploadStatus('');
       setAttachments((prev) => {
         if (prev.length >= MAX_MAINTENANCE_ATTACHMENTS) {
-          showBannerMessage('error', `You can upload up to ${MAX_MAINTENANCE_ATTACHMENTS} photos only.`);
+          showBannerMessage('error', `You can upload up to ${MAX_MAINTENANCE_ATTACHMENTS} files.`);
           return prev;
         }
         return [...prev, file];
@@ -701,9 +706,9 @@ export default function ServicesScreen() {
     }
   };
 
-  const removeAttachment = (name) => {
+  const removeAttachment = (index) => {
     setAttachmentUploadStatus('');
-    setAttachments((prev) => prev.filter((item) => getAttachmentDisplayName(item) !== name));
+    setAttachments((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
   };
 
   const getStatusColor = (status) => {
@@ -1231,36 +1236,46 @@ export default function ServicesScreen() {
                 </Text>
                 {fieldErrors.description ? <Text style={styles.fieldError}>{fieldErrors.description}</Text> : null}
                 <Text style={styles.modalSectionTitle}>Add Attachments (optional)</Text>
-                <View style={styles.uploadPanel}>
-                  <View style={styles.uploadIcon}><Ionicons name="cloud-upload" size={28} color={colors.textMuted} /></View>
-                  <Text style={styles.uploadTitle}>Upload Files</Text>
-                  <Text style={styles.uploadSubtitle}>Add supporting photos or documents</Text>
-                  <View style={styles.uploadButtons}>
-                    <TouchableOpacity style={styles.uploadBtn} onPress={() => handleAttach(pickFromCamera)} disabled={submitting}>
-                      <Text style={styles.uploadBtnText}>Take Photo</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.uploadBtn} onPress={() => handleAttach(pickFromLibrary)} disabled={submitting}>
-                      <Text style={styles.uploadBtnText}>Choose from Gallery</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.uploadBtn} onPress={() => handleAttach(pickDocument)} disabled={submitting}>
-                      <Text style={styles.uploadBtnText}>Choose Document</Text>
-                    </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.attachmentAction,
+                    (submitting || attachments.length >= MAX_MAINTENANCE_ATTACHMENTS) && styles.attachmentActionDisabled,
+                  ]}
+                  onPress={() => setShowCreateAttachMenu(true)}
+                  disabled={submitting || attachments.length >= MAX_MAINTENANCE_ATTACHMENTS}
+                  accessibilityRole="button"
+                  accessibilityLabel={attachments.length >= MAX_MAINTENANCE_ATTACHMENTS ? 'Attachment limit reached' : 'Add attachment'}
+                  accessibilityHint="Choose a photo or document to include with this maintenance inquiry"
+                >
+                  <View style={styles.attachmentActionIcon}>
+                    <Ionicons name="attach" size={21} color={colors.primary} />
                   </View>
-                  <Text style={styles.uploadNote}>Accepted: JPG, PNG • Max size: 5MB</Text>
-                  {attachmentUploadStatus ? (
-                    <Text style={styles.uploadNote}>{attachmentUploadStatus}</Text>
-                  ) : null}
-                </View>
+                  <View style={styles.attachmentActionContent}>
+                    <Text style={styles.attachmentActionTitle}>
+                      {attachments.length >= MAX_MAINTENANCE_ATTACHMENTS ? 'Attachment limit reached' : 'Add attachment'}
+                    </Text>
+                    <Text style={styles.attachmentActionHint}>Photos, PDF, Word, TXT, or CSV - max 5 MB each</Text>
+                  </View>
+                  <Text style={styles.attachmentCount}>{attachments.length}/{MAX_MAINTENANCE_ATTACHMENTS}</Text>
+                </TouchableOpacity>
+                {attachmentUploadStatus ? (
+                  <Text style={styles.attachmentUploadNote}>{attachmentUploadStatus}</Text>
+                ) : null}
                 {attachments.length > 0 && (
                   <View style={styles.attachmentPreview}>
-                    {attachments.map((file) => (
-                      <TouchableOpacity
-                        key={getAttachmentDisplayName(file)}
-                        style={styles.previewChip}
-                        onLongPress={() => removeAttachment(getAttachmentDisplayName(file))}
-                      >
-                        <Text style={styles.previewText}>{getAttachmentDisplayName(file)}</Text>
-                      </TouchableOpacity>
+                    {attachments.map((file, index) => (
+                      <View key={`${getAttachmentDisplayName(file)}-${index}`} style={styles.createAttachmentChip}>
+                        <Ionicons name="document-attach-outline" size={16} color={colors.textMuted} />
+                        <Text style={styles.createAttachmentName} numberOfLines={1}>{getAttachmentDisplayName(file)}</Text>
+                        <TouchableOpacity
+                          style={styles.removeAttachmentButton}
+                          onPress={() => removeAttachment(index)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Remove ${getAttachmentDisplayName(file)}`}
+                        >
+                          <Ionicons name="close" size={17} color={colors.textMuted} />
+                        </TouchableOpacity>
+                      </View>
                     ))}
                   </View>
                 )}
@@ -1748,6 +1763,15 @@ export default function ServicesScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <AttachmentPickerSheet
+        visible={showCreateAttachMenu}
+        onClose={() => setShowCreateAttachMenu(false)}
+        onTakePhoto={() => handleAttach(pickFromCamera)}
+        onChoosePhoto={() => handleAttach(pickFromLibrary)}
+        onChooseDocument={() => handleAttach(pickDocument)}
+        disabled={submitting}
+      />
 
       <AttachmentPickerSheet
         visible={showReplyAttachMenu}
