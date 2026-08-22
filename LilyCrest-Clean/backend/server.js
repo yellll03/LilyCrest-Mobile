@@ -395,6 +395,36 @@ async function startServer() {
       );
     }
 
+    // Canonical support idempotency. Mobile retries reuse client-generated
+    // operation ids; partial unique indexes make duplicate prevention atomic
+    // without indexing records created by older clients. Compound `sparse`
+    // indexes are intentionally avoided: the always-present scope fields
+    // would otherwise index a missing client key as null.
+    await db.collection('chat_conversations').createIndex(
+      { tenantUserId: 1, startRequestIds: 1 },
+      {
+        unique: true,
+        partialFilterExpression: { startRequestIds: { $exists: true, $type: 'array' } },
+        name: 'chat_tenant_start_request_unique',
+      },
+    );
+    await db.collection('chat_messages').createIndex(
+      { conversationId: 1, senderUserId: 1, clientMessageId: 1 },
+      {
+        unique: true,
+        partialFilterExpression: { clientMessageId: { $exists: true, $type: 'string' } },
+        name: 'chat_sender_message_request_unique',
+      },
+    );
+    await db.collection('chat_attachments').createIndex(
+      { conversationId: 1, uploadedBy: 1, clientAttachmentId: 1 },
+      {
+        unique: true,
+        partialFilterExpression: { clientAttachmentId: { $exists: true, $type: 'string' } },
+        name: 'chat_uploader_attachment_request_unique',
+      },
+    );
+
     // TTL index: auto-expire OTP records after expires_at
     const otpStore = db.collection('otp_store');
     await otpStore.createIndex({ expires_at: 1 }, { expireAfterSeconds: 0, name: 'otp_ttl' });

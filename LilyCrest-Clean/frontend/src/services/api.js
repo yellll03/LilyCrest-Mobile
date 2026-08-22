@@ -432,47 +432,39 @@ export const apiService = {
   getFAQCategories: () => api.get('/faqs/categories'),
   
   // AI Chatbot
-  sendChatMessage: (message, sessionId, attachments = []) =>
-    api.post('/chatbot/message', { message, session_id: sessionId, attachments }),
+  sendChatMessage: (message, sessionId, attachments = [], clientMessageId = '') =>
+    api.post('/chatbot/message', {
+      message,
+      session_id: sessionId,
+      attachments,
+      client_message_id: clientMessageId,
+    }),
   resetChatSession: (sessionId) =>
     api.post('/chatbot/reset', { session_id: sessionId }),
-  requestAdminChat: (sessionId, reason) =>
-    api.post('/chatbot/request-admin', { session_id: sessionId, reason }),
-  getLiveChatStatus: (sessionId) =>
-    api.get(`/chatbot/live-status/${sessionId}`),
-  // Tenant live chat uses the same endpoint; backend routes to admin when active.
-  sendLiveChatMessage: (message, sessionId) =>
-    api.post('/chatbot/message', { message, session_id: sessionId }),
-  closeLiveChat: (sessionId) =>
-    api.post('/chatbot/close-live-chat', { session_id: sessionId }),
-  
-  // Support Tickets
-  getMyTickets: (status) => api.get('/tickets/me', { params: { status } }),
-  getTicket: (ticketId) => api.get(`/tickets/${ticketId}`),
-  createTicket: (data) => api.post('/tickets', data),
-  respondToTicket: (ticketId, data) => api.post(`/tickets/${ticketId}/respond`, data),
-  updateTicketStatus: (ticketId, status) => api.put(`/tickets/${ticketId}/status`, { status }),
 
-  // Human support chat - synced with the web admin panel in real-time.
-  // Uses /api/m/chat/... endpoints (mobile bridge in Capstone server) which
-  // write to chat_conversations + chat_messages collections the web admin reads.
+  // Human support chat. All current mobile support work goes through the one
+  // canonical conversation/message/attachment model shared with web admin.
   startSupportChat: (data) => api.post('/chat/start', data),
   getMySupportChats: () => api.get('/chat/me'),
-  getSupportChatMessages: (conversationId) => api.get(`/chat/${conversationId}/messages`),
-  sendSupportMessage: (conversationId, message, attachments = []) =>
-    api.post(`/chat/${conversationId}/messages`, { message, attachments }),
-  uploadSupportAttachment: (conversationId, attachment = {}) => {
-    const form = new FormData();
-    form.append('file', {
-      uri: attachment.uri,
-      name: attachment.name || attachment.fileName || 'attachment',
-      type: attachment.mimeType || attachment.type || 'application/octet-stream',
-    });
-    return api.post(`/chat/${conversationId}/attachments`, form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 90000,
-    });
-  },
+  getSupportChatMessages: (conversationId, params = {}) =>
+    api.get(`/chat/${conversationId}/messages`, { params }),
+  sendSupportMessage: (conversationId, message, attachments = [], clientMessageId = '') =>
+    api.post(`/chat/${conversationId}/messages`, { message, attachments, clientMessageId }),
+  // Registers an attachment whose bytes were already uploaded through the
+  // canonical durable-storage pipeline (POST /upload/firebase-storage, via
+  // ensureFirebaseStorageAttachments). The backend has no multipart parser
+  // and deliberately no second storage system — it re-proves the
+  // server-issued storagePath/downloadUrl pair belongs to this tenant, then
+  // records the metadata.
+  registerSupportAttachment: (conversationId, attachment = {}, clientAttachmentId = '') =>
+    api.post(`/chat/${encodeURIComponent(conversationId)}/attachments`, { attachment, clientAttachmentId }),
+  // Rollback for a multi-file send that failed part-way. Only the uploader can
+  // discard, and only while no message references the attachment yet, so this
+  // can never delete sent chat history.
+  discardSupportAttachment: (conversationId, attachmentId) =>
+    api.delete(
+      `/chat/${encodeURIComponent(conversationId)}/attachments/${encodeURIComponent(attachmentId)}`,
+    ),
   confirmSupportResolution: (conversationId, resolved, note = '', satisfaction = {}) =>
     api.patch(`/chat/${conversationId}/resolution`, {
       resolved,
@@ -484,7 +476,6 @@ export const apiService = {
     api.patch(`/chat/${conversationId}/reopen`, { note }),
   closeSupportChat: (conversationId, note) =>
     api.patch(`/chat/${conversationId}/close`, { note }),
-  sendSupportTyping: (conversationId) => api.post(`/chat/${conversationId}/typing`),
   
   // Seed data
   seedData: () => api.post('/seed'),

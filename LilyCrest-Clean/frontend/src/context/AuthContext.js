@@ -38,7 +38,6 @@ import {
   publishCanonicalNotification,
   subscribeCanonicalNotifications,
 } from '../services/canonicalEvents';
-import { startCanonicalRealtime, stopCanonicalRealtime } from '../services/realtime';
 import { useToast } from './ToastContext';
 import {
   isAuthenticatedNavigationReady,
@@ -499,15 +498,6 @@ export function AuthProvider({ children }) {
       data: notification.data || {},
     });
   }), [refreshNotifications]);
-
-  useEffect(() => {
-    if (authStatus !== 'authenticated' || !user?.user_id) {
-      stopCanonicalRealtime();
-      return undefined;
-    }
-    startCanonicalRealtime().catch(() => {});
-    return () => stopCanonicalRealtime();
-  }, [authStatus, user?.user_id]);
 
   useEffect(() => {
     if (!notificationBanner) return undefined;

@@ -1,6 +1,6 @@
-const { v4: uuidv4 } = require('uuid');
 const { ObjectId } = require('mongodb');
 const { getDb } = require('../config/database');
+const { ensureTenantSupportConversation } = require('./chat.controller');
 const {
   CHATBOT_SYSTEM_PROMPT,
   KNOWLEDGE_BASE,
@@ -1026,48 +1026,16 @@ function buildSessionIdentityFingerprint(user = {}) {
   ].join('|');
 }
 
-async function ensureLiveChatRequest(db, sessionId, userId, userName, userEmail, reason) {
-  const existing = liveChatQueue.get(sessionId);
-  if (existing) return existing;
-
-  const session = chatSessions.get(sessionId);
-  const chatHistory = session ? session.history : [];
-  const liveChatRequest = {
-    session_id: sessionId,
-    user_id: userId,
-    user_name: userName || 'Tenant',
-    user_email: userEmail,
-    reason: reason || 'Requested admin assistance',
-    chat_history: chatHistory,
-    messages: [],
-    status: 'waiting',
-    admin_id: null,
-    admin_name: null,
-    position: liveChatQueue.size + 1,
-    created_at: new Date(),
-  };
-
-  liveChatQueue.set(sessionId, liveChatRequest);
-  await db.collection('live_chat_requests').insertOne(liveChatRequest);
-
-  // Also create a support ticket so the web admin dashboard (which watches
-  // the tickets collection) sees the escalation immediately.
-  const ticketId = `ticket_esc_${uuidv4().replace(/-/g, '').substring(0, 12)}`;
-  await db.collection('tickets').insertOne({
-    ticket_id: ticketId,
-    user_id: userId,
-    subject: 'Admin Chat Request',
-    message: reason || 'Tenant requested admin assistance via AI assistant.',
-    category: 'Escalation',
-    status: 'open',
-    source: 'live_chat',
-    session_id: sessionId,
-    responses: [],
-    created_at: new Date(),
-    updated_at: new Date(),
+async function ensureCanonicalSupportConversation(db, sessionId, user, reason, clientRequestId = sessionId) {
+  return ensureTenantSupportConversation(db, user, {
+    category: 'general_inquiry',
+    priority: 'normal',
+    assistantSessionId: sessionId,
+    // Current clients send one stable operation id across transport retries.
+    // Older clients fall back to their validated assistant session id.
+    clientRequestId,
+    initialMessage: reason || 'Requested admin assistance',
   });
-
-  return liveChatRequest;
 }
 
 // ─────────────────────────────────────────────────────
@@ -1075,7 +1043,7 @@ async function ensureLiveChatRequest(db, sessionId, userId, userName, userEmail,
 // ─────────────────────────────────────────────────────
 async function sendMessage(req, res) {
   try {
-    const { message, session_id, attachments } = req.body;
+    const { message, session_id, attachments, client_message_id: clientMessageId } = req.body;
     const userId = req.user.user_id;
     const userEmail = req.user.email;
     const userName = req.user.name;
@@ -1427,9 +1395,12 @@ async function sendMessage(req, res) {
       if (escalate) {
         // Safety/admin escalation — AI still generates the response, but we flag it
         needsAdmin = true;
-        await ensureLiveChatRequest(
-          db, sessionId, userId, userName, userEmail,
-          `Escalated: ${userMessage.slice(0, 120)}`
+        await ensureCanonicalSupportConversation(
+          db,
+          sessionId,
+          normalizeUser({ ...req.user, ...tenantAccount }),
+          `Escalated: ${userMessage.slice(0, 120)}`,
+          clientMessageId,
         );
         // Let AI craft a natural escalation message
         const escalationPrompt = buildAIPrompt(
@@ -1455,9 +1426,12 @@ async function sendMessage(req, res) {
           aiResponse = text;
           if (text.includes('[NEEDS_ADMIN]')) {
             needsAdmin = true;
-            await ensureLiveChatRequest(
-              db, sessionId, userId, userName, userEmail,
-              `AI escalation: ${userMessage.slice(0, 120)}`
+            await ensureCanonicalSupportConversation(
+              db,
+              sessionId,
+              normalizeUser({ ...req.user, ...tenantAccount }),
+              `AI escalation: ${userMessage.slice(0, 120)}`,
+              clientMessageId,
             );
           }
         } else {
@@ -1556,43 +1530,23 @@ async function requestAdmin(req, res) {
       return res.status(400).json({ detail: `Reason must be ${MAX_ADMIN_REASON_CHARS} characters or fewer` });
     }
 
-    if (liveChatQueue.has(sessionId)) {
-      const existing = liveChatQueue.get(sessionId);
-      return res.json({
-        queued: true, position: existing.position, status: existing.status,
-        message: existing.status === 'active' ? `You are now chatting with ${existing.admin_name}` : 'Your request is in queue. An admin will be with you shortly.'
-      });
-    }
+    const result = await ensureCanonicalSupportConversation(
+      db,
+      sessionId,
+      normalizeUser({ ...req.user, ...(user || {}) }),
+      normalizedReason || 'Requested admin assistance',
+    );
 
-    const session = chatSessions.get(sessionId);
-    const chatHistory = session ? session.history : [];
-
-    const liveChatRequest = {
-      session_id: sessionId, user_id: userId, user_name: user?.name || 'Tenant', user_email: user?.email,
-      reason: normalizedReason || 'Requested admin assistance', chat_history: chatHistory, messages: [],
-      status: 'waiting', admin_id: null, admin_name: null, position: liveChatQueue.size + 1, created_at: new Date()
-    };
-
-    liveChatQueue.set(sessionId, liveChatRequest);
-    await db.collection('live_chat_requests').insertOne(liveChatRequest);
-
-    // Create a support ticket so the web admin dashboard sees it immediately.
-    const ticketId = `ticket_esc_${uuidv4().replace(/-/g, '').substring(0, 12)}`;
-    await db.collection('tickets').insertOne({
-      ticket_id: ticketId,
-      user_id: userId,
-      subject: 'Admin Chat Request',
-      message: normalizedReason || 'Tenant requested admin assistance via AI assistant.',
-      category: 'Escalation',
-      status: 'open',
-      source: 'live_chat',
+    res.json({
+      queued: true,
       session_id: sessionId,
-      responses: [],
-      created_at: new Date(),
-      updated_at: new Date(),
+      conversation_id: String(result.conversation._id),
+      reusedExisting: result.reusedExisting,
+      idempotentReplay: result.idempotentReplay,
+      message: result.reusedExisting
+        ? 'Your admin support conversation is already active.'
+        : 'Your request has been submitted. An admin will follow up shortly.',
     });
-
-    res.json({ queued: true, session_id: sessionId, position: liveChatRequest.position, message: 'Your request has been submitted. An admin will be with you shortly.' });
   } catch (error) {
     console.error('Live chat request error:', error);
     res.status(500).json({ error: 'Failed to request admin chat' });

@@ -35,11 +35,20 @@ describe('Phase 4 inquiry, archive, and attachment reconciliation', () => {
 
   test('support attachments use the authenticated chat pipeline and survive history mapping', () => {
     expect(screen).not.toContain('Attachments are not supported in admin support yet.');
-    expect(screen).toContain('apiService.uploadSupportAttachment(');
-    expect(api).toContain('form.append(\'file\'');
-    expect(api).toContain('`/chat/${conversationId}/attachments`');
+    // Support attachments go through the single durable-storage pipeline this
+    // codebase already has (POST /upload/firebase-storage via
+    // ensureFirebaseStorageAttachments), then register the server-issued
+    // metadata against the conversation. The old multipart path posted to a
+    // route the backend never registered, so every upload 404'd; there is
+    // deliberately no second storage system and no multipart parser.
+    expect(screen).toContain('ensureFirebaseStorageAttachments(');
+    expect(screen).toContain('apiService.registerSupportAttachment(');
+    expect(screen).toContain("folder: SUPPORT_ATTACHMENT_FOLDER");
+    expect(api).not.toContain("form.append('file'");
+    expect(api).toContain('registerSupportAttachment:');
+    expect(api).toContain('/attachments`, { attachment, clientAttachmentId }');
     expect(screen).toContain('attachments: Array.isArray(message.attachments)');
-    expect(api).toContain('sendSupportMessage: (conversationId, message, attachments = [])');
+    expect(api).toContain("sendSupportMessage: (conversationId, message, attachments = [], clientMessageId = '')");
     expect(bubble).toContain('onOpen?.(file)');
     expect(bubble).toContain('attachmentThumbnail');
     expect(screen).toContain('text,');

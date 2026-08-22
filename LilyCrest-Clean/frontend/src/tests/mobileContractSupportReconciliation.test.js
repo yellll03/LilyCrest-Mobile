@@ -39,4 +39,21 @@ describe('mobile contract/support canonical consumption', () => {
     expect(assistant).toContain('View Contract');
     expect(assistant).toContain("params: { contractId: context.entityId }");
   });
+
+  test('support retries use stable client operation ids and no legacy work-item APIs remain', () => {
+    expect(assistant).toContain("createClientOperationId('support-start')");
+    expect(assistant).toContain("createClientOperationId('support-message')");
+    expect(assistant).toContain("createClientOperationId('support-reply')");
+    expect(assistant).toContain('clientAttachmentId');
+    expect(api).toContain('clientMessageId');
+    expect(api).not.toContain('requestAdminChat:');
+    expect(api).not.toContain('getMyTickets:');
+  });
+
+  test('long support threads expose cursor pagination and an explicit load-earlier control', () => {
+    expect(api).toContain('getSupportChatMessages: (conversationId, params = {})');
+    expect(assistant).toContain('pageInfo.nextCursor');
+    expect(assistant).toContain('Load Earlier Messages');
+    expect(assistant).toContain('mergeSupportThread(older');
+  });
 });
