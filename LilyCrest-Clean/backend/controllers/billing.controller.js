@@ -747,6 +747,35 @@ function currentBillTiming(bill, asOf = new Date()) {
   return { state: 'overdue', days: late.penaltyDays, label: `Overdue by ${late.penaltyDays} day${late.penaltyDays === 1 ? '' : 's'}` };
 }
 
+const LATEST_BILLING_STATES = Object.freeze({
+  CURRENT_BILL: 'CURRENT_BILL',
+  NO_CURRENT_BILL: 'NO_CURRENT_BILL',
+});
+
+function serializeLatestBillingResponse({
+  bill = null,
+  serverTime = new Date(),
+  previousOutstanding = 0,
+  previousBill = null,
+} = {}) {
+  const timestamp = serverTime instanceof Date ? serverTime : new Date(serverTime);
+  if (Number.isNaN(timestamp.getTime())) {
+    throw new TypeError('serverTime must be a valid date');
+  }
+
+  const previousBalance = Number(previousOutstanding);
+  return {
+    state: bill ? LATEST_BILLING_STATES.CURRENT_BILL : LATEST_BILLING_STATES.NO_CURRENT_BILL,
+    bill: bill || null,
+    server_time: timestamp.toISOString(),
+    timing: bill ? currentBillTiming(bill, timestamp) : null,
+    previous_balance: Number.isFinite(previousBalance)
+      ? Math.round(Math.max(0, previousBalance) * 100) / 100
+      : 0,
+    previous_bill_id: normalizeBillId(previousBill || {}) || null,
+  };
+}
+
 function pushUniqueFilter(filters, filter) {
   if (!filter || typeof filter !== 'object') return;
   const key = JSON.stringify(filter, (_name, value) => (
@@ -1133,13 +1162,12 @@ async function getLatestBilling(req, res) {
     const previousOutstanding = previousBills
       .filter(isPayableBill)
       .reduce((sum, entry) => sum + Math.max(0, getComparableBillAmount(entry)), 0);
-    res.json({
+    res.json(serializeLatestBillingResponse({
       bill,
-      server_time: serverTime.toISOString(),
-      timing: bill ? currentBillTiming(bill, serverTime) : null,
-      previous_balance: Math.round(previousOutstanding * 100) / 100,
-      previous_bill_id: normalizeBillId(previousBills.find(isPayableBill) || {}),
-    });
+      serverTime,
+      previousOutstanding,
+      previousBill: previousBills.find(isPayableBill) || null,
+    }));
   } catch (error) {
     console.error('Get latest billing error:', error);
     res.status(500).json({ detail: 'Failed to fetch latest billing' });
@@ -1845,6 +1873,8 @@ module.exports = {
   isMoveInFinancialBill,
   resolveCurrentBill,
   currentBillTiming,
+  LATEST_BILLING_STATES,
+  serializeLatestBillingResponse,
   billPeriodKey,
   billStatusLabel,
   billPaymentMethodLabel,

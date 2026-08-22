@@ -27,4 +27,17 @@ describe('canonical billing screen states', () => {
     const bill = { billing_id: 'bill-1', total: 1000 };
     expect(normalizeLatestBillingResponse({ data: bill })).toMatchObject({ outcome: 'current', bill });
   });
+
+  test('deployed transitional wrapper never turns its valid bill into an empty state', () => {
+    const bill = { billing_id: 'bill-wrapped', total: 1750 };
+    expect(normalizeLatestBillingResponse({ data: { bill, server_time: '2026-08-22T00:00:00.000Z' } }))
+      .toMatchObject({ outcome: 'current', bill });
+  });
+
+  test('malformed fulfilled payload is a contract failure, not a no-current success', () => {
+    const normalized = normalizeLatestBillingResponse({ data: { state: 'CURRENT_BILL', bill: {} } });
+    expect(normalized).toMatchObject({ outcome: 'invalid', bill: null });
+    expect(resolveBillingScreenState({ latest: normalized.outcome, historyAvailable: false }))
+      .toBe(BILLING_SCREEN_STATES.TOTAL_FAILURE);
+  });
 });
