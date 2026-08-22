@@ -12,16 +12,11 @@ const {
 const {
   classifyIntent,
   sendGeminiMessage,
-  liveChatQueue,
   chatSessions,
   isQuotaError,
 } = require('../services/gemini.service');
 
 const GEMINI_QUOTA_FALLBACK = 'Lily Assistant is temporarily unavailable due to high demand. You may try again later or contact admin for urgent concerns.';
-const {
-  notifyAdminChatAccepted,
-  notifyChatbotReply,
-} = require('../services/pushService');
 const { fetchUserBills, resolveCurrentBill, currentBillTiming, billStatusLabel } = require('./billing.controller');
 const { normalizeUser } = require('../utils/normalizeUser');
 const { loadAttachmentParts } = require('../services/assistantAttachment.service');
@@ -161,18 +156,6 @@ function normalizeSessionId(rawSessionId, userId) {
     return { ok: false, error: 'Invalid session id format' };
   }
   return { ok: true, value: candidate };
-}
-
-// A sessionId is a client-supplied, guessable/enumerable string — it must
-// never be treated as proof of ownership. Every read/write against
-// liveChatQueue that isn't already admin-gated must resolve the session
-// through this helper so a tenant who knows or guesses another tenant's
-// sessionId cannot read their live-chat status/messages or inject messages
-// into their active admin conversation.
-function getOwnedLiveChat(sessionId, userId) {
-  const liveChat = liveChatQueue.get(sessionId);
-  if (!liveChat || liveChat.user_id !== userId) return null;
-  return liveChat;
 }
 
 function normalizeUserMessage(rawMessage) {
@@ -1138,13 +1121,6 @@ async function sendMessage(req, res) {
     tenantAccount.contractDocumentKind = canonicalContract.documentKind || null;
     tenantAccount.contractErrorKind = canonicalContract.available ? null : canonicalContract.errorKind;
 
-    // Check if this is an active live chat (admin is responding)
-    const liveChat = getOwnedLiveChat(sessionId, userId);
-    if (liveChat && liveChat.status === 'active') {
-      liveChat.messages.push({ sender: 'tenant', content: userMessage, timestamp: new Date() });
-      return res.json({ response: null, session_id: sessionId, live_chat_active: true, admin_name: liveChat.admin_name, message: 'Message sent to admin' });
-    }
-
     // Build tenant context lines
     const contextLines = [];
     contextLines.push(`Tenant display name: ${tenantAccount.tenantName || userName || 'Resident'}`);
@@ -1556,61 +1532,26 @@ async function requestAdmin(req, res) {
 // ─────────────────────────────────────────────────────
 // Get live status
 // ─────────────────────────────────────────────────────
+function legacySupportRetired(req, res) {
+  return res.status(410).json({
+    code: 'LEGACY_SUPPORT_RETIRED',
+    detail: 'This legacy live-chat endpoint is retired. Use canonical support conversations.',
+    canonical: {
+      tenant: '/api/chat/me',
+      admin: '/api/chat/admin/conversations',
+    },
+  });
+}
+
 async function getLiveStatus(req, res) {
-  try {
-    const { sessionId } = req.params;
-    const normalizedSession = normalizeSessionId(sessionId, req.user.user_id);
-    if (!normalizedSession.ok) {
-      return res.status(400).json({ detail: normalizedSession.error });
-    }
-    const liveChat = getOwnedLiveChat(normalizedSession.value, req.user.user_id);
-    if (!liveChat) {
-      return res.json({ active: false, in_queue: false });
-    }
-    res.json({ active: liveChat.status === 'active', in_queue: liveChat.status === 'waiting', position: liveChat.position, admin_name: liveChat.admin_name, messages: liveChat.messages });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to get status' });
-  }
+  return legacySupportRetired(req, res);
 }
 
 // ─────────────────────────────────────────────────────
 // Get live chats (admin)
 // ─────────────────────────────────────────────────────
 async function getLiveChats(req, res) {
-  try {
-    const pendingChats = [];
-    liveChatQueue.forEach((chat, sessionId) => {
-      if (chat.status === 'waiting' || chat.status === 'active') {
-        pendingChats.push({ session_id: sessionId, user_name: chat.user_name, reason: chat.reason, status: chat.status, created_at: chat.created_at });
-      }
-    });
-
-    // In-memory queue is empty after a server restart — restore from MongoDB so
-    // tenants who were already waiting don't disappear from the admin view.
-    if (pendingChats.length === 0) {
-      const db = getDb();
-      const dbChats = await db.collection('live_chat_requests')
-        .find({ status: { $in: ['waiting', 'active'] } })
-        .sort({ created_at: -1 })
-        .toArray();
-      for (const chat of dbChats) {
-        if (!liveChatQueue.has(chat.session_id)) {
-          liveChatQueue.set(chat.session_id, chat);
-        }
-        pendingChats.push({
-          session_id: chat.session_id,
-          user_name: chat.user_name,
-          reason: chat.reason,
-          status: chat.status,
-          created_at: chat.created_at,
-        });
-      }
-    }
-
-    res.json(pendingChats);
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to get live chats' });
-  }
+  return legacySupportRetired(req, res);
 }
 
 // ─────────────────────────────────────────────────────
@@ -1623,11 +1564,6 @@ async function resetSession(req, res) {
 
     chatSessions.delete(sessionId);
 
-    const liveChat = liveChatQueue.get(sessionId);
-    if (liveChat && liveChat.status !== 'active') {
-      liveChatQueue.delete(sessionId);
-    }
-
     return res.json({ reset: true, session_id: sessionId });
   } catch (error) {
     console.error('Reset chat session error:', error);
@@ -1639,106 +1575,28 @@ async function resetSession(req, res) {
 // Accept live chat (admin)
 // ─────────────────────────────────────────────────────
 async function acceptLiveChat(req, res) {
-  try {
-    const { session_id } = req.body;
-    const db = getDb();
-    const adminUser = await db.collection('users').findOne({ user_id: req.user.user_id });
-    const liveChat = liveChatQueue.get(session_id);
-    if (!liveChat) return res.status(404).json({ error: 'Chat session not found' });
-    if (liveChat.status === 'active') return res.status(400).json({ error: 'Chat already being handled', admin_name: liveChat.admin_name });
-
-    liveChat.status = 'active';
-    liveChat.admin_id = req.user.user_id;
-    liveChat.admin_name = adminUser?.name || 'Admin';
-    liveChat.messages.push({ sender: 'system', content: `${liveChat.admin_name} has joined the chat.`, timestamp: new Date() });
-
-    await db.collection('live_chat_requests').updateOne({ session_id }, { $set: { status: 'active', admin_id: req.user.user_id, admin_name: liveChat.admin_name } });
-    notifyAdminChatAccepted(liveChat.user_id, liveChat.admin_name, session_id).catch(() => {});
-    res.json({ success: true, chat_history: liveChat.chat_history, user_name: liveChat.user_name, reason: liveChat.reason });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to accept chat' });
-  }
+  return legacySupportRetired(req, res);
 }
 
 // ─────────────────────────────────────────────────────
 // Send admin message
 // ─────────────────────────────────────────────────────
 async function sendAdminMessage(req, res) {
-  try {
-    const { session_id, message } = req.body;
-    const normalizedSession = normalizeSessionId(session_id, req.user.user_id);
-    if (!normalizedSession.ok) return res.status(400).json({ detail: normalizedSession.error });
-    const normalizedMessage = normalizeUserMessage(message);
-    if (!normalizedMessage.ok) return res.status(400).json({ detail: normalizedMessage.error });
-    const db = getDb();
-    const adminUser = await db.collection('users').findOne({ user_id: req.user.user_id });
-
-    const liveChat = liveChatQueue.get(normalizedSession.value);
-    if (!liveChat || liveChat.status !== 'active') return res.status(404).json({ error: 'Active chat session not found' });
-
-    liveChat.messages.push({ sender: 'admin', admin_name: adminUser?.name || 'Admin', content: normalizedMessage.value, timestamp: new Date() });
-    notifyChatbotReply(liveChat.user_id, {
-      adminName: adminUser?.name || 'Admin',
-      message: normalizedMessage.value,
-      sessionId: normalizedSession.value,
-    }).catch(() => {});
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to send message' });
-  }
+  return legacySupportRetired(req, res);
 }
 
 // ─────────────────────────────────────────────────────
 // Close live chat
 // ─────────────────────────────────────────────────────
 async function closeLiveChat(req, res) {
-  try {
-    const { session_id } = req.body;
-    const liveChat = liveChatQueue.get(session_id);
-    if (liveChat) {
-      const isOwner = liveChat.user_id === req.user.user_id;
-      const role = (req.user?.role || '').toLowerCase();
-      const isAdmin = role === 'admin' || role === 'superadmin';
-      if (!isOwner && !isAdmin) {
-        return res.status(403).json({ error: 'Only the session owner or an admin can close this chat' });
-      }
-
-      liveChat.status = 'closed';
-      liveChat.messages.push({ sender: 'system', content: 'Chat session has been closed.', timestamp: new Date() });
-      const db = getDb();
-      const closedAt = new Date();
-      await Promise.all([
-        db.collection('live_chat_archive').insertOne({ ...liveChat, closed_at: closedAt }),
-        // Mark as closed in source collection so stale 'waiting' records don't
-        // reappear in admin view after a server restart.
-        db.collection('live_chat_requests').updateOne(
-          { session_id },
-          { $set: { status: 'closed', closed_at: closedAt } }
-        ),
-      ]);
-      setTimeout(() => liveChatQueue.delete(session_id), 5000);
-    }
-    res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to close chat' });
-  }
+  return legacySupportRetired(req, res);
 }
 
 // ─────────────────────────────────────────────────────
 // Get chat history
 // ─────────────────────────────────────────────────────
 async function getChatHistory(req, res) {
-  try {
-    const userId = req.user.user_id;
-    const db = getDb();
-    const [liveRequests, archived] = await Promise.all([
-      db.collection('live_chat_requests').find({ user_id: userId }).sort({ created_at: -1 }).limit(50).toArray(),
-      db.collection('live_chat_archive').find({ user_id: userId }).sort({ created_at: -1 }).limit(50).toArray(),
-    ]);
-    res.json({ escalations: liveRequests, archive: archived });
-  } catch (error) {
-    res.status(500).json({ error: 'Failed to get history' });
-  }
+  return legacySupportRetired(req, res);
 }
 
 module.exports = {
@@ -1770,8 +1628,6 @@ module.exports = {
     classifyContractUnavailability,
     contractUnavailabilityResponse,
     fetchMaintenanceRequestsForUser,
-    getOwnedLiveChat,
-    liveChatQueue,
     chatSessions,
   },
 };

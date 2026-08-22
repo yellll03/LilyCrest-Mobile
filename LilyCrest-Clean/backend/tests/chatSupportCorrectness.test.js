@@ -114,8 +114,18 @@ function createDb(seed = {}) {
         store[name].push(record);
         return { insertedId: record._id };
       },
-      async updateOne(filter, update) {
-        const doc = store[name].find((row) => matches(row, filter));
+      async updateOne(filter, update, options = {}) {
+        let doc = store[name].find((row) => matches(row, filter));
+        if (!doc && options.upsert) {
+          doc = {
+            ...filter,
+            ...(update.$setOnInsert || {}),
+            ...(update.$set || {}),
+            _id: new ObjectId(),
+          };
+          store[name].push(doc);
+          return { matchedCount: 0, modifiedCount: 0, upsertedCount: 1, upsertedId: doc._id };
+        }
         if (!doc) return { matchedCount: 0, modifiedCount: 0 };
         if (update.$set) Object.assign(doc, update.$set);
         if (update.$unset) Object.keys(update.$unset).forEach((field) => { delete doc[field]; });
@@ -258,6 +268,10 @@ test('tenant and admin message retries preserve stable identity and unread count
   assert.equal(adminRetry.body.idempotentReplay, true);
   assert.equal(db.store.chat_messages.length, 2);
   assert.equal(db.store.chat_conversations[0].unreadTenantCount, 1);
+  assert.equal(db.store.notifications.length, 1, 'an idempotent reply replay must not duplicate the tenant notification');
+  assert.equal(db.store.notifications[0].event_key, `chat_reply:${conversationId}:${adminFirst.body.message.id}`);
+  assert.equal(db.store.notifications[0].data.conversation_id, conversationId);
+  assert.equal(db.store.notifications[0].data.message_id, adminFirst.body.message.id);
 });
 
 test('attachment retry reuses one record and removes a second uploaded object after a lost response', async () => {

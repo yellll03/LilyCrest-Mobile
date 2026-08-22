@@ -596,41 +596,18 @@ async function notifyPrivateAnnouncement(userId, announcement = {}) {
   });
 }
 
-async function notifyAdminChatAccepted(userId, adminName, sessionId) {
-  const payload = {
-    title: 'Admin Joined Your Chat',
-    body: `${adminName || 'An admin'} is now ready to assist you.`,
-    data: {
-      type: 'chat_assigned',
-      session_id: sessionId,
-      screen: 'chat',
-      url: '/(tabs)/chatbot',
-    },
-  };
-
-  const [, pushResult] = await Promise.allSettled([
-    saveNotificationForUser(userId, {
-      ...payload,
-      category: 'Assistant',
-      source: 'chat',
-      source_label: adminName || 'LilyCrest Support',
-      session_id: sessionId,
-      eventKey: sessionId ? `chat_assigned:${sessionId}` : '',
-      priority: 'normal',
-    }),
-    sendPushToUser(userId, payload),
-  ]);
-
-  return pushResult.status === 'fulfilled' ? pushResult.value : false;
-}
-
-async function notifyChatbotReply(userId, { adminName, message, sessionId }) {
+async function notifySupportReply(userId, { adminName, message, conversationId, messageId }) {
+  const canonicalConversationId = normalizeString(conversationId);
+  const canonicalMessageId = normalizeString(messageId);
   const payload = {
     title: `${adminName || 'Admin'} replied`,
     body: clipText(message, 110) || 'You have a new message from LilyCrest support.',
+    type: 'chat_reply',
+    url: '/(tabs)/chatbot',
     data: {
       type: 'chat_reply',
-      session_id: sessionId,
+      conversation_id: canonicalConversationId,
+      message_id: canonicalMessageId,
       screen: 'chat',
       url: '/(tabs)/chatbot',
     },
@@ -642,7 +619,9 @@ async function notifyChatbotReply(userId, { adminName, message, sessionId }) {
       category: 'Assistant',
       source: 'chat',
       source_label: adminName || 'LilyCrest Support',
-      session_id: sessionId,
+      eventKey: canonicalConversationId && canonicalMessageId
+        ? `chat_reply:${canonicalConversationId}:${canonicalMessageId}`
+        : '',
       priority: 'normal',
     }),
     sendPushToUser(userId, payload),
@@ -693,7 +672,6 @@ module.exports = {
   notifyPaymentConfirmed,
   notifyNewAnnouncement,
   notifyPrivateAnnouncement,
-  notifyAdminChatAccepted,
-  notifyChatbotReply,
+  notifySupportReply,
   notifyReservationUpdate,
 };

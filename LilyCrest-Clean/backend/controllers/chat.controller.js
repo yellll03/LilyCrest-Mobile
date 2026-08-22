@@ -18,6 +18,7 @@ const {
   SUPPORT_ATTACHMENT_MAX_BYTES,
   SUPPORT_ATTACHMENT_MIME_TYPES,
 } = require('../constants/supportAttachments');
+const { notifySupportReply } = require('../services/pushService');
 
 // Matches chatbot.controller.js's MAX_CHAT_MESSAGE_CHARS and the single
 // client-side cap the mobile UI already applies to both the AI assistant and
@@ -1525,6 +1526,12 @@ async function sendAdminMessage(req, res) {
     );
 
     const updatedConversation = await db.collection('chat_conversations').findOne({ _id: conversation._id });
+    await notifySupportReply(conversation.tenantUserId, {
+      adminName,
+      message: message || (adminAttachments.length ? 'You received a support attachment.' : ''),
+      conversationId: String(conversation._id),
+      messageId: String(insertResult.insertedId),
+    });
     return res.json({
       message: serializeMessage({ ...messageDoc, _id: insertResult.insertedId }),
       conversation: serializeConversation(updatedConversation || conversation),
