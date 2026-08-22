@@ -1,4 +1,4 @@
-import { Stack, usePathname, useRouter } from 'expo-router';
+import { Stack, usePathname, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
 import React, { useEffect } from 'react';
@@ -9,8 +9,21 @@ import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { ThemeProvider, useTheme } from '../src/context/ThemeContext';
 import { ToastProvider } from '../src/context/ToastContext';
 import { clearDocumentCacheIfStaleBuild, evictStaleDocumentCache } from '../src/services/documentManager';
+import {
+  isAuthenticationPath,
+  resetToHome,
+  resetToLogin,
+} from '../src/utils/navigation';
 
 SplashScreen.preventAutoHideAsync();
+
+// When the app is opened through a deep link, Expo Router seeds the root stack
+// with the authenticated tabs (whose initial route is Home) before presenting
+// the linked screen. This gives a validated deep link a deterministic Back
+// destination instead of making Login/onboarding its accidental parent.
+export const unstable_settings = {
+  initialRouteName: '(tabs)',
+};
 
 const PUBLIC_ROUTE_PREFIXES = [
   '/',
@@ -58,7 +71,12 @@ function LayoutContent() {
   const { authReady, authStatus } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
-  const protectedPath = isProtectedPath(pathname);
+  const segments = useSegments();
+  // An anchored Home tab can have the collapsed pathname "/". Its group
+  // segment still marks it as authenticated application content.
+  const protectedPath = isProtectedPath(pathname) || segments.includes('(tabs)');
+  const authenticatedAuthPath = authStatus === 'authenticated' && isAuthenticationPath(pathname, segments);
+  const unauthenticatedProtectedPath = authStatus === 'unauthenticated' && protectedPath;
 
   useEffect(() => {
     if (!isLoading) SplashScreen.hideAsync();
@@ -72,12 +90,16 @@ function LayoutContent() {
 
   useEffect(() => {
     if (!authReady) return;
-    if (protectedPath && authStatus === 'unauthenticated') {
-      router.replace('/login');
+    if (authenticatedAuthPath) {
+      resetToHome(router);
+      return;
     }
-  }, [authReady, authStatus, protectedPath, router]);
+    if (unauthenticatedProtectedPath) {
+      resetToLogin(router);
+    }
+  }, [authReady, authenticatedAuthPath, router, unauthenticatedProtectedPath]);
 
-  if (isLoading || !authReady || (protectedPath && authStatus === 'unauthenticated')) {
+  if (isLoading || !authReady || authenticatedAuthPath || unauthenticatedProtectedPath) {
     return (
       <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, padding: 24 }}>
         <ActivityIndicator size="large" color={colors.primary} />

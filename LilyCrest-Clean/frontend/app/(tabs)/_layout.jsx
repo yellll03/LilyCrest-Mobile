@@ -32,7 +32,7 @@ export default function TabLayout() {
   return (
     <Tabs
       initialRouteName="home"
-      backBehavior="history"
+      backBehavior="initialRoute"
       screenOptions={{
         headerShown: false,
         tabBarActiveTintColor: colors.primary,
