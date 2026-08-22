@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { format } from 'date-fns';
-import { Link, useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
@@ -21,7 +21,7 @@ import ImageLightbox from '../../src/components/ImageLightbox';
 import { getBillOwedAmount, isBillOutstanding } from '../../src/utils/billingStatus';
 import PropertyShowcase from '../../src/components/PropertyShowcase';
 import StyledModal from '../../src/components/StyledModal';
-import LilyFlowerIcon from '../../src/components/assistant/LilyFlowerIcon';
+import LilyAssistantFab from '../../src/components/assistant/LilyAssistantFab';
 import { useAuth } from '../../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
 import { apiService, getApiErrorMessage } from '../../src/services/api';
@@ -119,19 +119,6 @@ export default function HomeScreen() {
   const requestedDashboardUserIdRef = useRef(null);
   const activeUserIdRef = useRef(userId);
   activeUserIdRef.current = userId;
-
-  // FAB pulse animation
-  const fabScale = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    const pulse = Animated.loop(
-      Animated.sequence([
-        Animated.timing(fabScale, { toValue: 1.08, duration: 1400, useNativeDriver: true }),
-        Animated.timing(fabScale, { toValue: 1, duration: 1400, useNativeDriver: true }),
-      ])
-    );
-    pulse.start();
-    return () => pulse.stop();
-  }, [fabScale]);
 
   // ── Debounce search ──
   useEffect(() => {
@@ -1140,14 +1127,7 @@ export default function HomeScreen() {
         <View style={styles.bottomSpacer} />
       </ScrollView>
 
-      {/* ── Floating Chatbot Button ── */}
-      <Link href="/(tabs)/chatbot" prefetch asChild>
-        <TouchableOpacity activeOpacity={0.85}>
-          <Animated.View style={[styles.chatbotButton, { transform: [{ scale: fabScale }] }]}>
-            <LilyFlowerIcon size={42} imageScale={1.24} />
-          </Animated.View>
-        </TouchableOpacity>
-      </Link>
+      <LilyAssistantFab />
 
       <StyledModal
         visible={modalData.visible}
@@ -1624,26 +1604,6 @@ function createStyles(c) {
     emptyState: { alignItems: 'center', paddingVertical: 20 },
     emptyTitle: { fontSize: 15, fontWeight: '600', color: c.text, marginTop: 8 },
     emptyHint: { fontSize: 12, color: c.textMuted, marginTop: 3 },
-
-    // FAB
-    chatbotButton: {
-      position: 'absolute',
-      bottom: Platform.OS === 'ios' ? 110 : 90,
-      right: 20,
-      width: 58,
-      height: 58,
-      borderRadius: 29,
-      backgroundColor: c.accent,
-      borderWidth: 2,
-      borderColor: '#FFFFFF',
-      justifyContent: 'center',
-      alignItems: 'center',
-      ...Platform.select({
-        ios: { shadowColor: c.headerBg, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.16, shadowRadius: 6 },
-        android: { elevation: 4 },
-        web: { boxShadow: '0 2px 8px rgba(10,22,40,0.16)' },
-      }),
-    },
 
     bottomSpacer: { height: Platform.OS === 'ios' ? 120 : 100 },
   });
