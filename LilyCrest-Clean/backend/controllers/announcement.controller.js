@@ -13,8 +13,14 @@ function announcementIdFilter(id) {
   if (ObjectId.isValid(id)) clauses.push({ _id: new ObjectId(id) });
   return { $or: clauses };
 }
-const { notifyNewAnnouncement, notifyPrivateAnnouncement } = require('../services/pushService');
-const { resolveTenantBranch, normalizedBranchReference } = require('../services/branchLocation.service');
+const { notifyNewAnnouncement } = require('../services/pushService');
+const {
+  filterAnnouncementsForTenant,
+  getTenantUserId,
+  hasTenantAudienceIdentity,
+  isAnnouncementLifecycleVisible,
+  loadVisibleAnnouncementsForTenant,
+} = require('../services/announcementAudience.service');
 
 function getAnnouncementDateValue(doc = {}) {
   return doc.publishedAt || doc.sentAt || doc.created_at || doc.createdAt || doc.updated_at || doc.updatedAt || null;
@@ -85,85 +91,21 @@ function getAnnouncementDedupKey(doc = {}, normalized = {}) {
   return `fallback:${String(content).trim()}::${timestamp}`;
 }
 
-// Resolve the requesting tenant's authoritative branch code for filtering, or
-// null if unauthenticated or no branch could be confirmed (no active occupancy,
-// conflicting assignments, etc). Branch-restricted announcements are hidden
-// rather than shown when this can't be determined — never guessed client-side.
-async function resolveRequesterBranchCode(db, user) {
-  if (!user) return null;
-  try {
-    const resolved = await resolveTenantBranch(db, user);
-    const code = resolved?.branch?.branchCode;
-    return code ? normalizedBranchReference(code) : null;
-  } catch (_) {
-    return null;
-  }
-}
-
-// An announcement with no branch field (or blank) is global/legacy and stays
-// visible to everyone — existing announcements must not suddenly disappear.
-//
-// A private (user_id-targeted) announcement is already scoped to exactly one
-// tenant by the query-level ownership filter above — that's strictly more
-// precise targeting than a branch match. Additionally requiring the branch to
-// line up too would only ever narrow an already-exact match, and could hide a
-// private announcement from its own intended recipient if the branch value is
-// stale, mistyped, or the tenant transferred branches after it was sent — so
-// branch filtering is skipped entirely for private announcements.
-function isAnnouncementVisibleForBranch(doc, requesterBranchCode) {
-  const isPrivate = doc.is_private === true || doc.isPrivate === true;
-  if (isPrivate) return true;
-
-  const branchRef = doc.branch || doc.branchId || doc.branch_id;
-  if (!branchRef || !String(branchRef).trim()) return true;
-  if (!requesterBranchCode) return false;
-  return normalizedBranchReference(branchRef) === requesterBranchCode;
-}
-
-// Mongo-level portion of tenant announcement visibility: active, not
-// archived, and either public or privately targeted at this exact userId.
-// Branch scoping (isAnnouncementVisibleForBranch) is applied afterward in JS
-// since it needs the requester's resolved branch code, not just their id.
-// Shared by getAllAnnouncements and any other authenticated-tenant-scoped
-// consumer (the AI assistant) that needs the identical visibility rule
-// instead of a second, divergent query.
-function buildTenantAnnouncementQuery(userId) {
-  // Handle both snake_case (app-created) and camelCase (admin-panel-created) documents.
-  // Web admin docs may lack is_active/isActive entirely — treat missing as active.
-  const activeFilter = {
-    $or: [
-      { is_active: true },
-      { isActive: true },
-      { is_active: { $exists: false }, isActive: { $exists: false } },
-    ],
-  };
-  // Exclude archived announcements (web admin uses isArchived)
-  const notArchivedFilter = { isArchived: { $ne: true } };
-  const visibilityFilter = {
-    $or: [
-      { is_private: { $ne: true }, isPrivate: { $ne: true } },
-      ...(userId ? [{ is_private: true, user_id: userId }, { isPrivate: true, userId }] : []),
-    ],
-  };
-  return { $and: [activeFilter, notArchivedFilter, visibilityFilter] };
-}
-
 // Get all announcements
 async function getAllAnnouncements(req, res) {
   try {
     const db = getDb();
-    const userId = req.user?.user_id || null;
-    const requesterBranchCode = await resolveRequesterBranchCode(db, req.user);
-    const dismissedIds = userId
-      ? new Set((await db.collection('announcement_dismissals').find({ user_id: userId }).project({ announcement_id: 1 }).toArray().catch(() => []))
-        .map((entry) => String(entry.announcement_id || '')).filter(Boolean))
-      : new Set();
+    const userId = getTenantUserId(req.user);
+    if (!userId) return res.status(401).json({ detail: 'Authentication is required.' });
+    if (!hasTenantAudienceIdentity(req.user)) return res.status(403).json({ detail: 'Tenant access is required.' });
+    const dismissedIds = new Set((await db.collection('announcement_dismissals')
+      .find({ user_id: userId })
+      .project({ announcement_id: 1 })
+      .toArray()
+      .catch(() => []))
+      .map((entry) => String(entry.announcement_id || '')).filter(Boolean));
 
-    const announcements = (await db.collection('announcements')
-      .find(buildTenantAnnouncementQuery(userId))
-      .sort({ created_at: -1, createdAt: -1 })
-      .toArray())
-      .filter((doc) => isAnnouncementVisibleForBranch(doc, requesterBranchCode));
+    const announcements = await loadVisibleAnnouncementsForTenant(db, req.user);
 
     const normalizedAnnouncements = announcements.map(normalizeAnnouncement);
     const dedupedAnnouncements = [];
@@ -199,6 +141,7 @@ async function createAnnouncement(req, res) {
     if (!content || content.length > 5000) return res.status(400).json({ detail: 'content is required and must be 5000 characters or fewer' });
     if (!allowedPriorities.includes(normalizedPriority)) return res.status(400).json({ detail: `priority must be one of: ${allowedPriorities.join(', ')}` });
     if (!allowedCategories.includes(normalizedCategory)) return res.status(400).json({ detail: `category must be one of: ${allowedCategories.join(', ')}` });
+    if (is_private !== undefined && typeof is_private !== 'boolean') return res.status(400).json({ detail: 'is_private must be a boolean' });
     const publishDate = publish_at ? new Date(publish_at) : new Date();
     const expiryDate = expires_at ? new Date(expires_at) : null;
     if (Number.isNaN(publishDate.getTime()) || (expiryDate && Number.isNaN(expiryDate.getTime()))) return res.status(400).json({ detail: 'publish_at and expires_at must be valid dates' });
@@ -206,9 +149,16 @@ async function createAnnouncement(req, res) {
 
     const db = getDb();
     if (is_private === true && !targetUserId) return res.status(400).json({ detail: 'user_id is required for a private announcement' });
-    if (targetUserId) {
-      const target = await db.collection('users').findOne({ user_id: String(targetUserId).trim() });
-      if (!target) return res.status(400).json({ detail: 'Target user was not found' });
+    if (is_private !== true && targetUserId) return res.status(400).json({ detail: 'user_id is only valid for a private announcement' });
+    const normalizedTargetUserId = targetUserId ? String(targetUserId).trim() : '';
+    let target = null;
+    if (normalizedTargetUserId) {
+      target = await db.collection('users').findOne({
+        $or: [{ user_id: normalizedTargetUserId }, { userId: normalizedTargetUserId }],
+      });
+      if (!target || !hasTenantAudienceIdentity(target) || target.is_active === false || target.isActive === false) {
+        return res.status(400).json({ detail: 'Target tenant was not found or is inactive' });
+      }
     }
     const announcement = {
       announcement_id: `ann_${uuidv4().replace(/-/g, '').substring(0, 12)}`,
@@ -219,8 +169,8 @@ async function createAnnouncement(req, res) {
       category: normalizedCategory,
       is_urgent: is_urgent === true || normalizedPriority === 'high',
       is_active: true,
-      is_private: is_private || false,
-      user_id: targetUserId || null,
+      is_private: is_private === true,
+      user_id: normalizedTargetUserId || null,
       branch: typeof branch === 'string' && branch.trim() ? branch.trim() : null,
       publishedAt: publishDate,
       expiresAt: expiryDate,
@@ -228,18 +178,21 @@ async function createAnnouncement(req, res) {
       updated_at: new Date(),
     };
 
+    if (announcement.is_private && announcement.branch) {
+      const targetCanReceive = await filterAnnouncementsForTenant(db, target, [announcement]);
+      if (!targetCanReceive.length) {
+        return res.status(400).json({ detail: 'The private target is not eligible for the selected branch.' });
+      }
+    }
+
     await db.collection('announcements').insertOne(announcement);
 
     // Push/in-app notification delivery
-    let notification_sent = false;
-    if (!announcement.is_private) {
+    const notification_sent = isAnnouncementLifecycleVisible(announcement);
+    if (notification_sent) {
       notifyNewAnnouncement(db, announcement).catch(() => {});
-      notification_sent = true;
-    } else if (announcement.user_id) {
-      notifyPrivateAnnouncement(announcement.user_id, announcement).catch(() => {});
-      notification_sent = true;
     } else {
-      console.log(`[createAnnouncement] Skipping push notification for private announcement "${announcement.title}" (user_id: ${announcement.user_id})`);
+      console.log(`[createAnnouncement] Announcement "${announcement.title}" is not currently publishable; immediate delivery skipped.`);
     }
 
     res.status(201).json({ ...normalizeAnnouncement(announcement), notification_sent });
@@ -260,7 +213,8 @@ async function dismissAnnouncement(req, res) {
   if (!announcementId) return res.status(400).json({ detail: 'announcementId is required.' });
   const db = getDb();
   const exists = await db.collection('announcements').findOne(announcementIdFilter(announcementId));
-  if (!exists) return res.status(404).json({ detail: 'Announcement not found.' });
+  const visible = exists ? await filterAnnouncementsForTenant(db, req.user, [exists]) : [];
+  if (!visible.length) return res.status(404).json({ detail: 'Announcement not found.' });
   await db.collection('announcement_dismissals').updateOne(
     { user_id: userId, announcement_id: announcementId },
     { $set: { dismissed_at: new Date() }, $setOnInsert: { created_at: new Date() } },
@@ -294,10 +248,15 @@ async function dismissAnnouncementsBulk(req, res) {
   const ids = [...new Set(rawIds.map((id) => id.trim()))];
 
   const db = getDb();
-  const existingCount = await db.collection('announcements').countDocuments({
+  const existing = await db.collection('announcements').find({
     $or: ids.flatMap((id) => [{ announcement_id: id }, ...(ObjectId.isValid(id) ? [{ _id: new ObjectId(id) }] : [])]),
-  });
-  if (existingCount !== ids.length) {
+  }).toArray();
+  const visible = await filterAnnouncementsForTenant(db, req.user, existing);
+  const visibleIds = new Set(visible.flatMap((announcement) => [
+    String(announcement.announcement_id || ''),
+    String(announcement._id || ''),
+  ].filter(Boolean)));
+  if (ids.some((id) => !visibleIds.has(id))) {
     return res.status(400).json({ detail: 'One or more ids do not match an existing announcement.' });
   }
 
@@ -318,9 +277,4 @@ module.exports = {
   createAnnouncement,
   dismissAnnouncement,
   dismissAnnouncementsBulk,
-  // exported for unit testing of branch-visibility rules in isolation, and
-  // for reuse by other authenticated-tenant-scoped consumers (chatbot)
-  isAnnouncementVisibleForBranch,
-  resolveRequesterBranchCode,
-  buildTenantAnnouncementQuery,
 };

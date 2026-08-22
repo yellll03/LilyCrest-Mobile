@@ -108,11 +108,12 @@ function fakeRes() {
 async function run(db, req) {
   currentDb = db;
   const res = fakeRes();
-  await getAllAnnouncements(req, res);
+  const request = req.user ? { ...req, user: { role: 'tenant', ...req.user } } : req;
+  await getAllAnnouncements(request, res);
   return res;
 }
 
-test('handler: unauthenticated request sees only public/global announcements, never private or branch-restricted', async () => {
+test('handler: unauthenticated request fails closed without returning announcement content', async () => {
   const db = fakeDb({
     announcements: [
       { announcement_id: 'a-global', title: 'Global', content: 'x' },
@@ -121,9 +122,8 @@ test('handler: unauthenticated request sees only public/global announcements, ne
     ],
   });
   const res = await run(db, { user: null });
-  assert.equal(res.statusCode, 200);
-  const ids = res.body.map((a) => a.announcement_id);
-  assert.deepEqual(ids, ['a-global']);
+  assert.equal(res.statusCode, 401);
+  assert.deepEqual(res.body, { detail: 'Authentication is required.' });
 });
 
 test('handler: Gil Puyat tenant sees global, own-branch, and own-private announcements, not other-branch or other-tenant-private', async () => {
@@ -143,6 +143,31 @@ test('handler: Gil Puyat tenant sees global, own-branch, and own-private announc
   assert.deepEqual(ids, ['a-mine', 'a-global', 'a-gp'].sort());
 });
 
+test('handler: another tenant in the same branch sees branch content but not the private target content', async () => {
+  const db = fakeDb({
+    announcements: [
+      { announcement_id: 'a-gp', title: 'Gil Puyat only', content: 'x', branch: 'gil-puyat' },
+      { announcement_id: 'a-private-target', title: 'Target only', content: 'secret', is_private: true, user_id: 'tenant-gil', branch: 'gil-puyat' },
+    ],
+    reservations: [{ user_id: 'tenant-gil-other', branch: 'gil-puyat', status: 'approved' }],
+    requesterUserId: 'tenant-gil-other',
+  });
+  const res = await run(db, { user: { user_id: 'tenant-gil-other' } });
+  assert.deepEqual(res.body.map((a) => a.announcement_id), ['a-gp']);
+});
+
+test('handler: future and expired announcements return no content', async () => {
+  const db = fakeDb({
+    announcements: [
+      { announcement_id: 'a-future', title: 'Future', content: 'not yet', publishedAt: new Date('2099-01-01T00:00:00Z') },
+      { announcement_id: 'a-expired', title: 'Expired', content: 'too late', expiresAt: new Date('2000-01-01T00:00:00Z') },
+    ],
+    requesterUserId: 'tenant-gil',
+  });
+  const res = await run(db, { user: { user_id: 'tenant-gil' } });
+  assert.deepEqual(res.body, []);
+});
+
 test('handler: tenant with no resolvable occupancy sees global announcements but not branch-restricted ones', async () => {
   const db = fakeDb({
     announcements: [
@@ -157,10 +182,7 @@ test('handler: tenant with no resolvable occupancy sees global announcements but
   assert.deepEqual(ids, ['a-global']);
 });
 
-test('handler: a private announcement is visible to its intended recipient even if its branch field is stale/mismatched', async () => {
-  // Ownership targeting (user_id) is already exact and strictly more precise
-  // than a branch match — a stale/mistyped branch field on a private message
-  // must not additionally hide it from the one tenant it was sent to.
+test('handler: a private announcement with a mismatched branch fails closed for its intended recipient', async () => {
   const db = fakeDb({
     announcements: [
       { announcement_id: 'a-private-wrong-branch', title: 'Private+stale branch', content: 'x', is_private: true, user_id: 'tenant-gil', branch: 'guadalupe' },
@@ -169,8 +191,7 @@ test('handler: a private announcement is visible to its intended recipient even 
     requesterUserId: 'tenant-gil',
   });
   const res = await run(db, { user: { user_id: 'tenant-gil' } });
-  assert.equal(res.body.length, 1);
-  assert.equal(res.body[0].announcement_id, 'a-private-wrong-branch');
+  assert.equal(res.body.length, 0);
 });
 
 test('handler: legacy announcement with missing branch field is treated as global', async () => {

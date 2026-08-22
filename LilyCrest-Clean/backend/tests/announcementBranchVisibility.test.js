@@ -5,7 +5,7 @@ const assert = require('node:assert/strict');
 const {
   isAnnouncementVisibleForBranch,
   resolveRequesterBranchCode,
-} = require('../controllers/announcement.controller');
+} = require('../services/announcementAudience.service');
 
 function cursor(records) {
   return { sort() { return this; }, limit() { return this; }, async toArray() { return records; } };
@@ -53,9 +53,9 @@ test('branch-restricted announcement is hidden when requester branch is unresolv
   assert.equal(isAnnouncementVisibleForBranch({ branch: 'guadalupe' }, null), false);
 });
 
-test('private (user_id-targeted) announcements bypass branch filtering entirely, even with a mismatched or unresolved branch', () => {
-  assert.equal(isAnnouncementVisibleForBranch({ is_private: true, branch: 'guadalupe' }, 'gil-puyat'), true);
-  assert.equal(isAnnouncementVisibleForBranch({ isPrivate: true, branch: 'guadalupe' }, null), true);
+test('private announcements still require branch eligibility when a branch restriction is present', () => {
+  assert.equal(isAnnouncementVisibleForBranch({ is_private: true, branch: 'guadalupe' }, 'gil-puyat'), false);
+  assert.equal(isAnnouncementVisibleForBranch({ isPrivate: true, branch: 'guadalupe' }, null), false);
   assert.equal(isAnnouncementVisibleForBranch({ is_private: true }, null), true);
 });
 

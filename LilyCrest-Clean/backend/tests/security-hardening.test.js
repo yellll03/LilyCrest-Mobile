@@ -110,14 +110,14 @@ test('inactive tenant session is rejected', async () => {
 
 test('notification read ownership is enforced', async () => {
   let wrote = false;
-  const emptyCursor = { limit() { return this; }, toArray: async () => [] };
+  const emptyCursor = { sort() { return this; }, limit() { return this; }, toArray: async () => [] };
   const db = { collection(name) { return {
     find: () => emptyCursor,
     updateOne: async () => { wrote = true; },
   }; } };
   const { markNotificationRead } = loadWithDb('../controllers/notification.controller', db);
   const res = response();
-  await markNotificationRead({ params: { notificationId: 'tenant-a-secret' }, user: { user_id: 'tenant-b' } }, res);
+  await markNotificationRead({ params: { notificationId: 'tenant-a-secret' }, user: { user_id: 'tenant-b', role: 'tenant' } }, res);
   assert.equal(res.statusCode, 404);
   assert.equal(wrote, false);
 });
