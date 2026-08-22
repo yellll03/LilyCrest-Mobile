@@ -38,7 +38,15 @@ import {
   toStoredAttachmentMetadata,
 } from '../../src/services/firebaseStorageUpload';
 import { pickDocument, pickFromCamera, pickFromLibrary } from '../../src/utils/attachmentPicker';
+import { createLatestRequestGate, runLatestRequest } from '../../src/utils/latestRequest';
 import { classifyMaintenanceAttachment, getValidMaintenanceAttachmentUrl } from '../../src/utils/maintenanceAttachmentViewer';
+import {
+  getMaintenanceAllowedActions,
+  getMaintenanceStatusGroup,
+  MAINTENANCE_ACTIONS,
+  MAINTENANCE_GROUPS,
+  MAINTENANCE_STATUS_STAGES,
+} from '../../src/utils/maintenanceStatus';
 import { STATUS } from '../../src/theme/tokens';
 
 function safeFormat(dateStr, fmt) {
@@ -222,20 +230,10 @@ const RESOLUTION_ESTIMATES = {
   high: 'Within 24 hours',
 };
 
-const STATUS_STAGES = [
-  { label: 'Pending Review', cardTitle: 'Request Received', detail: 'Awaiting Admin Review', statuses: ['pending', 'pending_review'] },
-  { label: 'Under Review', cardTitle: 'Admin Reviewing', detail: 'Being Reviewed by Admin', statuses: ['viewed', 'reviewed'] },
-  { label: 'In Progress', cardTitle: 'Repair In Progress', detail: 'Provider Assigned & Working', statuses: ['provider_assigned', 'scheduled', 'in_progress', 'waiting_tenant', 'reopened'] },
-  { label: 'Resolved', cardTitle: 'Work Resolved', detail: 'Awaiting Tenant Feedback & Verification', statuses: ['resolved'] },
-  { label: 'Completed', cardTitle: 'Request Completed', detail: 'Confirmed & Closed', statuses: ['completed'] },
-];
 const MIN_DESCRIPTION_LENGTH = 10;
 // Mirrors backend/controllers/maintenance.controller.js DESCRIPTION_MAX.
 // Frontend enforcement here is UX only — the backend remains authoritative.
 const MAX_DESCRIPTION_LENGTH = 1000;
-const ACTIVE_STATUSES = ['pending', 'pending_review', 'provider_assigned', 'scheduled', 'viewed', 'reviewed', 'in_progress', 'waiting_tenant', 'reopened'];
-const RESOLVED_STATUSES = ['completed', 'resolved', 'rejected', 'closed'];
-const CLOSED_REPLY_STATUSES = ['cancelled', 'rejected', 'closed'];
 const MAX_MAINTENANCE_ATTACHMENTS = 4;
 // Every inquiry attachment (image, PDF, or other supported document type) is
 // capped at 5MB, regardless of the generic upload endpoint's own larger
@@ -283,13 +281,6 @@ function getNextStepDetail(status, request = {}) {
     case 'closed': return 'No action is needed right now.';
     default: return 'Review the latest update below.';
   }
-}
-
-function canReplyToRequest(request = {}) {
-  const status = String(request.status || '').toLowerCase();
-  if (CLOSED_REPLY_STATUSES.includes(status)) return false;
-  if (['resolved', 'completed'].includes(status)) return false;
-  return true;
 }
 
 export default function ServicesScreen() {
@@ -454,6 +445,8 @@ export default function ServicesScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const bannerTimerRef = useRef(null);
   const handledNotificationRequestRef = useRef('');
+  const requestGateRef = useRef(null);
+  if (!requestGateRef.current) requestGateRef.current = createLatestRequestGate();
   // Idempotency key for the current submission attempt. Minted once and
   // reused across retries (e.g. a timed-out request the tenant resubmits by
   // tapping Submit again) so the backend can recognize it as the same
@@ -558,6 +551,7 @@ export default function ServicesScreen() {
   const fetchRequests = useCallback(async () => {
     if (!authReady) return;
     if (authStatus !== 'authenticated' || !userId) {
+      requestGateRef.current.invalidate();
       setRequests([]);
       setIsLoading(false);
       setRefreshing(false);
@@ -565,37 +559,40 @@ export default function ServicesScreen() {
       return;
     }
 
-    try {
-      const response = await apiService.getMyMaintenance();
-      // Force new array to trigger rerender even if values are identical
-      const nextRequests = [...(response.data || [])].sort((a, b) => {
-        const aTime = new Date(a.latestActivityAt || a.lastActivityAt || a.updated_at || a.created_at || 0).getTime();
-        const bTime = new Date(b.latestActivityAt || b.lastActivityAt || b.updated_at || b.created_at || 0).getTime();
-        return bTime - aTime;
-      });
-      setRequests(nextRequests);
-    } catch (error) {
-      console.warn('Fetch requests error:', error?.normalized || error?.message);
-      showBannerMessage('error', getApiErrorMessage(error, 'Unable to load service requests. Pull to retry.'), { withToast: false });
-    } finally {
-      setIsLoading(false);
-      setRefreshing(false);
-    }
+    await runLatestRequest({
+      gate: requestGateRef.current,
+      request: () => apiService.getMyMaintenance(),
+      onSuccess: (response) => {
+        const nextRequests = [...(response.data || [])].sort((a, b) => {
+          const aTime = new Date(a.latestActivityAt || a.lastActivityAt || a.updated_at || a.created_at || 0).getTime();
+          const bTime = new Date(b.latestActivityAt || b.lastActivityAt || b.updated_at || b.created_at || 0).getTime();
+          return bTime - aTime;
+        });
+        setRequests(nextRequests);
+      },
+      onError: (error) => {
+        console.warn('Fetch requests error:', error?.normalized || error?.message);
+        showBannerMessage('error', getApiErrorMessage(error, 'Unable to load service requests. Pull to retry.'), { withToast: false });
+      },
+      onSettled: () => {
+        setIsLoading(false);
+        setRefreshing(false);
+      },
+    });
   }, [authReady, authStatus, showBannerMessage, userId]);
-
-  useEffect(() => {
-    if (!authReady) return;
-    fetchRequests();
-  }, [authReady, fetchRequests]);
 
   useFocusEffect(
     useCallback(() => {
-      if (!authReady || authStatus !== 'authenticated' || !userId) return undefined;
-      // Refresh immediately when tab gains focus
+      if (!authReady) return undefined;
+      // One immediate load per focus. There is no separate mount effect racing it.
       fetchRequests();
-      // Also poll while this tab is focused
-      const interval = setInterval(() => { fetchRequests(); }, 60000);
-      return () => clearInterval(interval);
+      const interval = authStatus === 'authenticated' && userId
+        ? setInterval(() => { fetchRequests(); }, 60000)
+        : null;
+      return () => {
+        if (interval) clearInterval(interval);
+        requestGateRef.current.invalidate();
+      };
     }, [authReady, authStatus, fetchRequests, userId])
   );
 
@@ -769,14 +766,7 @@ export default function ServicesScreen() {
     if (!ownedRequest) return;
 
     handledNotificationRequestRef.current = targetRequestId;
-    const status = String(ownedRequest.status || '').toLowerCase();
-    setActiveTab(
-      RESOLVED_STATUSES.includes(status)
-        ? 'resolved'
-        : status === 'cancelled'
-          ? 'cancelled'
-          : 'active',
-    );
+    setActiveTab(getMaintenanceStatusGroup(ownedRequest.status));
     openDetail(ownedRequest);
     // openDetail intentionally refreshes this same owned request after opening.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -984,9 +974,10 @@ export default function ServicesScreen() {
       return typeLabel.includes(normalizedSearchQuery) || (request.description || '').toLowerCase().includes(normalizedSearchQuery);
     });
   }, [normalizedSearchQuery]);
-  const activeRequests = useMemo(() => filterBySearch(requests.filter((request) => ACTIVE_STATUSES.includes((request.status || 'pending').toLowerCase()))), [filterBySearch, requests]);
-  const resolvedRequests = useMemo(() => filterBySearch(requests.filter((request) => RESOLVED_STATUSES.includes((request.status || '').toLowerCase()))), [filterBySearch, requests]);
-  const cancelledRequests = useMemo(() => filterBySearch(requests.filter((request) => (request.status || '').toLowerCase() === 'cancelled')), [filterBySearch, requests]);
+  const activeRequests = useMemo(() => filterBySearch(requests.filter((request) => getMaintenanceStatusGroup(request.status) === MAINTENANCE_GROUPS.ACTIVE)), [filterBySearch, requests]);
+  const resolvedRequests = useMemo(() => filterBySearch(requests.filter((request) => getMaintenanceStatusGroup(request.status) === MAINTENANCE_GROUPS.RESOLVED)), [filterBySearch, requests]);
+  const cancelledRequests = useMemo(() => filterBySearch(requests.filter((request) => getMaintenanceStatusGroup(request.status) === MAINTENANCE_GROUPS.CANCELLED)), [filterBySearch, requests]);
+  const detailAllowedActions = useMemo(() => new Set(getMaintenanceAllowedActions(detailRequest?.status)), [detailRequest?.status]);
   const detailProgressEntries = useMemo(() => buildRequestProgress(detailRequest), [detailRequest]);
   const detailTenantSummary = useMemo(() => detailRequest?.tenant_summary || detailRequest?.tenantSummary || null, [detailRequest]);
   const hasConversationSummary = useMemo(() => detailProgressEntries.some((entry) => entry.isSummary), [detailProgressEntries]);
@@ -1326,17 +1317,17 @@ export default function ServicesScreen() {
                   {/* Guided Stage Action Hub */}
                   {!editMode && (() => {
                     const currentStatus = (detailRequest.status || '').toLowerCase();
-                    const currentIdx = STATUS_STAGES.findIndex((s) => s.statuses.includes(currentStatus));
+                    const currentIdx = MAINTENANCE_STATUS_STAGES.findIndex((s) => s.statuses.includes(currentStatus));
                     if (currentIdx === -1) return null;
-                    const currentStage = STATUS_STAGES[currentIdx];
+                    const currentStage = MAINTENANCE_STATUS_STAGES[currentIdx];
                     return (
                       <View style={{ marginBottom: 20 }}>
                         <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text }}>Guided Stage Action Hub</Text>
                         <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 2, marginBottom: 14 }}>
-                          Step {currentIdx + 1} of {STATUS_STAGES.length}: {currentStage.label} ({currentStage.detail})
+                          Step {currentIdx + 1} of {MAINTENANCE_STATUS_STAGES.length}: {currentStage.label} ({currentStage.detail})
                         </Text>
                         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4 }}>
-                          {STATUS_STAGES.map((stage, i) => {
+                          {MAINTENANCE_STATUS_STAGES.map((stage, i) => {
                             const isActive = i <= currentIdx;
                             const isCurrent = i === currentIdx;
                             return (
@@ -1345,7 +1336,7 @@ export default function ServicesScreen() {
                                   {isActive ? <Ionicons name="checkmark" size={14} color={colors.surface} /> : <Text style={{ fontSize: 10, color: colors.textMuted }}>{i + 1}</Text>}
                                 </View>
                                 <Text style={{ fontSize: 9, color: isActive ? colors.primary : colors.textMuted, marginTop: 4, textAlign: 'center' }}>{stage.label}</Text>
-                                {i < STATUS_STAGES.length - 1 && (
+                                {i < MAINTENANCE_STATUS_STAGES.length - 1 && (
                                   <View style={{ position: 'absolute', top: 13, left: '60%', right: '-40%', height: 2, backgroundColor: isActive && i < currentIdx ? colors.primary : colors.surfaceSecondary }} />
                                 )}
                               </View>
@@ -1386,8 +1377,8 @@ export default function ServicesScreen() {
 
                   {!editMode && (() => {
                     const currentStatus = (detailRequest.status || '').toLowerCase();
-                    const currentIdx = STATUS_STAGES.findIndex((s) => s.statuses.includes(currentStatus));
-                    const currentStage = currentIdx !== -1 ? STATUS_STAGES[currentIdx] : null;
+                    const currentIdx = MAINTENANCE_STATUS_STAGES.findIndex((s) => s.statuses.includes(currentStatus));
+                    const currentStage = currentIdx !== -1 ? MAINTENANCE_STATUS_STAGES[currentIdx] : null;
                     return (
                       <View style={{ backgroundColor: '#F8FAFC', borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#E5E7EB' }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
@@ -1648,7 +1639,7 @@ export default function ServicesScreen() {
                     </View>
                   )}
 
-                  {!editMode && canReplyToRequest(detailRequest) && (
+                  {!editMode && detailAllowedActions.has(MAINTENANCE_ACTIONS.REPLY) && (
                     <View testID="maintenance-composer" style={styles.replyComposer}>
                       {replyAttachments.length > 0 ? (
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
@@ -1710,34 +1701,44 @@ export default function ServicesScreen() {
                       </View>
                     ) : (
                       <>
-                        {(detailRequest.status || '').toLowerCase() === 'pending' && (
+                        {(detailAllowedActions.has(MAINTENANCE_ACTIONS.EDIT) || detailAllowedActions.has(MAINTENANCE_ACTIONS.CANCEL)) && (
                           <>
-                            <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 14 }} onPress={enterEditMode}>
-                              <Ionicons name="create-outline" size={20} color={colors.surface} />
-                              <Text style={{ color: colors.surface, fontWeight: '700', fontSize: 15 }}>Edit Request</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FEF2F2', borderRadius: 12, paddingVertical: 14 }} onPress={() => setShowCancelConfirm(true)}>
-                              <Ionicons name="close-circle-outline" size={20} color="#DC2626" />
-                              <Text style={{ color: '#DC2626', fontWeight: '700', fontSize: 15 }}>Cancel Request</Text>
-                            </TouchableOpacity>
+                            {detailAllowedActions.has(MAINTENANCE_ACTIONS.EDIT) && (
+                              <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 14 }} onPress={enterEditMode}>
+                                <Ionicons name="create-outline" size={20} color={colors.surface} />
+                                <Text style={{ color: colors.surface, fontWeight: '700', fontSize: 15 }}>Edit Request</Text>
+                              </TouchableOpacity>
+                            )}
+                            {detailAllowedActions.has(MAINTENANCE_ACTIONS.CANCEL) && (
+                              <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FEF2F2', borderRadius: 12, paddingVertical: 14 }} onPress={() => setShowCancelConfirm(true)}>
+                                <Ionicons name="close-circle-outline" size={20} color="#DC2626" />
+                                <Text style={{ color: '#DC2626', fontWeight: '700', fontSize: 15 }}>Cancel Request</Text>
+                              </TouchableOpacity>
+                            )}
                           </>
                         )}
-                        {['resolved', 'completed'].includes((detailRequest.status || '').toLowerCase()) && !detailRequest.tenant_confirmed_resolved && (
+                        {!detailRequest.tenant_confirmed_resolved && (detailAllowedActions.has(MAINTENANCE_ACTIONS.CONFIRM_RESOLVED) || detailAllowedActions.has(MAINTENANCE_ACTIONS.REOPEN)) && (
                           <>
-                            <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#ECFDF5', borderRadius: 12, paddingVertical: 14 }} onPress={handleConfirmResolved} disabled={saving}>
-                              <Ionicons name="checkmark-done-circle-outline" size={20} color="#065F46" />
-                              <Text style={{ color: '#065F46', fontWeight: '700', fontSize: 15 }}>Confirm Resolved</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#EFF6FF', borderRadius: 12, paddingVertical: 14 }} onPress={() => setShowReopenModal(true)}>
-                              <Ionicons name="refresh" size={20} color="#2563EB" />
-                              <Text style={{ color: '#2563EB', fontWeight: '700', fontSize: 15 }}>Still an Issue</Text>
-                            </TouchableOpacity>
+                            {detailAllowedActions.has(MAINTENANCE_ACTIONS.CONFIRM_RESOLVED) && (
+                              <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#ECFDF5', borderRadius: 12, paddingVertical: 14 }} onPress={handleConfirmResolved} disabled={saving}>
+                                <Ionicons name="checkmark-done-circle-outline" size={20} color="#065F46" />
+                                <Text style={{ color: '#065F46', fontWeight: '700', fontSize: 15 }}>Confirm Resolved</Text>
+                              </TouchableOpacity>
+                            )}
+                            {detailAllowedActions.has(MAINTENANCE_ACTIONS.REOPEN) && (
+                              <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#EFF6FF', borderRadius: 12, paddingVertical: 14 }} onPress={() => setShowReopenModal(true)}>
+                                <Ionicons name="refresh" size={20} color="#2563EB" />
+                                <Text style={{ color: '#2563EB', fontWeight: '700', fontSize: 15 }}>Still an Issue</Text>
+                              </TouchableOpacity>
+                            )}
                           </>
                         )}
-                        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.surfaceSecondary, borderRadius: 12, paddingVertical: 14 }} onPress={submitSimilar}>
-                          <Ionicons name="copy-outline" size={20} color={colors.text} />
-                          <Text style={{ color: colors.text, fontWeight: '700', fontSize: 15 }}>Submit Similar</Text>
-                        </TouchableOpacity>
+                        {detailAllowedActions.has(MAINTENANCE_ACTIONS.SUBMIT_SIMILAR) && (
+                          <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.surfaceSecondary, borderRadius: 12, paddingVertical: 14 }} onPress={submitSimilar}>
+                            <Ionicons name="copy-outline" size={20} color={colors.text} />
+                            <Text style={{ color: colors.text, fontWeight: '700', fontSize: 15 }}>Submit Similar</Text>
+                          </TouchableOpacity>
+                        )}
                       </>
                     )}
                   </View>
