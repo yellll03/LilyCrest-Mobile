@@ -563,23 +563,28 @@ async function notifyNewAnnouncement(db, announcement) {
     return 0;
   }
 
-  const [, pushResult] = await Promise.allSettled([
-    saveNotificationForUsers(recipientUserIds, {
-      ...payload,
-      category: announcement.category || 'Announcement',
-      source: 'announcement',
-      source_label: announcement.author_name || 'LilyCrest Admin',
-      author_name: announcement.author_name || 'LilyCrest Admin',
-      announcement_id: announcement.announcement_id,
-      eventKey: announcement.announcement_id ? `announcement:${announcement.announcement_id}` : '',
-      priority: isUrgent ? 'high' : (announcement.priority || 'normal'),
-      is_urgent: Boolean(isUrgent),
-      created_at: announcement.created_at || new Date(),
-    }, { db }),
-    sendPushToUsers(recipients, payload),
-  ]);
+  // Persist the in-app feed first. Its event key makes retries idempotent and
+  // a storage failure must remain retryable instead of being hidden by an
+  // allSettled result. Native push is best-effort after the durable record.
+  await saveNotificationForUsers(recipientUserIds, {
+    ...payload,
+    category: announcement.category || 'Announcement',
+    source: 'announcement',
+    source_label: announcement.author_name || 'LilyCrest Admin',
+    author_name: announcement.author_name || 'LilyCrest Admin',
+    announcement_id: announcement.announcement_id,
+    eventKey: announcement.announcement_id ? `announcement:${announcement.announcement_id}` : '',
+    priority: isUrgent ? 'high' : (announcement.priority || 'normal'),
+    is_urgent: Boolean(isUrgent),
+    created_at: announcement.created_at || new Date(),
+  }, { db });
 
-  return pushResult.status === 'fulfilled' ? pushResult.value : 0;
+  try {
+    await sendPushToUsers(recipients, payload);
+  } catch (error) {
+    console.warn(`[Push] Native delivery failed for announcement ${announcement.announcement_id}:`, error?.message);
+  }
+  return recipientUserIds.length;
 }
 
 async function notifyPrivateAnnouncement(userId, announcement = {}) {
