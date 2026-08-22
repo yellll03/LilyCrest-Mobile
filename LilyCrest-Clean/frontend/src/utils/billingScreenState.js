@@ -12,8 +12,9 @@ export const BILLING_SCREEN_STATES = Object.freeze({
 export function resolveBillingScreenState({ loading, latest, historyAvailable, historyCount = 0 }) {
   if (loading) return BILLING_SCREEN_STATES.LOADING;
   if (latest === 'unauthorized') return BILLING_SCREEN_STATES.UNAUTHORIZED;
-  if (latest === 'failed' && !historyAvailable) return BILLING_SCREEN_STATES.TOTAL_FAILURE;
-  if (latest === 'failed') return BILLING_SCREEN_STATES.PARTIAL_FAILURE;
+  const latestFailed = latest === 'failed' || latest === 'invalid';
+  if (latestFailed && !historyAvailable) return BILLING_SCREEN_STATES.TOTAL_FAILURE;
+  if (latestFailed) return BILLING_SCREEN_STATES.PARTIAL_FAILURE;
   if (!historyAvailable) return BILLING_SCREEN_STATES.PARTIAL_FAILURE;
   if (latest === 'utility_pending') return BILLING_SCREEN_STATES.UTILITY_PENDING;
   if (latest === 'current') return BILLING_SCREEN_STATES.CURRENT_BILL;
@@ -23,12 +24,41 @@ export function resolveBillingScreenState({ loading, latest, historyAvailable, h
 }
 
 export function normalizeLatestBillingResponse(response) {
-  const payload = response?.data || {};
-  if (payload?.state === 'NO_CURRENT_BILL') return { outcome: 'no_current', bill: null, payload };
-  if (payload?.state === 'UTILITY_PENDING') return { outcome: 'utility_pending', bill: payload.bill || null, payload };
-  if (payload?.state === 'CURRENT_BILL') return { outcome: 'current', bill: payload.bill || null, payload };
-  // Backward compatibility during rolling deployment: the former endpoint
-  // returned the raw bill object, never a wrapper.
-  if (payload?.billing_id || payload?._id) return { outcome: 'current', bill: payload, payload: { bill: payload } };
-  return { outcome: 'no_current', bill: null, payload };
+  const payload = response?.data;
+  const isObject = payload && typeof payload === 'object' && !Array.isArray(payload);
+  if (!isObject) return { outcome: 'invalid', bill: null, payload: {} };
+
+  const billId = (bill) => bill?.billing_id || bill?.bill_id || bill?.id
+    || bill?.billingId || bill?.billId || bill?._id;
+  const isBill = (bill) => Boolean(bill && typeof bill === 'object' && !Array.isArray(bill) && billId(bill));
+  const state = String(payload.state || '').trim().replace(/[\s-]+/g, '_').toUpperCase();
+  const wrappedBill = payload.bill;
+
+  // Canonical and transitional wrappers are checked for a real bill before
+  // empty-state handling. This is the production mismatch that previously
+  // turned `{ bill: {...} }` into `no_current`.
+  if (isBill(wrappedBill)) {
+    return {
+      outcome: state === 'UTILITY_PENDING' ? 'utility_pending' : 'current',
+      bill: wrappedBill,
+      payload,
+    };
+  }
+
+  if (isBill(payload)) {
+    return { outcome: 'current', bill: payload, payload: { bill: payload } };
+  }
+
+  if (state === 'NO_CURRENT_BILL' && (wrappedBill === null || wrappedBill === undefined)) {
+    return { outcome: 'no_current', bill: null, payload };
+  }
+
+  // Compatibility with the deployed wrapper before `state` was added. A
+  // deliberate `bill: null` is a successful empty response; an absent or
+  // malformed bill is a contract failure, never evidence of an empty account.
+  if (!state && Object.prototype.hasOwnProperty.call(payload, 'bill') && wrappedBill === null) {
+    return { outcome: 'no_current', bill: null, payload };
+  }
+
+  return { outcome: 'invalid', bill: null, payload };
 }
