@@ -153,6 +153,31 @@ test('proxyJson relays an upstream 401/403 verbatim instead of masking it', asyn
   });
 });
 
+test('proxyJson extracts the real message from a 409 MULTIPLE_CANONICAL_CONTRACTS conflict, which Capstone-Website wraps in { success, error } rather than a flat { detail }', async () => {
+  // Verified against real Capstone-Website source: the 409 thrown by
+  // tenantContractSelectionService.js's selectCanonicalTenantContract is
+  // uncaught in mobileContractRoutes.js and falls through to the app's
+  // global error handler, which wraps it as { success:false, error:{ code,
+  // message, details } } — a different shape than the flat { detail } body
+  // mobileTenantAuth's own 401s use.
+  await withMockedAxiosGet(async () => ({
+    status: 409,
+    data: {
+      success: false,
+      error: {
+        code: 'MULTIPLE_CANONICAL_CONTRACTS',
+        message: 'Multiple resident-visible canonical Contracts were found.',
+        details: null,
+      },
+    },
+  }), async () => {
+    const res = fakeJsonRes();
+    await proxyJson({ headers: { authorization: 'Bearer t' } }, res, '/api/m/contracts/current');
+    assert.equal(res.statusCode, 409);
+    assert.equal(res.body.detail, 'Multiple resident-visible canonical Contracts were found.');
+  });
+});
+
 test('proxyJson normalizes an upstream timeout to 504 without leaking internals', async () => {
   await withMockedAxiosGet(async () => {
     const err = new Error('timeout of 15000ms exceeded');

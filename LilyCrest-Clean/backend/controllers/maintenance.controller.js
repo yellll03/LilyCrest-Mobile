@@ -2121,4 +2121,11 @@ module.exports = {
   // (see tests/inquiryAttachmentSizeLimit.test.js).
   normalizeTenantAttachments,
   INQUIRY_ATTACHMENT_MAX_BYTES,
+  // Exported so other authenticated-tenant-scoped consumers (the AI
+  // assistant) can reuse the exact same tenant-owned maintenance
+  // lookup/visibility logic instead of re-implementing it — see
+  // chatbot.controller.js's fetchMaintenanceRequestsForUser.
+  loadRequestsAcrossCollections,
+  buildUserMaintenanceFilter,
+  resolveTenantContext,
 };
