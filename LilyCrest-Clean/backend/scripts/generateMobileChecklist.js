@@ -53,7 +53,7 @@ const MODULES = [
       { text: 'Change password from within the app',            status: 'done'    },
       { text: 'Verify session on app launch',                   status: 'done'    },
       { text: 'Check account status (active / inactive)',       status: 'done'    },
-      { text: 'Remember me and saved email preference',         status: 'done'    },
+      { text: 'Secure session persists across app restarts',    status: 'done'    },
       { text: 'Update profile information (name, phone, photo)',status: 'done'    },
       { text: 'Input validation and security error handling',   status: 'done'    },
     ],

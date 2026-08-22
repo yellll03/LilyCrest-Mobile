@@ -74,6 +74,7 @@ jest.mock('../services/api', () => ({
     delete: (...args) => mockDelete(...args),
   },
   getApiErrorMessage: (error, fallback) => fallback,
+  getConfirmedSessionInvalidation: jest.fn(() => null),
   teardownExpiredSession: jest.fn().mockResolvedValue(true),
 }));
 

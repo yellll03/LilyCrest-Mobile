@@ -60,7 +60,6 @@ export default function LoginScreen() {
   const [touched, setTouched] = useState({ email: false, password: false });
   // loginError: { message: string, type: 'credentials' | 'access' | 'ratelimit' | 'network' }
   const [loginError, setLoginError] = useState(null);
-  const [rememberMe, setRememberMe] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricType, setBiometricType] = useState('Biometric');
@@ -93,16 +92,14 @@ export default function LoginScreen() {
     setPassword(nextValue);
   };
 
-  // Load remember-me preference and biometric eligibility
+  // Load biometric eligibility and an optional email hint. Session
+  // persistence itself is always secure and no longer controlled here.
   useEffect(() => {
     const init = async () => {
       try {
-        const savedRemember = await AsyncStorage.getItem('remember_me');
         const savedEmail = await AsyncStorage.getItem('last_email');
         const bioSetting = await AsyncStorage.getItem('biometricLogin');
-        const prefersRemember = savedRemember === 'true';
         const isBioEnabled = bioSetting === 'true';
-        if (prefersRemember) setRememberMe(true);
         if (savedEmail && validateEmail(savedEmail).valid) setEmail(savedEmail);
 
         const hasHardware = await LocalAuthentication.hasHardwareAsync();
@@ -145,14 +142,13 @@ export default function LoginScreen() {
     const normalizedPassword = password;
 
     try {
-      const result = await loginWithEmail(normalizedEmail, normalizedPassword, rememberMe);
+      const result = await loginWithEmail(normalizedEmail, normalizedPassword);
 
       // OTP required — credentials were valid, navigate to verification screen
       if (result.otpRequired) {
         await savePendingLogin({
           otpToken: result.otpToken,
           maskedEmail: result.maskedEmail,
-          rememberMe,
           email: normalizedEmail,
         });
         router.push({
@@ -184,14 +180,6 @@ export default function LoginScreen() {
         setErrors({ email: '', password: '' });
         setTouched({ email: false, password: false });
         return;
-      }
-
-      // Persist remember-me email preference
-      await AsyncStorage.setItem('remember_me', rememberMe ? 'true' : 'false');
-      if (rememberMe) {
-        await AsyncStorage.setItem('last_email', normalizedEmail);
-      } else {
-        await AsyncStorage.removeItem('last_email');
       }
 
       // Handle biometric credential storage
@@ -279,11 +267,10 @@ export default function LoginScreen() {
           return;
         }
 
-        const backendResult = await signInWithGoogle(idToken, rememberMe);
+        const backendResult = await signInWithGoogle(idToken);
         const { success: backendSuccess, status, error: backendError } = backendResult;
 
         if (backendSuccess) {
-          await AsyncStorage.setItem('remember_me', rememberMe ? 'true' : 'false');
           router.replace('/(tabs)/home');
         } else {
           const type = status === 403 ? 'access' : 'credentials';
@@ -340,7 +327,6 @@ export default function LoginScreen() {
         return;
       }
 
-      await AsyncStorage.setItem('remember_me', 'true');
       router.replace('/(tabs)/home');
     } catch (error) {
       console.error('Biometric login error:', error?.message || 'Unexpected error');
@@ -451,19 +437,8 @@ export default function LoginScreen() {
               ) : null}
             </View>
 
-            {/* Remember Me + Forgot Password */}
+            {/* Authentication persists securely by default. */}
             <View style={styles.optionsRow}>
-              <TouchableOpacity style={styles.rememberRow} onPress={async () => {
-                const next = !rememberMe;
-                setRememberMe(next);
-                await AsyncStorage.setItem('remember_me', next ? 'true' : 'false');
-              }}>
-                <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
-                  {rememberMe ? <Ionicons name="checkmark" size={14} color="#0A1628" /> : null}
-                </View>
-                <Text style={styles.rememberText}>Remember me</Text>
-              </TouchableOpacity>
-
               <TouchableOpacity style={styles.forgotPassword} onPress={() => router.push('/forgot-password')}>
                 <Text style={styles.forgotPasswordText}>Forgot password?</Text>
               </TouchableOpacity>
@@ -589,11 +564,7 @@ const createStyles = (c) => StyleSheet.create({
   input: { flex: 1, paddingVertical: 14, fontSize: 15, color: c.text },
   errorContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 4 },
   errorText: { fontSize: 12, color: '#DC2626' },
-  optionsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 },
-  rememberRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  checkbox: { width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: c.border, justifyContent: 'center', alignItems: 'center', backgroundColor: c.inputBg },
-  checkboxChecked: { backgroundColor: c.accent, borderColor: c.accent },
-  rememberText: { color: c.text, fontWeight: '600' },
+  optionsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 24 },
   forgotPassword: { alignSelf: 'flex-end' },
   forgotPasswordText: { color: c.primary, fontSize: 14, fontWeight: '600' },
   loginErrorContainer: { flexDirection: 'row', alignItems: 'flex-start', borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 20, gap: 10 },

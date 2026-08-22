@@ -25,8 +25,10 @@ function fakeResponse() {
 
 function fakeDb(order = []) {
   const deletedSessionsFor = [];
+  const userPatches = [];
   return {
     _deletedSessionsFor: deletedSessionsFor,
+    _userPatches: userPatches,
     collection(name) {
       if (name === 'user_sessions') {
         return { deleteMany: async (query) => {
@@ -34,6 +36,18 @@ function fakeDb(order = []) {
           deletedSessionsFor.push(query.user_id);
           return { deletedCount: 1 };
         } };
+      }
+      if (name === 'users') {
+        return {
+          findOne: async () => ({ user_id: 'tenant-a', securityVersion: 2 }),
+          updateOne: async (_filter, update) => {
+            order.push('security-version-bump');
+            userPatches.push(update.$set);
+            return { matchedCount: 1, modifiedCount: 1 };
+          },
+          insertOne: async () => ({ insertedId: 'fake-id' }),
+          deleteMany: async () => ({ deletedCount: 0 }),
+        };
       }
       return {
         insertOne: async () => ({ insertedId: 'fake-id' }),
@@ -48,13 +62,18 @@ function fakeDb(order = []) {
 // overriding it requires defineProperty on the prototype — always restored
 // via the returned restore function since this patches the shared,
 // module-cached firebase-admin singleton.
-function patchAdminAuth(updateUserImpl) {
+function patchAdminAuth(updateUserImpl, revokedUids = []) {
   const { admin } = require(firebasePath);
   const proto = Object.getPrototypeOf(admin);
   const original = Object.getOwnPropertyDescriptor(proto, 'auth');
   Object.defineProperty(proto, 'auth', {
     configurable: true,
-    value: () => ({ updateUser: updateUserImpl || (async () => {}) }),
+    value: () => ({
+      updateUser: updateUserImpl || (async () => {}),
+      // Provider-side revocation remains defense in depth alongside the
+      // backend session security-version gate.
+      revokeRefreshTokens: async (uid) => { revokedUids.push(uid); },
+    }),
   });
   return () => Object.defineProperty(proto, 'auth', original);
 }
@@ -79,10 +98,10 @@ function baseReq(overrides = {}) {
 // Runs `fn(changePassword)` with a fresh auth.controller module, the given
 // fake db, and firebase-admin's auth().updateUser mocked — always restoring
 // the patched admin.auth afterward, regardless of outcome.
-async function withChangePassword({ db, updateUserImpl, axiosImpl }, fn) {
+async function withChangePassword({ db, updateUserImpl, axiosImpl, revokedUids }, fn) {
   process.env.FIREBASE_API_KEY = 'test-firebase-api-key';
   require(databasePath).getDb = () => db;
-  const restoreAdminAuth = patchAdminAuth(updateUserImpl);
+  const restoreAdminAuth = patchAdminAuth(updateUserImpl, revokedUids);
   try {
     delete require.cache[authControllerPath];
     const { changePassword } = require(authControllerPath);
@@ -202,10 +221,12 @@ test('the new password cannot be identical to the current password', async () =>
 test('a successful change updates Firebase and invalidates every existing session (forces re-login everywhere)', async () => {
   const order = [];
   const db = fakeDb(order);
+  const revokedUids = [];
   let updatedUid = null;
   let updatedPassword = null;
   await withChangePassword({
     db,
+    revokedUids,
     updateUserImpl: async (uid, patch) => {
       order.push('provider-update');
       updatedUid = uid;
@@ -224,5 +245,47 @@ test('a successful change updates Firebase and invalidates every existing sessio
   // client's own forced local logout (see change-password.jsx) is backed by
   // an equivalent server-side guarantee, not just client-side trust.
   assert.deepEqual(db._deletedSessionsFor, ['tenant-a']);
-  assert.deepEqual(order, ['provider-update', 'sessions-delete']);
+  assert.deepEqual(order, ['provider-update', 'security-version-bump', 'sessions-delete']);
+  // Session revocation is belt-and-braces: the account's securityVersion is
+  // advanced (authMiddleware refuses any session stamped with the old one)
+  // *and* the session rows are deleted. Either alone is sufficient, so a
+  // partial infrastructure failure can't leave a pre-change session usable.
+  assert.equal(db._userPatches.length, 1);
+  assert.equal(db._userPatches[0].securityVersion, 3);
+  assert.equal(db._userPatches[0].security_version, 3);
+  assert.ok(db._userPatches[0].password_changed_at instanceof Date);
+  // The provider-side refresh token dies with the old password too.
+  assert.deepEqual(revokedUids, ['firebase-uid-a']);
+});
+
+test('a change is reported as failed if sessions cannot be invalidated at all', async () => {
+  const brokenDb = {
+    collection() {
+      return {
+        findOne: async () => { throw new Error('mongo down'); },
+        updateOne: async () => { throw new Error('mongo down'); },
+        deleteMany: async () => { throw new Error('mongo down'); },
+        insertOne: async () => ({ insertedId: 'fake-id' }),
+      };
+    },
+  };
+  const originalError = console.error;
+  console.error = () => {};
+  try {
+    await withChangePassword({
+      db: brokenDb,
+      updateUserImpl: async () => {},
+      axiosImpl: async () => ({ data: {} }),
+    }, async (changePassword) => {
+      const res = fakeResponse();
+      await changePassword(baseReq({ body: { current_password: 'CurrentStrong1!', new_password: 'NewStrong1!' } }), res);
+      // The credential really did change, but old sessions may still be live.
+      // Returning 200 here would be a silent security lie.
+      assert.equal(res.statusCode, 500);
+      assert.equal(res.body.code, 'SESSION_FINALIZATION_FAILED');
+      assert.equal(res.body.sessionCleanupComplete, false);
+    });
+  } finally {
+    console.error = originalError;
+  }
 });

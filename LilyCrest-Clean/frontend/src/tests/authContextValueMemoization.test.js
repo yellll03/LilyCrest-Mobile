@@ -69,6 +69,7 @@ jest.mock('../services/api', () => ({
     patch: jest.fn().mockResolvedValue({ data: {} }),
   },
   getApiErrorMessage: (error, fallback) => fallback,
+  getConfirmedSessionInvalidation: jest.fn(() => null),
   teardownExpiredSession: jest.fn().mockResolvedValue(true),
 }));
 

@@ -3,7 +3,12 @@ import { useRouter } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, AppState, Platform, Pressable, StatusBar as RNStatusBar, StyleSheet, Text, View } from 'react-native';
 import { auth, getFreshIdToken, subscribeToAuthState } from '../config/firebase';
-import { api, getApiErrorMessage, teardownExpiredSession } from '../services/api';
+import {
+  api,
+  getApiErrorMessage,
+  getConfirmedSessionInvalidation,
+  teardownExpiredSession,
+} from '../services/api';
 import { validateStrongPassword } from '../utils/passwordValidation';
 import { AUTH_MESSAGES, classifyAuthError } from '../utils/authStability';
 import { clearDocumentCache } from '../services/documentManager';
@@ -40,10 +45,14 @@ const AuthContext = createContext(undefined);
 const SESSION_USER_KEY = 'session_user';
 const DEFAULT_NOTIFICATION_MESSAGE = 'Open LilyCrest to view the latest update.';
 
-async function persistSession(sessionToken, userData, remember = true) {
+async function persistSession(sessionPayload, userData) {
   const writes = [];
-  if (sessionToken) {
-    writes.push(setSessionToken(sessionToken, { remember }));
+  if (sessionPayload?.session_token) {
+    writes.push(setSessionToken(sessionPayload.session_token, {
+      refreshToken: sessionPayload.refresh_token,
+      expiresAt: sessionPayload.expires_at,
+      refreshExpiresAt: sessionPayload.refresh_expires_at,
+    }));
   }
   if (userData) {
     writes.push(AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(userData)));
@@ -104,7 +113,11 @@ function isSessionPayloadShape(value) {
   return isPlainObject(value)
     && isAuthUserShape(value.user)
     && typeof value.session_token === 'string'
-    && value.session_token.trim().length > 0;
+    && value.session_token.trim().length > 0
+    && typeof value.refresh_token === 'string'
+    && value.refresh_token.trim().length > 0
+    && !Number.isNaN(Date.parse(value.expires_at))
+    && !Number.isNaN(Date.parse(value.refresh_expires_at));
 }
 
 // resolveTenantBranch (backend/services/branchLocation.service.js) can
@@ -124,6 +137,7 @@ function preserveKnownBranch(prevUser, nextUser) {
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [authStatus, setAuthStatus] = useState('initializing');
+  const [sessionState, setSessionState] = useState('restoring');
   const [firebaseUser, setFirebaseUser] = useState(null);
   const [firebaseAuthReady, setFirebaseAuthReady] = useState(false);
   // Single source of truth for every notification UI surface (tab badge,
@@ -212,10 +226,11 @@ export function AuthProvider({ children }) {
       setNotificationUnreadCount((prev) => (prev === nextUnreadCount ? prev : nextUnreadCount));
       return true;
     } catch (error) {
-      if (error?.response?.status === 401) {
+      if (getConfirmedSessionInvalidation(error)) {
         await clearPersistedSession();
         setUser(null);
         setAuthStatus('unauthenticated');
+        setSessionState('unauthenticated');
         setNotifications([]);
         setNotificationUnreadCount(0);
       }
@@ -378,6 +393,7 @@ export function AuthProvider({ children }) {
 
       setUser(null);
       setAuthStatus('unauthenticated');
+      setSessionState('unauthenticated');
       setNotifications([]);
       setNotificationUnreadCount(0);
       showToast(reason === 'account_inactive' ? {
@@ -563,6 +579,7 @@ export function AuthProvider({ children }) {
           if (!cancelled) {
             setUser(null);
             setAuthStatus('unauthenticated');
+            setSessionState('unauthenticated');
           }
           return;
         }
@@ -580,6 +597,7 @@ export function AuthProvider({ children }) {
           if (!cancelled) {
             setUser(null);
             setAuthStatus('unauthenticated');
+            setSessionState('unauthenticated');
           }
           return;
         }
@@ -588,17 +606,19 @@ export function AuthProvider({ children }) {
         if (!cancelled) {
           setUser((prev) => preserveKnownBranch(prev, response.data));
           setAuthStatus('authenticated');
+          setSessionState('online');
         }
       } catch (error) {
         console.warn('Session hydration failed:', error?.message);
-        const status = error?.response?.status;
+        const invalidation = getConfirmedSessionInvalidation(error);
 
-        if (status === 401 || status === 403) {
+        if (invalidation) {
           await clearPersistedSession();
           await clearCredentials({ disableBiometric: false });
           if (!cancelled) {
             setUser(null);
             setAuthStatus('unauthenticated');
+            setSessionState('unauthenticated');
           }
           return;
         }
@@ -607,9 +627,11 @@ export function AuthProvider({ children }) {
         if (!cancelled && cachedUser) {
           setUser(cachedUser);
           setAuthStatus('authenticated');
+          setSessionState('retryable');
         } else if (!cancelled) {
           setUser(null);
-          setAuthStatus('unauthenticated');
+          setAuthStatus('restoring_offline');
+          setSessionState('retryable');
         }
       }
     })();
@@ -656,7 +678,7 @@ export function AuthProvider({ children }) {
     });
   }, [authStatus, user?.user_id]);
 
-  const loginWithEmail = useCallback(async (email, password, remember = true) => {
+  const loginWithEmail = useCallback(async (email, password) => {
     try {
       const { data } = await api.post('/auth/login', {
         email,
@@ -684,17 +706,18 @@ export function AuthProvider({ children }) {
         return { success: false, status: 500, error: 'Received an invalid sign-in response. Please try again.' };
       }
 
-      const { user: userData, session_token } = data;
+      const { user: userData } = data;
       if (!isTenantRole(userData.role)) {
         await clearPersistedSession();
         return { success: false, status: 403, error: NOT_A_TENANT_MESSAGE };
       }
-      await persistSession(session_token, userData, remember);
+      await persistSession(data, userData);
       const profile = await loadAuthoritativeTenantProfile(userData);
       await AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(profile)).catch(() => {});
       setUser(profile);
       dismissPendingNotificationForFreshSignIn();
       setAuthStatus('authenticated');
+      setSessionState('online');
       return { success: true };
     } catch (error) {
       const status = error.response?.status;
@@ -720,7 +743,7 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  const verifyLoginOtp = useCallback(async (otpToken, otpCode, remember = true) => {
+  const verifyLoginOtp = useCallback(async (otpToken, otpCode) => {
     const normalizedToken = typeof otpToken === 'string' ? otpToken.trim() : '';
     const normalizedCode = String(otpCode ?? '').replace(/\D/g, '');
 
@@ -737,18 +760,19 @@ export function AuthProvider({ children }) {
         await clearPersistedSession();
         return { success: false, status: 500, error: 'Received an invalid verification response. Please try again.' };
       }
-      const { user: userData, session_token } = response.data;
+      const { user: userData } = response.data;
       if (!isTenantRole(userData.role)) {
         await clearPersistedSession();
         return { success: false, status: 403, error: NOT_A_TENANT_MESSAGE };
       }
 
-      await persistSession(session_token, userData, remember);
+      await persistSession(response.data, userData);
       const profile = await loadAuthoritativeTenantProfile(userData);
       await AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(profile)).catch(() => {});
       setUser(profile);
       dismissPendingNotificationForFreshSignIn();
       setAuthStatus('authenticated');
+      setSessionState('online');
       return { success: true };
     } catch (error) {
       const status = error.response?.status;
@@ -775,14 +799,15 @@ export function AuthProvider({ children }) {
         await clearPersistedSession();
         return { success: false, error: 'Received an invalid registration response. Please try again.' };
       }
-      const { user: userData, session_token } = response.data;
+      const { user: userData } = response.data;
 
-      await persistSession(session_token, userData);
+      await persistSession(response.data, userData);
       const profile = await loadAuthoritativeTenantProfile(userData);
       await AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(profile)).catch(() => {});
       setUser(profile);
       dismissPendingNotificationForFreshSignIn();
       setAuthStatus('authenticated');
+      setSessionState('online');
       return { success: true };
     } catch (error) {
       const status = error.response?.status;
@@ -794,7 +819,7 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
-  const signInWithGoogle = useCallback(async (idToken, remember = true) => {
+  const signInWithGoogle = useCallback(async (idToken) => {
     try {
       let tokenToUse = idToken;
       if (!tokenToUse && firebaseUserRef.current) {
@@ -826,18 +851,19 @@ export function AuthProvider({ children }) {
         await clearPersistedSession();
         return { success: false, error: 'Received an invalid Google sign-in response. Please try again.' };
       }
-      const { user: userData, session_token } = response.data;
+      const { user: userData } = response.data;
       if (!isTenantRole(userData.role)) {
         await clearPersistedSession();
         return { success: false, error: NOT_A_TENANT_MESSAGE };
       }
 
-      await persistSession(session_token, userData, remember);
+      await persistSession(response.data, userData);
       const profile = await loadAuthoritativeTenantProfile(userData);
       await AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(profile)).catch(() => {});
       setUser(profile);
       dismissPendingNotificationForFreshSignIn();
       setAuthStatus('authenticated');
+      setSessionState('online');
       return { success: true };
     } catch (error) {
       const status = error.response?.status;
@@ -864,6 +890,7 @@ export function AuthProvider({ children }) {
       await clearDocumentCache().catch(() => {});
       setUser(null);
       setAuthStatus('unauthenticated');
+      setSessionState('unauthenticated');
       setNotifications([]);
       setNotificationUnreadCount(0);
     } finally {
@@ -891,6 +918,7 @@ export function AuthProvider({ children }) {
         await AsyncStorage.removeItem(SESSION_USER_KEY).catch(() => {});
         setUser(null);
         setAuthStatus('unauthenticated');
+        setSessionState('unauthenticated');
         return { authenticated: false };
       }
 
@@ -906,18 +934,21 @@ export function AuthProvider({ children }) {
         await clearCredentials({ disableBiometric: false });
         setUser(null);
         setAuthStatus('unauthenticated');
+        setSessionState('unauthenticated');
         return { authenticated: false };
       }
       await AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(response.data)).catch(() => {});
       setUser((prev) => preserveKnownBranch(prev, response.data));
       setAuthStatus('authenticated');
+      setSessionState('online');
       return { authenticated: true, restoredFromCache: false };
     } catch (error) {
-      if (error?.response?.status === 401 || error?.response?.status === 403) {
+      if (getConfirmedSessionInvalidation(error)) {
         await clearPersistedSession();
         await clearCredentials({ disableBiometric: false });
         setUser(null);
         setAuthStatus('unauthenticated');
+        setSessionState('unauthenticated');
         return { authenticated: false };
       }
 
@@ -925,16 +956,30 @@ export function AuthProvider({ children }) {
       if (cachedUser) {
         setUser(cachedUser);
         setAuthStatus('authenticated');
+        setSessionState('retryable');
         return { authenticated: true, restoredFromCache: true, offline: true };
       }
 
       // A timeout, offline state, or 5xx response is not proof that the
       // locally persisted session is invalid. Keep the token so a later
       // retry can recover; only an authoritative 401/403 signs the user out.
-      setAuthStatus((current) => current === 'authenticated' ? current : 'unauthenticated');
+      setAuthStatus((current) => current === 'authenticated' ? current : 'restoring_offline');
+      setSessionState('retryable');
       return { authenticated: false, indeterminate: true };
     }
   }, []);
+
+  // Retry a retained session when connectivity is likely to have changed.
+  // The credential remains in SecureStore throughout a retryable outage.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active'
+        && (authStatusRef.current === 'restoring_offline' || sessionState === 'retryable')) {
+        checkAuth().catch(() => {});
+      }
+    });
+    return () => subscription.remove();
+  }, [checkAuth, sessionState]);
 
   const updateUser = useCallback((data) => {
     setUser((prev) => {
@@ -965,6 +1010,7 @@ export function AuthProvider({ children }) {
     isLoading,
     authReady,
     authStatus,
+    sessionState,
     login,
     loginWithEmail,
     verifyLoginOtp,
@@ -983,7 +1029,7 @@ export function AuthProvider({ children }) {
     clearNotifications,
     refreshNotifications,
   }), [
-    user, firebaseUser, firebaseAuthReady, isLoading, authReady, authStatus,
+    user, firebaseUser, firebaseAuthReady, isLoading, authReady, authStatus, sessionState,
     login, loginWithEmail, verifyLoginOtp, registerWithEmail, logout, checkAuth,
     signInWithGoogle, updateUser, notifications, notificationUnreadCount,
     markNotificationRead, clearNotificationUnread, dismissNotification, clearNotifications,
@@ -1000,9 +1046,34 @@ export function AuthProvider({ children }) {
     );
   }
 
+  if (authStatus === 'restoring_offline') {
+    return (
+      <View style={styles.authLoadingContainer}>
+        <Text style={styles.authLoadingTitle}>Still restoring your session</Text>
+        <Text style={styles.authLoadingText}>
+          LilyCrest could not reach the server. Your secure session is still saved.
+        </Text>
+        <Pressable style={styles.authRetryButton} onPress={() => checkAuth().catch(() => {})}>
+          <Text style={styles.authRetryButtonText}>Retry connection</Text>
+        </Pressable>
+      </View>
+    );
+  }
+
   return (
     <AuthContext.Provider value={contextValue}>
       <View style={styles.container}>
+        {sessionState === 'retryable' ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Retry LilyCrest connection"
+            style={styles.sessionOfflineBanner}
+            onPress={() => checkAuth().catch(() => {})}
+          >
+            <Text style={styles.sessionOfflineText}>Offline — showing saved account data</Text>
+            <Text style={styles.sessionOfflineAction}>Retry</Text>
+          </Pressable>
+        ) : null}
         {children}
         {notificationBanner ? (
           <View pointerEvents="box-none" style={styles.bannerOverlay}>
@@ -1057,6 +1128,28 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  sessionOfflineBanner: {
+    minHeight: 44,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFF7ED',
+    borderBottomWidth: 1,
+    borderBottomColor: '#FDBA74',
+  },
+  sessionOfflineText: {
+    flex: 1,
+    color: '#9A3412',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  sessionOfflineAction: {
+    marginLeft: 12,
+    color: '#9A3412',
+    fontSize: 13,
+    fontWeight: '800',
+  },
   authLoadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -1075,6 +1168,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     color: '#4B5563',
+    textAlign: 'center',
+  },
+  authRetryButton: {
+    marginTop: 18,
+    minHeight: 48,
+    minWidth: 160,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    backgroundColor: '#0A1628',
+  },
+  authRetryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
   bannerOverlay: {
     position: 'absolute',

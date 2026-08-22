@@ -98,7 +98,9 @@ test('maintenance transition policy rejects invalid admin and tenant transitions
 test('inactive tenant session is rejected', async () => {
   let deleted = false;
   const db = { collection(name) { return {
-    findOne: async () => name === 'user_sessions' ? { user_id: 'tenant-a' } : { user_id: 'tenant-a', role: 'tenant', status: 'pending_approval' },
+    findOne: async () => name === 'user_sessions'
+      ? { user_id: 'tenant-a', expires_at: new Date(Date.now() + 60000) }
+      : { user_id: 'tenant-a', role: 'tenant', status: 'pending_approval' },
     deleteMany: async () => { deleted = true; },
   }; } };
   const { authMiddleware } = loadWithDb('../middleware/auth', db);

@@ -39,7 +39,8 @@ describe('auth flow implementation contracts', () => {
   test('login preserves the exact entered password', () => {
     const source = read('app/login.jsx');
     expect(source).toContain('const normalizedPassword = password;');
-    expect(source).toContain('loginWithEmail(normalizedEmail, normalizedPassword, rememberMe)');
+    expect(source).toContain('loginWithEmail(normalizedEmail, normalizedPassword)');
+    expect(source).not.toContain('Remember me');
     expect(source).not.toMatch(/password\.(trim|replace)\(/);
   });
 
@@ -57,7 +58,7 @@ describe('auth flow implementation contracts', () => {
 
   test('expired session clears storage and returns unauthenticated', () => {
     const source = read('src/context/AuthContext.js');
-    expect(source).toContain('if (status === 401)');
+    expect(source).toContain('getConfirmedSessionInvalidation(error)');
     expect(source).toContain('await clearPersistedSession()');
     expect(source).toContain("setAuthStatus('unauthenticated')");
   });

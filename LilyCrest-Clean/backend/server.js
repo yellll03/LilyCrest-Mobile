@@ -381,6 +381,14 @@ async function startServer() {
     const userSessions = db.collection('user_sessions');
     await userSessions.createIndex({ expires_at: 1 }, { expireAfterSeconds: 0, name: 'sessions_ttl' });
     await userSessions.createIndex({ user_id: 1 }, { name: 'sessions_user_id' });
+    await userSessions.createIndex(
+      { session_token: 1 },
+      { unique: true, sparse: true, name: 'sessions_token_unique' },
+    );
+    await userSessions.createIndex(
+      { refresh_token_hash: 1 },
+      { unique: true, sparse: true, name: 'sessions_refresh_token_unique' },
+    );
 
     const migrationDone = await migrationsCol.findOne({ name: 'v1_index_migration', completed: true });
     if (migrationDone) {
