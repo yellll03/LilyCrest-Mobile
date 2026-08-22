@@ -343,7 +343,7 @@ export default function ServicesScreen() {
     modalTitle: { fontSize: 20, fontWeight: 'bold', color: c.text },
     modalSectionTitle: { fontSize: 14, fontWeight: '600', color: c.text, marginBottom: 12, marginTop: 8 },
     typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 },
-    typeItem: { width: '23%', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 8, borderRadius: 12, backgroundColor: c.surfaceSecondary },
+    typeItem: { width: '31%', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 8, borderRadius: 12, backgroundColor: c.surfaceSecondary },
     typeItemSelected: { backgroundColor: c.primaryLight, borderWidth: 1, borderColor: c.primary },
     typeIcon: { width: 40, height: 40, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
     typeLabel: { fontSize: 10, color: c.textMuted, textAlign: 'center' },
