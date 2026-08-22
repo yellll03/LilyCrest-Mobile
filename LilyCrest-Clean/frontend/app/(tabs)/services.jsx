@@ -22,6 +22,7 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AttachmentPickerSheet from '../../src/components/AttachmentPickerSheet';
 import LilyFlowerIcon from '../../src/components/assistant/LilyFlowerIcon';
 import { useAuth } from '../../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
@@ -374,6 +375,14 @@ export default function ServicesScreen() {
     attachmentPreview: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
     previewChip: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, backgroundColor: c.surfaceSecondary },
     previewText: { fontSize: 12, color: c.text },
+    conversationThread: { backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, borderRadius: 16, padding: 12, gap: 4 },
+    conversationMessageRow: { width: '100%', marginBottom: 8 },
+    conversationBubble: { maxWidth: '82%', paddingVertical: 9, paddingHorizontal: 12 },
+    conversationTimestamp: { fontSize: 10, color: c.textMuted, marginTop: 3, marginHorizontal: 4 },
+    replyComposer: { marginTop: 2, marginBottom: 14 },
+    replyComposerBar: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.surfaceSecondary, borderRadius: 16, borderWidth: 1, borderColor: c.border, paddingHorizontal: 6, paddingVertical: 6 },
+    replyAttachButton: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
+    replyInput: { flex: 1, minHeight: 36, maxHeight: 100, fontSize: 14, color: c.text, paddingVertical: 6, paddingHorizontal: 2 },
     submitButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: c.primary, borderRadius: 12, paddingVertical: 16, gap: 8, marginBottom: 20 },
     submitButtonDisabled: { opacity: 0.7 },
     submitButtonText: { color: c.surface, fontSize: 16, fontWeight: '600' },
@@ -440,6 +449,7 @@ export default function ServicesScreen() {
   const [replyAttachments, setReplyAttachments] = useState([]);
   const [replyUploadStatus, setReplyUploadStatus] = useState('');
   const [sendingReply, setSendingReply] = useState(false);
+  const [showReplyAttachMenu, setShowReplyAttachMenu] = useState(false);
   // Search
   const [searchQuery, setSearchQuery] = useState('');
   const bannerTimerRef = useRef(null);
@@ -731,6 +741,7 @@ export default function ServicesScreen() {
     setReplyMessage('');
     setReplyAttachments([]);
     setReplyUploadStatus('');
+    setShowReplyAttachMenu(false);
     setShowDetailModal(true);
     setDetailLoading(true);
     try {
@@ -849,6 +860,7 @@ export default function ServicesScreen() {
   };
 
   const handleReplyAttach = async (pickerFn) => {
+    setShowReplyAttachMenu(false);
     try {
       const file = await pickerFn();
       if (!file) return;
@@ -1292,13 +1304,13 @@ export default function ServicesScreen() {
       </Modal>
 
       {/* ===== REQUEST DETAIL MODAL ===== */}
-      <Modal visible={showDetailModal} animationType="slide" transparent onRequestClose={() => { setEditMode(false); setShowDetailModal(false); }}>
+      <Modal visible={showDetailModal} animationType="slide" transparent onRequestClose={() => { setEditMode(false); setShowReplyAttachMenu(false); setShowDetailModal(false); }}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalContainer}>
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, { maxHeight: '92%' }]}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>{editMode ? 'Edit Request' : 'Request Details'}</Text>
-                <TouchableOpacity onPress={() => { setEditMode(false); setShowDetailModal(false); }}>
+                <TouchableOpacity onPress={() => { setEditMode(false); setShowReplyAttachMenu(false); setShowDetailModal(false); }}>
                   <Ionicons name="close" size={24} color={colors.textMuted} />
                 </TouchableOpacity>
               </View>
@@ -1487,15 +1499,16 @@ export default function ServicesScreen() {
                   {!editMode && (
                     <View style={{ marginBottom: 14 }} testID="maintenance-conversation">
                       <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text, marginBottom: 8 }}>Conversation</Text>
-                      {chatItems.length === 0 ? (
-                        <View style={{ backgroundColor: colors.surfaceSecondary, borderRadius: 12, padding: 18, alignItems: 'center', gap: 6 }}>
-                          <Ionicons name="chatbubbles-outline" size={22} color={colors.textMuted} />
-                          <Text style={{ fontSize: 13, color: colors.textMuted, textAlign: 'center', lineHeight: 19 }}>
-                            Your request has been submitted.{'\n'}Messages from Lilycrest staff will appear here.
-                          </Text>
-                        </View>
-                      ) : (
-                        <View style={{ gap: 4 }}>
+                      <View style={styles.conversationThread}>
+                        {chatItems.length === 0 ? (
+                          <View style={{ backgroundColor: colors.surfaceSecondary, borderRadius: 12, padding: 18, alignItems: 'center', gap: 6 }}>
+                            <Ionicons name="chatbubbles-outline" size={22} color={colors.textMuted} />
+                            <Text style={{ fontSize: 13, color: colors.textMuted, textAlign: 'center', lineHeight: 19 }}>
+                              Your request has been submitted.{'\n'}Messages from Lilycrest staff will appear here.
+                            </Text>
+                          </View>
+                        ) : (
+                          <View style={{ gap: 4 }}>
                           {chatItems.map((item) => {
                             if (item.kind === 'date') {
                               return (
@@ -1526,22 +1539,19 @@ export default function ServicesScreen() {
                             }
 
                             return (
-                              <View key={item.id} style={{ alignItems: isTenant ? 'flex-end' : 'flex-start', marginBottom: 6 }}>
+                              <View key={item.id} style={[styles.conversationMessageRow, { alignItems: isTenant ? 'flex-end' : 'flex-start' }]}>
                                 {item.showSender && !isTenant ? (
                                   <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '700', marginBottom: 3, marginLeft: 4 }} numberOfLines={1}>
                                     {entry.actorLabel || 'Lilycrest Staff'}
                                   </Text>
                                 ) : null}
                                 <View
-                                  style={{
-                                    maxWidth: '82%',
+                                  style={[styles.conversationBubble, {
                                     backgroundColor: isTenant ? colors.primary : colors.surfaceSecondary,
                                     borderRadius: 16,
                                     borderBottomRightRadius: isTenant ? 4 : 16,
                                     borderBottomLeftRadius: isTenant ? 16 : 4,
-                                    paddingVertical: 9,
-                                    paddingHorizontal: 12,
-                                  }}
+                                  }]}
                                 >
                                   {entry.isSummary ? (
                                     <Text style={{ fontSize: 11, fontWeight: '800', color: isTenant ? colors.surface : colors.text, marginBottom: 3, textTransform: 'uppercase', opacity: 0.8 }}>
@@ -1558,6 +1568,7 @@ export default function ServicesScreen() {
                                       horizontal
                                       showsHorizontalScrollIndicator={false}
                                       style={{ height: 84, flexGrow: 0, marginTop: entry.message ? 8 : 0 }}
+                                      contentContainerStyle={{ alignItems: 'center' }}
                                     >
                                       <View style={{ flexDirection: 'row' }}>
                                         {entry.attachments.map((att, idx) => (
@@ -1591,7 +1602,7 @@ export default function ServicesScreen() {
                                 </View>
                                 <Text
                                   accessibilityLabel={showSeen ? `Sent ${safeFormat(entry.timestamp, 'h:mm a')}, seen by staff` : undefined}
-                                  style={{ fontSize: 10, color: colors.textMuted, marginTop: 3, marginHorizontal: 4 }}
+                                  style={styles.conversationTimestamp}
                                 >
                                   {entry.timestamp ? safeFormat(entry.timestamp, 'h:mm a') : ''}
                                   {showSeen ? ` • ${entry.seenByAdmin ? 'Seen' : 'Sent'}` : ''}
@@ -1599,8 +1610,9 @@ export default function ServicesScreen() {
                               </View>
                             );
                           })}
+                          </View>
+                        )}
                         </View>
-                      )}
                     </View>
                   )}
 
@@ -1637,7 +1649,7 @@ export default function ServicesScreen() {
                   )}
 
                   {!editMode && canReplyToRequest(detailRequest) && (
-                    <View testID="maintenance-composer" style={{ marginTop: -6, marginBottom: 14 }}>
+                    <View testID="maintenance-composer" style={styles.replyComposer}>
                       {replyAttachments.length > 0 ? (
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
                           {replyAttachments.map((file) => (
@@ -1648,18 +1660,18 @@ export default function ServicesScreen() {
                         </View>
                       ) : null}
                       {replyUploadStatus ? <Text style={{ color: replyUploadStatus.includes('failed') ? '#DC2626' : colors.textMuted, fontSize: 12, marginBottom: 6 }}>{replyUploadStatus}</Text> : null}
-                      <View style={{ flexDirection: 'row', alignItems: 'flex-end', gap: 6, backgroundColor: colors.surfaceSecondary, borderRadius: 20, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 6, paddingVertical: 6 }}>
-                        <TouchableOpacity accessibilityLabel="Attach a photo" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 6 }} onPress={() => handleReplyAttach(pickFromCamera)} disabled={sendingReply}>
-                          <Ionicons name="camera-outline" size={19} color={colors.textMuted} />
-                        </TouchableOpacity>
-                        <TouchableOpacity accessibilityLabel="Attach from gallery" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 6 }} onPress={() => handleReplyAttach(pickFromLibrary)} disabled={sendingReply}>
-                          <Ionicons name="image-outline" size={19} color={colors.textMuted} />
-                        </TouchableOpacity>
-                        <TouchableOpacity accessibilityLabel="Attach a document" hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 6 }} onPress={() => handleReplyAttach(pickDocument)} disabled={sendingReply}>
-                          <Ionicons name="document-attach-outline" size={19} color={colors.textMuted} />
+                      <View style={styles.replyComposerBar}>
+                        <TouchableOpacity
+                          accessibilityLabel="Add attachment"
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          style={styles.replyAttachButton}
+                          onPress={() => setShowReplyAttachMenu(true)}
+                          disabled={sendingReply}
+                        >
+                          <Ionicons name="attach" size={19} color={colors.textMuted} />
                         </TouchableOpacity>
                         <TextInput
-                          style={{ flex: 1, fontSize: 14, color: colors.text, maxHeight: 100, paddingVertical: 6, paddingHorizontal: 4 }}
+                          style={styles.replyInput}
                           placeholder="Type a message..."
                           placeholderTextColor={colors.textMuted}
                           multiline
@@ -1735,6 +1747,15 @@ export default function ServicesScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <AttachmentPickerSheet
+        visible={showReplyAttachMenu}
+        onClose={() => setShowReplyAttachMenu(false)}
+        onTakePhoto={() => handleReplyAttach(pickFromCamera)}
+        onChoosePhoto={() => handleReplyAttach(pickFromLibrary)}
+        onChooseDocument={() => handleReplyAttach(pickDocument)}
+        disabled={sendingReply}
+      />
 
       <Modal visible={Boolean(previewAttachment)} transparent animationType="fade" onRequestClose={() => { setPreviewAttachment(null); setPreviewAttachmentError(''); }}>
         <TouchableOpacity style={styles.confirmOverlay} activeOpacity={1} onPress={() => { setPreviewAttachment(null); setPreviewAttachmentError(''); }}>

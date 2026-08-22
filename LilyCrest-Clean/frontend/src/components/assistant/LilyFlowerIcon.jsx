@@ -1,7 +1,8 @@
-import { Animated, Image, StyleSheet, View } from 'react-native';
+import { Image } from 'expo-image';
+import { Animated, StyleSheet, View } from 'react-native';
 import { useEffect, useRef } from 'react';
 
-const BASE_BG = '#0A1628';
+const BASE_BG = '#FFFFFF';
 
 /**
  * LilyFlowerIcon — renders the Lily robot assistant avatar.
@@ -9,7 +10,7 @@ const BASE_BG = '#0A1628';
  *   size  — width/height in dp (default 36)
  *   pulse — breathing scale animation while Lily is thinking (default false)
  */
-export default function LilyFlowerIcon({ size = 36, pulse = false }) {
+export default function LilyFlowerIcon({ size = 36, pulse = false, imageScale = 1.48 }) {
   const scale = useRef(new Animated.Value(1)).current;
 
   useEffect(() => {
@@ -24,7 +25,6 @@ export default function LilyFlowerIcon({ size = 36, pulse = false }) {
     return () => anim.stop();
   }, [pulse, scale]);
 
-  const imageScale = 1.48;
   const Container = pulse ? Animated.View : View;
   const animStyle = pulse ? { transform: [{ scale }] } : {};
 
@@ -40,7 +40,7 @@ export default function LilyFlowerIcon({ size = 36, pulse = false }) {
             borderRadius: size / 2,
             transform: [{ scale: imageScale }],
           }}
-          resizeMode="cover"
+          contentFit="cover"
         />
       </View>
     </Container>
@@ -50,6 +50,8 @@ export default function LilyFlowerIcon({ size = 36, pulse = false }) {
 const styles = StyleSheet.create({
   frame: {
     backgroundColor: BASE_BG,
+    borderWidth: 1,
+    borderColor: '#FFFFFF',
     overflow: 'hidden',
   },
 });
