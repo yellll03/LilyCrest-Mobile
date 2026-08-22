@@ -11,6 +11,7 @@ const { buildAllowedOrigins, makeIsAllowedOrigin, hasBrowserOrigin } = require('
 const { connectToMongo } = require('./config/database');
 const { ensureIndexes: ensureSurveyIndexes } = require('./services/survey.service');
 const { sendDueSoonReminders } = require('./services/surveyNotification.service');
+const { runAnnouncementDeliverySweep } = require('./services/announcementDelivery.service');
 const { initializeFirebase } = require('./config/firebase');
 const { cacheMiddleware } = require('./middleware/cache');
 
@@ -317,6 +318,24 @@ async function startServer() {
     setInterval(() => {
       sendDueSoonReminders(db).catch((error) => console.warn('[Survey reminders]', error?.message));
     }, 6 * 60 * 60 * 1000).unref();
+
+    const announcements = db.collection('announcements');
+    await announcements.createIndex(
+      { created_by: 1, client_request_id: 1 },
+      {
+        unique: true,
+        partialFilterExpression: { client_request_id: { $type: 'string', $gt: '' } },
+        name: 'announcement_create_idempotency',
+      },
+    );
+    await announcements.createIndex(
+      { 'delivery.status': 1, publishedAt: 1, 'delivery.leaseExpiresAt': 1 },
+      { name: 'announcement_delivery_queue' },
+    );
+    runAnnouncementDeliverySweep(db).catch((error) => console.warn('[AnnouncementDelivery]', error?.message));
+    setInterval(() => {
+      runAnnouncementDeliverySweep(db).catch((error) => console.warn('[AnnouncementDelivery]', error?.message));
+    }, 60 * 1000).unref();
 
     // Billing collection indexes (frequently queried)
     const billing = db.collection('billing');
