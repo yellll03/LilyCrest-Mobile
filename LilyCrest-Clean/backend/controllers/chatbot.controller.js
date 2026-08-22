@@ -28,7 +28,7 @@ const { loadAttachmentParts } = require('../services/assistantAttachment.service
 const { resolveTenantBranch } = require('../services/branchLocation.service');
 const { fetchCurrentContractForRequest, fetchContractDocumentForRequest } = require('../routes/contracts.routes');
 const { loadRequestsAcrossCollections, buildUserMaintenanceFilter, buildTenantRequestResponse: buildMaintenanceTenantResponse } = require('./maintenance.controller');
-const { buildTenantAnnouncementQuery, isAnnouncementVisibleForBranch, resolveRequesterBranchCode } = require('./announcement.controller');
+const { loadVisibleAnnouncementsForTenant } = require('../services/announcementAudience.service');
 const { extractContractDocumentText, findRelevantContractExcerpts } = require('../domain/contracts/contractDocumentQA');
 
 function sanitizeResponse(text = '') {
@@ -1141,13 +1141,8 @@ async function sendMessage(req, res) {
 
     // Pull tenant context for grounded responses
     const db = getDb();
-    const requesterBranchCode = await resolveRequesterBranchCode(db, req.user);
     const [announcements, bills, activeSupportConversations, tenantAccount, recentMaintenanceRequests, canonicalContract] = await Promise.all([
-      db.collection('announcements')
-        .find(buildTenantAnnouncementQuery(userId))
-        .sort({ created_at: -1, createdAt: -1 })
-        .toArray()
-        .then((docs) => docs.filter((doc) => isAnnouncementVisibleForBranch(doc, requesterBranchCode)).slice(0, 3)),
+      loadVisibleAnnouncementsForTenant(db, req.user, { limit: 3 }),
       fetchUserBills(db, req.user, { limit: 5 }),
       db.collection('chat_conversations')
         .find({ tenantUserId: userId, status: { $in: ['open', 'in_review', 'waiting_tenant', 'resolved'] } })

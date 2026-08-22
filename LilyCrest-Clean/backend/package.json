@@ -26,7 +26,8 @@
     "identity-crosswalk:export": "node scripts/identityCrosswalk.js --export",
     "identity-crosswalk:review": "node scripts/prepareIdentityReview.js --export",
     "identity-crosswalk:approve": "node scripts/approveIdentityCrosswalk.js --confirm",
-    "administrative-evidence:export": "node scripts/prepareAdministrativeEvidencePack.js --export"
+    "administrative-evidence:export": "node scripts/prepareAdministrativeEvidencePack.js --export",
+    "announcements:audit-notification-audience": "node scripts/auditAnnouncementNotificationAudience.js"
   },
   "dependencies": {
     "@fontsource/noto-serif": "^5.3.0",
