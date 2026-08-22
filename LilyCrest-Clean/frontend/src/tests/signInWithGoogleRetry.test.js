@@ -144,6 +144,28 @@ describe('AuthContext.signInWithGoogle connect-failure retry', () => {
     });
   });
 
+  it('accepts the deployed user + session_token Google response during the refresh-token rollout', async () => {
+    mockPost.mockResolvedValueOnce({
+      data: {
+        user: { user_id: 'tenant-a', role: 'tenant' },
+        session_token: 'legacy-google-session',
+      },
+    });
+
+    let latest;
+    renderAuth((state) => { latest = state; });
+    await waitFor(() => expect(latest.authReady).toBe(true));
+
+    let result;
+    await act(async () => {
+      result = await latest.signInWithGoogle('firebase-id-token');
+    });
+
+    expect(result).toEqual({ success: true });
+    const { setSessionToken } = require('../services/secureCredentials');
+    expect(setSessionToken).toHaveBeenCalledWith('legacy-google-session', {});
+  });
+
   it('does not retry when the server actually responded (e.g. 403)', async () => {
     mockPost.mockRejectedValueOnce(serverRejectionError(403, 'Access denied. Your account is not registered as an active tenant.'));
 

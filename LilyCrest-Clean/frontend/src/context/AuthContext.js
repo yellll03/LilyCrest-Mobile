@@ -52,11 +52,14 @@ const DEFAULT_NOTIFICATION_MESSAGE = 'Open LilyCrest to view the latest update.'
 async function persistSession(sessionPayload, userData) {
   const writes = [];
   if (sessionPayload?.session_token) {
-    writes.push(setSessionToken(sessionPayload.session_token, {
-      refreshToken: sessionPayload.refresh_token,
-      expiresAt: sessionPayload.expires_at,
-      refreshExpiresAt: sessionPayload.refresh_expires_at,
-    }));
+    const refreshOptions = isRefreshSessionPayloadShape(sessionPayload)
+      ? {
+          refreshToken: sessionPayload.refresh_token,
+          expiresAt: sessionPayload.expires_at,
+          refreshExpiresAt: sessionPayload.refresh_expires_at,
+        }
+      : {};
+    writes.push(setSessionToken(sessionPayload.session_token, refreshOptions));
   }
   if (userData) {
     writes.push(AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(userData)));
@@ -117,7 +120,16 @@ function isSessionPayloadShape(value) {
   return isPlainObject(value)
     && isAuthUserShape(value.user)
     && typeof value.session_token === 'string'
-    && value.session_token.trim().length > 0
+    && value.session_token.trim().length > 0;
+}
+
+// The currently deployed API still returns the established user +
+// session_token response, while newer API builds add a rotating refresh
+// bundle. Both are valid login contracts during the rolling deployment.
+// Only persist refresh metadata when the complete bundle is present so a
+// partial/malformed optional bundle cannot break an otherwise valid login.
+function isRefreshSessionPayloadShape(value) {
+  return isSessionPayloadShape(value)
     && typeof value.refresh_token === 'string'
     && value.refresh_token.trim().length > 0
     && !Number.isNaN(Date.parse(value.expires_at))
