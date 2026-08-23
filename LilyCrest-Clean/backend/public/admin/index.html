@@ -27,10 +27,12 @@
   button { cursor: pointer; font-family: inherit; }
 
   /* ── Auth ── */
-  #auth-screen {
+  #auth-screen, #boot-screen {
     display: flex; align-items: center; justify-content: center;
     min-height: 100vh; background: var(--bg);
   }
+  .boot-message { color: var(--muted); font-size: 14px; line-height: 1.6; text-align: center; }
+  .boot-actions { display: flex; justify-content: center; margin-top: 20px; }
   .auth-card {
     background: var(--surface); border-radius: 20px; padding: 40px 36px;
     width: 100%; max-width: 400px; border: 1px solid var(--border);
@@ -135,6 +137,10 @@
   .badge-normal { background: rgba(148,163,184,0.15); color: var(--muted); }
   .badge-resolved, .badge-completed { background: rgba(34,197,94,0.15); color: var(--success); }
   .badge-rejected, .badge-cancelled { background: rgba(239,68,68,0.15); color: var(--danger); }
+  .badge-active, .badge-delivered { background: rgba(34,197,94,0.15); color: var(--success); }
+  .badge-scheduled, .badge-processing { background: rgba(56,189,248,0.15); color: var(--info); }
+  .badge-expired, .badge-archived, .badge-legacy { background: rgba(148,163,184,0.15); color: var(--muted); }
+  .badge-failed { background: rgba(239,68,68,0.15); color: var(--danger); }
 
   /* ── Ticket Detail Panel ── */
   .panel-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 200; display: flex; align-items: stretch; justify-content: flex-end; }
@@ -205,6 +211,14 @@
   .filter-bar input[type=search]:focus { border-color: var(--accent); }
   .empty-emoji { font-size: 36px; }
   .ann-actions { display: flex; justify-content: flex-end; margin-bottom: 16px; }
+  .ann-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px 0; flex-wrap: wrap; }
+  .ann-toolbar .filter-bar { margin-bottom: 0; }
+  .table-scroll { overflow-x: auto; }
+  .ann-audience { min-width: 140px; }
+  .ann-row-actions { display: flex; gap: 6px; flex-wrap: wrap; min-width: 150px; }
+  .pagination-bar { display: flex; align-items: center; justify-content: flex-end; gap: 10px; padding: 14px 20px; border-top: 1px solid var(--border); }
+  .pagination-bar .btn:disabled { cursor: not-allowed; opacity: .4; }
+  .field-note { margin-top: 6px; font-size: 11px; line-height: 1.45; color: var(--muted); }
   .panel-head-actions { display: flex; align-items: center; gap: 8px; }
   .toast { position: fixed; bottom: 24px; right: 24px; background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 14px 18px; font-size: 13px; font-weight: 600; z-index: 999; box-shadow: 0 8px 32px rgba(0,0,0,0.4); display: flex; align-items: center; gap: 10px; min-width: 220px; }
   .toast.success { border-color: var(--success); }
@@ -223,8 +237,22 @@
 </head>
 <body>
 
+<!-- ── Session restore ── -->
+<div id="boot-screen">
+  <div class="auth-card">
+    <div class="auth-logo">
+      <h1>🌸 LilyCrest</h1>
+      <p>Admin Dashboard</p>
+    </div>
+    <p class="boot-message" id="boot-message">Restoring your secure admin session…</p>
+    <div class="boot-actions hidden" id="boot-actions">
+      <button class="btn btn-primary" id="boot-retry-btn">Retry connection</button>
+    </div>
+  </div>
+</div>
+
 <!-- ── Login ── -->
-<div id="auth-screen">
+<div id="auth-screen" class="hidden">
   <div class="auth-card">
     <div class="auth-logo">
       <h1>🌸 LilyCrest</h1>
@@ -238,7 +266,7 @@
       <label>Password</label>
       <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password" />
     </div>
-    <button class="btn btn-primary btn-full" id="login-btn" onclick="doLogin()">Sign In</button>
+    <button class="btn btn-primary btn-full" id="login-btn">Sign In</button>
     <p class="err-msg hidden" id="login-err"></p>
   </div>
 </div>
@@ -252,29 +280,29 @@
       <span>Admin Panel</span>
     </div>
     <nav class="nav">
-      <button class="nav-item" data-page="dashboard" onclick="navigate('dashboard')">
+      <button class="nav-item" data-page="dashboard">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
         Dashboard
       </button>
-      <button class="nav-item" data-page="tickets" onclick="navigate('tickets')">
+      <button class="nav-item" data-page="tickets">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
         Tenant Inquiries
         <span class="badge hidden" id="ticket-badge">0</span>
       </button>
-      <button class="nav-item" data-page="livechat" onclick="navigate('livechat')">
+      <button class="nav-item" data-page="livechat">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 9h8"/><path d="M8 13h5"/></svg>
         Admin Support
         <span class="badge hidden" id="livechat-badge">0</span>
       </button>
-      <button class="nav-item" data-page="announcements" onclick="navigate('announcements')">
+      <button class="nav-item" data-page="announcements">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
         Announcements
       </button>
-      <button class="nav-item" data-page="maintenance" onclick="navigate('maintenance')">
+      <button class="nav-item" data-page="maintenance">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/></svg>
         Maintenance
       </button>
-      <button class="nav-item" data-page="users" onclick="navigate('users')">
+      <button class="nav-item" data-page="users">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         Tenants
       </button>
@@ -287,7 +315,7 @@
           <div class="admin-role" id="admin-role-text">Admin</div>
         </div>
       </div>
-      <button class="btn btn-sm btn-logout mt-2" onclick="doLogout()">Sign Out</button>
+      <button class="btn btn-sm btn-logout mt-2" id="logout-btn">Sign Out</button>
     </div>
   </aside>
 
@@ -296,7 +324,7 @@
     <header class="topbar">
       <h1 id="page-title">Dashboard</h1>
       <div class="topbar-right">
-        <button class="btn btn-sm btn-ghost" onclick="refreshPage()">↻ Refresh</button>
+        <button class="btn btn-sm btn-ghost" id="refresh-btn">↻ Refresh</button>
       </div>
     </header>
 
@@ -310,7 +338,7 @@
           <div class="stat-card success"><div class="stat-label">Resolved Today</div><div class="stat-value" id="stat-resolved">–</div></div>
         </div>
         <div class="card">
-          <div class="card-header"><h2>Recent Inquiries</h2><button class="btn btn-sm btn-ghost" onclick="navigate('tickets')">View All →</button></div>
+          <div class="card-header"><h2>Recent Inquiries</h2><button class="btn btn-sm btn-ghost" id="view-all-tickets-btn">View All →</button></div>
           <div class="card-body">
             <table>
               <thead><tr><th>Tenant</th><th>Subject</th><th>Status</th><th>Date</th></tr></thead>
@@ -323,43 +351,14 @@
       <!-- Tickets -->
       <div id="page-tickets" class="hidden">
         <div class="filter-bar">
-          <select id="ticket-filter-status" onchange="loadTickets()">
+          <select id="ticket-filter-status">
             <option value="">All Status</option>
             <option value="open">Open</option>
             <option value="in_progress">In Progress</option>
             <option value="solved">Solved</option>
-
-      <!-- Live Chat -->
-      <div id="page-livechat" class="hidden">
-        <div class="filter-bar">
-          <select id="livechat-filter-status" onchange="loadLiveChats()">
-            <option value="">All Status</option>
-            <option value="open">Open</option>
-            <option value="in_review">In Review</option>
-            <option value="waiting_tenant">Waiting for Tenant</option>
-            <option value="resolved">Resolved</option>
             <option value="closed">Closed</option>
           </select>
-          <button class="btn btn-sm btn-ghost" onclick="loadLiveChats()">Refresh</button>
-        </div>
-        <div class="card">
-          <div class="card-header"><h2>Admin Support Conversations</h2></div>
-          <div class="card-body">
-            <div id="livechat-loading" class="loading">Loading live chats…</div>
-            <table id="livechat-table" class="hidden">
-              <thead><tr><th>Tenant</th><th>Concern</th><th>Status</th><th>Unread</th><th>Date</th><th>Action</th></tr></thead>
-              <tbody id="livechat-tbody"></tbody>
-            </table>
-            <div id="livechat-empty" class="empty-state hidden">
-              <div class="empty-emoji">No support</div>
-              <p>No admin support conversations right now</p>
-            </div>
-          </div>
-        </div>
-      </div>
-            <option value="closed">Closed</option>
-          </select>
-          <input type="search" id="ticket-search" placeholder="Search by tenant or subject…" oninput="filterTicketTable()" />
+          <input type="search" id="ticket-search" placeholder="Search by tenant or subject…" />
         </div>
         <div class="card">
           <div class="card-header"><h2>Tenant Inquiries</h2></div>
@@ -377,22 +376,71 @@
         </div>
       </div>
 
+      <!-- Live Chat -->
+      <div id="page-livechat" class="hidden">
+        <div class="filter-bar">
+          <select id="livechat-filter-status">
+            <option value="">All Status</option>
+            <option value="open">Open</option>
+            <option value="in_review">In Review</option>
+            <option value="waiting_tenant">Waiting for Tenant</option>
+            <option value="resolved">Resolved</option>
+            <option value="closed">Closed</option>
+          </select>
+          <button class="btn btn-sm btn-ghost" id="livechat-refresh-btn">Refresh</button>
+        </div>
+        <div class="card">
+          <div class="card-header"><h2>Admin Support Conversations</h2></div>
+          <div class="card-body">
+            <div id="livechat-loading" class="loading">Loading live chats…</div>
+            <table id="livechat-table" class="hidden">
+              <thead><tr><th>Tenant</th><th>Concern</th><th>Status</th><th>Unread</th><th>Date</th><th>Action</th></tr></thead>
+              <tbody id="livechat-tbody"></tbody>
+            </table>
+            <div id="livechat-empty" class="empty-state hidden">
+              <div class="empty-emoji">No support</div>
+              <p>No admin support conversations right now</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <!-- Announcements -->
       <div id="page-announcements" class="hidden">
         <div class="ann-actions">
-          <button class="btn btn-primary" onclick="showAnnouncementModal()">+ New Announcement</button>
+          <button class="btn btn-primary" id="new-announcement-btn">+ New Announcement</button>
         </div>
         <div class="card">
           <div class="card-header"><h2>Announcements</h2></div>
           <div class="card-body">
+            <div class="ann-toolbar">
+              <div class="filter-bar">
+                <select id="ann-filter-status" aria-label="Filter announcements by lifecycle">
+                  <option value="">All lifecycle states</option>
+                  <option value="active">Active</option>
+                  <option value="scheduled">Scheduled</option>
+                  <option value="expired">Expired</option>
+                  <option value="archived">Archived</option>
+                </select>
+                <input type="search" id="ann-search" placeholder="Search title, content, or ID" aria-label="Search announcements" />
+                <button class="btn btn-sm btn-ghost" id="ann-search-btn">Search</button>
+              </div>
+            </div>
             <div id="ann-loading" class="loading">Loading…</div>
-            <table id="ann-table" class="hidden">
-              <thead><tr><th>Title</th><th>Category</th><th>Priority</th><th>Date</th></tr></thead>
-              <tbody id="ann-tbody"></tbody>
-            </table>
+            <div class="table-scroll">
+              <table id="ann-table" class="hidden">
+                <thead><tr><th>Title</th><th>Audience</th><th>Lifecycle</th><th>Delivery</th><th>Publish</th><th>Actions</th></tr></thead>
+                <tbody id="ann-tbody"></tbody>
+              </table>
+            </div>
             <div id="ann-empty" class="empty-state hidden">
               <div class="empty-emoji">📢</div>
-              <p>No announcements yet</p>
+              <p>No announcements match these filters</p>
+            </div>
+            <div id="ann-pagination" class="pagination-bar hidden">
+              <button class="btn btn-sm btn-ghost" id="ann-prev-btn">Previous</button>
+              <span class="text-sm text-muted" id="ann-page-summary"></span>
+              <button class="btn btn-sm btn-ghost" id="ann-next-btn">Next</button>
             </div>
           </div>
         </div>
@@ -401,7 +449,7 @@
       <!-- Maintenance -->
       <div id="page-maintenance" class="hidden">
         <div class="filter-bar">
-          <select id="maint-filter-status" onchange="loadMaintenance()">
+          <select id="maint-filter-status">
             <option value="">All Status</option>
             <option value="pending">Pending</option>
             <option value="in_progress">In Progress</option>
@@ -409,7 +457,7 @@
             <option value="completed">Completed</option>
             <option value="rejected">Rejected</option>
           </select>
-          <input type="search" id="maint-search" placeholder="Search…" oninput="filterMaintenanceTable()" />
+          <input type="search" id="maint-search" placeholder="Search…" />
         </div>
         <div class="card">
           <div class="card-header"><h2>Maintenance Requests</h2></div>
@@ -430,12 +478,12 @@
       <!-- Users -->
       <div id="page-users" class="hidden">
         <div class="filter-bar">
-          <select id="user-filter-role" onchange="filterUserTable()">
+          <select id="user-filter-role">
             <option value="">All Roles</option>
             <option value="tenant">Tenants</option>
             <option value="admin">Admins</option>
           </select>
-          <input type="search" id="user-search" placeholder="Search by name or email…" oninput="filterUserTable()" />
+          <input type="search" id="user-search" placeholder="Search by name or email…" />
         </div>
         <div class="card">
           <div class="card-header"><h2>Tenants &amp; Admins</h2></div>
@@ -457,13 +505,13 @@
 </div>
 
 <!-- ── Ticket Detail Panel ── -->
-<div class="panel-overlay hidden" id="ticket-panel" onclick="closePanelOnBackdrop(event)">
-  <div class="panel" onclick="event.stopPropagation()">
+<div class="panel-overlay hidden" id="ticket-panel">
+  <div class="panel">
       <div class="panel-head">
       <h3 id="panel-subject">Inquiry</h3>
       <div class="panel-head-actions">
         <span id="panel-status-badge" class="badge-status"></span>
-        <button class="panel-close" onclick="closePanel()">✕</button>
+        <button class="panel-close" id="ticket-panel-close-btn">✕</button>
       </div>
     </div>
     <div class="panel-meta" id="panel-meta"></div>
@@ -476,21 +524,21 @@
           <option value="in_progress">Mark In Progress</option>
           <option value="solved">Mark Solved</option>
         </select>
-        <button class="btn btn-primary" id="send-reply-btn" onclick="sendReply()">Send Reply</button>
+        <button class="btn btn-primary" id="send-reply-btn">Send Reply</button>
       </div>
     </div>
   </div>
 </div>
 
 <!-- ── Live Chat Panel ── -->
-<div class="panel-overlay hidden" id="livechat-panel" onclick="closeLiveChatPanelOnBackdrop(event)">
-  <div class="panel" onclick="event.stopPropagation()">
+<div class="panel-overlay hidden" id="livechat-panel">
+  <div class="panel">
     <div class="panel-head">
       <h3 id="livechat-panel-subject">Live Chat</h3>
       <div class="panel-head-actions">
         <span id="livechat-panel-status" class="badge-status"></span>
-        <button class="btn btn-sm btn-ghost" id="livechat-close-btn" onclick="closeLiveChatSession()">Resolve</button>
-        <button class="panel-close" onclick="closeLiveChatPanel()">✕</button>
+        <button class="btn btn-sm btn-ghost" id="livechat-close-btn">Resolve</button>
+        <button class="panel-close" id="livechat-panel-close-btn">✕</button>
       </div>
     </div>
     <div class="panel-meta" id="livechat-panel-meta"></div>
@@ -498,8 +546,8 @@
     <div class="panel-reply" id="livechat-panel-reply">
       <textarea id="livechat-reply-input" placeholder="Type a reply to the tenant…"></textarea>
       <div class="panel-reply-actions">
-        <button class="btn btn-primary" id="livechat-accept-btn" onclick="acceptLiveChat()">Mark In Review</button>
-        <button class="btn btn-primary" id="livechat-send-btn" onclick="sendLiveChatReply()">Send Reply</button>
+        <button class="btn btn-primary" id="livechat-accept-btn">Mark In Review</button>
+        <button class="btn btn-primary" id="livechat-send-btn">Send Reply</button>
       </div>
     </div>
   </div>
@@ -507,29 +555,57 @@
 
 <!-- ── Announcement Modal ── -->
 <div class="modal-overlay hidden" id="ann-modal">
-  <div class="modal">
+  <div class="modal modal-wide">
     <h3>New Announcement</h3>
-    <div class="form-group"><label>Title</label><input type="text" id="ann-title" placeholder="Announcement title" /></div>
-    <div class="form-group"><label>Content</label><textarea id="ann-content" placeholder="Write your message…"></textarea></div>
-    <div class="form-group"><label>Category</label>
-      <select id="ann-category">
-        <option value="General">General</option>
-        <option value="Maintenance">Maintenance</option>
-        <option value="Billing">Billing</option>
-        <option value="Rules">Rules</option>
-        <option value="Emergency">Emergency</option>
-      </select>
+    <div class="form-group"><label for="ann-title">Title</label><input type="text" id="ann-title" maxlength="120" placeholder="Announcement title" /></div>
+    <div class="form-group"><label for="ann-content">Content</label><textarea id="ann-content" maxlength="5000" placeholder="Write your message…"></textarea></div>
+    <div class="form-grid-2">
+      <div class="form-group"><label for="ann-category">Category</label>
+        <select id="ann-category">
+          <option value="General">General</option>
+          <option value="Account">Account</option>
+          <option value="Billing">Billing</option>
+          <option value="Maintenance">Maintenance</option>
+          <option value="Security">Security</option>
+          <option value="Reservation">Reservation</option>
+          <option value="Rules">Rules</option>
+          <option value="Promo">Promo</option>
+          <option value="Event">Event</option>
+          <option value="Emergency">Emergency</option>
+        </select>
+      </div>
+      <div class="form-group"><label for="ann-priority">Priority</label>
+        <select id="ann-priority">
+          <option value="normal">Normal</option>
+          <option value="high">High / Urgent</option>
+          <option value="low">Low</option>
+        </select>
+      </div>
     </div>
-    <div class="form-group"><label>Priority</label>
-      <select id="ann-priority">
-        <option value="normal">Normal</option>
-        <option value="high">High / Urgent</option>
-        <option value="low">Low</option>
+    <div class="form-group"><label for="ann-audience-type">Audience</label>
+      <select id="ann-audience-type">
+        <option value="global">All tenants</option>
+        <option value="branch">One branch</option>
+        <option value="private">One tenant</option>
       </select>
+      <p class="field-note">Audience is fixed at creation. Archiving later hides the announcement without deleting its audit record.</p>
     </div>
+    <div class="form-group hidden" id="ann-branch-group"><label for="ann-branch">Branch</label>
+      <select id="ann-branch"><option value="">Select a branch</option></select>
+    </div>
+    <div class="form-group hidden" id="ann-tenant-group"><label for="ann-tenant">Tenant</label>
+      <input type="search" id="ann-tenant-search" placeholder="Search tenants by name, email, or ID" />
+      <select id="ann-tenant"><option value="">Select a tenant</option></select>
+      <p class="field-note">For private announcements, a selected branch is an additional eligibility check.</p>
+    </div>
+    <div class="form-grid-2">
+      <div class="form-group"><label for="ann-publish-at">Publish at</label><input type="datetime-local" id="ann-publish-at" /></div>
+      <div class="form-group"><label for="ann-expires-at">Expires at (optional)</label><input type="datetime-local" id="ann-expires-at" /></div>
+    </div>
+    <p class="helper-text">Leave publish time blank to post immediately. Scheduled announcements are delivered when their publish time arrives.</p>
     <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeAnnModal()">Cancel</button>
-      <button class="btn btn-primary" id="ann-submit-btn" onclick="submitAnnouncement()">Post Announcement</button>
+      <button class="btn btn-ghost" id="ann-cancel-btn">Cancel</button>
+      <button class="btn btn-primary" id="ann-submit-btn">Post Announcement</button>
     </div>
     <p class="err-msg hidden" id="ann-err"></p>
   </div>
@@ -579,7 +655,7 @@
     <div class="form-group"><label>Admin Note (optional)</label><textarea id="maint-note" placeholder="Leave a note for the tenant…"></textarea></div>
     <div class="form-group">
       <label>Attachments</label>
-      <input type="file" id="maint-attachments" accept="image/*,.pdf,.doc,.docx,.txt,.csv" multiple onchange="handleMaintAttachmentChange(event)" />
+      <input type="file" id="maint-attachments" accept="image/*,.pdf,.doc,.docx,.txt,.csv" multiple />
       <p class="helper-text mt-2">Tenant-visible attachments appear in the mobile thread. Internal-note attachments stay hidden.</p>
       <div id="maint-attachments-preview" class="attachment-chip-list"></div>
     </div>
@@ -591,8 +667,8 @@
       <div id="maint-thread-preview" class="maint-thread-box"></div>
     </div>
     <div class="modal-actions">
-      <button class="btn btn-ghost" onclick="closeMaintModal()">Cancel</button>
-      <button class="btn btn-primary" id="maint-submit-btn" onclick="submitMaintStatus()">Update</button>
+      <button class="btn btn-ghost" id="maint-cancel-btn">Cancel</button>
+      <button class="btn btn-primary" id="maint-submit-btn">Update</button>
     </div>
   </div>
 </div>
@@ -600,7 +676,18 @@
 <script>
 // ── Config ──
 const API = '';  // same origin
-let sessionToken = localStorage.getItem('lc_admin_token');
+const ADMIN_BROWSER_HEADER = 'browser';
+const AUTH_INVALIDATION_CODES = new Set([
+  'AUTH_TOKEN_MISSING',
+  'SESSION_INVALID',
+  'SESSION_EXPIRED',
+  'SESSION_REVOKED',
+  'AUTH_ACCOUNT_NOT_FOUND',
+  'ACCOUNT_INACTIVE',
+  'ADMIN_COOKIE_FORBIDDEN',
+]);
+let adminCsrfToken = null;
+let logoutInFlight = false;
 let currentAdmin = null;
 let currentPage = 'dashboard';
 let allTickets = [];
@@ -619,6 +706,14 @@ let liveChatPoller = null;
 let liveChatListPoller = null;
 let ticketPoller = null;
 let maintenancePoller = null;
+let announcementPage = 1;
+let announcementTotalPages = 1;
+let announcementOptions = null;
+let announcementClientRequestId = null;
+let announcementLoadVersion = 0;
+let announcementOptionSearch = null;
+let announcementOptionLoadVersion = 0;
+let announcementTenantSearchTimer = null;
 const MAINT_ALLOWED_ATTACHMENT_TYPES = [
   'image/jpeg',
   'image/jpg',
@@ -637,12 +732,45 @@ const MAINT_ALLOWED_ATTACHMENT_TYPES = [
 
 // ── API helpers ──
 async function apiFetch(path, options = {}) {
-  const headers = { 'Content-Type': 'application/json', ...(options.headers || {}) };
-  if (sessionToken) headers['Authorization'] = `Bearer ${sessionToken}`;
-  const res = await fetch(`/api${path}`, { ...options, headers });
-  if (res.status === 401) { doLogout(); return null; }
+  const { handleAuthInvalidation = true, ...requestOptions } = options;
+  const method = String(requestOptions.method || 'GET').toUpperCase();
+  const headers = {
+    'Content-Type': 'application/json',
+    'X-LilyCrest-Admin': ADMIN_BROWSER_HEADER,
+    ...(requestOptions.headers || {}),
+  };
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method) && adminCsrfToken) {
+    headers['X-CSRF-Token'] = adminCsrfToken;
+  }
+
+  let res;
+  try {
+    res = await fetch(`/api${path}`, {
+      ...requestOptions,
+      method,
+      headers,
+      credentials: 'same-origin',
+    });
+  } catch (cause) {
+    const error = new Error('Unable to reach LilyCrest. Your admin session has been kept.');
+    error.retryable = true;
+    error.cause = cause;
+    throw error;
+  }
+
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.detail || `HTTP ${res.status}`);
+  if (!res.ok) {
+    const error = new Error(data.detail || `HTTP ${res.status}`);
+    error.status = res.status;
+    error.code = data.code || null;
+    error.retryable = data.retryable === true || res.status >= 500;
+    error.authInvalidating = res.status === 401
+      || (res.status === 403 && AUTH_INVALIDATION_CODES.has(error.code));
+    if (handleAuthInvalidation && error.authInvalidating) {
+      invalidateAdminSession();
+    }
+    throw error;
+  }
   return data;
 }
 
@@ -655,7 +783,10 @@ function showToast(msg, type = 'success') {
   const t = document.createElement('div');
   t.id = 'toast';
   t.className = `toast ${type}`;
-  t.innerHTML = `<span class="dot ${type}"></span>${msg}`;
+  const dot = document.createElement('span');
+  dot.className = `dot ${type}`;
+  t.appendChild(dot);
+  t.appendChild(document.createTextNode(String(msg || '')));
   document.body.appendChild(t);
   toastTimer = setTimeout(() => t.remove(), 3500);
 }
@@ -671,20 +802,27 @@ async function doLogin() {
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Signing in…';
   try {
-    const data = await fetch('/api/auth/login', {
+    const response = await fetch('/api/auth/login', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'X-LilyCrest-Admin': ADMIN_BROWSER_HEADER,
+      },
+      credentials: 'same-origin',
       body: JSON.stringify({ email, password: pass })
-    }).then(r => r.json());
+    });
+    const data = await response.json().catch(() => ({}));
     if (data.otp_required) { err.textContent = 'OTP login not supported in admin panel. Please use a non-OTP admin account.'; err.classList.remove('hidden'); return; }
-    if (!data.session_token) throw new Error(data.detail || 'Login failed');
+    if (!response.ok) throw new Error(data.detail || `Login failed (HTTP ${response.status})`);
+    if (data.auth_transport !== 'cookie' || !data.csrf_token) {
+      throw new Error('The secure admin session could not be established.');
+    }
     if (!['admin','superadmin'].includes((data.user?.role || '').toLowerCase())) {
       throw new Error('Access denied. Admin account required.');
     }
-    sessionToken = data.session_token;
-    localStorage.setItem('lc_admin_token', sessionToken);
+    adminCsrfToken = data.csrf_token;
     currentAdmin = data.user;
-    bootApp();
+    await bootApp();
   } catch(e) {
     err.textContent = e.message;
     err.classList.remove('hidden');
@@ -694,30 +832,67 @@ async function doLogin() {
   }
 }
 
-document.getElementById('login-password').addEventListener('keydown', e => { if(e.key === 'Enter') doLogin(); });
-
-function doLogout() {
-  apiFetch('/auth/logout', { method: 'POST' }).catch(() => {});
-  sessionToken = null;
-  localStorage.removeItem('lc_admin_token');
+function clearAdminUiState() {
+  stopLiveChatListPoller();
+  stopLiveChatPoller();
+  stopTicketPoller();
+  stopMaintenancePoller();
+  adminCsrfToken = null;
   currentAdmin = null;
+  document.cookie = 'lc_admin_csrf=; Max-Age=0; Path=/; SameSite=Strict';
+}
+
+function showLogin() {
+  document.getElementById('boot-screen').classList.add('hidden');
   document.getElementById('auth-screen').classList.remove('hidden');
   document.getElementById('app').classList.add('hidden');
+  document.getElementById('login-password').value = '';
+}
+
+function invalidateAdminSession() {
+  clearAdminUiState();
+  showLogin();
+}
+
+function showBootError(message) {
+  document.getElementById('auth-screen').classList.add('hidden');
+  document.getElementById('app').classList.add('hidden');
+  document.getElementById('boot-screen').classList.remove('hidden');
+  document.getElementById('boot-message').textContent = message;
+  document.getElementById('boot-actions').classList.remove('hidden');
+}
+
+async function doLogout() {
+  if (logoutInFlight) return;
+  logoutInFlight = true;
+  try {
+    await apiFetch('/auth/logout', { method: 'POST', handleAuthInvalidation: false });
+    clearAdminUiState();
+    showLogin();
+  } catch (error) {
+    if (error.authInvalidating) {
+      invalidateAdminSession();
+    } else {
+      showToast('Sign out could not be completed. Your session is still active; please retry.', 'error');
+    }
+  } finally {
+    logoutInFlight = false;
+  }
 }
 
 // ── Boot ──
 async function bootApp() {
-  if (!sessionToken) return;
   try {
     if (!currentAdmin) {
-      const me = await apiFetch('/auth/me');
-      if (!me) return;
-      currentAdmin = me;
+      const session = await apiFetch('/auth/admin-session');
+      currentAdmin = session.user;
+      adminCsrfToken = session.csrf_token;
     }
     if (!['admin','superadmin'].includes((currentAdmin.role || '').toLowerCase())) {
-      showErr('Access denied. Admin account required.');
-      doLogout(); return;
+      invalidateAdminSession();
+      return;
     }
+    document.getElementById('boot-screen').classList.add('hidden');
     document.getElementById('auth-screen').classList.add('hidden');
     document.getElementById('app').classList.remove('hidden');
     const name = currentAdmin.name || currentAdmin.fullName || 'Admin';
@@ -735,7 +910,9 @@ async function bootApp() {
     }).catch(() => {});
     navigate('dashboard');
   } catch(e) {
-    doLogout();
+    if (!e.authInvalidating) {
+      showBootError(e.message || 'LilyCrest is temporarily unavailable. Your admin session has been kept.');
+    }
   }
 }
 
@@ -801,7 +978,7 @@ async function loadDashboard() {
     const tbody = document.getElementById('dash-tickets');
     const recent = [...tickets].sort((a,b) => new Date(b.updated_at||b.created_at) - new Date(a.updated_at||a.created_at)).slice(0, 8);
     tbody.innerHTML = recent.length ? recent.map(t => `
-      <tr style="cursor:pointer" onclick="openTicketPanel('${t.ticket_id}')">
+      <tr style="cursor:pointer" data-action="open-ticket" data-ticket-id="${escHtml(t.ticket_id)}">
         <td class="text-sm">${escHtml(tenantName(t.user_id))}</td>
         <td class="truncate">${escHtml(t.subject || '—')}</td>
         <td><span class="badge-status badge-${t.status}">${t.status}</span></td>
@@ -848,7 +1025,7 @@ function renderTickets(tickets) {
       <td class="text-sm">${escHtml(t.category || '—')}</td>
       <td><span class="badge-status badge-${t.status}">${t.status}</span></td>
       <td class="text-sm text-muted">${formatDate(t.created_at)}</td>
-      <td><button class="btn btn-sm btn-primary" onclick="openTicketPanel('${t.ticket_id}')">Open</button></td>
+      <td><button class="btn btn-sm btn-primary" data-action="open-ticket" data-ticket-id="${escHtml(t.ticket_id)}">Open</button></td>
     </tr>`).join('');
 }
 
@@ -956,7 +1133,7 @@ async function sendReply() {
     }
 
     // Refresh ticket data
-    const updated = await apiFetch(`/tickets/${currentTicket.ticket_id}`);
+    const updated = await apiFetch(`/tickets/admin/${currentTicket.ticket_id}`);
     if (updated) {
       currentTicket = updated;
       allTickets = allTickets.map(t => t.ticket_id === updated.ticket_id ? updated : t);
@@ -1087,8 +1264,6 @@ function renderLiveChats(data) {
       created_at: dateValue,
       session_id: c.id,
     };
-    const actionLabel = 'Open';
-    const actionFn = `openLiveChatPanel('${c.session_id}')`;
     return `
       <tr>
         <td class="text-sm">${escHtml(c.tenantName || 'Tenant')}</td>
@@ -1096,7 +1271,7 @@ function renderLiveChats(data) {
         <td><span class="badge-status ${liveChatBadgeClass(status)}">${status}</span></td>
         <td class="text-sm text-muted">${typeof c.position === 'number' ? c.position : '—'}</td>
         <td class="text-sm text-muted">${formatDate(c.created_at)}</td>
-        <td><button class="btn btn-sm btn-primary" onclick="${actionFn}">${actionLabel}</button></td>
+        <td><button class="btn btn-sm btn-primary" data-action="open-live-chat" data-session-id="${escHtml(c.session_id)}">Open</button></td>
       </tr>`;
   }).join('');
 }
@@ -1341,39 +1516,148 @@ async function closeLiveChatSession() {
 
 // ── Announcements ──
 async function loadAnnouncements() {
+  const loadVersion = ++announcementLoadVersion;
   document.getElementById('ann-loading').classList.remove('hidden');
   document.getElementById('ann-table').classList.add('hidden');
   document.getElementById('ann-empty').classList.add('hidden');
+  document.getElementById('ann-pagination').classList.add('hidden');
   try {
-    const data = await apiFetch('/announcements');
-    if (!data) return;
+    const status = document.getElementById('ann-filter-status').value;
+    const search = document.getElementById('ann-search').value.trim();
+    const query = new URLSearchParams({ page: String(announcementPage), limit: '20' });
+    if (status) query.set('status', status);
+    if (search) query.set('search', search);
+    const data = await apiFetch(`/announcements/admin?${query.toString()}`);
+    if (!data || loadVersion !== announcementLoadVersion) return;
+    const items = Array.isArray(data.items) ? data.items : [];
+    const pagination = data.pagination || {};
+    announcementPage = Number(pagination.page || 1);
+    announcementTotalPages = Math.max(1, Number(pagination.total_pages || 1));
+    if (!items.length && announcementPage > announcementTotalPages) {
+      announcementPage = announcementTotalPages;
+      return loadAnnouncements();
+    }
     const tbody = document.getElementById('ann-tbody');
-    if (!data.length) {
+    tbody.innerHTML = '';
+    if (!items.length) {
       document.getElementById('ann-empty').classList.remove('hidden');
     } else {
       document.getElementById('ann-table').classList.remove('hidden');
-      tbody.innerHTML = data.map(a => `
+      tbody.innerHTML = items.map(a => {
+        const lifecycle = String(a.lifecycle_status || 'active').toLowerCase();
+        const delivery = String(a.delivery?.status || 'legacy').toLowerCase();
+        const audience = announcementAudienceLabel(a);
+        const deliveryDetail = delivery === 'delivered'
+          ? `${Number(a.delivery?.recipient_count || 0)} recipient${Number(a.delivery?.recipient_count || 0) === 1 ? '' : 's'}`
+          : a.delivery?.last_error || `${Number(a.delivery?.attempts || 0)} attempt${Number(a.delivery?.attempts || 0) === 1 ? '' : 's'}`;
+        const archiveButton = lifecycle !== 'archived'
+          ? `<button class="btn btn-sm btn-ghost" data-action="announcement-lifecycle" data-announcement-id="${escHtml(a.announcement_id)}" data-lifecycle-action="archive">Archive</button>`
+          : `<button class="btn btn-sm btn-ghost" data-action="announcement-lifecycle" data-announcement-id="${escHtml(a.announcement_id)}" data-lifecycle-action="activate">Activate</button>`;
+        const retryButton = delivery === 'failed'
+          ? `<button class="btn btn-sm btn-primary" data-action="announcement-lifecycle" data-announcement-id="${escHtml(a.announcement_id)}" data-lifecycle-action="retry_delivery">Retry delivery</button>`
+          : '';
+        return `
         <tr>
-          <td class="fw-700">${escHtml(a.title)}</td>
-          <td class="text-sm">${escHtml(a.category || '—')}</td>
-          <td><span class="badge-status badge-${a.priority === 'high' ? 'high' : 'normal'}">${a.priority || 'normal'}</span></td>
-          <td class="text-sm text-muted">${formatDate(a.created_at)}</td>
-        </tr>`).join('');
+          <td><div class="fw-700">${escHtml(a.title)}</div><div class="text-sm text-muted">${escHtml(a.category || 'General')} · ${escHtml(a.priority || 'normal')}</div></td>
+          <td class="ann-audience text-sm">${escHtml(audience)}</td>
+          <td><span class="badge-status badge-${escHtml(lifecycle)}">${escHtml(lifecycle)}</span></td>
+          <td><span class="badge-status badge-${escHtml(delivery)}">${escHtml(delivery)}</span><div class="text-sm text-muted mt-1" title="${escHtml(deliveryDetail)}">${escHtml(deliveryDetail)}</div></td>
+          <td class="text-sm text-muted">${formatDateTime(a.publish_at || a.created_at)}${a.expires_at ? `<div class="mt-1">Expires ${formatDateTime(a.expires_at)}</div>` : ''}</td>
+          <td><div class="ann-row-actions">${archiveButton}${retryButton}</div></td>
+        </tr>`;
+      }).join('');
     }
+    document.getElementById('ann-pagination').classList.remove('hidden');
+    document.getElementById('ann-page-summary').textContent = `Page ${announcementPage} of ${announcementTotalPages} · ${Number(pagination.total || 0)} total`;
+    document.getElementById('ann-prev-btn').disabled = announcementPage <= 1;
+    document.getElementById('ann-next-btn').disabled = announcementPage >= announcementTotalPages;
   } catch(e) {
-    showToast(e.message, 'error');
+    if (loadVersion === announcementLoadVersion) showToast(e.message, 'error');
   } finally {
-    document.getElementById('ann-loading').classList.add('hidden');
+    if (loadVersion === announcementLoadVersion) document.getElementById('ann-loading').classList.add('hidden');
   }
 }
 
-function showAnnouncementModal() {
+function announcementAudienceLabel(announcement) {
+  if (announcement.is_private) return `Tenant: ${tenantName(announcement.user_id)}`;
+  if (announcement.branch) {
+    const branch = announcementOptions?.branches?.find((item) => item.code === announcement.branch);
+    return `Branch: ${branch?.name || announcement.branch}`;
+  }
+  return 'All tenants';
+}
+
+function createAnnouncementRequestId() {
+  if (globalThis.crypto?.randomUUID) return `ann_${globalThis.crypto.randomUUID().replace(/-/g, '')}`;
+  return `ann_${Date.now()}_${Math.random().toString(36).slice(2, 12)}`;
+}
+
+function populateAnnouncementAudienceOptions() {
+  const branchSelect = document.getElementById('ann-branch');
+  const tenantSelect = document.getElementById('ann-tenant');
+  const selectedBranch = branchSelect.value;
+  const selectedTenant = tenantSelect.value;
+  const branches = Array.isArray(announcementOptions?.branches) ? announcementOptions.branches : [];
+  const tenants = Array.isArray(announcementOptions?.tenants) ? announcementOptions.tenants : [];
+  branchSelect.innerHTML = '<option value="">Select a branch</option>' + branches.map(branch =>
+    `<option value="${escHtml(branch.code)}">${escHtml(branch.name || branch.code)}</option>`
+  ).join('');
+  branchSelect.value = branches.some(branch => branch.code === selectedBranch) ? selectedBranch : '';
+  const eligibleTenants = branchSelect.value ? tenants.filter(tenant => tenant.branch === branchSelect.value) : tenants;
+  tenantSelect.innerHTML = '<option value="">Select a tenant</option>' + eligibleTenants.map(tenant =>
+    `<option value="${escHtml(tenant.user_id)}">${escHtml(tenant.name || tenant.email || tenant.user_id)}${tenant.branch ? ` · ${escHtml(tenant.branch)}` : ''}</option>`
+  ).join('');
+  tenantSelect.value = eligibleTenants.some(tenant => tenant.user_id === selectedTenant) ? selectedTenant : '';
+}
+
+function updateAnnouncementAudienceFields() {
+  const audienceType = document.getElementById('ann-audience-type').value;
+  document.getElementById('ann-branch-group').classList.toggle('hidden', audienceType === 'global');
+  document.getElementById('ann-tenant-group').classList.toggle('hidden', audienceType !== 'private');
+}
+
+function updateAnnouncementSubmitLabel() {
+  const publishValue = document.getElementById('ann-publish-at').value;
+  const isFuture = publishValue && new Date(publishValue).getTime() > Date.now();
+  document.getElementById('ann-submit-btn').textContent = isFuture ? 'Schedule Announcement' : 'Post Announcement';
+}
+
+async function loadAnnouncementOptions(search = '') {
+  const normalizedSearch = String(search || '').trim();
+  if (!announcementOptions || normalizedSearch !== announcementOptionSearch) {
+    const query = normalizedSearch ? `?search=${encodeURIComponent(normalizedSearch)}` : '';
+    const loadVersion = ++announcementOptionLoadVersion;
+    const options = await apiFetch(`/announcements/admin/options${query}`);
+    if (loadVersion !== announcementOptionLoadVersion) return;
+    announcementOptions = options;
+    announcementOptionSearch = normalizedSearch;
+  }
+  populateAnnouncementAudienceOptions();
+}
+
+async function showAnnouncementModal() {
   document.getElementById('ann-title').value = '';
   document.getElementById('ann-content').value = '';
   document.getElementById('ann-category').value = 'General';
   document.getElementById('ann-priority').value = 'normal';
+  document.getElementById('ann-audience-type').value = 'global';
+  document.getElementById('ann-publish-at').value = '';
+  document.getElementById('ann-expires-at').value = '';
+  document.getElementById('ann-tenant-search').value = '';
+  document.getElementById('ann-branch').value = '';
+  document.getElementById('ann-tenant').value = '';
+  announcementClientRequestId = createAnnouncementRequestId();
+  updateAnnouncementAudienceFields();
+  updateAnnouncementSubmitLabel();
   document.getElementById('ann-err').classList.add('hidden');
   document.getElementById('ann-modal').classList.remove('hidden');
+  try {
+    await loadAnnouncementOptions();
+  } catch (error) {
+    const err = document.getElementById('ann-err');
+    err.textContent = `Audience options could not be loaded: ${error.message}`;
+    err.classList.remove('hidden');
+  }
 }
 
 function closeAnnModal() {
@@ -1385,27 +1669,70 @@ async function submitAnnouncement() {
   const content = document.getElementById('ann-content').value.trim();
   const category = document.getElementById('ann-category').value;
   const priority = document.getElementById('ann-priority').value;
+  const audienceType = document.getElementById('ann-audience-type').value;
+  const branch = document.getElementById('ann-branch').value;
+  const tenantId = document.getElementById('ann-tenant').value;
+  const publishValue = document.getElementById('ann-publish-at').value;
+  const expiryValue = document.getElementById('ann-expires-at').value;
   const err = document.getElementById('ann-err');
   err.classList.add('hidden');
   if (!title || !content) { err.textContent = 'Title and content are required.'; err.classList.remove('hidden'); return; }
+  if (audienceType === 'branch' && !branch) { err.textContent = 'Select a branch for a branch announcement.'; err.classList.remove('hidden'); return; }
+  if (audienceType === 'private' && !tenantId) { err.textContent = 'Select a tenant for a private announcement.'; err.classList.remove('hidden'); return; }
+  const publishAt = publishValue ? new Date(publishValue) : null;
+  const expiresAt = expiryValue ? new Date(expiryValue) : null;
+  if ((publishAt && Number.isNaN(publishAt.getTime())) || (expiresAt && Number.isNaN(expiresAt.getTime()))) {
+    err.textContent = 'Publish and expiry must be valid dates.'; err.classList.remove('hidden'); return;
+  }
+  const effectivePublishAt = publishAt || new Date();
+  if (expiresAt && expiresAt <= effectivePublishAt) { err.textContent = 'Expiry must be after the publish time.'; err.classList.remove('hidden'); return; }
 
   const btn = document.getElementById('ann-submit-btn');
+  const idleLabel = publishAt && publishAt.getTime() > Date.now() ? 'Schedule Announcement' : 'Post Announcement';
   btn.disabled = true;
-  btn.innerHTML = '<span class="spinner"></span> Posting…';
+  btn.innerHTML = `<span class="spinner"></span> ${publishAt && publishAt.getTime() > Date.now() ? 'Scheduling' : 'Posting'}…`;
   try {
     await apiFetch('/announcements', {
       method: 'POST',
-      body: JSON.stringify({ title, content, category, priority, is_urgent: priority === 'high' })
+      body: JSON.stringify({
+        title,
+        content,
+        category,
+        priority,
+        is_urgent: priority === 'high',
+        is_private: audienceType === 'private',
+        ...(audienceType !== 'global' && branch ? { branch } : {}),
+        ...(audienceType === 'private' ? { user_id: tenantId } : {}),
+        ...(publishAt ? { publish_at: publishAt.toISOString() } : {}),
+        ...(expiresAt ? { expires_at: expiresAt.toISOString() } : {}),
+        client_request_id: announcementClientRequestId,
+      })
     });
     closeAnnModal();
-    showToast('Announcement posted!');
+    showToast(publishAt && publishAt.getTime() > Date.now() ? 'Announcement scheduled' : 'Announcement posted');
+    announcementPage = 1;
     loadAnnouncements();
   } catch(e) {
     err.textContent = e.message;
     err.classList.remove('hidden');
   } finally {
     btn.disabled = false;
-    btn.textContent = 'Post Announcement';
+    btn.textContent = idleLabel;
+  }
+}
+
+async function updateAnnouncementLifecycle(announcementId, action) {
+  if (!announcementId || !action) return;
+  if (action === 'archive' && !window.confirm('Archive this announcement? Tenants will no longer see it.')) return;
+  try {
+    await apiFetch(`/announcements/admin/${encodeURIComponent(announcementId)}/lifecycle`, {
+      method: 'PATCH',
+      body: JSON.stringify({ action }),
+    });
+    showToast(action === 'retry_delivery' ? 'Delivery retry queued' : `Announcement ${action === 'archive' ? 'archived' : 'activated'}`);
+    loadAnnouncements();
+  } catch (error) {
+    showToast(error.message, 'error');
   }
 }
 
@@ -1446,7 +1773,7 @@ function renderMaintenance(data) {
       <td><span class="badge-status badge-${m.urgency === 'high' ? 'high' : 'normal'}">${m.urgency || 'normal'}</span></td>
       <td><span class="badge-status badge-${m.status}">${m.status || '—'}</span></td>
       <td class="text-sm text-muted">${formatDate(m.created_at || m.createdAt)}</td>
-      <td><button class="btn btn-sm btn-ghost" onclick="openMaintModal('${rid}', '${m.status}')">Update</button></td>
+      <td><button class="btn btn-sm btn-ghost" data-action="open-maintenance" data-request-id="${escHtml(rid)}" data-status="${escHtml(m.status)}">Update</button></td>
     </tr>`;
   }).join('');
 }
@@ -1587,7 +1914,7 @@ function renderMaintAttachmentPreview() {
   container.innerHTML = currentMaintAttachments.map((attachment, index) => `
     <div class="attachment-chip">
       <span>${escHtml(attachment.name || `Photo ${index + 1}`)}</span>
-      <button type="button" onclick="removeMaintAttachment(${index})" aria-label="Remove attachment">&times;</button>
+      <button type="button" data-action="remove-maintenance-attachment" data-index="${index}" aria-label="Remove attachment">&times;</button>
     </div>
   `).join('');
 }
@@ -1789,9 +2116,81 @@ function formatDateTime(val) {
 }
 
 // ── Init ──
-if (sessionToken) {
+document.getElementById('login-btn').addEventListener('click', doLogin);
+document.getElementById('login-password').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') doLogin();
+});
+document.getElementById('boot-retry-btn').addEventListener('click', () => {
+  document.getElementById('boot-actions').classList.add('hidden');
+  document.getElementById('boot-message').textContent = 'Restoring your secure admin session…';
   bootApp();
-}
+});
+document.getElementById('logout-btn').addEventListener('click', doLogout);
+document.getElementById('refresh-btn').addEventListener('click', refreshPage);
+document.getElementById('view-all-tickets-btn').addEventListener('click', () => navigate('tickets'));
+document.getElementById('livechat-refresh-btn').addEventListener('click', () => loadLiveChats());
+document.getElementById('new-announcement-btn').addEventListener('click', showAnnouncementModal);
+document.getElementById('ann-filter-status').addEventListener('change', () => { announcementPage = 1; loadAnnouncements(); });
+document.getElementById('ann-search-btn').addEventListener('click', () => { announcementPage = 1; loadAnnouncements(); });
+document.getElementById('ann-search').addEventListener('keydown', (event) => {
+  if (event.key === 'Enter') { announcementPage = 1; loadAnnouncements(); }
+});
+document.getElementById('ann-prev-btn').addEventListener('click', () => {
+  if (announcementPage > 1) { announcementPage -= 1; loadAnnouncements(); }
+});
+document.getElementById('ann-next-btn').addEventListener('click', () => {
+  if (announcementPage < announcementTotalPages) { announcementPage += 1; loadAnnouncements(); }
+});
+document.getElementById('ann-audience-type').addEventListener('change', updateAnnouncementAudienceFields);
+document.getElementById('ann-branch').addEventListener('change', populateAnnouncementAudienceOptions);
+document.getElementById('ann-tenant-search').addEventListener('input', (event) => {
+  clearTimeout(announcementTenantSearchTimer);
+  announcementTenantSearchTimer = setTimeout(() => {
+    loadAnnouncementOptions(event.target.value).catch(error => showToast(error.message, 'error'));
+  }, 300);
+});
+document.getElementById('ann-publish-at').addEventListener('change', updateAnnouncementSubmitLabel);
+document.getElementById('ticket-filter-status').addEventListener('change', loadTickets);
+document.getElementById('ticket-search').addEventListener('input', filterTicketTable);
+document.getElementById('livechat-filter-status').addEventListener('change', () => loadLiveChats());
+document.getElementById('maint-filter-status').addEventListener('change', loadMaintenance);
+document.getElementById('maint-search').addEventListener('input', filterMaintenanceTable);
+document.getElementById('user-filter-role').addEventListener('change', filterUserTable);
+document.getElementById('user-search').addEventListener('input', filterUserTable);
+document.getElementById('ticket-panel').addEventListener('click', closePanelOnBackdrop);
+document.getElementById('ticket-panel-close-btn').addEventListener('click', closePanel);
+document.getElementById('send-reply-btn').addEventListener('click', sendReply);
+document.getElementById('livechat-panel').addEventListener('click', closeLiveChatPanelOnBackdrop);
+document.getElementById('livechat-close-btn').addEventListener('click', closeLiveChatSession);
+document.getElementById('livechat-panel-close-btn').addEventListener('click', closeLiveChatPanel);
+document.getElementById('livechat-accept-btn').addEventListener('click', acceptLiveChat);
+document.getElementById('livechat-send-btn').addEventListener('click', sendLiveChatReply);
+document.getElementById('ann-cancel-btn').addEventListener('click', closeAnnModal);
+document.getElementById('ann-submit-btn').addEventListener('click', submitAnnouncement);
+document.getElementById('maint-attachments').addEventListener('change', handleMaintAttachmentChange);
+document.getElementById('maint-cancel-btn').addEventListener('click', closeMaintModal);
+document.getElementById('maint-submit-btn').addEventListener('click', submitMaintStatus);
+document.querySelectorAll('.nav-item').forEach((item) => {
+  item.addEventListener('click', () => navigate(item.dataset.page));
+});
+document.addEventListener('click', (event) => {
+  const target = event.target.closest('[data-action]');
+  if (!target) return;
+  if (target.dataset.action === 'open-ticket') {
+    openTicketPanel(target.dataset.ticketId);
+  } else if (target.dataset.action === 'open-live-chat') {
+    openLiveChatPanel(target.dataset.sessionId);
+  } else if (target.dataset.action === 'open-maintenance') {
+    openMaintModal(target.dataset.requestId, target.dataset.status);
+  } else if (target.dataset.action === 'remove-maintenance-attachment') {
+    const index = Number.parseInt(target.dataset.index, 10);
+    if (Number.isInteger(index)) removeMaintAttachment(index);
+  } else if (target.dataset.action === 'announcement-lifecycle') {
+    updateAnnouncementLifecycle(target.dataset.announcementId, target.dataset.lifecycleAction);
+  }
+});
+
+bootApp();
 </script>
 </body>
 </html>

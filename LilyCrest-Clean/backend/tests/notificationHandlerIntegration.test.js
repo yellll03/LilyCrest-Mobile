@@ -132,7 +132,8 @@ function fakeRes() {
 async function run(handler, db, req) {
   currentDb = db;
   const res = fakeRes();
-  await handler(req, res);
+  const request = req.user ? { ...req, user: { role: 'tenant', ...req.user } } : req;
+  await handler(request, res);
   return res;
 }
 
@@ -161,6 +162,35 @@ test('getMyNotifications: shows a branch-restricted announcement to a tenant in 
   });
   const res = await run(getMyNotifications, db, { user: { user_id: 'tenant-gil' } });
   assert.deepEqual(res.body.map((n) => n.announcement_id), ['a-gp']);
+});
+
+test('getMyNotifications: removes already-stored leaked branch/private/future/expired announcement rows', async () => {
+  const announcements = [
+    { announcement_id: 'a-gp', title: 'Other branch', content: 'branch secret', branch: 'gil-puyat', created_at: new Date() },
+    { announcement_id: 'a-private', title: 'Other tenant', content: 'private secret', is_private: true, user_id: 'tenant-other', created_at: new Date() },
+    { announcement_id: 'a-future', title: 'Future', content: 'not yet', publishedAt: new Date('2099-01-01T00:00:00Z'), created_at: new Date() },
+    { announcement_id: 'a-expired', title: 'Expired', content: 'too late', expiresAt: new Date('2000-01-01T00:00:00Z'), created_at: new Date() },
+    { announcement_id: 'a-gu', title: 'My branch', content: 'allowed', branch: 'guadalupe', created_at: new Date() },
+  ];
+  const notifications = announcements.map((announcement) => ({
+    notification_id: `n-${announcement.announcement_id}`,
+    user_id: 'tenant-gu',
+    title: announcement.title,
+    body: announcement.content,
+    source: 'announcement',
+    type: 'announcement',
+    announcement_id: announcement.announcement_id,
+    created_at: new Date(),
+  }));
+  const db = fakeDb({
+    announcements,
+    notifications,
+    reservations: [GUADALUPE_RESERVATION],
+    requesterUserId: 'tenant-gu',
+  });
+  const res = await run(getMyNotifications, db, { user: { user_id: 'tenant-gu' } });
+  assert.deepEqual(res.body.map((n) => n.announcement_id), ['a-gu']);
+  assert.ok(!JSON.stringify(res.body).includes('secret'));
 });
 
 test('getMyNotifications: only returns the requesting user’s own stored notifications, never another user’s', async () => {

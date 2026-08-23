@@ -18,7 +18,8 @@ try {
   console.warn('[SecureAuth] expo-secure-store not available');
 }
 
-const SESSION_TOKEN_KEY = 'session_token';
+const LEGACY_SESSION_TOKEN_KEY = 'session_token';
+const SESSION_CREDENTIALS_KEY = 'lilycrest_session_credentials_v2';
 const BIOMETRIC_SETTING_KEY = 'biometricLogin';
 const BIOMETRIC_SESSION_KEY = 'lilycrest_bio_session_enabled';
 const PENDING_LOGIN_KEY = 'lilycrest_pending_login';
@@ -31,19 +32,7 @@ const LEGACY_KEYS = {
 };
 
 let memoryPendingLogin = null;
-// Holds the session token for a "Remember Me" = off login. Kept only in this
-// module's memory (never SecureStore/AsyncStorage) so it is lost on app kill
-// (fresh JS engine) but survives normal backgrounding within the same run.
-let memoryOnlySessionToken = null;
-// Whether the current session was established with "Remember Me" on. A
-// silent same-run session refresh (see api.js's refreshGoogleSession) must
-// preserve this instead of defaulting to true, or it would silently promote
-// a non-remembered session into a durable one.
-let currentSessionRemembered = true;
-
-export function isCurrentSessionRemembered() {
-  return currentSessionRemembered;
-}
+let memorySessionCredentials = null;
 
 function canUseSecureStore() {
   return Boolean(SecureStore) && Platform.OS !== 'web';
@@ -51,7 +40,7 @@ function canUseSecureStore() {
 
 async function deleteSecureItem(key) {
   if (!canUseSecureStore()) return;
-  await SecureStore.deleteItemAsync(key).catch(() => {});
+  await Promise.resolve(SecureStore.deleteItemAsync(key)).catch(() => {});
 }
 
 async function setSecureItem(key, value) {
@@ -75,65 +64,114 @@ export async function migrateLegacyCredentials() {
       deleteSecureItem(LEGACY_KEYS.email),
       deleteSecureItem(LEGACY_KEYS.password),
       AsyncStorage.removeItem(LEGACY_KEYS.stored).catch(() => {}),
+      AsyncStorage.removeItem('remember_me').catch(() => {}),
     ]);
   } catch (err) {
     console.warn('[SecureAuth] Legacy credential cleanup failed:', err?.message);
   }
 }
 
-export async function getSessionToken() {
-  if (memoryOnlySessionToken) return memoryOnlySessionToken;
-  let token = await getSecureItem(SESSION_TOKEN_KEY).catch(() => null);
-  if (token) return token;
-  const legacyToken = await AsyncStorage.getItem(SESSION_TOKEN_KEY).catch(() => null);
-  if (!legacyToken) return null;
-  try {
-    await setSecureItem(SESSION_TOKEN_KEY, legacyToken);
-    await AsyncStorage.removeItem(SESSION_TOKEN_KEY);
-    token = legacyToken;
-  } catch (error) {
-    console.warn('[SecureAuth] Session token migration failed:', error?.message);
-  }
-  return token;
+function normalizeSessionCredentials(value) {
+  if (!value || typeof value !== 'object') return null;
+  const sessionToken = typeof value.sessionToken === 'string' ? value.sessionToken.trim() : '';
+  if (!sessionToken) return null;
+  return {
+    sessionToken,
+    refreshToken: typeof value.refreshToken === 'string' ? value.refreshToken.trim() : '',
+    expiresAt: typeof value.expiresAt === 'string' ? value.expiresAt : null,
+    refreshExpiresAt: typeof value.refreshExpiresAt === 'string' ? value.refreshExpiresAt : null,
+  };
 }
 
-export async function setSessionToken(token, { remember = true } = {}) {
+async function readSecureSessionBundle() {
+  if (!canUseSecureStore()) return memorySessionCredentials;
+  const raw = await getSecureItem(SESSION_CREDENTIALS_KEY).catch(() => null);
+  if (!raw) return null;
+  try {
+    return normalizeSessionCredentials(JSON.parse(raw));
+  } catch (_) {
+    await deleteSecureItem(SESSION_CREDENTIALS_KEY);
+    return null;
+  }
+}
+
+export async function getSessionCredentials() {
+  const current = await readSecureSessionBundle();
+  if (current) return current;
+
+  // One-time migration from the previous SecureStore token key, followed by
+  // the older AsyncStorage key. New credentials are never written to ordinary
+  // plaintext storage.
+  let legacyToken = await getSecureItem(LEGACY_SESSION_TOKEN_KEY).catch(() => null);
+  let migratedFromAsyncStorage = false;
+  if (!legacyToken) {
+    legacyToken = await AsyncStorage.getItem(LEGACY_SESSION_TOKEN_KEY).catch(() => null);
+    migratedFromAsyncStorage = Boolean(legacyToken);
+  }
+  if (!legacyToken) return null;
+
+  try {
+    await setSessionToken(legacyToken);
+    if (migratedFromAsyncStorage) {
+      await AsyncStorage.removeItem(LEGACY_SESSION_TOKEN_KEY);
+    }
+    await deleteSecureItem(LEGACY_SESSION_TOKEN_KEY);
+  } catch (error) {
+    console.warn('[SecureAuth] Session token migration failed:', error?.message);
+    if (migratedFromAsyncStorage) {
+      await AsyncStorage.removeItem(LEGACY_SESSION_TOKEN_KEY).catch(() => {});
+    }
+    return null;
+  }
+  return readSecureSessionBundle();
+}
+
+export async function getSessionToken() {
+  const credentials = await getSessionCredentials();
+  return credentials?.sessionToken || null;
+}
+
+export async function setSessionToken(token, {
+  refreshToken = '',
+  expiresAt = null,
+  refreshExpiresAt = null,
+} = {}) {
   const normalized = typeof token === 'string' ? token.trim() : '';
   if (!normalized) return removeSessionToken();
 
-  currentSessionRemembered = remember;
+  const credentials = normalizeSessionCredentials({
+    sessionToken: normalized,
+    refreshToken,
+    expiresAt: expiresAt ? new Date(expiresAt).toISOString() : null,
+    refreshExpiresAt: refreshExpiresAt ? new Date(refreshExpiresAt).toISOString() : null,
+  });
+  if (!credentials) return removeSessionToken();
 
-  if (!remember) {
-    // "Remember Me" is off: keep the token in memory only so the session
-    // does not survive an app kill, and make sure no durable copy lingers
-    // from a prior "Remember Me" = on login on this device.
-    memoryOnlySessionToken = normalized;
-    await Promise.all([
-      deleteSecureItem(SESSION_TOKEN_KEY),
-      AsyncStorage.removeItem(SESSION_TOKEN_KEY).catch(() => {}),
-    ]);
-    return;
-  }
-
-  memoryOnlySessionToken = null;
   if (!canUseSecureStore()) {
-    await AsyncStorage.setItem(SESSION_TOKEN_KEY, normalized);
+    // A platform without SecureStore gets only process-memory credentials.
+    // Never downgrade bearer/refresh secrets into AsyncStorage plaintext.
+    memorySessionCredentials = credentials;
     return;
   }
-  await setSecureItem(SESSION_TOKEN_KEY, normalized);
-  await AsyncStorage.removeItem(SESSION_TOKEN_KEY).catch(() => {});
-}
 
-export async function removeSessionToken() {
-  memoryOnlySessionToken = null;
-  currentSessionRemembered = true;
+  await setSecureItem(SESSION_CREDENTIALS_KEY, JSON.stringify(credentials));
+  memorySessionCredentials = null;
   await Promise.all([
-    deleteSecureItem(SESSION_TOKEN_KEY),
-    AsyncStorage.removeItem(SESSION_TOKEN_KEY).catch(() => {}),
+    deleteSecureItem(LEGACY_SESSION_TOKEN_KEY),
+    AsyncStorage.removeItem(LEGACY_SESSION_TOKEN_KEY).catch(() => {}),
   ]);
 }
 
-export async function savePendingLogin({ otpToken, email, maskedEmail, rememberMe } = {}) {
+export async function removeSessionToken() {
+  memorySessionCredentials = null;
+  await Promise.all([
+    deleteSecureItem(SESSION_CREDENTIALS_KEY),
+    deleteSecureItem(LEGACY_SESSION_TOKEN_KEY),
+    AsyncStorage.removeItem(LEGACY_SESSION_TOKEN_KEY).catch(() => {}),
+  ]);
+}
+
+export async function savePendingLogin({ otpToken, email, maskedEmail, rememberEmail = false } = {}) {
   const token = typeof otpToken === 'string' ? otpToken.trim() : '';
   if (!token) return false;
 
@@ -141,7 +179,7 @@ export async function savePendingLogin({ otpToken, email, maskedEmail, rememberM
     otpToken: token,
     email: typeof email === 'string' ? email.trim().toLowerCase() : '',
     maskedEmail: typeof maskedEmail === 'string' ? maskedEmail : '',
-    rememberMe: rememberMe === true,
+    rememberEmail: rememberEmail === true,
     createdAt: Date.now(),
   });
 
@@ -172,7 +210,7 @@ export async function getPendingLogin() {
       otpToken,
       email: typeof parsed.email === 'string' ? parsed.email : '',
       maskedEmail: typeof parsed.maskedEmail === 'string' ? parsed.maskedEmail : '',
-      rememberMe: parsed.rememberMe === true,
+      rememberEmail: parsed.rememberEmail === true,
     };
   } catch (_) {
     await clearPendingLogin();

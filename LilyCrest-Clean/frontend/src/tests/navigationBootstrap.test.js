@@ -16,16 +16,28 @@ describe('authenticated navigation bootstrap', () => {
   const authContext = read('src/context/AuthContext.js');
 
   test('authentication, cold start, and restored sessions enter Home', () => {
-    expect(login).toContain("router.replace('/(tabs)/home')");
+    expect(login).toContain('resetToHome(router)');
     expect(authContext).toContain('getSessionToken()');
-    expect(index).toContain("router.replace('/(tabs)/home')");
+    expect(index).toContain("router.replace('/login')");
+    expect(index).not.toContain("router.push('/login')");
     expect(tabLayout).toContain('initialRouteName="home"');
-    expect(tabLayout).toContain('backBehavior="history"');
+    expect(tabLayout).toContain('backBehavior="initialRoute"');
+    expect(rootLayout).toContain("initialRouteName: '(tabs)'");
   });
 
-  test('logout returns protected navigation to Login', () => {
+  test('auth entry and protected routes are replaced with canonical roots', () => {
     expect(authContext).toContain("setAuthStatus('unauthenticated')");
-    expect(rootLayout).toContain("router.replace('/login')");
+    expect(rootLayout).toContain('resetToHome(router)');
+    expect(rootLayout).toContain('resetToLogin(router)');
+    expect(rootLayout).toContain('authenticatedAuthPath');
+    expect(rootLayout).toContain('unauthenticatedProtectedPath');
+  });
+
+  test('cold-start notifications wait for the authenticated root and are idempotent', () => {
+    expect(authContext).toContain('isAuthenticatedNavigationReady(authStatus, pathname, segments)');
+    expect(authContext).toContain('navigateToNotificationDestination(routerRef.current, destination)');
+    expect(authContext).toContain('lastNotificationNavigationRef');
+    expect(authContext).toContain('discardInitialNotificationResponseRef');
   });
 
   test('explicit notification destinations remain exceptions to Home bootstrap', () => {
@@ -41,5 +53,11 @@ describe('authenticated navigation bootstrap', () => {
       pathname: '/(tabs)/announcements',
       params: { announcementId: 'announcement-1' },
     });
+  });
+
+  test('empty and unknown notification payloads preserve the current route', () => {
+    expect(resolveNotificationRoute()).toBeNull();
+    expect(resolveNotificationRoute({})).toBeNull();
+    expect(resolveNotificationRoute({ type: 'unknown-event' })).toBeNull();
   });
 });

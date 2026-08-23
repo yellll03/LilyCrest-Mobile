@@ -78,7 +78,6 @@ function stubGeminiService() {
       sendGeminiMessageCalls += 1;
       return { text: 'STUBBED AI RESPONSE — should not appear for out-of-scope messages' };
     },
-    liveChatQueue: new Map(),
     chatSessions: new Map(),
     isQuotaError: () => false,
   };

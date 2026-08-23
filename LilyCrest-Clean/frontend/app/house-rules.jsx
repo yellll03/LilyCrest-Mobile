@@ -115,7 +115,7 @@ export default function HouseRulesScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScreenHeader strong title="House Rules" subtitle="Lilycrest tenant guidelines" onBack={() => safeBack(router, '/(tabs)/home')} />
+      <ScreenHeader strong title="House Rules" subtitle="Lilycrest tenant guidelines" onBack={() => safeBack(router)} />
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.introCard}>

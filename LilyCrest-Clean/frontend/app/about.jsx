@@ -18,7 +18,7 @@ export default function AboutScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScreenHeader strong title="About Lilycrest" subtitle="Dormitory Management System" onBack={() => safeBack(router, '/(tabs)/profile')} />
+      <ScreenHeader strong title="About Lilycrest" subtitle="Dormitory Management System" onBack={() => safeBack(router)} />
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         <View style={styles.logoSection}>

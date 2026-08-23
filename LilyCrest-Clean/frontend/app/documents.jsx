@@ -31,7 +31,7 @@ export default function DocumentsScreen() {
         strong
         title="House Rules & Documents"
         subtitle="Policies, safety guidance, and your lease"
-        onBack={() => safeBack(router, '/(tabs)/home')}
+        onBack={() => safeBack(router)}
       />
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>

@@ -109,8 +109,42 @@ function sanitizeUserForClient(user) {
   return safe;
 }
 
+const ADMIN_LIST_USER_FIELDS = [
+  'user_id',
+  'email',
+  'emailAddress',
+  'google_email',
+  'name',
+  'fullName',
+  'firstName',
+  'lastName',
+  'role',
+  'room_number',
+  'roomNumber',
+  'room',
+  'status',
+  'isActive',
+  'is_active',
+  'branch',
+  'branch_id',
+  'created_at',
+  'createdAt',
+];
+
+function sanitizeUserForAdminList(user) {
+  if (!user) return user;
+  const safe = {};
+  for (const field of ADMIN_LIST_USER_FIELDS) {
+    if (Object.prototype.hasOwnProperty.call(user, field)) {
+      safe[field] = user[field];
+    }
+  }
+  return safe;
+}
+
 module.exports = {
   normalizeUser,
   firstNonEmptyString,
   sanitizeUserForClient,
+  sanitizeUserForAdminList,
 };

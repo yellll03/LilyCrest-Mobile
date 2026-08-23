@@ -2,8 +2,7 @@
 //   1. PayMongo webhook signature verification fails closed.
 //   2. POST /billing and PUT /billing/:billingId remain admin-gated (tenant
 //      cannot create bills or mutate bill status).
-//   3. GET /chatbot/live-status/:sessionId enforces session ownership
-//      (cross-tenant IDOR).
+//   3. Retired live-chat paths cannot expose or mutate legacy support data.
 const test = require('node:test');
 const assert = require('node:assert/strict');
 
@@ -83,7 +82,7 @@ test('PUT /billing/:billingId route enforces adminMiddleware (tenants cannot mut
   assert.ok(handlerNames.includes('adminMiddleware'), `PUT /billing/:billingId must enforce adminMiddleware, got: ${handlerNames.join(', ')}`);
 });
 
-// ── Live-chat cross-tenant IDOR ─────────────────────────────────────────────
+// ── Legacy live-chat retirement ─────────────────────────────────────────────
 
 test('GET /chatbot/live-status/:sessionId route requires authentication', () => {
   delete require.cache[require.resolve('../routes/chatbot.routes')];
@@ -94,53 +93,27 @@ test('GET /chatbot/live-status/:sessionId route requires authentication', () => 
   assert.ok(handlerNames.includes('authMiddleware'), `live-status route must require authMiddleware, got: ${handlerNames.join(', ')}`);
 });
 
-test('tenant can read their own live-chat status', async () => {
-  const { getLiveStatus, __test } = require('../controllers/chatbot.controller');
-  __test.liveChatQueue.set('tenant-a_own', {
-    user_id: 'tenant-a', status: 'active', position: 1, admin_name: 'Admin', messages: [{ sender: 'admin', content: 'hi tenant-a' }],
-  });
-  try {
+test('every retired live-chat handler fails closed without touching legacy data', async () => {
+  let dbTouched = false;
+  const db = { collection() { dbTouched = true; throw new Error('legacy database access is forbidden'); } };
+  const controller = loadWithDb('../controllers/chatbot.controller', db);
+  const handlers = [
+    controller.getLiveStatus,
+    controller.getLiveChats,
+    controller.acceptLiveChat,
+    controller.sendAdminMessage,
+    controller.closeLiveChat,
+    controller.getChatHistory,
+  ];
+
+  for (const handler of handlers) {
     const res = response();
-    await getLiveStatus({ params: { sessionId: 'tenant-a_own' }, user: { user_id: 'tenant-a' } }, res);
-    assert.equal(res.body.active, true);
-    assert.equal(res.body.admin_name, 'Admin');
-    assert.equal(res.body.messages.length, 1);
-  } finally {
-    __test.liveChatQueue.delete('tenant-a_own');
+    await handler({ params: {}, body: {}, user: { user_id: 'tenant-a', role: 'tenant' } }, res);
+    assert.equal(res.statusCode, 410);
+    assert.equal(res.body.code, 'LEGACY_SUPPORT_RETIRED');
+    assert.equal(res.body.canonical.tenant, '/api/chat/me');
+    assert.equal(res.body.canonical.admin, '/api/chat/admin/conversations');
   }
-});
 
-test('tenant cannot read another tenant live-chat status/messages (cross-tenant IDOR)', async () => {
-  const { getLiveStatus, __test } = require('../controllers/chatbot.controller');
-  __test.liveChatQueue.set('tenant-b_secret', {
-    user_id: 'tenant-b', status: 'active', position: 1, admin_name: 'Admin B', messages: [{ sender: 'admin', content: 'confidential to tenant-b' }],
-  });
-  try {
-    const res = response();
-    await getLiveStatus({ params: { sessionId: 'tenant-b_secret' }, user: { user_id: 'tenant-a' } }, res);
-    assert.deepEqual(res.body, { active: false, in_queue: false });
-    assert.equal(res.body.messages, undefined);
-    assert.equal(res.body.admin_name, undefined);
-  } finally {
-    __test.liveChatQueue.delete('tenant-b_secret');
-  }
-});
-
-test('nonexistent live-chat session returns the normal not-found shape', async () => {
-  const { getLiveStatus } = require('../controllers/chatbot.controller');
-  const res = response();
-  await getLiveStatus({ params: { sessionId: 'nobody_000' }, user: { user_id: 'tenant-a' } }, res);
-  assert.deepEqual(res.body, { active: false, in_queue: false });
-});
-
-test('getOwnedLiveChat only resolves sessions owned by the requesting user', () => {
-  const { __test } = require('../controllers/chatbot.controller');
-  __test.liveChatQueue.set('owner-check_1', { user_id: 'tenant-a', status: 'waiting' });
-  try {
-    assert.ok(__test.getOwnedLiveChat('owner-check_1', 'tenant-a'));
-    assert.equal(__test.getOwnedLiveChat('owner-check_1', 'tenant-b'), null);
-    assert.equal(__test.getOwnedLiveChat('missing-session', 'tenant-a'), null);
-  } finally {
-    __test.liveChatQueue.delete('owner-check_1');
-  }
+  assert.equal(dbTouched, false, 'retired handlers must never read or mutate legacy support collections');
 });

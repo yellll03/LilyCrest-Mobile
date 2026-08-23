@@ -26,7 +26,8 @@ import {
   enableBiometricSession,
   getPendingLogin,
 } from '../src/services/secureCredentials';
-import { safeBack } from '../src/utils/navigation';
+import { saveRememberedEmail } from '../src/services/rememberedEmail';
+import { resetToHome, safeBack } from '../src/utils/navigation';
 
 const OTP_LENGTH = 6;
 const RESEND_COOLDOWN = 60; // seconds
@@ -61,7 +62,6 @@ export default function OtpVerifyScreen() {
   const resendGuardRef = useRef(false);
   const otpToken = pendingLogin?.otpToken || '';
   const maskedEmail = pendingLogin?.maskedEmail || routeMaskedEmail || 'your email';
-  const rememberMe = pendingLogin?.rememberMe === true;
   const savedEmail = pendingLogin?.email || '';
 
   useEffect(() => {
@@ -161,7 +161,7 @@ export default function OtpVerifyScreen() {
     setError(null);
 
     try {
-      const result = await verifyLoginOtp(otpToken, code, rememberMe);
+      const result = await verifyLoginOtp(otpToken, code);
 
       if (!result.success) {
         setError(result.error || 'Invalid code. Please try again.');
@@ -171,15 +171,13 @@ export default function OtpVerifyScreen() {
         return;
       }
 
+      await saveRememberedEmail({
+        rememberEmail: pendingLogin?.rememberEmail === true,
+        email: savedEmail,
+      }).catch((preferenceError) => {
+        console.warn('Remembered email update failed:', preferenceError?.message);
+      });
       await clearPendingLogin();
-
-    // Persist remember-me and biometric preferences post-OTP
-      await AsyncStorage.setItem('remember_me', rememberMe ? 'true' : 'false');
-      if (rememberMe && savedEmail) {
-        await AsyncStorage.setItem('last_email', savedEmail);
-      } else {
-        await AsyncStorage.removeItem('last_email');
-      }
 
     // Offer biometric if available and not yet enabled
       const hasHardware = await LocalAuthentication.hasHardwareAsync();
@@ -188,7 +186,7 @@ export default function OtpVerifyScreen() {
 
       if (hasHardware && isEnrolled && bioSetting === 'true') {
         await enableBiometricSession(savedEmail);
-        router.replace('/(tabs)/home');
+        resetToHome(router);
       } else if (hasHardware && isEnrolled && bioSetting !== 'true') {
         showAlert({
         title: 'Enable Biometric Login',
@@ -196,7 +194,7 @@ export default function OtpVerifyScreen() {
         type: 'info',
         icon: 'finger-print',
         buttons: [
-          { text: 'Not Now', style: 'cancel', onPress: () => router.replace('/(tabs)/home') },
+          { text: 'Not Now', style: 'cancel', onPress: () => resetToHome(router) },
           {
             text: 'Enable',
             onPress: async () => {
@@ -211,13 +209,13 @@ export default function OtpVerifyScreen() {
                   await enableBiometricSession(savedEmail);
                 }
               } catch (_) {}
-              router.replace('/(tabs)/home');
+              resetToHome(router);
             },
           },
         ],
         });
       } else {
-        router.replace('/(tabs)/home');
+        resetToHome(router);
       }
     } catch (error) {
       setError(getApiErrorMessage(error, 'Unable to finish verification. Please try again.'));

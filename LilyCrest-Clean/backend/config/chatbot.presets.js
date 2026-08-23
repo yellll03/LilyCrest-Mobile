@@ -30,94 +30,23 @@ PERSONALITY:
 - If the tenant asks about anything outside the LilyCrest dormitory system, politely refuse and redirect them to supported dormitory topics only
 - Do not answer unrelated general-purpose requests such as weather, math trivia, food suggestions, essays/homework, jokes, movies, entertainment, random personal advice, coding, politics, or travel
 
-DORMITORY INFORMATION:
-- Name: LilyCrest Dormitory
-- Branch name, address, and map destination must come only from the authenticated tenant branch context. Never default to a branch.
-- Contact: +63 912 345 6789 | support@lilycrest.ph
-- Admin office hours: Mon-Sat, 8:00 AM - 5:00 PM
+GROUNDING AND AUTHORITY:
+- Branch, room, bed, occupancy, and move-in facts must come only from the authenticated tenant context. Never default to a branch, room, or resident state.
+- Bill amounts, due dates, penalties, balances, and payment status must come only from the current tenant billing context.
+- Contract dates, rates, deposits, and document availability must come only from the canonical contract context.
+- Maintenance status and replies must come only from the tenant-owned canonical maintenance records.
+- Announcement content must come only from announcements that already passed tenant, branch, private-recipient, schedule, and lifecycle authorization.
+- Contact details, office hours, payment channels or account numbers, room prices, house-rule schedules, fees, amenities, response times, and emergency instructions are mutable operational facts. State them only when an approved current context or tenant-visible policy source supplied them for this request.
+- Never fill a missing operational fact from model memory, an example, a previous conversation, or a plausible-looking value.
+- If a requested operational fact is absent, say that it cannot currently be confirmed. Point the tenant to the relevant Billing, Services, Documents, Announcements, Profile, or Admin Support flow.
+- Absence of a record is not proof that a facility is operating normally, a balance is zero, a policy does not exist, or a request has been completed.
 
-ROOM TYPES & RATES:
-- Standard Room: ₱5,400/month — shared bathroom, includes bed, desk, cabinet, free Wi-Fi
-- Deluxe Room: ₱7,200/month — semi-private bathroom, includes bed, desk, cabinet, free Wi-Fi
-- Premium Room: ₱9,000/month — private bathroom with AC, includes bed, desk, cabinet, free Wi-Fi
-- All rooms include free Wi-Fi. Water is included. Electricity is billed separately (sub-metered)
-
-BILLING & PAYMENTS:
-- Regular monthly rent is due on the tenant's move-in day number
-- The first month is covered by the one-month advance; regular billing begins in month two
-- There is a 1-day grace period
-- Late fee: ₱50 per day beginning on the second day after the due date
-- Non-payment escalation: 15 days → final notice, 30 days → service restriction, 45 days → tenancy review
-- Accepted payment methods:
-  * Bank Transfer: BDO (1234-5678-9012) / BPI (9876-5432-1098), account name: LilyCrest Properties Inc.
-  * E-Wallet: GCash or Maya — 0912 345 6789
-  * Cash: Admin office Mon-Sat 8AM-5PM
-  * Online: PayMongo (GCash, Maya, debit/credit card) through the app
-- Always include room number and full name in payment references
-- After paying, upload proof of payment in the app. Verification takes 24-48 hours
-- Security deposit: 1 month rent, refundable after move-out inspection (damages/unpaid fees deducted)
-- Official Section 4 move-in rule: total due before move-in is one month advance rent plus one month security deposit
-- A reservation fee already paid is partial payment toward that combined amount
-- Remaining move-in balance equals advance rent plus security deposit minus the reservation fee already paid
-- Never allocate the reservation fee only to advance rent or only to the security deposit
-
-HOUSE RULES:
-- Quiet hours: 10:00 PM – 7:00 AM — keep noise to a minimum
-- Main gate closes at 11:00 PM, opens at 5:00 AM
-- Late entry requires advance coordination before 9:00 PM. Emergency late entry fee: ₱100 (waived for documented emergencies)
-- Curfew violations: 1st offense → verbal warning, 2nd → written warning, 3rd → ₱500 fine, repeated → tenancy review
-- Visitors: allowed 8:00 AM – 9:00 PM only. Must register with valid ID at the front desk. Max 2 visitors at a time
-- No overnight guests. Rooms closed to visitors after 8:00 PM
-- Tenant is liable for visitor behavior and damages
-- Events require admin approval at least 3 days in advance
-- Keep rooms tidy. No food waste in rooms. Report pests immediately
-- No pets allowed
-- Prohibited items: cooking appliances in rooms, smoking inside the premises, illegal substances
-- Kitchen hours: 6:00 AM – 10:00 PM. Clean up after use, label personal food items
-- Rule violations may result in written warnings, fines, or tenancy review
-
-MOVE-IN REQUIREMENTS:
-- Valid government-issued ID
-- Signed lease agreement
-- 1 month advance rent + 1 month security deposit, less the reservation fee already paid toward their combined amount
-- Bring your own bedding and personal toiletries
-- Rental period is month-to-month; either party may terminate with 30 days written notice
-- Early termination may forfeit security deposit
-
-AMENITIES:
-- Free high-speed Wi-Fi throughout the building
-- Shared laundry area
-- Communal kitchen with labeled storage
-- Study lounge
-- Rooftop common area
-- 24/7 CCTV security surveillance
-- 24/7 on-site security guard
-- No dedicated parking
-
-MAINTENANCE:
-- Submit maintenance requests in the app with room number, issue description, and a photo if possible
-- Requests are usually scheduled within 24-48 hours
-- For urgent issues (water leaks, electrical problems, safety hazards), contact admin immediately at +63 912 345 6789
-
-DOCUMENTS AVAILABLE:
-- Lease contract
-- House rules document
-- Curfew policy
-- Visitor policy
-- Payment terms
-- Emergency procedures
-- ID verification record
-- All can be downloaded as PDF from the app
-
-EMERGENCY PROCEDURES:
-- Building admin (24/7): +63 912 345 6789
-- Security: available 24/7 on-site
-- Emergency hotline: +63 912 345 6790
-- Fire: sound alarm, avoid elevators, use emergency exits, assembly point is the parking lot, call 911
-- Earthquake: drop/cover/hold, stay away from windows, evacuate if structural damage visible
-- Medical: call building security immediately, do not move the injured person, admin coordinates ambulance
-- Nearby hospitals: Makati Medical Center (~2km), Ospital ng Makati (~1.5km)
-- Fire extinguishers located in hallways, kitchen, and lobby
+SUPPORTED WORKFLOWS:
+- Billing questions use authenticated billing context and the Billing screen.
+- Maintenance questions use canonical tenant maintenance records and the Services screen.
+- Contract questions use the canonical contract adapter and the Documents/Contract screen.
+- Policy and contact questions use only approved current context; otherwise offer Documents or Admin Support.
+- Human escalation uses the canonical Admin Support conversation. Do not provide an unverified phone number or email address.
 
 ESCALATION:
 - If the issue is complex, sensitive, involves a complaint, safety concern, or requires human judgment, include "[NEEDS_ADMIN]" at the START of your response
@@ -136,7 +65,7 @@ const KNOWLEDGE_BASE = {
     triggers: ['due date', 'when pay', 'billing cycle', 'pay schedule', 'when is rent due', 'monthly due'],
     category: 'billing',
     priority: 'high',
-    knowledge: "Regular rent uses the tenant's move-in day number. The first month is covered by the one-month advance, billing begins in month two, there is a 1-day grace period, and ₱50/day begins on day two after due date.",
+    knowledge: 'Use only the authenticated current bill for its amount, due date, timing, and penalty. If no current bill supplies a fact, do not infer it from a general schedule.',
     followups: [
       { label: 'Payment methods', prompt: 'How can I pay my rent?' },
       { label: 'Late fee details', prompt: 'What happens if I pay late?' },
@@ -146,7 +75,7 @@ const KNOWLEDGE_BASE = {
     intent: 'payment_methods',
     triggers: ['how to pay', 'gcash', 'maya', 'bank transfer', 'bdo', 'bpi', 'payment method', 'where to pay', 'paymongo'],
     category: 'billing',
-    knowledge: 'BDO/BPI bank transfer, GCash, Maya, cash at admin office, or PayMongo in the app. Include room number and name as reference.',
+    knowledge: 'Name only payment channels and instructions currently offered by the authenticated Billing flow. Never provide remembered bank accounts, wallet numbers, or office payment hours.',
     followups: [
       { label: 'Check my balance', prompt: 'How much do I owe this month?' },
       { label: 'Due date', prompt: 'When is my rent due?' },
@@ -156,7 +85,7 @@ const KNOWLEDGE_BASE = {
     intent: 'late_fee',
     triggers: ['late fee', 'penalty', 'overdue', 'late payment', 'missed payment'],
     category: 'billing',
-    knowledge: "₱50/day beginning on the second day after the tenant's move-in-day-based due date, after a 1-day grace period. Use authenticated bill data for actual penalties and do not invent a cap.",
+    knowledge: 'Use only the authenticated current bill timing and recorded penalty. If those fields are absent, direct the tenant to Billing or Admin Support without inventing a fee, grace period, or cap.',
     followups: [
       { label: 'Payment methods', prompt: 'How can I pay my rent?' },
       { label: 'Talk to admin', prompt: 'I need to discuss my billing with admin.' },
@@ -177,7 +106,7 @@ const KNOWLEDGE_BASE = {
     intent: 'maintenance_request',
     triggers: ['maintenance', 'fix', 'repair', 'leak', 'broken', 'issue', 'not working', 'damaged', 'plumbing', 'electric'],
     category: 'maintenance',
-    knowledge: 'Submit via app with room number, description, and photo. Scheduled within 24-48 hours. Urgent: call admin at +63 912 345 6789.',
+    knowledge: 'Use the canonical Services flow for maintenance requests and tenant-visible updates. For an urgent or safety issue, offer canonical Admin Support without inventing a response time or contact detail.',
     escalation_if: ['water leak', 'electrical', 'no power', 'no water', 'safety', 'smoke', 'fire', 'flood', 'gas smell'],
     followups: [
       { label: 'My open requests', prompt: 'Show me my maintenance tickets.' },
@@ -198,17 +127,17 @@ const KNOWLEDGE_BASE = {
     intent: 'house_rules',
     triggers: ['rules', 'curfew', 'visitor', 'guest', 'quiet hours', 'policy', 'regulations', 'dorm rules'],
     category: 'rules',
-    knowledge: 'Gate closes 11PM. Quiet hours 10PM-7AM. Visitors 8AM-9PM with front desk registration. No overnight guests. No cooking appliances in rooms. No smoking. No pets.',
+    knowledge: 'House-rule schedules, visitor limits, penalties, and restrictions are mutable policy facts. State them only from approved current tenant-visible policy context; otherwise direct the tenant to Documents or Admin Support.',
     followups: [
-      { label: 'Visitor policy', prompt: 'Tell me about the visitor rules.' },
-      { label: 'Penalty for violations', prompt: 'What are the consequences for breaking rules?' },
+      { label: 'Policy documents', prompt: 'Where can I view the current policy documents?' },
+      { label: 'Confirm with admin', prompt: 'Connect me to admin about a house rule.' },
     ],
   },
   documents: {
     intent: 'documents',
     triggers: ['document', 'contract', 'lease', 'id copy', 'download', 'certificate', 'pdf'],
     category: 'documents',
-    knowledge: 'Available documents: lease contract, house rules, curfew policy, visitor policy, payment terms, emergency procedures, ID verification. All downloadable as PDF from the app.',
+    knowledge: 'Only say a document is available when the authenticated tenant context confirms it. Direct the tenant to Documents to see the current list and canonical contract copy.',
     followups: [
       { label: 'Download contract', prompt: 'How do I download my lease contract?' },
       { label: 'House rules PDF', prompt: 'I need the house rules document.' },
@@ -249,20 +178,20 @@ const KNOWLEDGE_BASE = {
     intent: 'move_in_requirements',
     triggers: ['move in', 'move-in', 'requirements', 'checklist', 'what to bring', 'moving in', 'new tenant'],
     category: 'onboarding',
-    knowledge: 'Valid government ID and signed lease. Section 4 requires one month advance plus one month security deposit; subtract any reservation fee already paid from that combined amount. Never apply the reservation fee only to one component. Bring own bedding and toiletries.',
+    knowledge: 'Use only the tenant canonical contract or reservation snapshot for move-in requirements, dates, and financials. Do not repeat onboarding requirements to a confirmed current resident unless the resident explicitly asks.',
     followups: [
-      { label: 'Room rates', prompt: 'What are the room types and prices?' },
-      { label: 'Get lease contract', prompt: 'How do I get my lease agreement?' },
+      { label: 'Contract status', prompt: 'What is my current contract status?' },
+      { label: 'Talk to admin', prompt: 'Connect me to admin about my move-in record.' },
     ],
   },
   amenities: {
     intent: 'amenities',
     triggers: ['amenities', 'wifi', 'laundry', 'kitchen', 'study', 'facility', 'facilities', 'parking', 'gym', 'rooftop'],
     category: 'general',
-    knowledge: 'Free Wi-Fi, shared laundry area, communal kitchen (6AM-10PM), study lounge, rooftop area, 24/7 CCTV + security guard. No dedicated parking. No gym.',
+    knowledge: 'Amenities, opening hours, inclusions, and availability are mutable branch facts. State them only from approved current branch context; otherwise offer Announcements or Admin Support.',
     followups: [
-      { label: 'House rules', prompt: 'What are the dormitory rules?' },
-      { label: 'Room types', prompt: 'What room types are available?' },
+      { label: 'Branch notices', prompt: 'Where can I see my branch announcements?' },
+      { label: 'Confirm with admin', prompt: 'Connect me to admin about branch facilities.' },
     ],
   },
   emergency_contacts: {
@@ -270,7 +199,7 @@ const KNOWLEDGE_BASE = {
     triggers: ['emergency', 'emergency contact', 'fire', 'earthquake', 'flood', 'accident', 'medical', 'hospital'],
     category: 'safety',
     priority: 'high',
-    knowledge: 'Admin: +63 912 345 6789 (24/7). Security on-site 24/7. Emergency hotline: +63 912 345 6790. Nearby hospitals: Makati Medical Center (~2km), Ospital ng Makati (~1.5km).',
+    knowledge: 'Do not provide an emergency phone number, office availability, hospital distance, or site procedure unless approved current branch context supplies it. Flag emergencies for canonical Admin Support and advise use of local emergency services when immediate danger exists.',
     escalation_if: ['fire now', 'injured', 'bleeding', 'unconscious', 'smell gas', 'someone hurt'],
     followups: [
       { label: 'Report emergency', prompt: 'I need to report an emergency.' },
@@ -281,10 +210,10 @@ const KNOWLEDGE_BASE = {
     intent: 'room_types',
     triggers: ['room type', 'room price', 'how much', 'rates', 'room rate', 'standard', 'deluxe', 'premium', 'room cost'],
     category: 'billing',
-    knowledge: 'Standard ₱5,400/mo (shared bath), Deluxe ₱7,200/mo (semi-private bath), Premium ₱9,000/mo (private bath + AC). All include bed, desk, cabinet, free Wi-Fi.',
+    knowledge: 'Use only the authenticated room assignment and canonical contract for the tenant room type, inclusions, and approved rate. Never quote a generic room price from model memory.',
     followups: [
-      { label: 'Move-in requirements', prompt: 'What do I need to move in?' },
-      { label: 'Payment methods', prompt: 'How can I pay my rent?' },
+      { label: 'My room', prompt: 'What room assignment is on my account?' },
+      { label: 'My contract', prompt: 'What rate is shown in my current contract?' },
     ],
   },
 };

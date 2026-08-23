@@ -1,9 +1,14 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useRouter } from 'expo-router';
+import { usePathname, useRouter, useSegments } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, AppState, Platform, Pressable, StatusBar as RNStatusBar, StyleSheet, Text, View } from 'react-native';
+import { Animated, AppState, Platform, Pressable, StatusBar as RNStatusBar, StyleSheet, Text, View } from 'react-native';
 import { auth, getFreshIdToken, subscribeToAuthState } from '../config/firebase';
-import { api, getApiErrorMessage, teardownExpiredSession } from '../services/api';
+import {
+  api,
+  getApiErrorMessage,
+  getConfirmedSessionInvalidation,
+  teardownExpiredSession,
+} from '../services/api';
 import { validateStrongPassword } from '../utils/passwordValidation';
 import { AUTH_MESSAGES, classifyAuthError } from '../utils/authStability';
 import { clearDocumentCache } from '../services/documentManager';
@@ -27,23 +32,34 @@ import {
   removeSessionToken,
   setSessionToken,
 } from '../services/secureCredentials';
-import { subscribeSessionExpired } from '../services/sessionEvents';
+import { subscribeSessionExpired, subscribeSessionRecovered } from '../services/sessionEvents';
 import {
   canonicalNotificationKey,
   publishCanonicalNotification,
   subscribeCanonicalNotifications,
 } from '../services/canonicalEvents';
-import { startCanonicalRealtime, stopCanonicalRealtime } from '../services/realtime';
 import { useToast } from './ToastContext';
+import {
+  isAuthenticatedNavigationReady,
+  navigateToNotificationDestination,
+  notificationDestinationKey,
+} from '../utils/navigation';
 
 const AuthContext = createContext(undefined);
 const SESSION_USER_KEY = 'session_user';
 const DEFAULT_NOTIFICATION_MESSAGE = 'Open LilyCrest to view the latest update.';
 
-async function persistSession(sessionToken, userData, remember = true) {
+async function persistSession(sessionPayload, userData) {
   const writes = [];
-  if (sessionToken) {
-    writes.push(setSessionToken(sessionToken, { remember }));
+  if (sessionPayload?.session_token) {
+    const refreshOptions = isRefreshSessionPayloadShape(sessionPayload)
+      ? {
+          refreshToken: sessionPayload.refresh_token,
+          expiresAt: sessionPayload.expires_at,
+          refreshExpiresAt: sessionPayload.refresh_expires_at,
+        }
+      : {};
+    writes.push(setSessionToken(sessionPayload.session_token, refreshOptions));
   }
   if (userData) {
     writes.push(AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(userData)));
@@ -107,6 +123,19 @@ function isSessionPayloadShape(value) {
     && value.session_token.trim().length > 0;
 }
 
+// The currently deployed API still returns the established user +
+// session_token response, while newer API builds add a rotating refresh
+// bundle. Both are valid login contracts during the rolling deployment.
+// Only persist refresh metadata when the complete bundle is present so a
+// partial/malformed optional bundle cannot break an otherwise valid login.
+function isRefreshSessionPayloadShape(value) {
+  return isSessionPayloadShape(value)
+    && typeof value.refresh_token === 'string'
+    && value.refresh_token.trim().length > 0
+    && !Number.isNaN(Date.parse(value.expires_at))
+    && !Number.isNaN(Date.parse(value.refresh_expires_at));
+}
+
 // resolveTenantBranch (backend/services/branchLocation.service.js) can
 // transiently fail to resolve a tenant's branch (ambiguous/missing linked
 // records) and buildTenantProfile silently degrades to branch: null rather
@@ -124,6 +153,7 @@ function preserveKnownBranch(prevUser, nextUser) {
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [authStatus, setAuthStatus] = useState('initializing');
+  const [sessionState, setSessionState] = useState('restoring');
   const [firebaseUser, setFirebaseUser] = useState(null);
   const [firebaseAuthReady, setFirebaseAuthReady] = useState(false);
   // Single source of truth for every notification UI surface (tab badge,
@@ -138,8 +168,12 @@ export function AuthProvider({ children }) {
   const [notificationUnreadCount, setNotificationUnreadCount] = useState(0);
   const [notificationBanner, setNotificationBanner] = useState(null);
   const router = useRouter();
+  const pathname = usePathname();
+  const segments = useSegments();
   const { showToast } = useToast();
   const routerRef = useRef(router);
+  const pathnameRef = useRef(pathname);
+  const segmentsRef = useRef(segments);
   const authStatusRef = useRef(authStatus);
   // Let logout/signInWithGoogle read the latest user/firebaseUser without
   // needing them in a useCallback dependency array — same technique already
@@ -156,11 +190,15 @@ export function AuthProvider({ children }) {
   // any await, so only the first of a burst of near-simultaneous events proceeds.
   const sessionExpiryHandlingRef = useRef(false);
   const pendingNotificationRef = useRef(null);
+  const discardInitialNotificationResponseRef = useRef(false);
+  const lastNotificationNavigationRef = useRef({ key: '', at: 0 });
   const latestNotificationKeyRef = useRef('');
   const bannerHideTimerRef = useRef(null);
   const bannerOpacity = useRef(new Animated.Value(0)).current;
   const bannerTranslateY = useRef(new Animated.Value(-18)).current;
   routerRef.current = router;
+  pathnameRef.current = pathname;
+  segmentsRef.current = segments;
   authStatusRef.current = authStatus;
   userRef.current = user;
   firebaseUserRef.current = firebaseUser;
@@ -212,10 +250,11 @@ export function AuthProvider({ children }) {
       setNotificationUnreadCount((prev) => (prev === nextUnreadCount ? prev : nextUnreadCount));
       return true;
     } catch (error) {
-      if (error?.response?.status === 401) {
+      if (getConfirmedSessionInvalidation(error)) {
         await clearPersistedSession();
         setUser(null);
         setAuthStatus('unauthenticated');
+        setSessionState('unauthenticated');
         setNotifications([]);
         setNotificationUnreadCount(0);
       }
@@ -315,29 +354,62 @@ export function AuthProvider({ children }) {
   // from a previous session gets replayed by the authStatus effect below and
   // overrides login's own redirect (e.g. bouncing the user to News).
   const dismissPendingNotificationForFreshSignIn = useCallback(() => {
+    discardInitialNotificationResponseRef.current = true;
+    const responseId = pendingNotificationRef.current?.responseId;
     pendingNotificationRef.current = null;
-    clearLastNotificationResponse().catch(() => {});
+    clearLastNotificationResponse(responseId).catch(() => {});
   }, []);
 
-  const navigateFromNotification = useCallback(async (data) => {
-    const destination = resolveNotificationRoute(data);
-    if (!destination || !routerRef.current) return false;
+  const navigateFromNotification = useCallback(async (interactionOrData) => {
+    const isResponseInteraction = interactionOrData
+      && typeof interactionOrData === 'object'
+      && typeof interactionOrData.responseId === 'string'
+      && interactionOrData.data
+      && typeof interactionOrData.data === 'object';
+    const interaction = isResponseInteraction
+      ? interactionOrData
+      : { data: interactionOrData, responseId: null };
+    const destination = resolveNotificationRoute(interaction.data);
 
-    routerRef.current.push(destination);
+    if (!destination) {
+      pendingNotificationRef.current = null;
+      if (interaction.responseId) {
+        await clearLastNotificationResponse(interaction.responseId).catch(() => {});
+      }
+      return true;
+    }
+    if (!routerRef.current) return false;
+
+    if (!isAuthenticatedNavigationReady(authStatusRef.current, pathnameRef.current, segmentsRef.current)) {
+      pendingNotificationRef.current = interaction;
+      return false;
+    }
+
+    const key = notificationDestinationKey(destination);
+    const now = Date.now();
+    const previous = lastNotificationNavigationRef.current;
+    if (key && previous.key === key && now - previous.at < 1500) {
+      pendingNotificationRef.current = null;
+      await clearLastNotificationResponse(interaction.responseId).catch(() => {});
+      return true;
+    }
+
+    if (!navigateToNotificationDestination(routerRef.current, destination)) return false;
+    lastNotificationNavigationRef.current = { key, at: now };
     pendingNotificationRef.current = null;
-    await clearLastNotificationResponse().catch(() => {});
+    await clearLastNotificationResponse(interaction.responseId).catch(() => {});
     return true;
   }, []);
 
-  const handleNotificationTap = useCallback(async (data) => {
-    if (!data || typeof data !== 'object') return;
+  const handleNotificationTap = useCallback(async (interactionOrData) => {
+    if (!interactionOrData || typeof interactionOrData !== 'object') return;
 
-    if (authStatusRef.current !== 'authenticated') {
-      pendingNotificationRef.current = data;
+    if (!isAuthenticatedNavigationReady(authStatusRef.current, pathnameRef.current, segmentsRef.current)) {
+      pendingNotificationRef.current = interactionOrData;
       return;
     }
 
-    await navigateFromNotification(data);
+    await navigateFromNotification(interactionOrData);
   }, [navigateFromNotification]);
 
   useEffect(() => {
@@ -378,6 +450,7 @@ export function AuthProvider({ children }) {
 
       setUser(null);
       setAuthStatus('unauthenticated');
+      setSessionState('unauthenticated');
       setNotifications([]);
       setNotificationUnreadCount(0);
       showToast(reason === 'account_inactive' ? {
@@ -415,6 +488,13 @@ export function AuthProvider({ children }) {
     });
   }, [showToast]);
 
+  useEffect(() => subscribeSessionRecovered(() => {
+    if (authStatusRef.current !== 'authenticated') return;
+    // Only reconcile an already-retained session. Login/logout and confirmed
+    // invalidation continue to own every other session-state transition.
+    setSessionState((current) => current === 'retryable' ? 'online' : current);
+  }), []);
+
   useEffect(() => {
     const cleanup = setupNotificationListeners(
       (notification) => {
@@ -432,9 +512,9 @@ export function AuthProvider({ children }) {
         // notification-list item at all), so re-syncing with the backend
         // keeps the shared unread state accurate instead of drifting.
       },
-      (data) => {
-        pendingNotificationRef.current = data;
-        handleNotificationTap(data);
+      (interaction) => {
+        pendingNotificationRef.current = interaction;
+        handleNotificationTap(interaction);
       }
     );
 
@@ -456,15 +536,6 @@ export function AuthProvider({ children }) {
       data: notification.data || {},
     });
   }), [refreshNotifications]);
-
-  useEffect(() => {
-    if (authStatus !== 'authenticated' || !user?.user_id) {
-      stopCanonicalRealtime();
-      return undefined;
-    }
-    startCanonicalRealtime().catch(() => {});
-    return () => stopCanonicalRealtime();
-  }, [authStatus, user?.user_id]);
 
   useEffect(() => {
     if (!notificationBanner) return undefined;
@@ -509,11 +580,15 @@ export function AuthProvider({ children }) {
     let cancelled = false;
 
     (async () => {
-      const data = await getLastNotificationResponseData();
-      if (cancelled || !data) return;
+      const interaction = await getLastNotificationResponseData();
+      if (cancelled || !interaction) return;
+      if (discardInitialNotificationResponseRef.current) {
+        await clearLastNotificationResponse(interaction.responseId).catch(() => {});
+        return;
+      }
 
-      pendingNotificationRef.current = data;
-      await handleNotificationTap(data);
+      pendingNotificationRef.current = interaction;
+      await handleNotificationTap(interaction);
     })();
 
     return () => {
@@ -522,9 +597,9 @@ export function AuthProvider({ children }) {
   }, [handleNotificationTap]);
 
   useEffect(() => {
-    if (authStatus !== 'authenticated' || !pendingNotificationRef.current) return;
+    if (!isAuthenticatedNavigationReady(authStatus, pathname, segments) || !pendingNotificationRef.current) return;
     handleNotificationTap(pendingNotificationRef.current);
-  }, [authStatus, handleNotificationTap, user?.user_id]);
+  }, [authStatus, handleNotificationTap, pathname, segments, user?.user_id]);
 
   // Initial load + 60s poll while authenticated. Matches the cadence the old
   // per-surface tab-badge poller used, now feeding the one shared state.
@@ -563,6 +638,7 @@ export function AuthProvider({ children }) {
           if (!cancelled) {
             setUser(null);
             setAuthStatus('unauthenticated');
+            setSessionState('unauthenticated');
           }
           return;
         }
@@ -580,6 +656,7 @@ export function AuthProvider({ children }) {
           if (!cancelled) {
             setUser(null);
             setAuthStatus('unauthenticated');
+            setSessionState('unauthenticated');
           }
           return;
         }
@@ -588,17 +665,19 @@ export function AuthProvider({ children }) {
         if (!cancelled) {
           setUser((prev) => preserveKnownBranch(prev, response.data));
           setAuthStatus('authenticated');
+          setSessionState('online');
         }
       } catch (error) {
         console.warn('Session hydration failed:', error?.message);
-        const status = error?.response?.status;
+        const invalidation = getConfirmedSessionInvalidation(error);
 
-        if (status === 401 || status === 403) {
+        if (invalidation) {
           await clearPersistedSession();
           await clearCredentials({ disableBiometric: false });
           if (!cancelled) {
             setUser(null);
             setAuthStatus('unauthenticated');
+            setSessionState('unauthenticated');
           }
           return;
         }
@@ -607,9 +686,11 @@ export function AuthProvider({ children }) {
         if (!cancelled && cachedUser) {
           setUser(cachedUser);
           setAuthStatus('authenticated');
+          setSessionState('retryable');
         } else if (!cancelled) {
           setUser(null);
-          setAuthStatus('unauthenticated');
+          setAuthStatus('restoring_offline');
+          setSessionState('retryable');
         }
       }
     })();
@@ -656,7 +737,7 @@ export function AuthProvider({ children }) {
     });
   }, [authStatus, user?.user_id]);
 
-  const loginWithEmail = useCallback(async (email, password, remember = true) => {
+  const loginWithEmail = useCallback(async (email, password) => {
     try {
       const { data } = await api.post('/auth/login', {
         email,
@@ -684,17 +765,18 @@ export function AuthProvider({ children }) {
         return { success: false, status: 500, error: 'Received an invalid sign-in response. Please try again.' };
       }
 
-      const { user: userData, session_token } = data;
+      const { user: userData } = data;
       if (!isTenantRole(userData.role)) {
         await clearPersistedSession();
         return { success: false, status: 403, error: NOT_A_TENANT_MESSAGE };
       }
-      await persistSession(session_token, userData, remember);
+      await persistSession(data, userData);
       const profile = await loadAuthoritativeTenantProfile(userData);
       await AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(profile)).catch(() => {});
       setUser(profile);
       dismissPendingNotificationForFreshSignIn();
       setAuthStatus('authenticated');
+      setSessionState('online');
       return { success: true };
     } catch (error) {
       const status = error.response?.status;
@@ -718,9 +800,9 @@ export function AuthProvider({ children }) {
         error: classified.message,
       };
     }
-  }, []);
+  }, [dismissPendingNotificationForFreshSignIn]);
 
-  const verifyLoginOtp = useCallback(async (otpToken, otpCode, remember = true) => {
+  const verifyLoginOtp = useCallback(async (otpToken, otpCode) => {
     const normalizedToken = typeof otpToken === 'string' ? otpToken.trim() : '';
     const normalizedCode = String(otpCode ?? '').replace(/\D/g, '');
 
@@ -737,18 +819,19 @@ export function AuthProvider({ children }) {
         await clearPersistedSession();
         return { success: false, status: 500, error: 'Received an invalid verification response. Please try again.' };
       }
-      const { user: userData, session_token } = response.data;
+      const { user: userData } = response.data;
       if (!isTenantRole(userData.role)) {
         await clearPersistedSession();
         return { success: false, status: 403, error: NOT_A_TENANT_MESSAGE };
       }
 
-      await persistSession(session_token, userData, remember);
+      await persistSession(response.data, userData);
       const profile = await loadAuthoritativeTenantProfile(userData);
       await AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(profile)).catch(() => {});
       setUser(profile);
       dismissPendingNotificationForFreshSignIn();
       setAuthStatus('authenticated');
+      setSessionState('online');
       return { success: true };
     } catch (error) {
       const status = error.response?.status;
@@ -756,7 +839,7 @@ export function AuthProvider({ children }) {
       const attemptsRemaining = error.response?.data?.attempts_remaining;
       return { success: false, status, error: detail || getApiErrorMessage(error, 'Invalid code. Please try again.'), attemptsRemaining };
     }
-  }, []);
+  }, [dismissPendingNotificationForFreshSignIn]);
 
   const login = useCallback(async (email, password) => {
     const result = await loginWithEmail(email, password);
@@ -775,14 +858,15 @@ export function AuthProvider({ children }) {
         await clearPersistedSession();
         return { success: false, error: 'Received an invalid registration response. Please try again.' };
       }
-      const { user: userData, session_token } = response.data;
+      const { user: userData } = response.data;
 
-      await persistSession(session_token, userData);
+      await persistSession(response.data, userData);
       const profile = await loadAuthoritativeTenantProfile(userData);
       await AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(profile)).catch(() => {});
       setUser(profile);
       dismissPendingNotificationForFreshSignIn();
       setAuthStatus('authenticated');
+      setSessionState('online');
       return { success: true };
     } catch (error) {
       const status = error.response?.status;
@@ -792,9 +876,9 @@ export function AuthProvider({ children }) {
       }
       return { success: false, error: detail || getApiErrorMessage(error, 'Unable to create account. Please try again later.') };
     }
-  }, []);
+  }, [dismissPendingNotificationForFreshSignIn]);
 
-  const signInWithGoogle = useCallback(async (idToken, remember = true) => {
+  const signInWithGoogle = useCallback(async (idToken) => {
     try {
       let tokenToUse = idToken;
       if (!tokenToUse && firebaseUserRef.current) {
@@ -826,18 +910,19 @@ export function AuthProvider({ children }) {
         await clearPersistedSession();
         return { success: false, error: 'Received an invalid Google sign-in response. Please try again.' };
       }
-      const { user: userData, session_token } = response.data;
+      const { user: userData } = response.data;
       if (!isTenantRole(userData.role)) {
         await clearPersistedSession();
         return { success: false, error: NOT_A_TENANT_MESSAGE };
       }
 
-      await persistSession(session_token, userData, remember);
+      await persistSession(response.data, userData);
       const profile = await loadAuthoritativeTenantProfile(userData);
       await AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(profile)).catch(() => {});
       setUser(profile);
       dismissPendingNotificationForFreshSignIn();
       setAuthStatus('authenticated');
+      setSessionState('online');
       return { success: true };
     } catch (error) {
       const status = error.response?.status;
@@ -851,7 +936,7 @@ export function AuthProvider({ children }) {
       }
       return { success: false, error: getApiErrorMessage(error, 'Unable to sign in with Google. Please try again.') };
     }
-  }, []);
+  }, [dismissPendingNotificationForFreshSignIn]);
 
   const logout = useCallback(async () => {
     const token = await getSessionToken().catch(() => null);
@@ -864,6 +949,7 @@ export function AuthProvider({ children }) {
       await clearDocumentCache().catch(() => {});
       setUser(null);
       setAuthStatus('unauthenticated');
+      setSessionState('unauthenticated');
       setNotifications([]);
       setNotificationUnreadCount(0);
     } finally {
@@ -891,6 +977,7 @@ export function AuthProvider({ children }) {
         await AsyncStorage.removeItem(SESSION_USER_KEY).catch(() => {});
         setUser(null);
         setAuthStatus('unauthenticated');
+        setSessionState('unauthenticated');
         return { authenticated: false };
       }
 
@@ -906,18 +993,21 @@ export function AuthProvider({ children }) {
         await clearCredentials({ disableBiometric: false });
         setUser(null);
         setAuthStatus('unauthenticated');
+        setSessionState('unauthenticated');
         return { authenticated: false };
       }
       await AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(response.data)).catch(() => {});
       setUser((prev) => preserveKnownBranch(prev, response.data));
       setAuthStatus('authenticated');
+      setSessionState('online');
       return { authenticated: true, restoredFromCache: false };
     } catch (error) {
-      if (error?.response?.status === 401 || error?.response?.status === 403) {
+      if (getConfirmedSessionInvalidation(error)) {
         await clearPersistedSession();
         await clearCredentials({ disableBiometric: false });
         setUser(null);
         setAuthStatus('unauthenticated');
+        setSessionState('unauthenticated');
         return { authenticated: false };
       }
 
@@ -925,16 +1015,30 @@ export function AuthProvider({ children }) {
       if (cachedUser) {
         setUser(cachedUser);
         setAuthStatus('authenticated');
+        setSessionState('retryable');
         return { authenticated: true, restoredFromCache: true, offline: true };
       }
 
       // A timeout, offline state, or 5xx response is not proof that the
       // locally persisted session is invalid. Keep the token so a later
       // retry can recover; only an authoritative 401/403 signs the user out.
-      setAuthStatus((current) => current === 'authenticated' ? current : 'unauthenticated');
+      setAuthStatus((current) => current === 'authenticated' ? current : 'restoring_offline');
+      setSessionState('retryable');
       return { authenticated: false, indeterminate: true };
     }
   }, []);
+
+  // Retry a retained session when connectivity is likely to have changed.
+  // The credential remains in SecureStore throughout a retryable outage.
+  useEffect(() => {
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      if (nextState === 'active'
+        && (authStatusRef.current === 'restoring_offline' || sessionState === 'retryable')) {
+        checkAuth().catch(() => {});
+      }
+    });
+    return () => subscription.remove();
+  }, [checkAuth, sessionState]);
 
   const updateUser = useCallback((data) => {
     setUser((prev) => {
@@ -965,6 +1069,7 @@ export function AuthProvider({ children }) {
     isLoading,
     authReady,
     authStatus,
+    sessionState,
     login,
     loginWithEmail,
     verifyLoginOtp,
@@ -983,27 +1088,39 @@ export function AuthProvider({ children }) {
     clearNotifications,
     refreshNotifications,
   }), [
-    user, firebaseUser, firebaseAuthReady, isLoading, authReady, authStatus,
+    user, firebaseUser, firebaseAuthReady, isLoading, authReady, authStatus, sessionState,
     login, loginWithEmail, verifyLoginOtp, registerWithEmail, logout, checkAuth,
     signInWithGoogle, updateUser, notifications, notificationUnreadCount,
     markNotificationRead, clearNotificationUnread, dismissNotification, clearNotifications,
     refreshNotifications,
   ]);
 
-  if (isLoading) {
-    return (
-      <View style={styles.authLoadingContainer}>
-        <ActivityIndicator size="large" color="#0A1628" />
-        <Text style={styles.authLoadingTitle}>Preparing LilyCrest</Text>
-        <Text style={styles.authLoadingText}>Checking your secure session...</Text>
-      </View>
-    );
-  }
-
   return (
     <AuthContext.Provider value={contextValue}>
       <View style={styles.container}>
+        {sessionState === 'retryable' ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Retry LilyCrest connection"
+            style={styles.sessionOfflineBanner}
+            onPress={() => checkAuth().catch(() => {})}
+          >
+            <Text style={styles.sessionOfflineText}>Offline — showing saved account data</Text>
+            <Text style={styles.sessionOfflineAction}>Retry</Text>
+          </Pressable>
+        ) : null}
         {children}
+        {authStatus === 'restoring_offline' ? (
+          <View style={styles.authRestoringOverlay}>
+            <Text style={styles.authLoadingTitle}>Still restoring your session</Text>
+            <Text style={styles.authLoadingText}>
+              LilyCrest could not reach the server. Your secure session is still saved.
+            </Text>
+            <Pressable style={styles.authRetryButton} onPress={() => checkAuth().catch(() => {})}>
+              <Text style={styles.authRetryButtonText}>Retry connection</Text>
+            </Pressable>
+          </View>
+        ) : null}
         {notificationBanner ? (
           <View pointerEvents="box-none" style={styles.bannerOverlay}>
             <Animated.View
@@ -1057,12 +1174,35 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  authLoadingContainer: {
+  sessionOfflineBanner: {
+    minHeight: 44,
+    paddingHorizontal: 16,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#FFF7ED',
+    borderBottomWidth: 1,
+    borderBottomColor: '#FDBA74',
+  },
+  sessionOfflineText: {
     flex: 1,
+    color: '#9A3412',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  sessionOfflineAction: {
+    marginLeft: 12,
+    color: '#9A3412',
+    fontSize: 13,
+    fontWeight: '800',
+  },
+  authRestoringOverlay: {
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
     backgroundColor: '#F8FAFC',
+    zIndex: 2000,
   },
   authLoadingTitle: {
     marginTop: 14,
@@ -1075,6 +1215,22 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     color: '#4B5563',
+    textAlign: 'center',
+  },
+  authRetryButton: {
+    marginTop: 18,
+    minHeight: 48,
+    minWidth: 160,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+    backgroundColor: '#0A1628',
+  },
+  authRetryButtonText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '700',
   },
   bannerOverlay: {
     position: 'absolute',

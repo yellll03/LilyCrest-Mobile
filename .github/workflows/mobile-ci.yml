@@ -1,0 +1,119 @@
+name: Mobile CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mobile-ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  frontend:
+    name: Frontend tests, lint, and release contract
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: LilyCrest-Clean/frontend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: LilyCrest-Clean/frontend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install backend dependencies for cross-layer tests
+        working-directory: LilyCrest-Clean/backend
+        run: npm ci --ignore-scripts
+
+      - name: Run full frontend suite
+        run: npm test -- --runInBand
+
+      - name: Run lint
+        run: npm run lint
+
+      - name: Verify release contract
+        run: npm run verify:release-contract
+
+  backend:
+    name: Backend tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: LilyCrest-Clean/backend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: LilyCrest-Clean/backend/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Run full backend suite
+        run: npm test
+
+  android:
+    name: Android release build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: LilyCrest-Clean/frontend
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: LilyCrest-Clean/frontend/package-lock.json
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v4
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify release contract
+        run: npm run verify:release-contract
+
+      - name: Configure Google services
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+        run: |
+          if [ -z "$GOOGLE_SERVICES_JSON" ]; then
+            echo "GOOGLE_SERVICES_JSON repository secret is required for release builds." >&2
+            exit 1
+          fi
+          printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+
+      - name: Make Gradle wrapper executable
+        working-directory: LilyCrest-Clean/frontend/android
+        run: chmod +x gradlew
+
+      - name: Build release APK
+        working-directory: LilyCrest-Clean/frontend/android
+        run: ./gradlew assembleRelease

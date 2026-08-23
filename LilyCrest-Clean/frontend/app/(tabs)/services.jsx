@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Crypto from 'expo-crypto';
 import { format } from 'date-fns';
-import { Link, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -23,7 +23,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AttachmentPickerSheet from '../../src/components/AttachmentPickerSheet';
-import LilyFlowerIcon from '../../src/components/assistant/LilyFlowerIcon';
+import LilyAssistantFab from '../../src/components/assistant/LilyAssistantFab';
 import { useAuth } from '../../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
 import { useToast } from '../../src/context/ToastContext';
@@ -38,7 +38,15 @@ import {
   toStoredAttachmentMetadata,
 } from '../../src/services/firebaseStorageUpload';
 import { pickDocument, pickFromCamera, pickFromLibrary } from '../../src/utils/attachmentPicker';
+import { createLatestRequestGate, runLatestRequest } from '../../src/utils/latestRequest';
 import { classifyMaintenanceAttachment, getValidMaintenanceAttachmentUrl } from '../../src/utils/maintenanceAttachmentViewer';
+import {
+  getMaintenanceAllowedActions,
+  getMaintenanceStatusGroup,
+  MAINTENANCE_ACTIONS,
+  MAINTENANCE_GROUPS,
+  MAINTENANCE_STATUS_STAGES,
+} from '../../src/utils/maintenanceStatus';
 import { STATUS } from '../../src/theme/tokens';
 
 function safeFormat(dateStr, fmt) {
@@ -222,20 +230,10 @@ const RESOLUTION_ESTIMATES = {
   high: 'Within 24 hours',
 };
 
-const STATUS_STAGES = [
-  { label: 'Pending Review', cardTitle: 'Request Received', detail: 'Awaiting Admin Review', statuses: ['pending', 'pending_review'] },
-  { label: 'Under Review', cardTitle: 'Admin Reviewing', detail: 'Being Reviewed by Admin', statuses: ['viewed', 'reviewed'] },
-  { label: 'In Progress', cardTitle: 'Repair In Progress', detail: 'Provider Assigned & Working', statuses: ['provider_assigned', 'scheduled', 'in_progress', 'waiting_tenant', 'reopened'] },
-  { label: 'Resolved', cardTitle: 'Work Resolved', detail: 'Awaiting Tenant Feedback & Verification', statuses: ['resolved'] },
-  { label: 'Completed', cardTitle: 'Request Completed', detail: 'Confirmed & Closed', statuses: ['completed'] },
-];
 const MIN_DESCRIPTION_LENGTH = 10;
 // Mirrors backend/controllers/maintenance.controller.js DESCRIPTION_MAX.
 // Frontend enforcement here is UX only — the backend remains authoritative.
 const MAX_DESCRIPTION_LENGTH = 1000;
-const ACTIVE_STATUSES = ['pending', 'pending_review', 'provider_assigned', 'scheduled', 'viewed', 'reviewed', 'in_progress', 'waiting_tenant', 'reopened'];
-const RESOLVED_STATUSES = ['completed', 'resolved', 'rejected', 'closed'];
-const CLOSED_REPLY_STATUSES = ['cancelled', 'rejected', 'closed'];
 const MAX_MAINTENANCE_ATTACHMENTS = 4;
 // Every inquiry attachment (image, PDF, or other supported document type) is
 // capped at 5MB, regardless of the generic upload endpoint's own larger
@@ -283,13 +281,6 @@ function getNextStepDetail(status, request = {}) {
     case 'closed': return 'No action is needed right now.';
     default: return 'Review the latest update below.';
   }
-}
-
-function canReplyToRequest(request = {}) {
-  const status = String(request.status || '').toLowerCase();
-  if (CLOSED_REPLY_STATUSES.includes(status)) return false;
-  if (['resolved', 'completed'].includes(status)) return false;
-  return true;
 }
 
 export default function ServicesScreen() {
@@ -344,7 +335,6 @@ export default function ServicesScreen() {
     urgencyBadge: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 4 },
     urgencyText: { fontSize: 12, color: '#DC2626', fontWeight: '500' },
     bottomSpacer: { height: Platform.OS === 'ios' ? 140 : 120 },
-    chatbotButton: { position: 'absolute', bottom: Platform.OS === 'ios' ? 120 : 100, right: 20, width: 52, height: 52, borderRadius: 26, backgroundColor: c.primary, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: c.primaryHover, ...Platform.select({ ios: { shadowColor: '#0A1628', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.16, shadowRadius: 4 }, android: { elevation: 3 }, web: { boxShadow: '0 2px 8px rgba(10, 22, 40, 0.18)' } }) },
     modalContainer: { flex: 1 },
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
     modalContent: { backgroundColor: c.surface, borderTopLeftRadius: 12, borderTopRightRadius: 12, padding: 24, maxHeight: '90%', borderWidth: 1, borderColor: c.border },
@@ -352,7 +342,7 @@ export default function ServicesScreen() {
     modalTitle: { fontSize: 20, fontWeight: 'bold', color: c.text },
     modalSectionTitle: { fontSize: 14, fontWeight: '600', color: c.text, marginBottom: 12, marginTop: 8 },
     typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 },
-    typeItem: { width: '23%', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 8, borderRadius: 12, backgroundColor: c.surfaceSecondary },
+    typeItem: { width: '31%', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 8, borderRadius: 12, backgroundColor: c.surfaceSecondary },
     typeItemSelected: { backgroundColor: c.primaryLight, borderWidth: 1, borderColor: c.primary },
     typeIcon: { width: 40, height: 40, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
     typeLabel: { fontSize: 10, color: c.textMuted, textAlign: 'center' },
@@ -364,14 +354,17 @@ export default function ServicesScreen() {
     urgencyLabel: { fontSize: 14, fontWeight: '600', color: c.text },
     urgencyDesc: { fontSize: 12, color: c.textMuted },
     descriptionInput: { backgroundColor: c.surfaceSecondary, borderRadius: 12, padding: 16, fontSize: 15, color: c.text, minHeight: 120, marginBottom: 20 },
-    uploadPanel: { borderWidth: 1, borderStyle: 'dashed', borderColor: c.border, borderRadius: 12, padding: 14, alignItems: 'center', gap: 8, backgroundColor: c.surfaceSecondary, marginBottom: 10 },
-    uploadIcon: { width: 52, height: 52, borderRadius: 16, borderWidth: 1, borderColor: c.border, justifyContent: 'center', alignItems: 'center', backgroundColor: c.surface },
-    uploadTitle: { color: c.text, fontWeight: '800', fontSize: 15 },
-    uploadSubtitle: { color: c.textMuted, fontSize: 12, textAlign: 'center' },
-    uploadButtons: { width: '100%', gap: 10, marginTop: 4 },
-    uploadBtn: { paddingVertical: 12, paddingHorizontal: 12, borderRadius: 10, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border, alignItems: 'center' },
-    uploadBtnText: { color: c.text, fontWeight: '700' },
-    uploadNote: { color: c.textMuted, fontSize: 12, textAlign: 'center' },
+    attachmentAction: { minHeight: 58, borderWidth: 1, borderColor: c.border, borderRadius: 12, paddingHorizontal: 12, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: c.surfaceSecondary, marginBottom: 8 },
+    attachmentActionDisabled: { opacity: 0.58 },
+    attachmentActionIcon: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center', backgroundColor: c.surface },
+    attachmentActionContent: { flex: 1 },
+    attachmentActionTitle: { color: c.text, fontWeight: '800', fontSize: 14 },
+    attachmentActionHint: { color: c.textMuted, fontSize: 11, lineHeight: 16, marginTop: 2 },
+    attachmentCount: { color: c.textMuted, fontSize: 12, fontWeight: '700' },
+    attachmentUploadNote: { color: c.textMuted, fontSize: 12, marginBottom: 8 },
+    createAttachmentChip: { minHeight: 40, maxWidth: '100%', paddingLeft: 10, paddingRight: 6, borderRadius: 10, backgroundColor: c.surfaceSecondary, flexDirection: 'row', alignItems: 'center', gap: 7 },
+    createAttachmentName: { flexShrink: 1, maxWidth: 210, fontSize: 12, color: c.text },
+    removeAttachmentButton: { width: 32, height: 32, borderRadius: 9, alignItems: 'center', justifyContent: 'center' },
     attachmentPreview: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 16 },
     previewChip: { paddingVertical: 8, paddingHorizontal: 12, borderRadius: 12, backgroundColor: c.surfaceSecondary },
     previewText: { fontSize: 12, color: c.text },
@@ -430,6 +423,7 @@ export default function ServicesScreen() {
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
   const [attachmentUploadStatus, setAttachmentUploadStatus] = useState('');
+  const [showCreateAttachMenu, setShowCreateAttachMenu] = useState(false);
 
   // Detail modal state
   const [detailRequest, setDetailRequest] = useState(null);
@@ -454,6 +448,8 @@ export default function ServicesScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const bannerTimerRef = useRef(null);
   const handledNotificationRequestRef = useRef('');
+  const requestGateRef = useRef(null);
+  if (!requestGateRef.current) requestGateRef.current = createLatestRequestGate();
   // Idempotency key for the current submission attempt. Minted once and
   // reused across retries (e.g. a timed-out request the tenant resubmits by
   // tapping Submit again) so the backend can recognize it as the same
@@ -558,6 +554,7 @@ export default function ServicesScreen() {
   const fetchRequests = useCallback(async () => {
     if (!authReady) return;
     if (authStatus !== 'authenticated' || !userId) {
+      requestGateRef.current.invalidate();
       setRequests([]);
       setIsLoading(false);
       setRefreshing(false);
@@ -565,37 +562,40 @@ export default function ServicesScreen() {
       return;
     }
 
-    try {
-      const response = await apiService.getMyMaintenance();
-      // Force new array to trigger rerender even if values are identical
-      const nextRequests = [...(response.data || [])].sort((a, b) => {
-        const aTime = new Date(a.latestActivityAt || a.lastActivityAt || a.updated_at || a.created_at || 0).getTime();
-        const bTime = new Date(b.latestActivityAt || b.lastActivityAt || b.updated_at || b.created_at || 0).getTime();
-        return bTime - aTime;
-      });
-      setRequests(nextRequests);
-    } catch (error) {
-      console.warn('Fetch requests error:', error?.normalized || error?.message);
-      showBannerMessage('error', getApiErrorMessage(error, 'Unable to load service requests. Pull to retry.'), { withToast: false });
-    } finally {
-      setIsLoading(false);
-      setRefreshing(false);
-    }
+    await runLatestRequest({
+      gate: requestGateRef.current,
+      request: () => apiService.getMyMaintenance(),
+      onSuccess: (response) => {
+        const nextRequests = [...(response.data || [])].sort((a, b) => {
+          const aTime = new Date(a.latestActivityAt || a.lastActivityAt || a.updated_at || a.created_at || 0).getTime();
+          const bTime = new Date(b.latestActivityAt || b.lastActivityAt || b.updated_at || b.created_at || 0).getTime();
+          return bTime - aTime;
+        });
+        setRequests(nextRequests);
+      },
+      onError: (error) => {
+        console.warn('Fetch requests error:', error?.normalized || error?.message);
+        showBannerMessage('error', getApiErrorMessage(error, 'Unable to load service requests. Pull to retry.'), { withToast: false });
+      },
+      onSettled: () => {
+        setIsLoading(false);
+        setRefreshing(false);
+      },
+    });
   }, [authReady, authStatus, showBannerMessage, userId]);
-
-  useEffect(() => {
-    if (!authReady) return;
-    fetchRequests();
-  }, [authReady, fetchRequests]);
 
   useFocusEffect(
     useCallback(() => {
-      if (!authReady || authStatus !== 'authenticated' || !userId) return undefined;
-      // Refresh immediately when tab gains focus
+      if (!authReady) return undefined;
+      // One immediate load per focus. There is no separate mount effect racing it.
       fetchRequests();
-      // Also poll while this tab is focused
-      const interval = setInterval(() => { fetchRequests(); }, 60000);
-      return () => clearInterval(interval);
+      const interval = authStatus === 'authenticated' && userId
+        ? setInterval(() => { fetchRequests(); }, 60000)
+        : null;
+      return () => {
+        if (interval) clearInterval(interval);
+        requestGateRef.current.invalidate();
+      };
     }, [authReady, authStatus, fetchRequests, userId])
   );
 
@@ -668,6 +668,7 @@ export default function ServicesScreen() {
     setFieldTouched({ type: false, description: false });
     setFieldErrors({ type: '', description: '' });
     setHasAttemptedSubmit(false);
+    setShowCreateAttachMenu(false);
     submissionRequestIdRef.current = null;
   };
 
@@ -694,7 +695,7 @@ export default function ServicesScreen() {
       setAttachmentUploadStatus('');
       setAttachments((prev) => {
         if (prev.length >= MAX_MAINTENANCE_ATTACHMENTS) {
-          showBannerMessage('error', `You can upload up to ${MAX_MAINTENANCE_ATTACHMENTS} photos only.`);
+          showBannerMessage('error', `You can upload up to ${MAX_MAINTENANCE_ATTACHMENTS} files.`);
           return prev;
         }
         return [...prev, file];
@@ -704,9 +705,9 @@ export default function ServicesScreen() {
     }
   };
 
-  const removeAttachment = (name) => {
+  const removeAttachment = (index) => {
     setAttachmentUploadStatus('');
-    setAttachments((prev) => prev.filter((item) => getAttachmentDisplayName(item) !== name));
+    setAttachments((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
   };
 
   const getStatusColor = (status) => {
@@ -769,14 +770,7 @@ export default function ServicesScreen() {
     if (!ownedRequest) return;
 
     handledNotificationRequestRef.current = targetRequestId;
-    const status = String(ownedRequest.status || '').toLowerCase();
-    setActiveTab(
-      RESOLVED_STATUSES.includes(status)
-        ? 'resolved'
-        : status === 'cancelled'
-          ? 'cancelled'
-          : 'active',
-    );
+    setActiveTab(getMaintenanceStatusGroup(ownedRequest.status));
     openDetail(ownedRequest);
     // openDetail intentionally refreshes this same owned request after opening.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -984,9 +978,10 @@ export default function ServicesScreen() {
       return typeLabel.includes(normalizedSearchQuery) || (request.description || '').toLowerCase().includes(normalizedSearchQuery);
     });
   }, [normalizedSearchQuery]);
-  const activeRequests = useMemo(() => filterBySearch(requests.filter((request) => ACTIVE_STATUSES.includes((request.status || 'pending').toLowerCase()))), [filterBySearch, requests]);
-  const resolvedRequests = useMemo(() => filterBySearch(requests.filter((request) => RESOLVED_STATUSES.includes((request.status || '').toLowerCase()))), [filterBySearch, requests]);
-  const cancelledRequests = useMemo(() => filterBySearch(requests.filter((request) => (request.status || '').toLowerCase() === 'cancelled')), [filterBySearch, requests]);
+  const activeRequests = useMemo(() => filterBySearch(requests.filter((request) => getMaintenanceStatusGroup(request.status) === MAINTENANCE_GROUPS.ACTIVE)), [filterBySearch, requests]);
+  const resolvedRequests = useMemo(() => filterBySearch(requests.filter((request) => getMaintenanceStatusGroup(request.status) === MAINTENANCE_GROUPS.RESOLVED)), [filterBySearch, requests]);
+  const cancelledRequests = useMemo(() => filterBySearch(requests.filter((request) => getMaintenanceStatusGroup(request.status) === MAINTENANCE_GROUPS.CANCELLED)), [filterBySearch, requests]);
+  const detailAllowedActions = useMemo(() => new Set(getMaintenanceAllowedActions(detailRequest?.status)), [detailRequest?.status]);
   const detailProgressEntries = useMemo(() => buildRequestProgress(detailRequest), [detailRequest]);
   const detailTenantSummary = useMemo(() => detailRequest?.tenant_summary || detailRequest?.tenantSummary || null, [detailRequest]);
   const hasConversationSummary = useMemo(() => detailProgressEntries.some((entry) => entry.isSummary), [detailProgressEntries]);
@@ -1170,11 +1165,7 @@ export default function ServicesScreen() {
         ListFooterComponent={<View style={styles.bottomSpacer} />}
       />
 
-      <Link href="/(tabs)/chatbot" prefetch asChild>
-        <TouchableOpacity style={styles.chatbotButton}>
-          <LilyFlowerIcon size={26} />
-        </TouchableOpacity>
-      </Link>
+      <LilyAssistantFab />
 
       <Modal visible={showModal} animationType="slide" transparent={true} onRequestClose={confirmCloseModal}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalContainer}>
@@ -1240,36 +1231,46 @@ export default function ServicesScreen() {
                 </Text>
                 {fieldErrors.description ? <Text style={styles.fieldError}>{fieldErrors.description}</Text> : null}
                 <Text style={styles.modalSectionTitle}>Add Attachments (optional)</Text>
-                <View style={styles.uploadPanel}>
-                  <View style={styles.uploadIcon}><Ionicons name="cloud-upload" size={28} color={colors.textMuted} /></View>
-                  <Text style={styles.uploadTitle}>Upload Files</Text>
-                  <Text style={styles.uploadSubtitle}>Add supporting photos or documents</Text>
-                  <View style={styles.uploadButtons}>
-                    <TouchableOpacity style={styles.uploadBtn} onPress={() => handleAttach(pickFromCamera)} disabled={submitting}>
-                      <Text style={styles.uploadBtnText}>Take Photo</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.uploadBtn} onPress={() => handleAttach(pickFromLibrary)} disabled={submitting}>
-                      <Text style={styles.uploadBtnText}>Choose from Gallery</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.uploadBtn} onPress={() => handleAttach(pickDocument)} disabled={submitting}>
-                      <Text style={styles.uploadBtnText}>Choose Document</Text>
-                    </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.attachmentAction,
+                    (submitting || attachments.length >= MAX_MAINTENANCE_ATTACHMENTS) && styles.attachmentActionDisabled,
+                  ]}
+                  onPress={() => setShowCreateAttachMenu(true)}
+                  disabled={submitting || attachments.length >= MAX_MAINTENANCE_ATTACHMENTS}
+                  accessibilityRole="button"
+                  accessibilityLabel={attachments.length >= MAX_MAINTENANCE_ATTACHMENTS ? 'Attachment limit reached' : 'Add attachment'}
+                  accessibilityHint="Choose a photo or document to include with this maintenance inquiry"
+                >
+                  <View style={styles.attachmentActionIcon}>
+                    <Ionicons name="attach" size={21} color={colors.primary} />
                   </View>
-                  <Text style={styles.uploadNote}>Accepted: JPG, PNG • Max size: 5MB</Text>
-                  {attachmentUploadStatus ? (
-                    <Text style={styles.uploadNote}>{attachmentUploadStatus}</Text>
-                  ) : null}
-                </View>
+                  <View style={styles.attachmentActionContent}>
+                    <Text style={styles.attachmentActionTitle}>
+                      {attachments.length >= MAX_MAINTENANCE_ATTACHMENTS ? 'Attachment limit reached' : 'Add attachment'}
+                    </Text>
+                    <Text style={styles.attachmentActionHint}>Photos, PDF, Word, TXT, or CSV - max 5 MB each</Text>
+                  </View>
+                  <Text style={styles.attachmentCount}>{attachments.length}/{MAX_MAINTENANCE_ATTACHMENTS}</Text>
+                </TouchableOpacity>
+                {attachmentUploadStatus ? (
+                  <Text style={styles.attachmentUploadNote}>{attachmentUploadStatus}</Text>
+                ) : null}
                 {attachments.length > 0 && (
                   <View style={styles.attachmentPreview}>
-                    {attachments.map((file) => (
-                      <TouchableOpacity
-                        key={getAttachmentDisplayName(file)}
-                        style={styles.previewChip}
-                        onLongPress={() => removeAttachment(getAttachmentDisplayName(file))}
-                      >
-                        <Text style={styles.previewText}>{getAttachmentDisplayName(file)}</Text>
-                      </TouchableOpacity>
+                    {attachments.map((file, index) => (
+                      <View key={`${getAttachmentDisplayName(file)}-${index}`} style={styles.createAttachmentChip}>
+                        <Ionicons name="document-attach-outline" size={16} color={colors.textMuted} />
+                        <Text style={styles.createAttachmentName} numberOfLines={1}>{getAttachmentDisplayName(file)}</Text>
+                        <TouchableOpacity
+                          style={styles.removeAttachmentButton}
+                          onPress={() => removeAttachment(index)}
+                          accessibilityRole="button"
+                          accessibilityLabel={`Remove ${getAttachmentDisplayName(file)}`}
+                        >
+                          <Ionicons name="close" size={17} color={colors.textMuted} />
+                        </TouchableOpacity>
+                      </View>
                     ))}
                   </View>
                 )}
@@ -1326,17 +1327,17 @@ export default function ServicesScreen() {
                   {/* Guided Stage Action Hub */}
                   {!editMode && (() => {
                     const currentStatus = (detailRequest.status || '').toLowerCase();
-                    const currentIdx = STATUS_STAGES.findIndex((s) => s.statuses.includes(currentStatus));
+                    const currentIdx = MAINTENANCE_STATUS_STAGES.findIndex((s) => s.statuses.includes(currentStatus));
                     if (currentIdx === -1) return null;
-                    const currentStage = STATUS_STAGES[currentIdx];
+                    const currentStage = MAINTENANCE_STATUS_STAGES[currentIdx];
                     return (
                       <View style={{ marginBottom: 20 }}>
                         <Text style={{ fontSize: 15, fontWeight: '800', color: colors.text }}>Guided Stage Action Hub</Text>
                         <Text style={{ fontSize: 12, color: colors.textMuted, marginTop: 2, marginBottom: 14 }}>
-                          Step {currentIdx + 1} of {STATUS_STAGES.length}: {currentStage.label} ({currentStage.detail})
+                          Step {currentIdx + 1} of {MAINTENANCE_STATUS_STAGES.length}: {currentStage.label} ({currentStage.detail})
                         </Text>
                         <View style={{ flexDirection: 'row', alignItems: 'center', paddingHorizontal: 4 }}>
-                          {STATUS_STAGES.map((stage, i) => {
+                          {MAINTENANCE_STATUS_STAGES.map((stage, i) => {
                             const isActive = i <= currentIdx;
                             const isCurrent = i === currentIdx;
                             return (
@@ -1345,7 +1346,7 @@ export default function ServicesScreen() {
                                   {isActive ? <Ionicons name="checkmark" size={14} color={colors.surface} /> : <Text style={{ fontSize: 10, color: colors.textMuted }}>{i + 1}</Text>}
                                 </View>
                                 <Text style={{ fontSize: 9, color: isActive ? colors.primary : colors.textMuted, marginTop: 4, textAlign: 'center' }}>{stage.label}</Text>
-                                {i < STATUS_STAGES.length - 1 && (
+                                {i < MAINTENANCE_STATUS_STAGES.length - 1 && (
                                   <View style={{ position: 'absolute', top: 13, left: '60%', right: '-40%', height: 2, backgroundColor: isActive && i < currentIdx ? colors.primary : colors.surfaceSecondary }} />
                                 )}
                               </View>
@@ -1386,8 +1387,8 @@ export default function ServicesScreen() {
 
                   {!editMode && (() => {
                     const currentStatus = (detailRequest.status || '').toLowerCase();
-                    const currentIdx = STATUS_STAGES.findIndex((s) => s.statuses.includes(currentStatus));
-                    const currentStage = currentIdx !== -1 ? STATUS_STAGES[currentIdx] : null;
+                    const currentIdx = MAINTENANCE_STATUS_STAGES.findIndex((s) => s.statuses.includes(currentStatus));
+                    const currentStage = currentIdx !== -1 ? MAINTENANCE_STATUS_STAGES[currentIdx] : null;
                     return (
                       <View style={{ backgroundColor: '#F8FAFC', borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#E5E7EB' }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
@@ -1648,7 +1649,7 @@ export default function ServicesScreen() {
                     </View>
                   )}
 
-                  {!editMode && canReplyToRequest(detailRequest) && (
+                  {!editMode && detailAllowedActions.has(MAINTENANCE_ACTIONS.REPLY) && (
                     <View testID="maintenance-composer" style={styles.replyComposer}>
                       {replyAttachments.length > 0 ? (
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 8 }}>
@@ -1710,34 +1711,44 @@ export default function ServicesScreen() {
                       </View>
                     ) : (
                       <>
-                        {(detailRequest.status || '').toLowerCase() === 'pending' && (
+                        {(detailAllowedActions.has(MAINTENANCE_ACTIONS.EDIT) || detailAllowedActions.has(MAINTENANCE_ACTIONS.CANCEL)) && (
                           <>
-                            <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 14 }} onPress={enterEditMode}>
-                              <Ionicons name="create-outline" size={20} color={colors.surface} />
-                              <Text style={{ color: colors.surface, fontWeight: '700', fontSize: 15 }}>Edit Request</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FEF2F2', borderRadius: 12, paddingVertical: 14 }} onPress={() => setShowCancelConfirm(true)}>
-                              <Ionicons name="close-circle-outline" size={20} color="#DC2626" />
-                              <Text style={{ color: '#DC2626', fontWeight: '700', fontSize: 15 }}>Cancel Request</Text>
-                            </TouchableOpacity>
+                            {detailAllowedActions.has(MAINTENANCE_ACTIONS.EDIT) && (
+                              <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 14 }} onPress={enterEditMode}>
+                                <Ionicons name="create-outline" size={20} color={colors.surface} />
+                                <Text style={{ color: colors.surface, fontWeight: '700', fontSize: 15 }}>Edit Request</Text>
+                              </TouchableOpacity>
+                            )}
+                            {detailAllowedActions.has(MAINTENANCE_ACTIONS.CANCEL) && (
+                              <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FEF2F2', borderRadius: 12, paddingVertical: 14 }} onPress={() => setShowCancelConfirm(true)}>
+                                <Ionicons name="close-circle-outline" size={20} color="#DC2626" />
+                                <Text style={{ color: '#DC2626', fontWeight: '700', fontSize: 15 }}>Cancel Request</Text>
+                              </TouchableOpacity>
+                            )}
                           </>
                         )}
-                        {['resolved', 'completed'].includes((detailRequest.status || '').toLowerCase()) && !detailRequest.tenant_confirmed_resolved && (
+                        {!detailRequest.tenant_confirmed_resolved && (detailAllowedActions.has(MAINTENANCE_ACTIONS.CONFIRM_RESOLVED) || detailAllowedActions.has(MAINTENANCE_ACTIONS.REOPEN)) && (
                           <>
-                            <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#ECFDF5', borderRadius: 12, paddingVertical: 14 }} onPress={handleConfirmResolved} disabled={saving}>
-                              <Ionicons name="checkmark-done-circle-outline" size={20} color="#065F46" />
-                              <Text style={{ color: '#065F46', fontWeight: '700', fontSize: 15 }}>Confirm Resolved</Text>
-                            </TouchableOpacity>
-                            <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#EFF6FF', borderRadius: 12, paddingVertical: 14 }} onPress={() => setShowReopenModal(true)}>
-                              <Ionicons name="refresh" size={20} color="#2563EB" />
-                              <Text style={{ color: '#2563EB', fontWeight: '700', fontSize: 15 }}>Still an Issue</Text>
-                            </TouchableOpacity>
+                            {detailAllowedActions.has(MAINTENANCE_ACTIONS.CONFIRM_RESOLVED) && (
+                              <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#ECFDF5', borderRadius: 12, paddingVertical: 14 }} onPress={handleConfirmResolved} disabled={saving}>
+                                <Ionicons name="checkmark-done-circle-outline" size={20} color="#065F46" />
+                                <Text style={{ color: '#065F46', fontWeight: '700', fontSize: 15 }}>Confirm Resolved</Text>
+                              </TouchableOpacity>
+                            )}
+                            {detailAllowedActions.has(MAINTENANCE_ACTIONS.REOPEN) && (
+                              <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#EFF6FF', borderRadius: 12, paddingVertical: 14 }} onPress={() => setShowReopenModal(true)}>
+                                <Ionicons name="refresh" size={20} color="#2563EB" />
+                                <Text style={{ color: '#2563EB', fontWeight: '700', fontSize: 15 }}>Still an Issue</Text>
+                              </TouchableOpacity>
+                            )}
                           </>
                         )}
-                        <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.surfaceSecondary, borderRadius: 12, paddingVertical: 14 }} onPress={submitSimilar}>
-                          <Ionicons name="copy-outline" size={20} color={colors.text} />
-                          <Text style={{ color: colors.text, fontWeight: '700', fontSize: 15 }}>Submit Similar</Text>
-                        </TouchableOpacity>
+                        {detailAllowedActions.has(MAINTENANCE_ACTIONS.SUBMIT_SIMILAR) && (
+                          <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.surfaceSecondary, borderRadius: 12, paddingVertical: 14 }} onPress={submitSimilar}>
+                            <Ionicons name="copy-outline" size={20} color={colors.text} />
+                            <Text style={{ color: colors.text, fontWeight: '700', fontSize: 15 }}>Submit Similar</Text>
+                          </TouchableOpacity>
+                        )}
                       </>
                     )}
                   </View>
@@ -1747,6 +1758,15 @@ export default function ServicesScreen() {
           </View>
         </KeyboardAvoidingView>
       </Modal>
+
+      <AttachmentPickerSheet
+        visible={showCreateAttachMenu}
+        onClose={() => setShowCreateAttachMenu(false)}
+        onTakePhoto={() => handleAttach(pickFromCamera)}
+        onChoosePhoto={() => handleAttach(pickFromLibrary)}
+        onChooseDocument={() => handleAttach(pickDocument)}
+        disabled={submitting}
+      />
 
       <AttachmentPickerSheet
         visible={showReplyAttachMenu}

@@ -18,22 +18,16 @@ function normalizeBaseUrl(value) {
   return String(value || '').trim().replace(/\/+$/, '');
 }
 
-function resolveRedirectBaseUrl(req) {
+function resolveRedirectBaseUrl() {
   const configured = normalizeBaseUrl(process.env.BACKEND_URL);
   if (configured) {
-    return configured;
+    try {
+      const parsed = new URL(configured);
+      if (['http:', 'https:'].includes(parsed.protocol)) return configured;
+    } catch (_error) {
+      // Fall through to the known production origin.
+    }
   }
-
-  const forwardedProto = req.headers['x-forwarded-proto'];
-  const protocol = typeof forwardedProto === 'string' && forwardedProto
-    ? forwardedProto.split(',')[0].trim()
-    : (req.protocol || 'http');
-  const host = req.get('host');
-
-  if (host) {
-    return `${protocol}://${host}`;
-  }
-
   return DEFAULT_BACKEND_URL;
 }
 
@@ -192,38 +186,109 @@ async function resolveBillWithSource(db, billingId, user) {
 }
 
 // ── Save checkout reference to the correct collection ────────────────────────
-async function saveCheckoutRef(db, billingId, userId, mongoId, checkoutId, referenceNumber, checkoutUrl) {
-  const realFilter = buildRealBillLookupFilter(billingId, mongoId, {}, userId);
-  if (realFilter) {
-    const realResult = await db.collection('bills').updateOne(
-      realFilter,
-      {
-        $set: {
-          paymongoSessionId: checkoutId,
-          paymongoCheckoutUrl: checkoutUrl || null,
-          paymongoSessionCreatedAt: new Date(),
-          paymongoReference: referenceNumber,
-          paymentMethod: 'paymongo',
-          updatedAt: new Date(),
-        },
-        $unset: { checkoutClaimedAt: '' },
-      }
-    );
-    if (realResult.matchedCount > 0) return;
+function checkoutStorageDescriptor(source, billingId, user = {}) {
+  if (source === 'real') {
+    return {
+      source,
+      collectionName: 'bills',
+      filter: buildRealBillLookupFilter(billingId, user?._id, {}, user?.user_id),
+      fields: {
+        sessionId: 'paymongoSessionId',
+        checkoutUrl: 'paymongoCheckoutUrl',
+        createdAt: 'paymongoSessionCreatedAt',
+        reference: 'paymongoReference',
+        claim: 'checkoutClaimedAt',
+        idempotencyKey: 'checkoutIdempotencyKey',
+      },
+    };
   }
+  if (source === 'legacy') {
+    return {
+      source,
+      collectionName: 'billing',
+      filter: { billing_id: billingId, user_id: user?.user_id },
+      fields: {
+        sessionId: 'paymongo_checkout_id',
+        checkoutUrl: 'paymongo_checkout_url',
+        createdAt: 'paymongo_session_created_at',
+        reference: 'paymongo_reference',
+        claim: 'checkout_claimed_at',
+        idempotencyKey: 'checkout_idempotency_key',
+      },
+    };
+  }
+  return null;
+}
 
-  const legacyResult = await db.collection('billing').updateOne(
-    { billing_id: billingId, user_id: userId },
+function readStoredCheckout(doc, descriptor) {
+  if (!doc || !descriptor) return null;
+  const { fields } = descriptor;
+  return {
+    sessionId: doc[fields.sessionId] || '',
+    checkoutUrl: doc[fields.checkoutUrl] || '',
+    createdAt: doc[fields.createdAt] || null,
+    claimAt: doc[fields.claim] || null,
+    idempotencyKey: doc[fields.idempotencyKey] || '',
+  };
+}
+
+async function loadStoredCheckout(db, descriptor) {
+  if (!descriptor?.filter) return null;
+  const projection = Object.fromEntries(Object.values(descriptor.fields).map((field) => [field, 1]));
+  const doc = await db.collection(descriptor.collectionName).findOne(descriptor.filter, { projection });
+  return readStoredCheckout(doc, descriptor);
+}
+
+async function claimCheckoutCreation(db, descriptor, now, idempotencyKey) {
+  const { fields } = descriptor;
+  const claimed = unwrapMongoDocument(await db.collection(descriptor.collectionName).findOneAndUpdate(
+    {
+      $and: [
+        descriptor.filter,
+        {
+          $or: [
+            { [fields.claim]: { $exists: false } },
+            { [fields.claim]: { $lt: new Date(now.getTime() - CHECKOUT_CLAIM_TTL_MS) } },
+          ],
+        },
+      ],
+    },
+    { $set: { [fields.claim]: now, [fields.idempotencyKey]: idempotencyKey } },
+    { returnDocument: 'after' },
+  ));
+  return claimed ? readStoredCheckout(claimed, descriptor) : null;
+}
+
+async function releaseCheckoutClaim(db, descriptor, { clearIdempotencyKey = false } = {}) {
+  if (!descriptor?.filter) return;
+  const unset = { [descriptor.fields.claim]: '' };
+  if (clearIdempotencyKey) unset[descriptor.fields.idempotencyKey] = '';
+  await db.collection(descriptor.collectionName).updateOne(descriptor.filter, { $unset: unset });
+}
+
+async function saveCheckoutRef(db, descriptor, checkoutId, referenceNumber, checkoutUrl) {
+  const { fields } = descriptor;
+  const now = new Date();
+  const result = await db.collection(descriptor.collectionName).updateOne(
+    descriptor.filter,
     {
       $set: {
-        paymongo_checkout_id: checkoutId,
-        paymongo_reference: referenceNumber,
-        payment_method: 'paymongo',
-        updated_at: new Date(),
+        [fields.sessionId]: checkoutId,
+        [fields.checkoutUrl]: checkoutUrl || null,
+        [fields.createdAt]: now,
+        [fields.reference]: referenceNumber,
+        ...(descriptor.source === 'real'
+          ? { paymentMethod: 'paymongo', updatedAt: now }
+          : { payment_method: 'paymongo', updated_at: now }),
       },
-    }
+      $unset: { [fields.claim]: '' },
+    },
   );
-  if (legacyResult.matchedCount > 0) return;
+  if (result.matchedCount !== 1) {
+    const error = new Error('Created PayMongo checkout could not be bound to its exact bill.');
+    error.code = 'PAYMONGO_CHECKOUT_BIND_FAILED';
+    throw error;
+  }
 }
 
 async function findBillByCheckoutId(db, checkoutId) {
@@ -530,28 +595,24 @@ async function resolveRealBillOwnerUserId(db, bill = {}, fallbackUserId = '') {
 async function markBillPaid(db, billingId, userId, options = {}) {
   const { checkoutId } = options;
 
-  try {
-    const user = await db.collection('users').findOne({ user_id: userId });
-    const mongoId = user?._id;
-    const realFilter = buildRealBillLookupFilter(billingId, mongoId, {}, userId);
-    if (realFilter) {
-      const realResult = await markRealBillPaidAtomic(
-        db,
-        realFilter,
-        userId,
-        options
-      );
-      if (realResult.matched) {
-        console.log(`[markBillPaid] Bill ${billingId} resolved in bills collection`);
-        return realResult;
-      }
+  const user = await db.collection('users').findOne({ user_id: userId });
+  const mongoId = user?._id;
+  const realFilter = buildRealBillLookupFilter(billingId, mongoId, {}, userId);
+  if (realFilter) {
+    const realResult = await markRealBillPaidAtomic(
+      db,
+      realFilter,
+      userId,
+      options
+    );
+    if (realResult.matched) {
+      console.log(`[markBillPaid] Bill ${billingId} resolved in bills collection`);
+      return realResult;
     }
+  }
 
-    if (!mongoId) {
-      console.warn(`[markBillPaid] User not found for user_id=${userId}`);
-    }
-  } catch (err) {
-    console.error(`[markBillPaid] DB error for bill ${billingId}:`, err.message);
+  if (!mongoId) {
+    console.warn(`[markBillPaid] User not found for user_id=${userId}`);
   }
 
   const legacyResult = await markLegacyBillPaidAtomic(
@@ -580,53 +641,47 @@ async function markBillPaid(db, billingId, userId, options = {}) {
   // bill, and settling an arbitrary match from an ambiguous set is exactly
   // the kind of wrong-bill risk this fallback exists to avoid).
   if (checkoutId) {
-    try {
-      const sessionMatches = await db.collection('bills').find(
-        { paymongoSessionId: checkoutId },
-        { projection: { userId: 1, tenantId: 1, user_id: 1, tenantUserId: 1, tenant_user_id: 1 } }
-      ).limit(2).toArray();
+    const sessionMatches = await db.collection('bills').find(
+      { paymongoSessionId: checkoutId },
+      { projection: { userId: 1, tenantId: 1, user_id: 1, tenantUserId: 1, tenant_user_id: 1 } }
+    ).limit(2).toArray();
 
-      if (sessionMatches.length > 1) {
-        console.error(`[markBillPaid] REFUSING to settle — checkout ${checkoutId} matches more than one bill. Failing closed.`);
-      } else if (sessionMatches.length === 1) {
-        const bySession = sessionMatches[0];
-        const resolvedUserId = await resolveRealBillOwnerUserId(db, bySession, userId);
-        const realCheckoutResult = await markRealBillPaidAtomic(
-          db,
-          { paymongoSessionId: checkoutId },
-          resolvedUserId,
-          options
-        );
-        if (realCheckoutResult.matched) {
-          console.log(`[markBillPaid] Bill found by paymongoSessionId ${checkoutId}`);
-          return realCheckoutResult;
-        }
+    if (sessionMatches.length > 1) {
+      console.error(`[markBillPaid] REFUSING to settle — checkout ${checkoutId} matches more than one bill. Failing closed.`);
+      return { existing: null, alreadyPaid: false, matched: false, conflict: true };
+    } else if (sessionMatches.length === 1) {
+      const bySession = sessionMatches[0];
+      const resolvedUserId = await resolveRealBillOwnerUserId(db, bySession, userId);
+      const realCheckoutResult = await markRealBillPaidAtomic(
+        db,
+        { paymongoSessionId: checkoutId },
+        resolvedUserId,
+        options
+      );
+      if (realCheckoutResult.matched) {
+        console.log(`[markBillPaid] Bill found by paymongoSessionId ${checkoutId}`);
+        return realCheckoutResult;
       }
-    } catch (err) {
-      console.error(`[markBillPaid] bills checkout-ID fallback error:`, err.message);
     }
 
-    try {
-      const legacySessionMatches = await db.collection('billing').find(
-        { paymongo_checkout_id: checkoutId },
-        { projection: { _id: 1 } },
-      ).limit(2).toArray();
+    const legacySessionMatches = await db.collection('billing').find(
+      { paymongo_checkout_id: checkoutId },
+      { projection: { _id: 1 } },
+    ).limit(2).toArray();
 
-      if (legacySessionMatches.length > 1) {
-        console.error(`[markBillPaid] REFUSING to settle — legacy checkout ${checkoutId} matches more than one bill. Failing closed.`);
-      } else if (legacySessionMatches.length === 1) {
-        const legacyCheckoutResult = await markLegacyBillPaidAtomic(
-          db,
-          { paymongo_checkout_id: checkoutId },
-          options
-        );
-        if (legacyCheckoutResult.matched) {
-          console.log(`[markBillPaid] Bill found by checkout_id ${checkoutId}`);
-          return legacyCheckoutResult;
-        }
+    if (legacySessionMatches.length > 1) {
+      console.error(`[markBillPaid] REFUSING to settle — legacy checkout ${checkoutId} matches more than one bill. Failing closed.`);
+      return { existing: null, alreadyPaid: false, matched: false, conflict: true };
+    } else if (legacySessionMatches.length === 1) {
+      const legacyCheckoutResult = await markLegacyBillPaidAtomic(
+        db,
+        { paymongo_checkout_id: checkoutId },
+        options
+      );
+      if (legacyCheckoutResult.matched) {
+        console.log(`[markBillPaid] Bill found by checkout_id ${checkoutId}`);
+        return legacyCheckoutResult;
       }
-    } catch (err) {
-      console.error(`[markBillPaid] Checkout-ID fallback error:`, err.message);
     }
   }
 
@@ -695,27 +750,6 @@ async function sendPaymentReceiptForBill(db, {
   }
 }
 
-async function resolveCheckoutIdForBill(db, billingId) {
-  if (!billingId) return '';
-
-  const realFilter = buildRealBillLookupFilter(billingId, null);
-  if (realFilter) {
-    const realBill = await db.collection('bills').findOne(
-      realFilter,
-      { projection: { _id: 0, paymongoSessionId: 1 } },
-    );
-    if (realBill?.paymongoSessionId) return String(realBill.paymongoSessionId);
-  }
-
-  const legacy = await db.collection('billing').findOne(
-    { billing_id: billingId },
-    { projection: { _id: 0, paymongo_checkout_id: 1 } },
-  );
-  if (legacy?.paymongo_checkout_id) return String(legacy.paymongo_checkout_id);
-
-  return '';
-}
-
 async function reconcileCheckoutSessionPayment(db, checkoutId, {
   session = null,
   eventType = '',
@@ -757,7 +791,22 @@ async function reconcileCheckoutSessionPayment(db, checkoutId, {
   // before the bill is ever flipped to paid.
   const paidAmountCentavosRaw = state.payments[0]?.attributes?.amount;
   const paidAmountCentavos = Number.isFinite(Number(paidAmountCentavosRaw)) ? Number(paidAmountCentavosRaw) : null;
-  const { existing, alreadyPaid, resolvedUserId, underpaid } = await markBillPaid(db, billingId, userId, {
+  if (!Number.isFinite(paidAmountCentavos) || paidAmountCentavos <= 0) {
+    return {
+      session: resolvedSession,
+      ...state,
+      existing: null,
+      alreadyPaid: false,
+      underpaid: false,
+      conflict: false,
+      resolvedUserId: '',
+      referenceNumber,
+      paymentId,
+      settlementIssue: 'missing_payment_amount',
+      reconciled: false,
+    };
+  }
+  const { existing, alreadyPaid, resolvedUserId, underpaid, conflict } = await markBillPaid(db, billingId, userId, {
     paymentId,
     eventType,
     checkoutId,
@@ -790,6 +839,7 @@ async function reconcileCheckoutSessionPayment(db, checkoutId, {
     existing,
     alreadyPaid,
     underpaid: Boolean(underpaid),
+    conflict: Boolean(conflict),
     resolvedUserId: paymentUserId,
     referenceNumber,
     paymentId,
@@ -799,20 +849,23 @@ async function reconcileCheckoutSessionPayment(db, checkoutId, {
 
 // Create a PayMongo Checkout Session for a specific bill
 // A tenant re-opening the same unpaid bill, a double tap, or a client retry
-// must not each mint a brand-new PayMongo checkout session. REUSE_WINDOW_MS
-// bounds how long a just-created session is offered back to the tenant
-// instead of creating another one; CLAIM_TTL_MS is a short atomic lock so two
-// near-simultaneous requests for the same bill can't both pass the "no
-// existing session" check and both call PayMongo. Both are enforced on the
-// bill document itself via an atomic MongoDB update — no separate lock
-// collection needed, and no bill is ever marked paid by any of this; that
-// remains solely the webhook/poll reconciliation's job.
-const CHECKOUT_REUSE_WINDOW_MS = 20 * 60 * 1000;
+// must not each mint a brand-new PayMongo checkout session. A persisted
+// idempotency key and a short atomic claim cover both collections during the
+// migration window. Existing sessions are verified with PayMongo before they
+// are reused or replaced; an inconclusive provider lookup never creates a
+// second session. Only webhook/poll reconciliation can mark a bill paid.
 const CHECKOUT_CLAIM_TTL_MS = 20 * 1000;
+
+function checkoutReferenceNumber(billingId, idempotencyKey) {
+  const billPart = String(billingId || 'bill').replace(/[^a-zA-Z0-9_-]/g, '').slice(0, 36) || 'bill';
+  const attemptPart = crypto.createHash('sha256').update(String(idempotencyKey)).digest('hex').slice(0, 12);
+  return `LC-${billPart}-${attemptPart}`;
+}
 
 async function createCheckoutSession(req, res) {
   const db = getDb();
-  let claimedFilter = null;
+  let checkoutDescriptor = null;
+  let claimHeld = false;
   try {
     const { billingId } = req.body;
     if (!billingId) {
@@ -839,62 +892,103 @@ async function createCheckoutSession(req, res) {
       return res.status(400).json({ detail: 'Invalid bill amount' });
     }
 
-    const realFilter = source === 'real'
-      ? buildRealBillLookupFilter(billingId, req.user?._id, {}, req.user?.user_id)
-      : null;
+    checkoutDescriptor = checkoutStorageDescriptor(source, billingId, req.user);
+    if (!checkoutDescriptor?.filter) {
+      return res.status(503).json({
+        code: 'BILLING_SOURCE_UNAVAILABLE',
+        detail: 'The authoritative billing record could not be resolved. Please try again.',
+        retryable: true,
+      });
+    }
     const now = new Date();
 
-    if (realFilter) {
-      const existing = await db.collection('bills').findOne(realFilter, {
-        projection: { paymongoSessionId: 1, paymongoSessionCreatedAt: 1, paymongoCheckoutUrl: 1 },
-      });
-      const createdAt = existing?.paymongoSessionCreatedAt ? new Date(existing.paymongoSessionCreatedAt) : null;
-      if (existing?.paymongoSessionId && existing?.paymongoCheckoutUrl && createdAt && (now - createdAt) < CHECKOUT_REUSE_WINDOW_MS) {
-        try {
-          const statusResponse = await axios.get(`${PAYMONGO_BASE}/checkout_sessions/${existing.paymongoSessionId}`, {
-            headers: paymongoHeaders(),
+    const storedCheckout = await loadStoredCheckout(db, checkoutDescriptor);
+    let replaceStoredAttempt = false;
+    if (storedCheckout?.sessionId) {
+      let existingSession;
+      try {
+        existingSession = await fetchCheckoutSessionRecord(storedCheckout.sessionId);
+      } catch (error) {
+        const lookupStatus = Number(error?.response?.status || 0);
+        if ([404, 410].includes(lookupStatus)) {
+          replaceStoredAttempt = true;
+        } else {
+          console.warn('[PayMongo] Existing checkout could not be verified; refusing to create a duplicate:', error.message);
+          return res.status(503).json({
+            code: 'PAYMONGO_STATUS_UNAVAILABLE',
+            detail: 'Your existing payment session could not be checked. It has been kept; please retry shortly.',
+            retryable: true,
           });
-          const sessionStatus = statusResponse.data?.data?.attributes?.status;
-          const alreadyPaid = Array.isArray(statusResponse.data?.data?.attributes?.payments)
-            && statusResponse.data.data.attributes.payments.some((p) => p?.attributes?.status === 'paid');
-          if (!alreadyPaid && sessionStatus !== 'expired') {
-            return res.json({
-              checkout_url: existing.paymongoCheckoutUrl,
-              checkout_id: existing.paymongoSessionId,
-              reused: true,
-            });
-          }
-        } catch (_lookupError) {
-          // PayMongo lookup failed (network/expired/unknown id) — fall through
-          // and create a fresh session rather than blocking payment entirely.
         }
       }
 
-      // Atomically claim the right to create a session for this exact bill so
-      // two requests racing past the reuse check above can't both call
-      // PayMongo. The loser gets a clear, actionable message instead of a
-      // second live checkout.
-      const claim = await db.collection('bills').findOneAndUpdate(
-        {
-          ...realFilter,
-          $or: [
-            { checkoutClaimedAt: { $exists: false } },
-            { checkoutClaimedAt: { $lt: new Date(now.getTime() - CHECKOUT_CLAIM_TTL_MS) } },
-          ],
-        },
-        { $set: { checkoutClaimedAt: now } },
-      );
-      if (!claim) {
-        return res.status(409).json({ detail: 'A payment session is already being created for this bill. Please wait a moment and try again.' });
+      if (!replaceStoredAttempt) {
+        const state = getCheckoutSessionPaymentState(existingSession || {});
+        const normalizedStatus = normalizeCheckoutStatusForClient(state);
+        if (state.paymentConfirmed) {
+          await reconcileCheckoutSessionPayment(db, storedCheckout.sessionId, {
+            session: existingSession,
+            eventType: 'checkout_reuse_check',
+          });
+          return res.status(409).json({
+            code: 'BILL_ALREADY_PAID',
+            detail: 'This bill has already been paid.',
+            paid: true,
+            checkout_id: storedCheckout.sessionId,
+          });
+        }
+
+        if (normalizedStatus === 'failed' || normalizedStatus === 'cancelled') {
+          replaceStoredAttempt = true;
+        } else if (normalizedStatus === 'pending') {
+          const checkoutUrl = storedCheckout.checkoutUrl || existingSession?.attributes?.checkout_url;
+          if (!checkoutUrl) {
+            return res.status(503).json({
+              code: 'PAYMONGO_CHECKOUT_INCOMPLETE',
+              detail: 'Your payment session exists but its checkout link is unavailable. Please retry shortly.',
+              retryable: true,
+            });
+          }
+          if (!storedCheckout.checkoutUrl) {
+            await saveCheckoutRef(
+              db,
+              checkoutDescriptor,
+              storedCheckout.sessionId,
+              existingSession?.attributes?.reference_number || '',
+              checkoutUrl,
+            );
+          }
+          return res.json({ checkout_url: checkoutUrl, checkout_id: storedCheckout.sessionId, reused: true });
+        } else {
+          return res.status(503).json({
+            code: 'PAYMONGO_STATUS_UNRESOLVED',
+            detail: 'Your existing payment session has an unresolved status. No duplicate session was created.',
+            retryable: true,
+          });
+        }
       }
-      claimedFilter = realFilter;
     }
 
+    const idempotencyKey = !replaceStoredAttempt && storedCheckout?.idempotencyKey
+      ? storedCheckout.idempotencyKey
+      : crypto.randomUUID();
+    const claim = await claimCheckoutCreation(db, checkoutDescriptor, now, idempotencyKey);
+    if (!claim) {
+      return res.status(409).json({
+        code: 'PAYMONGO_CHECKOUT_IN_PROGRESS',
+        detail: 'A payment session is already being created for this bill. Please wait a moment and try again.',
+        retryable: true,
+      });
+    }
+    claimHeld = true;
+
+    // A successful claim is the only path to provider session creation.
     const description = bill.description || `Bill ${billingId}`;
-    const referenceNumber = `LC-${billingId}-${Date.now()}`;
+    const referenceNumber = checkoutReferenceNumber(billingId, idempotencyKey);
 
     // Build redirect URLs from the permanent mobile backend origin.
-    const backendUrl = resolveRedirectBaseUrl(req);
+    const backendUrl = resolveRedirectBaseUrl();
+    const encodedBillingId = encodeURIComponent(billingId);
 
     // Build the PayMongo Checkout Session payload
     const payload = {
@@ -920,8 +1014,8 @@ async function createCheckoutSession(req, res) {
           ],
           reference_number: referenceNumber,
           // Redirect to backend endpoints that bounce the user back to the app via deep link
-          success_url: `${backendUrl}/api/m/paymongo/redirect/success?billing_id=${billingId}`,
-          cancel_url: `${backendUrl}/api/m/paymongo/redirect/cancel?billing_id=${billingId}`,
+          success_url: `${backendUrl}/api/m/paymongo/redirect/success?billing_id=${encodedBillingId}`,
+          cancel_url: `${backendUrl}/api/m/paymongo/redirect/cancel?billing_id=${encodedBillingId}`,
           metadata: {
             billing_id: billingId,
             user_id: req.user.user_id,
@@ -932,21 +1026,23 @@ async function createCheckoutSession(req, res) {
     };
 
     const response = await axios.post(`${PAYMONGO_BASE}/checkout_sessions`, payload, {
-      headers: paymongoHeaders(),
+      headers: { ...paymongoHeaders(), 'Idempotency-Key': idempotencyKey },
     });
 
     const session = response.data?.data;
     const checkoutUrl = session?.attributes?.checkout_url;
     const checkoutId = session?.id;
 
-    if (!checkoutUrl) {
-      if (claimedFilter) await db.collection('bills').updateOne(claimedFilter, { $unset: { checkoutClaimedAt: '' } });
-      return res.status(500).json({ detail: 'Failed to create checkout session' });
+    if (!checkoutUrl || !checkoutId) {
+      const error = new Error('PayMongo returned an incomplete checkout session.');
+      error.code = 'PAYMONGO_INCOMPLETE_RESPONSE';
+      throw error;
     }
 
     // Save checkout reference to the correct collection (legacy or real).
     // This also clears the claim lock set above.
-    await saveCheckoutRef(db, billingId, req.user.user_id, req.user._id, checkoutId, referenceNumber, checkoutUrl);
+    await saveCheckoutRef(db, checkoutDescriptor, checkoutId, referenceNumber, checkoutUrl);
+    claimHeld = false;
 
     res.json({
       checkout_url: checkoutUrl,
@@ -954,13 +1050,21 @@ async function createCheckoutSession(req, res) {
       reference: referenceNumber,
     });
   } catch (error) {
-    if (claimedFilter) {
-      try { await db.collection('bills').updateOne(claimedFilter, { $unset: { checkoutClaimedAt: '' } }); } catch (_) {}
+    if (claimHeld && checkoutDescriptor) {
+      const providerStatus = Number(error?.response?.status || 0);
+      const definitelyRejected = providerStatus >= 400 && providerStatus < 500 && providerStatus !== 409;
+      try { await releaseCheckoutClaim(db, checkoutDescriptor, { clearIdempotencyKey: definitelyRejected }); } catch (_) {}
     }
     console.error('PayMongo checkout error:', error?.response?.data || error.message);
     const paymongoError = error?.response?.data?.errors?.[0]?.detail;
-    res.status(500).json({
+    const providerStatus = Number(error?.response?.status || 0);
+    const retryable = !providerStatus || providerStatus >= 500 || providerStatus === 409
+      || error.code === 'PAYMONGO_CHECKOUT_BIND_FAILED'
+      || error.code === 'PAYMONGO_INCOMPLETE_RESPONSE';
+    res.status(retryable ? 503 : 502).json({
+      code: retryable ? 'PAYMONGO_TEMPORARILY_UNAVAILABLE' : 'PAYMONGO_REQUEST_REJECTED',
       detail: paymongoError || 'Failed to create payment session. Please try again.',
+      retryable,
     });
   }
 }
@@ -1001,7 +1105,13 @@ async function getCheckoutStatus(req, res) {
     });
   } catch (error) {
     console.error('PayMongo status check error:', error?.response?.data || error.message);
-    res.status(500).json({ detail: 'Failed to check payment status' });
+    const providerStatus = Number(error?.response?.status || 0);
+    const retryable = !providerStatus || providerStatus === 429 || providerStatus >= 500;
+    res.status(retryable ? 503 : 502).json({
+      code: retryable ? 'PAYMONGO_STATUS_UNAVAILABLE' : 'PAYMONGO_STATUS_REJECTED',
+      detail: 'Payment status could not be checked. Your payment record has been kept; please retry shortly.',
+      retryable,
+    });
   }
 }
 
@@ -1035,6 +1145,16 @@ function verifyWebhookSignature(req) {
   const signature = parts.te || parts.li; // te = test, li = live
   if (!timestamp || !signature) return false;
 
+  const timestampSeconds = Number(timestamp);
+  const configuredTolerance = Number(process.env.PAYMONGO_WEBHOOK_TOLERANCE_SECONDS || 300);
+  const toleranceSeconds = Number.isFinite(configuredTolerance) && configuredTolerance > 0
+    ? Math.max(30, configuredTolerance)
+    : 300;
+  if (!Number.isFinite(timestampSeconds)
+      || Math.abs(Math.floor(Date.now() / 1000) - timestampSeconds) > toleranceSeconds) {
+    return false;
+  }
+
   const rawBody = req.rawBody ? req.rawBody.toString('utf8') : JSON.stringify(req.body);
   const signedPayload = `${timestamp}.${rawBody}`;
   const expected = crypto
@@ -1049,7 +1169,164 @@ function verifyWebhookSignature(req) {
   return crypto.timingSafeEqual(expectedBuffer, receivedBuffer);
 }
 
-// PayMongo webhook handler — receives events from PayMongo
+const PAYMONGO_WEBHOOK_EVENTS_COLLECTION = 'paymongo_webhook_events';
+const PAYMONGO_WEBHOOK_LEASE_MS = 60 * 1000;
+
+function webhookError(message, statusCode = 400) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  return error;
+}
+
+function paymongoLivemodeMatches(event) {
+  const eventLivemode = event?.attributes?.livemode
+    ?? event?.attributes?.data?.attributes?.livemode;
+  if (typeof eventLivemode !== 'boolean') return true;
+
+  const key = getSecretKey();
+  if (key.startsWith('sk_live_')) return eventLivemode === true;
+  if (key.startsWith('sk_test_')) return eventLivemode === false;
+  return true;
+}
+
+function hashWebhookPayload(event) {
+  return crypto.createHash('sha256').update(JSON.stringify(event)).digest('hex');
+}
+
+async function recordPaymongoWebhookEvent(db, event) {
+  const eventId = String(event?.id || '').trim();
+  const eventType = String(event?.attributes?.type || '').trim();
+  const checkoutData = event?.attributes?.data;
+  const checkoutId = String(checkoutData?.id || '').trim();
+
+  if (!eventId || !eventType || !checkoutData || !checkoutId) {
+    throw webhookError('Malformed PayMongo webhook event');
+  }
+  if (!paymongoLivemodeMatches(event)) {
+    throw webhookError('PayMongo webhook environment mismatch');
+  }
+
+  const collection = db.collection(PAYMONGO_WEBHOOK_EVENTS_COLLECTION);
+  const now = new Date();
+  const payloadHash = hashWebhookPayload(event);
+  await collection.updateOne(
+    { eventId },
+    {
+      $setOnInsert: {
+        eventId,
+        eventType,
+        checkoutId,
+        livemode: event?.attributes?.livemode
+          ?? checkoutData?.attributes?.livemode
+          ?? null,
+        payloadHash,
+        checkoutData,
+        status: 'pending',
+        attemptCount: 0,
+        createdAt: now,
+      },
+      $set: { lastReceivedAt: now },
+    },
+    { upsert: true },
+  );
+
+  const record = await collection.findOne({ eventId });
+  if (!record) throw new Error(`Webhook event ${eventId} was not durably recorded`);
+  if (record.payloadHash !== payloadHash) {
+    throw webhookError(`Webhook event ${eventId} was replayed with a different payload`, 409);
+  }
+  return record;
+}
+
+async function processPaymongoWebhookEvent(db, event) {
+  const eventId = String(event.id);
+  const eventType = String(event.attributes.type);
+  const checkoutData = event.attributes.data;
+  const checkoutId = String(checkoutData.id);
+  const events = db.collection(PAYMONGO_WEBHOOK_EVENTS_COLLECTION);
+  const now = new Date();
+
+  const claim = unwrapMongoDocument(await events.findOneAndUpdate(
+    {
+      eventId,
+      $or: [
+        { status: { $in: ['pending', 'failed'] } },
+        { status: 'processing', leaseExpiresAt: { $lt: now } },
+      ],
+    },
+    {
+      $set: {
+        status: 'processing',
+        processingStartedAt: now,
+        leaseExpiresAt: new Date(now.getTime() + PAYMONGO_WEBHOOK_LEASE_MS),
+        updatedAt: now,
+      },
+      $inc: { attemptCount: 1 },
+      $unset: { lastError: '' },
+    },
+    { returnDocument: 'after' },
+  ));
+
+  if (!claim) {
+    const current = await events.findOne({ eventId });
+    return {
+      duplicate: true,
+      status: current?.status || 'processing',
+      reconciled: current?.status === 'processed',
+    };
+  }
+
+  try {
+    const result = await reconcileCheckoutSessionPayment(db, checkoutId, {
+      session: checkoutData,
+      eventType,
+    });
+    const needsReview = Boolean(result.underpaid || result.conflict || !result.reconciled);
+    const finalStatus = needsReview ? 'needs_review' : 'processed';
+    const resolution = result.underpaid
+      ? 'underpaid'
+      : result.conflict
+        ? 'ambiguous_checkout_binding'
+        : result.reconciled
+          ? 'settled'
+          : 'bill_not_found';
+    const completedAt = new Date();
+    const updateResult = await events.updateOne(
+      { eventId, status: 'processing' },
+      {
+        $set: {
+          status: finalStatus,
+          resolution,
+          reconciled: Boolean(result.reconciled && !result.underpaid),
+          completedAt,
+          updatedAt: completedAt,
+        },
+        $unset: { leaseExpiresAt: '', lastError: '' },
+      },
+    );
+    if (updateResult.matchedCount !== 1) {
+      throw new Error(`Webhook event ${eventId} lost its processing lease`);
+    }
+    return { ...result, status: finalStatus, resolution, duplicate: false };
+  } catch (error) {
+    const failedAt = new Date();
+    await events.updateOne(
+      { eventId },
+      {
+        $set: {
+          status: 'failed',
+          lastError: String(error?.message || error).slice(0, 500),
+          failedAt,
+          updatedAt: failedAt,
+        },
+        $unset: { leaseExpiresAt: '' },
+      },
+    );
+    throw error;
+  }
+}
+
+// PayMongo webhook handler: verify, durably deduplicate, then reconcile.
 async function handleWebhook(req, res) {
   try {
     if (!verifyWebhookSignature(req)) {
@@ -1060,27 +1337,44 @@ async function handleWebhook(req, res) {
     const event = req.body?.data;
     const eventType = event?.attributes?.type;
 
-    if (eventType === 'checkout_session.payment.paid') {
-      const checkoutData = event?.attributes?.data;
-      const billingId = checkoutData?.attributes?.metadata?.billing_id;
-      const userId = checkoutData?.attributes?.metadata?.user_id;
-
-      if (billingId && userId) {
-        const db = getDb();
-        const webhookCheckoutId = checkoutData?.id || '';
-        await reconcileCheckoutSessionPayment(db, webhookCheckoutId, {
-          session: checkoutData,
-          eventType,
-        });
-        console.log(`[PayMongo Webhook] Bill ${billingId} marked as paid`);
-      }
+    if (eventType !== 'checkout_session.payment.paid') {
+      return res.status(200).json({ received: true, ignored: true });
     }
 
-    // Always respond 200 to acknowledge the webhook
-    res.status(200).json({ received: true });
+    const db = getDb();
+    await recordPaymongoWebhookEvent(db, event);
+    const result = await processPaymongoWebhookEvent(db, event);
+    if (result.status === 'processing') {
+      return res.status(503).json({
+        received: true,
+        duplicate: true,
+        status: 'processing',
+        retryable: true,
+        detail: 'The event is still being processed; retry is required until it reaches a durable terminal state.',
+      });
+    }
+    if (result.duplicate) {
+      console.log(`[PayMongo Webhook] Event ${event.id} already recorded with status ${result.status}`);
+    } else if (result.status === 'processed') {
+      console.log(`[PayMongo Webhook] Event ${event.id} reconciled successfully`);
+    } else if (result.status === 'needs_review') {
+      console.warn(`[PayMongo Webhook] Event ${event.id} retained for review: ${result.resolution}`);
+    }
+    return res.status(200).json({
+      received: true,
+      duplicate: Boolean(result.duplicate),
+      status: result.status,
+    });
   } catch (error) {
     console.error('PayMongo webhook error:', error);
-    res.status(200).json({ received: true }); // Still 200 to prevent retries
+    const statusCode = Number(error?.statusCode) || 503;
+    return res.status(statusCode).json({
+      received: false,
+      retryable: statusCode >= 500,
+      detail: statusCode >= 500
+        ? 'Webhook processing failed; retry is required'
+        : error.message,
+    });
   }
 }
 
@@ -1161,22 +1455,14 @@ async function registerWebhook() {
 
 // ── Redirect handlers ──
 // PayMongo redirects the browser here after payment. We serve an HTML page
-// that auto-redirects to the app's deep link (frontend:// scheme).
+// that auto-redirects to the app's deep link (frontend:// scheme). These
+// public endpoints never mutate billing state; verified webhook delivery or
+// an authenticated checkout-status poll performs settlement.
 
 async function redirectSuccess(req, res) {
   const billingId = req.query.billing_id || '';
-  let checkoutId = '';
-  try {
-    const db = getDb();
-    checkoutId = await resolveCheckoutIdForBill(db, billingId);
-    if (checkoutId) {
-      await reconcileCheckoutSessionPayment(db, checkoutId, { eventType: 'redirect_success' });
-    }
-  } catch (_) {}
-
-  const checkoutParam = checkoutId ? `&checkout_id=${encodeURIComponent(checkoutId)}` : '';
-  const prodLink = `frontend://payment-success?billing_id=${encodeURIComponent(billingId)}&status=success${checkoutParam}`;
-  const devLink = `exp+frontend://payment-success?billing_id=${encodeURIComponent(billingId)}&status=success${checkoutParam}`;
+  const prodLink = `frontend://payment-success?billing_id=${encodeURIComponent(billingId)}&status=success`;
+  const devLink = `exp+frontend://payment-success?billing_id=${encodeURIComponent(billingId)}&status=success`;
   console.log(`[PayMongo] Payment success redirect for bill ${billingId}`);
 
   // Immediately redirect to the app scheme. Chrome Custom Tabs (openAuthSessionAsync)
@@ -1211,15 +1497,8 @@ async function redirectSuccess(req, res) {
 
 async function redirectCancel(req, res) {
   const billingId = req.query.billing_id || '';
-  let checkoutId = '';
-  try {
-    const db = getDb();
-    checkoutId = await resolveCheckoutIdForBill(db, billingId);
-  } catch (_) {}
-
-  const checkoutParam = checkoutId ? `&checkout_id=${encodeURIComponent(checkoutId)}` : '';
-  const prodLink = `frontend://payment-cancel?billing_id=${encodeURIComponent(billingId)}&status=cancelled${checkoutParam}`;
-  const devLink = `exp+frontend://payment-cancel?billing_id=${encodeURIComponent(billingId)}&status=cancelled${checkoutParam}`;
+  const prodLink = `frontend://payment-cancel?billing_id=${encodeURIComponent(billingId)}&status=cancelled`;
+  const devLink = `exp+frontend://payment-cancel?billing_id=${encodeURIComponent(billingId)}&status=cancelled`;
   console.log(`[PayMongo] Payment cancelled redirect for bill ${billingId}`);
 
   res.send(`<!DOCTYPE html>
@@ -1256,6 +1535,9 @@ module.exports = {
   normalizeCheckoutStatusForClient,
   getCheckoutStatus,
   handleWebhook,
+  verifyWebhookSignature,
+  recordPaymongoWebhookEvent,
+  processPaymongoWebhookEvent,
   registerWebhook,
   reconcileCheckoutSessionPayment,
   redirectSuccess,

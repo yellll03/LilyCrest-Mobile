@@ -14,16 +14,20 @@ function loadWithDb(modulePath, db) {
 
 test('admin creates a bill for Tenant A using canonical tenant_id and separate created_by', async () => {
   let inserted;
+  let insertedCollection;
   const db = { collection(name) { return {
     findOne: async () => name === 'users' ? { _id: 'tenant-object-id', user_id: 'tenant-a', role: 'tenant' } : null,
-    insertOne: async (doc) => { inserted = doc; },
+    insertOne: async (doc) => { inserted = doc; insertedCollection = name; },
   }; } };
   const { createBilling } = loadWithDb('../controllers/billing.controller', db);
   const res = response();
   await createBilling({ body: { tenant_id: 'tenant-a', user_id: 'tenant-b', due_date: '2026-08-01', rent: 5000 }, user: { user_id: 'admin-1', role: 'admin' } }, res);
   assert.equal(res.statusCode, 201);
-  assert.equal(inserted.user_id, 'tenant-a');
-  assert.equal(inserted.created_by, 'admin-1');
+  assert.equal(insertedCollection, 'bills');
+  assert.equal(inserted.tenantUserId, 'tenant-a');
+  assert.equal(inserted.createdBy, 'admin-1');
+  assert.equal(inserted.totalAmount, 5000);
+  assert.equal(inserted.remainingAmount, 5000);
 });
 
 test('canonical tenant_id accepts the Mongo ObjectId format used by admin records', async () => {
@@ -98,7 +102,9 @@ test('maintenance transition policy rejects invalid admin and tenant transitions
 test('inactive tenant session is rejected', async () => {
   let deleted = false;
   const db = { collection(name) { return {
-    findOne: async () => name === 'user_sessions' ? { user_id: 'tenant-a' } : { user_id: 'tenant-a', role: 'tenant', status: 'pending_approval' },
+    findOne: async () => name === 'user_sessions'
+      ? { user_id: 'tenant-a', expires_at: new Date(Date.now() + 60000) }
+      : { user_id: 'tenant-a', role: 'tenant', status: 'pending_approval' },
     deleteMany: async () => { deleted = true; },
   }; } };
   const { authMiddleware } = loadWithDb('../middleware/auth', db);
@@ -110,14 +116,14 @@ test('inactive tenant session is rejected', async () => {
 
 test('notification read ownership is enforced', async () => {
   let wrote = false;
-  const emptyCursor = { limit() { return this; }, toArray: async () => [] };
+  const emptyCursor = { sort() { return this; }, limit() { return this; }, toArray: async () => [] };
   const db = { collection(name) { return {
     find: () => emptyCursor,
     updateOne: async () => { wrote = true; },
   }; } };
   const { markNotificationRead } = loadWithDb('../controllers/notification.controller', db);
   const res = response();
-  await markNotificationRead({ params: { notificationId: 'tenant-a-secret' }, user: { user_id: 'tenant-b' } }, res);
+  await markNotificationRead({ params: { notificationId: 'tenant-a-secret' }, user: { user_id: 'tenant-b', role: 'tenant' } }, res);
   assert.equal(res.statusCode, 404);
   assert.equal(wrote, false);
 });

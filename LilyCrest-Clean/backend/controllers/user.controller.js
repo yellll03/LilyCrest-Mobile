@@ -1,7 +1,7 @@
 const { getDb } = require('../config/database');
 const { ObjectId } = require('mongodb');
 const { v4: uuidv4 } = require('uuid');
-const { normalizeUser, sanitizeUserForClient } = require('../utils/normalizeUser');
+const { normalizeUser, sanitizeUserForClient, sanitizeUserForAdminList } = require('../utils/normalizeUser');
 const { admin, resolveStorageBucket } = require('../config/firebase');
 const { resolveTenantBranch } = require('../services/branchLocation.service');
 const { extractMoveInFinancials } = require('../domain/billing/moveInFinancials');
@@ -1114,7 +1114,7 @@ async function adminGetAllUsers(req, res) {
       .find({})
       .sort({ created_at: -1 })
       .toArray();
-    res.json(users.map(u => ({ ...u, _id: undefined, password_hash: undefined })));
+    res.json(users.map((user) => sanitizeUserForAdminList(normalizeUser(user))));
   } catch (error) {
     res.status(500).json({ detail: 'Failed to fetch users' });
   }

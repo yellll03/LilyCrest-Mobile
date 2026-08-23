@@ -33,6 +33,7 @@ function matchesQuery(doc, query) {
   if (Array.isArray(query.$or)) return query.$or.some((q) => matchesQuery(doc, q));
   return Object.entries(query).every(([field, condition]) => {
     const value = doc[field];
+    if (condition instanceof RegExp) return condition.test(String(value || ''));
     if (condition && typeof condition === 'object' && !Array.isArray(condition)) {
       if ('$ne' in condition) return value !== condition.$ne;
       if ('$in' in condition) return condition.$in.includes(value);
@@ -71,7 +72,6 @@ function stubGeminiService() {
       calls.push({ sessionId, prompt });
       return { text: 'Here is what I found for you po.' };
     },
-    liveChatQueue: new Map(),
     chatSessions: new Map(),
     isQuotaError: () => false,
   };
@@ -272,9 +272,14 @@ test('sendMessage context never includes another branch\'s or another tenant\'s 
   const db = makeFakeDb({
     announcements: [
       { announcement_id: 'ann_global', title: 'Global Notice', content: 'Visible to everyone', is_active: true },
+      { announcement_id: 'ann_own_branch', title: 'Own Branch Notice', content: 'Visible to Branch A', is_active: true, branch: 'gil-puyat' },
       { announcement_id: 'ann_other_branch', title: 'Other Branch Only', content: 'Should not leak', is_active: true, branch: 'guadalupe' },
+      { announcement_id: 'ann_private_mine', title: 'Private For Me', content: 'Visible to target', is_active: true, is_private: true, user_id: 'tenant-a', branch: 'gil-puyat' },
       { announcement_id: 'ann_private_other', title: 'Private For Someone Else', content: 'Should not leak', is_active: true, is_private: true, user_id: 'tenant-b' },
+      { announcement_id: 'ann_future', title: 'Future Notice', content: 'Should not leak', is_active: true, publishedAt: new Date('2099-01-01T00:00:00Z') },
+      { announcement_id: 'ann_expired', title: 'Expired Notice', content: 'Should not leak', is_active: true, expiresAt: new Date('2000-01-01T00:00:00Z') },
     ],
+    reservations: [{ user_id: 'tenant-a', branch: 'gil-puyat', status: 'approved' }],
     maintenance_requests: [],
     maintenancerequests: [],
     billing: [],
@@ -295,8 +300,12 @@ test('sendMessage context never includes another branch\'s or another tenant\'s 
         assert.equal(calls.length, 1, 'expected the AI to be invoked for this in-scope general question');
         const prompt = calls[0].prompt;
         assert.match(prompt, /Global Notice/);
+        assert.match(prompt, /Own Branch Notice/);
+        assert.match(prompt, /Private For Me/);
         assert.doesNotMatch(prompt, /Other Branch Only/);
         assert.doesNotMatch(prompt, /Private For Someone Else/);
+        assert.doesNotMatch(prompt, /Future Notice/);
+        assert.doesNotMatch(prompt, /Expired Notice/);
       });
     } finally {
       restore();

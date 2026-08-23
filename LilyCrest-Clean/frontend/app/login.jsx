@@ -28,7 +28,8 @@ import {
   hasStoredCredentials,
   savePendingLogin,
 } from '../src/services/secureCredentials';
-import { safeBack } from '../src/utils/navigation';
+import { loadRememberedEmail, saveRememberedEmail } from '../src/services/rememberedEmail';
+import { resetToHome } from '../src/utils/navigation';
 import { AUTH_MESSAGES, authErrorTypeForUi, normalizeEmail, validateEmail as validateAuthEmail } from '../src/utils/authStability';
 import { validateLoginPassword } from '../src/utils/passwordValidation';
 
@@ -52,6 +53,7 @@ export default function LoginScreen() {
   const { showAlert } = useAlert();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberEmail, setRememberEmail] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [isEmailLoading, setIsEmailLoading] = useState(false);
@@ -60,7 +62,6 @@ export default function LoginScreen() {
   const [touched, setTouched] = useState({ email: false, password: false });
   // loginError: { message: string, type: 'credentials' | 'access' | 'ratelimit' | 'network' }
   const [loginError, setLoginError] = useState(null);
-  const [rememberMe, setRememberMe] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricType, setBiometricType] = useState('Biometric');
@@ -93,17 +94,19 @@ export default function LoginScreen() {
     setPassword(nextValue);
   };
 
-  // Load remember-me preference and biometric eligibility
+  // Remember me is an email-only convenience. Session persistence remains
+  // owned by SecureStore and is deliberately independent of this preference.
   useEffect(() => {
     const init = async () => {
       try {
-        const savedRemember = await AsyncStorage.getItem('remember_me');
-        const savedEmail = await AsyncStorage.getItem('last_email');
-        const bioSetting = await AsyncStorage.getItem('biometricLogin');
-        const prefersRemember = savedRemember === 'true';
+        const [remembered, bioSetting] = await Promise.all([
+          loadRememberedEmail(),
+          AsyncStorage.getItem('biometricLogin'),
+        ]);
         const isBioEnabled = bioSetting === 'true';
-        if (prefersRemember) setRememberMe(true);
-        if (savedEmail && validateEmail(savedEmail).valid) setEmail(savedEmail);
+        setEmail(remembered.email);
+        setRememberEmail(remembered.rememberEmail);
+        setPassword('');
 
         const hasHardware = await LocalAuthentication.hasHardwareAsync();
         const isEnrolled = await LocalAuthentication.isEnrolledAsync();
@@ -145,15 +148,15 @@ export default function LoginScreen() {
     const normalizedPassword = password;
 
     try {
-      const result = await loginWithEmail(normalizedEmail, normalizedPassword, rememberMe);
+      const result = await loginWithEmail(normalizedEmail, normalizedPassword);
 
       // OTP required — credentials were valid, navigate to verification screen
       if (result.otpRequired) {
         await savePendingLogin({
           otpToken: result.otpToken,
           maskedEmail: result.maskedEmail,
-          rememberMe,
           email: normalizedEmail,
+          rememberEmail,
         });
         router.push({
           pathname: '/otp-verify',
@@ -186,13 +189,8 @@ export default function LoginScreen() {
         return;
       }
 
-      // Persist remember-me email preference
-      await AsyncStorage.setItem('remember_me', rememberMe ? 'true' : 'false');
-      if (rememberMe) {
-        await AsyncStorage.setItem('last_email', normalizedEmail);
-      } else {
-        await AsyncStorage.removeItem('last_email');
-      }
+      await saveRememberedEmail({ rememberEmail, email: normalizedEmail })
+        .catch((error) => console.warn('Remembered email update failed:', error?.message));
 
       // Handle biometric credential storage
       if (biometricAvailable) {
@@ -202,7 +200,7 @@ export default function LoginScreen() {
           // (covers password-change scenario where old credentials were cleared)
           await enableBiometricSession(normalizedEmail);
           setCanUseBiometric(true);
-          router.replace('/(tabs)/home');
+          resetToHome(router);
         } else {
           // First time on this device — offer to enable biometric login
           showAlert({
@@ -214,7 +212,7 @@ export default function LoginScreen() {
               {
                 text: 'Not Now',
                 style: 'cancel',
-                onPress: () => router.replace('/(tabs)/home'),
+                onPress: () => resetToHome(router),
               },
               {
                 text: 'Enable',
@@ -231,14 +229,14 @@ export default function LoginScreen() {
                       setCanUseBiometric(true);
                     }
                   } catch (_) {}
-                  router.replace('/(tabs)/home');
+                  resetToHome(router);
                 },
               },
             ],
           });
         }
       } else {
-        router.replace('/(tabs)/home');
+        resetToHome(router);
       }
     } catch (error) {
       console.error('Login error:', error?.message || 'Unexpected error');
@@ -279,12 +277,11 @@ export default function LoginScreen() {
           return;
         }
 
-        const backendResult = await signInWithGoogle(idToken, rememberMe);
+        const backendResult = await signInWithGoogle(idToken);
         const { success: backendSuccess, status, error: backendError } = backendResult;
 
         if (backendSuccess) {
-          await AsyncStorage.setItem('remember_me', rememberMe ? 'true' : 'false');
-          router.replace('/(tabs)/home');
+          resetToHome(router);
         } else {
           const type = status === 403 ? 'access' : 'credentials';
           setLoginError({ message: backendError || 'Failed to create session.', type });
@@ -340,8 +337,7 @@ export default function LoginScreen() {
         return;
       }
 
-      await AsyncStorage.setItem('remember_me', 'true');
-      router.replace('/(tabs)/home');
+      resetToHome(router);
     } catch (error) {
       console.error('Biometric login error:', error?.message || 'Unexpected error');
       setLoginError({ message: 'Biometric sign-in failed. Please use email or Google.', type: 'network' });
@@ -362,11 +358,6 @@ export default function LoginScreen() {
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardView}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-          {/* Back Button */}
-          <TouchableOpacity style={styles.backButton} onPress={() => safeBack(router, '/')}>
-            <Ionicons name="arrow-back" size={24} color={colors.text} />
-          </TouchableOpacity>
-
           {/* Logo */}
           <View style={styles.logoContainer}>
             <Image
@@ -426,7 +417,7 @@ export default function LoginScreen() {
             </View>
 
             {/* Password Input */}
-            <View style={styles.inputContainer}>
+            <View style={[styles.inputContainer, styles.passwordInputContainer]}>
               <Text style={styles.label}>Password</Text>
               <View style={[styles.inputWrapper, showPasswordFieldError && styles.inputWrapperError, !showPasswordFieldError && touched.password && isPasswordValid && styles.inputWrapperSuccess]}>
                 <Ionicons name="lock-closed-outline" size={20} color={showPasswordFieldError ? '#DC2626' : '#6B7280'} style={styles.inputIcon} />
@@ -451,19 +442,22 @@ export default function LoginScreen() {
               ) : null}
             </View>
 
-            {/* Remember Me + Forgot Password */}
+            {/* Email prefill only; authenticated sessions persist securely regardless. */}
             <View style={styles.optionsRow}>
-              <TouchableOpacity style={styles.rememberRow} onPress={async () => {
-                const next = !rememberMe;
-                setRememberMe(next);
-                await AsyncStorage.setItem('remember_me', next ? 'true' : 'false');
-              }}>
-                <View style={[styles.checkbox, rememberMe && styles.checkboxChecked]}>
-                  {rememberMe ? <Ionicons name="checkmark" size={14} color="#0A1628" /> : null}
-                </View>
+              <TouchableOpacity
+                style={styles.rememberOption}
+                onPress={() => setRememberEmail((current) => !current)}
+                accessibilityRole="checkbox"
+                accessibilityLabel="Remember me"
+                accessibilityState={{ checked: rememberEmail }}
+              >
+                <Ionicons
+                  name={rememberEmail ? 'checkbox' : 'square-outline'}
+                  size={22}
+                  color={rememberEmail ? colors.primary : colors.textMuted}
+                />
                 <Text style={styles.rememberText}>Remember me</Text>
               </TouchableOpacity>
-
               <TouchableOpacity style={styles.forgotPassword} onPress={() => router.push('/forgot-password')}>
                 <Text style={styles.forgotPasswordText}>Forgot password?</Text>
               </TouchableOpacity>
@@ -560,27 +554,13 @@ const createStyles = (c) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.background },
   keyboardView: { flex: 1 },
   scrollContent: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 16, paddingBottom: 32 },
-  backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: c.surfaceSecondary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: c.border,
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
-      android: { elevation: 2 },
-      web: { boxShadow: '0 2px 6px rgba(0,0,0,0.08)' },
-    }),
-  },
   logoContainer: { alignItems: 'center', marginTop: 8, marginBottom: 2 },
   authLogo: { width: 132, height: 102 },
   title: { fontSize: 28, fontWeight: '700', color: c.text, textAlign: 'center', marginBottom: 8 },
   subtitle: { fontSize: 15, color: c.textSecondary, textAlign: 'center', marginBottom: 32 },
   form: { width: '100%' },
   inputContainer: { marginBottom: 20 },
+  passwordInputContainer: { marginBottom: 4 },
   label: { fontSize: 13, fontWeight: '600', color: c.text, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
   inputWrapper: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: c.border, borderRadius: 12, backgroundColor: c.inputBg, paddingHorizontal: 16 },
   inputWrapperError: { borderColor: c.error, backgroundColor: c.errorBg },
@@ -589,12 +569,10 @@ const createStyles = (c) => StyleSheet.create({
   input: { flex: 1, paddingVertical: 14, fontSize: 15, color: c.text },
   errorContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 4 },
   errorText: { fontSize: 12, color: '#DC2626' },
-  optionsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 24 },
-  rememberRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  checkbox: { width: 20, height: 20, borderRadius: 6, borderWidth: 1.5, borderColor: c.border, justifyContent: 'center', alignItems: 'center', backgroundColor: c.inputBg },
-  checkboxChecked: { backgroundColor: c.accent, borderColor: c.accent },
-  rememberText: { color: c.text, fontWeight: '600' },
-  forgotPassword: { alignSelf: 'flex-end' },
+  optionsRow: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, gap: 12 },
+  rememberOption: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
+  rememberText: { color: c.text, fontSize: 14, fontWeight: '500' },
+  forgotPassword: { minHeight: 44, justifyContent: 'center', alignItems: 'flex-end', flexShrink: 0 },
   forgotPasswordText: { color: c.primary, fontSize: 14, fontWeight: '600' },
   loginErrorContainer: { flexDirection: 'row', alignItems: 'flex-start', borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 20, gap: 10 },
   loginErrorText: { flex: 1, fontSize: 13, fontWeight: '500', lineHeight: 18 },

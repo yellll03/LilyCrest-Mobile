@@ -1,6 +1,9 @@
 const { getDb } = require('../config/database');
 const { sanitizeStoredNotification, normalizePriority } = require('../services/notificationService');
-const { isAnnouncementVisibleForBranch, resolveRequesterBranchCode } = require('./announcement.controller');
+const {
+  filterStoredNotificationsForTenant,
+  loadVisibleAnnouncementsForTenant,
+} = require('../services/announcementAudience.service');
 
 function normalizeString(value) {
   return typeof value === 'string' ? value.trim() : '';
@@ -99,12 +102,16 @@ async function getMyNotifications(req, res) {
       return res.status(400).json({ detail: 'User context is required.' });
     }
 
-    const storedNotifications = await db.collection('notifications')
+    const storedNotificationCandidates = await db.collection('notifications')
       .find({ user_id: userId })
       .sort({ created_at: -1, updated_at: -1 })
       .limit(120)
-      .toArray()
-      .catch(() => []);
+      .toArray();
+    const storedNotifications = await filterStoredNotificationsForTenant(
+      db,
+      req.user,
+      storedNotificationCandidates
+    );
 
     const [dismissals, clearedState] = await Promise.all([
       db.collection('notification_dismissals').find({ user_id: userId }).project({ notification_key: 1 }).toArray().catch(() => []),
@@ -113,33 +120,7 @@ async function getMyNotifications(req, res) {
     const dismissedKeys = new Set(dismissals.map((entry) => normalizeString(entry.notification_key)).filter(Boolean));
     const allClearedAt = clearedState?.all_cleared_at ? new Date(clearedState.all_cleared_at).getTime() : 0;
 
-    const activeFilter = {
-      $or: [
-        { is_active: true },
-        { isActive: true },
-        { is_active: { $exists: false }, isActive: { $exists: false } },
-      ],
-    };
-    const notArchivedFilter = { isArchived: { $ne: true } };
-    const visibilityFilter = {
-      $or: [
-        { is_private: { $ne: true }, isPrivate: { $ne: true } },
-        { is_private: true, user_id: userId },
-        { isPrivate: true, userId },
-      ],
-    };
-
-    // Reuse the exact branch-visibility rule /announcements applies — without
-    // this, a branch-restricted announcement that's correctly hidden from
-    // GET /announcements would still leak through here as a "notification".
-    const requesterBranchCode = await resolveRequesterBranchCode(db, req.user);
-    const announcements = (await db.collection('announcements')
-      .find({ $and: [activeFilter, notArchivedFilter, visibilityFilter] })
-      .sort({ created_at: -1, createdAt: -1 })
-      .limit(80)
-      .toArray()
-      .catch(() => []))
-      .filter((doc) => isAnnouncementVisibleForBranch(doc, requesterBranchCode));
+    const announcements = await loadVisibleAnnouncementsForTenant(db, req.user, { limit: 80 });
 
     const mergedByKey = new Map();
     const [readReceipts, readState] = await Promise.all([
@@ -186,32 +167,27 @@ async function getMyNotifications(req, res) {
   }
 }
 
+async function findOwnedVisibleNotification(db, user, notificationKey) {
+  const userId = user?.user_id;
+  const storedCandidates = await db.collection('notifications').find({ user_id: userId }).limit(200).toArray();
+  const stored = await filterStoredNotificationsForTenant(db, user, storedCandidates);
+  const ownedStored = stored
+    .map((doc) => sanitizeStoredNotification(doc))
+    .find((item) => buildNotificationKey(item) === notificationKey || item.notification_id === notificationKey);
+  if (ownedStored) return ownedStored;
+
+  const announcements = await loadVisibleAnnouncementsForTenant(db, user, { limit: 200 });
+  return announcements
+    .map((doc) => normalizeAnnouncementNotification(doc))
+    .find((item) => buildNotificationKey(item) === notificationKey || item.notification_id === notificationKey);
+}
+
 async function markNotificationRead(req, res) {
   const userId = req.user?.user_id;
   const notificationKey = normalizeString(req.params.notificationId);
   if (!notificationKey) return res.status(400).json({ detail: 'notificationId is required.' });
   const db = getDb();
-  const stored = await db.collection('notifications').find({ user_id: userId }).limit(200).toArray();
-  let ownedNotification = stored
-    .map((doc) => sanitizeStoredNotification(doc))
-    .find((item) => buildNotificationKey(item) === notificationKey || item.notification_id === notificationKey);
-
-  if (!ownedNotification) {
-    const announcements = await db.collection('announcements').find({
-      $and: [
-        { $or: [{ is_active: true }, { isActive: true }, { is_active: { $exists: false }, isActive: { $exists: false } }] },
-        { isArchived: { $ne: true } },
-        { $or: [
-          { is_private: { $ne: true }, isPrivate: { $ne: true } },
-          { is_private: true, user_id: userId },
-          { isPrivate: true, userId },
-        ] },
-      ],
-    }).limit(200).toArray();
-    ownedNotification = announcements
-      .map((doc) => normalizeAnnouncementNotification(doc))
-      .find((item) => buildNotificationKey(item) === notificationKey || item.notification_id === notificationKey);
-  }
+  const ownedNotification = await findOwnedVisibleNotification(db, req.user, notificationKey);
 
   if (!ownedNotification) return res.status(404).json({ detail: 'Notification not found.' });
   const ownedKey = buildNotificationKey(ownedNotification);
@@ -249,27 +225,7 @@ async function dismissNotification(req, res) {
   const notificationKey = normalizeString(req.params.notificationId);
   if (!notificationKey) return res.status(400).json({ detail: 'notificationId is required.' });
   const db = getDb();
-  const stored = await db.collection('notifications').find({ user_id: userId }).limit(200).toArray();
-  let owned = stored
-    .map((doc) => sanitizeStoredNotification(doc))
-    .find((item) => buildNotificationKey(item) === notificationKey || item.notification_id === notificationKey);
-
-  if (!owned) {
-    const announcements = await db.collection('announcements').find({
-      $and: [
-        { $or: [{ is_active: true }, { isActive: true }, { is_active: { $exists: false }, isActive: { $exists: false } }] },
-        { isArchived: { $ne: true } },
-        { $or: [
-          { is_private: { $ne: true }, isPrivate: { $ne: true } },
-          { is_private: true, user_id: userId },
-          { isPrivate: true, userId },
-        ] },
-      ],
-    }).limit(200).toArray();
-    owned = announcements
-      .map((doc) => normalizeAnnouncementNotification(doc))
-      .find((item) => buildNotificationKey(item) === notificationKey || item.notification_id === notificationKey);
-  }
+  const owned = await findOwnedVisibleNotification(db, req.user, notificationKey);
 
   if (!owned) return res.status(404).json({ detail: 'Notification not found.' });
   const ownedKey = buildNotificationKey(owned);

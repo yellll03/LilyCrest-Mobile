@@ -10,6 +10,7 @@ import { answersObjectToArray, clearSurveyDraft, loadCachedSurvey, loadSurveyDra
 import { firstInvalidQuestionId, safeSurveyErrorMessage, toAnswerObject, validateSurveyAnswers, visibleSurveyQuestions } from '../src/utils/surveyForm';
 import { SURVEY_FEEDBACK_ENABLED } from '../src/config/features';
 import { ScreenHeader } from '../src/components/ui/LilycrestUI';
+import { safeBack } from '../src/utils/navigation';
 
 const CHOICE_LABELS = {
   YES: 'Yes', NO: 'No', MAYBE: 'Maybe', CONTRACT_COMPLETED: 'Contract completed',
@@ -197,7 +198,7 @@ export default function SurveyFormScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScreenHeader strong title={readOnly ? 'Survey Response' : 'Complete Survey'} subtitle={readOnly ? 'Submitted tenant feedback' : 'Share your Lilycrest experience'} onBack={() => router.back()} />
+      <ScreenHeader strong title={readOnly ? 'Survey Response' : 'Complete Survey'} subtitle={readOnly ? 'Submitted tenant feedback' : 'Share your Lilycrest experience'} onBack={() => safeBack(router)} />
       {loading ? <View style={styles.center}><ActivityIndicator color={colors.accent} /></View> : !survey ? <View style={styles.center}><Text style={styles.error}>{message}</Text></View> : (
         <KeyboardAvoidingView style={styles.flex} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
         <ScrollView ref={scrollRef} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag">

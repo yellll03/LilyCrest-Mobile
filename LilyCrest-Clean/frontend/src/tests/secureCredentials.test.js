@@ -1,93 +1,118 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
+const secureValues = new Map();
 const mockSecureStore = {
-  getItemAsync: jest.fn(),
-  setItemAsync: jest.fn(),
-  deleteItemAsync: jest.fn(),
+  getItemAsync: jest.fn((key) => Promise.resolve(secureValues.get(key) || null)),
+  setItemAsync: jest.fn((key, value) => {
+    secureValues.set(key, value);
+    return Promise.resolve();
+  }),
+  deleteItemAsync: jest.fn((key) => {
+    secureValues.delete(key);
+    return Promise.resolve();
+  }),
 };
 
 jest.mock('expo-secure-store', () => mockSecureStore);
 
-describe('SecureStore session migration', () => {
+const BUNDLE_KEY = 'lilycrest_session_credentials_v2';
+
+describe('secure session persistence', () => {
   beforeEach(async () => {
     jest.clearAllMocks();
     jest.resetModules();
+    secureValues.clear();
     await AsyncStorage.clear();
-    mockSecureStore.getItemAsync.mockResolvedValue(null);
-    mockSecureStore.setItemAsync.mockResolvedValue(undefined);
+    mockSecureStore.getItemAsync.mockImplementation((key) => Promise.resolve(secureValues.get(key) || null));
+    mockSecureStore.setItemAsync.mockImplementation((key, value) => {
+      secureValues.set(key, value);
+      return Promise.resolve();
+    });
+    mockSecureStore.deleteItemAsync.mockImplementation((key) => {
+      secureValues.delete(key);
+      return Promise.resolve();
+    });
   });
 
-  it('removes the AsyncStorage token only after SecureStore saves it', async () => {
+  it('migrates a legacy AsyncStorage bearer token into SecureStore before deleting plaintext', async () => {
     await AsyncStorage.setItem('session_token', 'legacy-token');
-    const removeSpy = jest.spyOn(AsyncStorage, 'removeItem');
     const { getSessionToken } = require('../services/secureCredentials');
+
     await expect(getSessionToken()).resolves.toBe('legacy-token');
-    expect(mockSecureStore.setItemAsync).toHaveBeenCalledWith('session_token', 'legacy-token');
-    expect(removeSpy).toHaveBeenCalledWith('session_token');
+    expect(mockSecureStore.setItemAsync).toHaveBeenCalledWith(
+      BUNDLE_KEY,
+      expect.stringContaining('legacy-token'),
+    );
     expect(await AsyncStorage.getItem('session_token')).toBeNull();
   });
 
-  it('retains the AsyncStorage token when SecureStore save fails', async () => {
+  it('deletes the legacy plaintext token if secure migration fails rather than using insecure storage', async () => {
     await AsyncStorage.setItem('session_token', 'legacy-token');
     mockSecureStore.setItemAsync.mockRejectedValue(new Error('secure storage unavailable'));
     const { getSessionToken } = require('../services/secureCredentials');
+
     await expect(getSessionToken()).resolves.toBeNull();
-    expect(await AsyncStorage.getItem('session_token')).toBe('legacy-token');
-  });
-});
-
-describe('"Remember Me" session persistence', () => {
-  beforeEach(async () => {
-    jest.clearAllMocks();
-    jest.resetModules();
-    await AsyncStorage.clear();
-    mockSecureStore.getItemAsync.mockResolvedValue(null);
-    mockSecureStore.setItemAsync.mockResolvedValue(undefined);
-    mockSecureStore.deleteItemAsync.mockResolvedValue(undefined);
-  });
-
-  it('remember=true persists the token to SecureStore (survives app kill)', async () => {
-    const { setSessionToken } = require('../services/secureCredentials');
-    await setSessionToken('token-remembered', { remember: true });
-    expect(mockSecureStore.setItemAsync).toHaveBeenCalledWith('session_token', 'token-remembered');
-
-    // Simulate an app kill: a fresh module load with no in-memory state,
-    // but SecureStore (which is actually durable) still returns the token.
-    jest.resetModules();
-    mockSecureStore.getItemAsync.mockResolvedValue('token-remembered');
-    const reloaded = require('../services/secureCredentials');
-    await expect(reloaded.getSessionToken()).resolves.toBe('token-remembered');
-  });
-
-  it('remember=false keeps the token in memory only, never in SecureStore or AsyncStorage', async () => {
-    const { setSessionToken, getSessionToken } = require('../services/secureCredentials');
-    await setSessionToken('token-not-remembered', { remember: false });
-
-    // Not persisted anywhere durable.
-    expect(mockSecureStore.setItemAsync).not.toHaveBeenCalledWith('session_token', expect.anything());
     expect(await AsyncStorage.getItem('session_token')).toBeNull();
-
-    // Still readable within the same app run (module not reloaded).
-    await expect(getSessionToken()).resolves.toBe('token-not-remembered');
   });
 
-  it('remember=false does not survive a simulated app kill (fresh module load)', async () => {
-    const { setSessionToken } = require('../services/secureCredentials');
-    await setSessionToken('token-not-remembered', { remember: false });
+  it('stores access and refresh credentials together in SecureStore and survives an app kill', async () => {
+    const expiresAt = new Date(Date.now() + 60000).toISOString();
+    const first = require('../services/secureCredentials');
+    await first.setSessionToken('access-token', {
+      refreshToken: 'refresh-token',
+      expiresAt,
+      refreshExpiresAt: expiresAt,
+    });
 
-    // Simulate an app kill: fresh module instance, and SecureStore/AsyncStorage
-    // (the only stores that would survive a real kill) have nothing stored.
-    jest.resetModules();
-    mockSecureStore.getItemAsync.mockResolvedValue(null);
-    const reloaded = require('../services/secureCredentials');
-    await expect(reloaded.getSessionToken()).resolves.toBeNull();
-  });
-
-  it('remember=false clears any durable token left over from a prior remember=true login', async () => {
-    const { setSessionToken } = require('../services/secureCredentials');
-    await AsyncStorage.setItem('session_token', 'stale-legacy-token');
-    await setSessionToken('token-not-remembered', { remember: false });
-    expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith('session_token');
     expect(await AsyncStorage.getItem('session_token')).toBeNull();
+    expect(mockSecureStore.setItemAsync).toHaveBeenCalledWith(BUNDLE_KEY, expect.any(String));
+
+    jest.resetModules();
+    const reopened = require('../services/secureCredentials');
+    await expect(reopened.getSessionCredentials()).resolves.toEqual({
+      sessionToken: 'access-token',
+      refreshToken: 'refresh-token',
+      expiresAt,
+      refreshExpiresAt: expiresAt,
+    });
+  });
+
+  it('ignores the legacy remember=false option and still survives an app kill', async () => {
+    const first = require('../services/secureCredentials');
+    await first.setSessionToken('ordinary-login-token', { remember: false });
+
+    jest.resetModules();
+    const reopened = require('../services/secureCredentials');
+    await expect(reopened.getSessionToken()).resolves.toBe('ordinary-login-token');
+  });
+
+  it('explicit logout removes both current and legacy secure credentials', async () => {
+    const credentials = require('../services/secureCredentials');
+    await credentials.setSessionToken('access-token', { refreshToken: 'refresh-token' });
+    secureValues.set('session_token', 'old-token');
+
+    await credentials.removeSessionToken();
+
+    expect(secureValues.has(BUNDLE_KEY)).toBe(false);
+    expect(secureValues.has('session_token')).toBe(false);
+    await expect(credentials.getSessionToken()).resolves.toBeNull();
+  });
+
+  it('carries only an email and Remember me choice through pending OTP verification', async () => {
+    const credentials = require('../services/secureCredentials');
+    await credentials.savePendingLogin({
+      otpToken: 'otp-session-token',
+      email: ' Tenant@Example.com ',
+      maskedEmail: 'te***@example.com',
+      rememberEmail: true,
+    });
+
+    await expect(credentials.getPendingLogin()).resolves.toEqual({
+      otpToken: 'otp-session-token',
+      email: 'tenant@example.com',
+      maskedEmail: 'te***@example.com',
+      rememberEmail: true,
+    });
+    expect(secureValues.get('lilycrest_pending_login')).not.toMatch(/password|otpCode/i);
   });
 });

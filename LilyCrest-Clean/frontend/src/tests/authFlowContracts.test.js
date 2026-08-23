@@ -39,7 +39,8 @@ describe('auth flow implementation contracts', () => {
   test('login preserves the exact entered password', () => {
     const source = read('app/login.jsx');
     expect(source).toContain('const normalizedPassword = password;');
-    expect(source).toContain('loginWithEmail(normalizedEmail, normalizedPassword, rememberMe)');
+    expect(source).toContain('loginWithEmail(normalizedEmail, normalizedPassword)');
+    expect(source).toContain('Remember me');
     expect(source).not.toMatch(/password\.(trim|replace)\(/);
   });
 
@@ -48,16 +49,24 @@ describe('auth flow implementation contracts', () => {
     expect(read('src/config/firebase.js')).toContain('globalForFirebase.auth');
   });
 
-  test('auth restoration renders a loading state before protected content', () => {
+  test('the native splash owns startup until auth and routing are ready', () => {
     const context = read('src/context/AuthContext.js');
     const layout = read('app/_layout.jsx');
+    const index = read('app/index.jsx');
     expect(context).toContain("authStatus === 'initializing'");
-    expect(layout).toContain('if (isLoading || !authReady');
+    expect(context).not.toContain('Preparing LilyCrest');
+    expect(layout).toContain('const startupReady = !isLoading && authReady && !redirectPending;');
+    expect(layout).toContain('if (startupReady && !startupComplete) SplashScreen.hideAsync()');
+    expect(index).toContain("router.replace('/login')");
+    expect(index).toContain('const SLIDES = [');
+    expect(index).not.toContain('ActivityIndicator');
+    expect(index).not.toContain('loadingScreen');
+    expect(index).not.toContain('PRE_LOGIN_LOADING_MIN_MS');
   });
 
   test('expired session clears storage and returns unauthenticated', () => {
     const source = read('src/context/AuthContext.js');
-    expect(source).toContain('if (status === 401)');
+    expect(source).toContain('getConfirmedSessionInvalidation(error)');
     expect(source).toContain('await clearPersistedSession()');
     expect(source).toContain("setAuthStatus('unauthenticated')");
   });
@@ -86,7 +95,9 @@ describe('auth flow implementation contracts', () => {
   test('a background session expiry (axios refresh failure) forces logout and tells the tenant why', () => {
     const apiSource = read('src/services/api.js');
     const contextSource = read('src/context/AuthContext.js');
-    expect(apiSource).toContain("import { emitSessionExpired } from './sessionEvents';");
+    expect(apiSource).toMatch(
+      /import\s*\{[^}]*\bemitSessionExpired\b[^}]*\}\s*from\s*['"]\.\/sessionEvents['"]/,
+    );
     expect(apiSource).toContain('emitSessionExpired(');
     expect(contextSource).toContain('subscribeSessionExpired');
     expect(contextSource).toContain("setAuthStatus('unauthenticated')");

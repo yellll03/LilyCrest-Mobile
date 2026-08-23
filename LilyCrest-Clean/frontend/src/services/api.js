@@ -1,9 +1,12 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios, { create as createAxios } from 'axios';
 import { API_BASE_URL, MOBILE_API_BASE_URL, MOBILE_HEALTH_URL } from '../config/api';
-import { getFreshIdToken } from '../config/firebase';
-import { getSessionToken, isCurrentSessionRemembered, removeSessionToken, setSessionToken } from './secureCredentials';
-import { emitSessionExpired } from './sessionEvents';
+import {
+  getSessionCredentials,
+  removeSessionToken,
+  setSessionToken,
+} from './secureCredentials';
+import { emitSessionExpired, emitSessionRecovered } from './sessionEvents';
 
 const IS_DEV = typeof __DEV__ !== 'undefined' && __DEV__;
 export const SERVER_STARTING_MESSAGE = 'The server is starting. Please try again in a few seconds.';
@@ -122,9 +125,39 @@ export async function checkBackendConnection() {
 }
 
 
-const AUTH_REFRESH_URL = `${MOBILE_API_BASE_URL}/auth/google`;
+const AUTH_REFRESH_URL = `${MOBILE_API_BASE_URL}/auth/session/refresh`;
 const SESSION_TEARDOWN_URL = `${MOBILE_API_BASE_URL}/auth/session-teardown`;
+const SESSION_REFRESH_WINDOW_MS = 24 * 60 * 60 * 1000;
 let refreshSessionPromise = null;
+
+const CONFIRMED_INVALIDATION_CODES = new Set([
+  'AUTH_TOKEN_MISSING',
+  'SESSION_INVALID',
+  'SESSION_REVOKED',
+  'AUTH_ACCOUNT_NOT_FOUND',
+  'REFRESH_TOKEN_MISSING',
+  'REFRESH_TOKEN_INVALID',
+  'REFRESH_TOKEN_EXPIRED',
+]);
+
+export function getConfirmedSessionInvalidation(error) {
+  if (error?.sessionRetained === true) return null;
+  const status = error?.response?.status;
+  const code = String(error?.response?.data?.code || '').trim().toUpperCase();
+  if (status === 403 && code === 'ACCOUNT_INACTIVE') return 'account_inactive';
+  if (status === 401 && code === 'SESSION_EXPIRED') return 'session_expired';
+  if (status === 401 && CONFIRMED_INVALIDATION_CODES.has(code)) return 'session_invalid';
+  return null;
+}
+
+function isRetryableRefreshFailure(error) {
+  const status = error?.response?.status;
+  return !error?.response
+    || error?.response?.data?.retryable === true
+    || status === 408
+    || status === 429
+    || status >= 500;
+}
 
 // Best-effort cleanup for a session that just died (see AuthContext's forced
 // session-expiry handler). Unlike a normal authenticated call, `expiredToken`
@@ -156,19 +189,25 @@ export const api = createAxios({
   timeout: 15000,
 });
 
-async function refreshGoogleSession() {
+async function refreshBackendSession() {
   if (!refreshSessionPromise) {
     refreshSessionPromise = (async () => {
-      const idToken = await getFreshIdToken(true);
-      if (!idToken) return null;
+      const credentials = await getSessionCredentials();
+      if (!credentials?.refreshToken) return null;
 
-      const response = await axios.post(AUTH_REFRESH_URL, { idToken });
+      const response = await axios.post(AUTH_REFRESH_URL, {
+        refresh_token: credentials.refreshToken,
+      }, { timeout: 15000 });
       const sessionToken = response?.data?.session_token || null;
 
       if (sessionToken) {
-        // Preserve the original "Remember Me" choice — a same-run silent
-        // refresh must not upgrade a memory-only session into a durable one.
-        await setSessionToken(sessionToken, { remember: isCurrentSessionRemembered() });
+        // Keep the method-neutral refresh credential while rotating the
+        // bearer token and its seven-day idle deadline.
+        await setSessionToken(sessionToken, {
+          refreshToken: credentials.refreshToken,
+          expiresAt: response?.data?.expires_at,
+          refreshExpiresAt: response?.data?.refresh_expires_at,
+        });
       }
 
       return sessionToken;
@@ -183,7 +222,26 @@ async function refreshGoogleSession() {
 // Request interceptor - attach session token to every request
 api.interceptors.request.use(
   async (config) => {
-    const token = await getSessionToken();
+    const credentials = await getSessionCredentials();
+    let token = credentials?.sessionToken || null;
+    const expiresAtMs = credentials?.expiresAt ? Date.parse(credentials.expiresAt) : Number.NaN;
+    const isAuthEndpoint = /\/auth\//.test(config?.url || '');
+
+    // Rotate before the seven-day idle deadline, leaving a full day for
+    // retries when the device is temporarily offline or the server is waking.
+    // A proactive refresh failure never clears a still-valid bearer session.
+    if (!isAuthEndpoint
+      && credentials?.refreshToken
+      && Number.isFinite(expiresAtMs)
+      && expiresAtMs - Date.now() <= SESSION_REFRESH_WINDOW_MS) {
+      try {
+        token = await refreshBackendSession() || token;
+      } catch (_) {
+        // Keep and use the current credential. Only a server-confirmed
+        // invalidation in the response interceptor may clear it.
+      }
+    }
+
     if (token && !config.headers?.Authorization) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -194,9 +252,25 @@ api.interceptors.request.use(
 
 // Response interceptor for error handling
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const headers = response?.config?.headers;
+    const authHeader = typeof headers?.get === 'function'
+      ? headers.get('Authorization')
+      : headers?.Authorization || headers?.authorization;
+    const isAuthEndpoint = /\/auth\//.test(response?.config?.url || '');
+
+    // The request interceptor attached this bearer to a protected request and
+    // the server accepted it. That is authoritative recovery evidence, so the
+    // global retryable-session banner can now clear. Public successes do not
+    // change auth/network presentation.
+    if (authHeader && !isAuthEndpoint) {
+      emitSessionRecovered({ url: response?.config?.url || null });
+    }
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
+    const invalidationReason = getConfirmedSessionInvalidation(error);
 
     // A deactivated account gets a 403 (not 401) from authMiddleware, which
     // already deleted every session for this user server-side — there is
@@ -206,45 +280,46 @@ api.interceptors.response.use(
     // 401s. Distinguished by a stable machine-readable code (not the English
     // detail string) so an unrelated 403 (e.g. hitting an admin-only route)
     // is never misread as account deactivation.
-    if (error.response?.status === 403 && error.response?.data?.code === 'ACCOUNT_INACTIVE') {
+    if (invalidationReason === 'account_inactive') {
       const authHeader = originalRequest?.headers?.Authorization || originalRequest?.headers?.authorization || '';
       const expiredToken = typeof authHeader === 'string' ? authHeader.replace(/^Bearer\s+/i, '').trim() : '';
       try {
         await removeSessionToken();
         await AsyncStorage.removeItem('session_user');
       } catch (_) {}
-      emitSessionExpired('account_inactive', { expiredToken });
+      emitSessionExpired(invalidationReason, { expiredToken });
     }
 
     // Handle 401 - try to refresh session once.
     // Skip for auth endpoints (login/register) - those 401s mean wrong credentials,
     // not an expired session. Retrying them would show the wrong error.
-    const isAuthEndpoint = /\/auth\/(login|register|google|forgot-password|login\/verify-otp|login\/resend-otp)/.test(originalRequest?.url || '');
-    // A request that never carried a session token in the first place has
-    // nothing to refresh — attempting refreshGoogleSession() here would pull
-    // from Firebase's own independently-persisted client session (it survives
-    // an app kill regardless of "Remember Me", see config/firebase.js's
-    // getReactNativePersistence(AsyncStorage)) and could silently mint a
-    // brand-new backend session after a cold start where "Remember Me" was
-    // off and no session should exist at all.
+    const isAuthEndpoint = /\/auth\//.test(originalRequest?.url || '');
+    // A request that never carried a session token has no authenticated
+    // session to rotate. The refresh path never consults Firebase state.
     const hadSessionToken = Boolean(
       originalRequest?.headers?.Authorization || originalRequest?.headers?.authorization,
     );
-    if (error.response?.status === 401 && !originalRequest._retry && !isAuthEndpoint && hadSessionToken) {
+    if (invalidationReason === 'session_expired' && !originalRequest._retry && !isAuthEndpoint && hadSessionToken) {
       originalRequest._retry = true;
 
       try {
-        const sessionToken = await refreshGoogleSession();
+        const sessionToken = await refreshBackendSession();
 
         if (sessionToken) {
           originalRequest.headers.Authorization = `Bearer ${sessionToken}`;
           return api(originalRequest);
         }
       } catch (refreshError) {
-        console.warn('Token refresh failed:', {
+        console.warn('Session renewal unavailable:', {
           message: refreshError?.message,
           endpoint: AUTH_REFRESH_URL,
         });
+        if (isRetryableRefreshFailure(refreshError)) {
+          error.sessionRetained = true;
+          error.normalized = normalizeApiError(refreshError);
+          error.userMessage = getApiErrorMessage(refreshError);
+          return Promise.reject(error);
+        }
       }
 
       // Capture the dying token before it's deleted below. Even for a
@@ -259,14 +334,21 @@ api.interceptors.response.use(
       const expiredAuthHeader = originalRequest?.headers?.Authorization || originalRequest?.headers?.authorization || '';
       const expiredToken = typeof expiredAuthHeader === 'string' ? expiredAuthHeader.replace(/^Bearer\s+/i, '').trim() : '';
 
-      // Refresh failed or no Firebase user - clear session and let AuthContext
-      // know synchronously, so a screen that's still mounted doesn't keep
-      // rendering as if authenticated until its next API call also 401s.
+      // The server confirmed expiry and no refresh succeeded. Clear locally
+      // and notify AuthContext synchronously.
       try {
         await removeSessionToken();
         await AsyncStorage.removeItem('session_user');
       } catch (_) {}
-      emitSessionExpired('refresh_failed', { expiredToken });
+      emitSessionExpired('session_expired', { expiredToken });
+    } else if (invalidationReason === 'session_invalid' && !isAuthEndpoint && hadSessionToken) {
+      const authHeader = originalRequest?.headers?.Authorization || originalRequest?.headers?.authorization || '';
+      const expiredToken = typeof authHeader === 'string' ? authHeader.replace(/^Bearer\s+/i, '').trim() : '';
+      try {
+        await removeSessionToken();
+        await AsyncStorage.removeItem('session_user');
+      } catch (_) {}
+      emitSessionExpired('session_invalid', { expiredToken });
     }
 
     error.normalized = normalizeApiError(error);
@@ -365,47 +447,40 @@ export const apiService = {
   getFAQCategories: () => api.get('/faqs/categories'),
   
   // AI Chatbot
-  sendChatMessage: (message, sessionId, attachments = []) =>
-    api.post('/chatbot/message', { message, session_id: sessionId, attachments }),
+  sendChatMessage: (message, sessionId, attachments = [], clientMessageId = '') =>
+    api.post('/chatbot/message', {
+      message,
+      session_id: sessionId,
+      attachments,
+      client_message_id: clientMessageId,
+    }),
+  getChatbotSuggestions: () => api.get('/chatbot/suggestions'),
   resetChatSession: (sessionId) =>
     api.post('/chatbot/reset', { session_id: sessionId }),
-  requestAdminChat: (sessionId, reason) =>
-    api.post('/chatbot/request-admin', { session_id: sessionId, reason }),
-  getLiveChatStatus: (sessionId) =>
-    api.get(`/chatbot/live-status/${sessionId}`),
-  // Tenant live chat uses the same endpoint; backend routes to admin when active.
-  sendLiveChatMessage: (message, sessionId) =>
-    api.post('/chatbot/message', { message, session_id: sessionId }),
-  closeLiveChat: (sessionId) =>
-    api.post('/chatbot/close-live-chat', { session_id: sessionId }),
-  
-  // Support Tickets
-  getMyTickets: (status) => api.get('/tickets/me', { params: { status } }),
-  getTicket: (ticketId) => api.get(`/tickets/${ticketId}`),
-  createTicket: (data) => api.post('/tickets', data),
-  respondToTicket: (ticketId, data) => api.post(`/tickets/${ticketId}/respond`, data),
-  updateTicketStatus: (ticketId, status) => api.put(`/tickets/${ticketId}/status`, { status }),
 
-  // Human support chat - synced with the web admin panel in real-time.
-  // Uses /api/m/chat/... endpoints (mobile bridge in Capstone server) which
-  // write to chat_conversations + chat_messages collections the web admin reads.
+  // Human support chat. All current mobile support work goes through the one
+  // canonical conversation/message/attachment model shared with web admin.
   startSupportChat: (data) => api.post('/chat/start', data),
   getMySupportChats: () => api.get('/chat/me'),
-  getSupportChatMessages: (conversationId) => api.get(`/chat/${conversationId}/messages`),
-  sendSupportMessage: (conversationId, message, attachments = []) =>
-    api.post(`/chat/${conversationId}/messages`, { message, attachments }),
-  uploadSupportAttachment: (conversationId, attachment = {}) => {
-    const form = new FormData();
-    form.append('file', {
-      uri: attachment.uri,
-      name: attachment.name || attachment.fileName || 'attachment',
-      type: attachment.mimeType || attachment.type || 'application/octet-stream',
-    });
-    return api.post(`/chat/${conversationId}/attachments`, form, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-      timeout: 90000,
-    });
-  },
+  getSupportChatMessages: (conversationId, params = {}) =>
+    api.get(`/chat/${conversationId}/messages`, { params }),
+  sendSupportMessage: (conversationId, message, attachments = [], clientMessageId = '') =>
+    api.post(`/chat/${conversationId}/messages`, { message, attachments, clientMessageId }),
+  // Registers an attachment whose bytes were already uploaded through the
+  // canonical durable-storage pipeline (POST /upload/firebase-storage, via
+  // ensureFirebaseStorageAttachments). The backend has no multipart parser
+  // and deliberately no second storage system — it re-proves the
+  // server-issued storagePath/downloadUrl pair belongs to this tenant, then
+  // records the metadata.
+  registerSupportAttachment: (conversationId, attachment = {}, clientAttachmentId = '') =>
+    api.post(`/chat/${encodeURIComponent(conversationId)}/attachments`, { attachment, clientAttachmentId }),
+  // Rollback for a multi-file send that failed part-way. Only the uploader can
+  // discard, and only while no message references the attachment yet, so this
+  // can never delete sent chat history.
+  discardSupportAttachment: (conversationId, attachmentId) =>
+    api.delete(
+      `/chat/${encodeURIComponent(conversationId)}/attachments/${encodeURIComponent(attachmentId)}`,
+    ),
   confirmSupportResolution: (conversationId, resolved, note = '', satisfaction = {}) =>
     api.patch(`/chat/${conversationId}/resolution`, {
       resolved,
@@ -417,7 +492,6 @@ export const apiService = {
     api.patch(`/chat/${conversationId}/reopen`, { note }),
   closeSupportChat: (conversationId, note) =>
     api.patch(`/chat/${conversationId}/close`, { note }),
-  sendSupportTyping: (conversationId) => api.post(`/chat/${conversationId}/typing`),
   
   // Seed data
   seedData: () => api.post('/seed'),

@@ -90,9 +90,18 @@ describe('Phase 2 destination ownership guards', () => {
     path.join(process.cwd(), 'app/index.jsx'),
     'utf8',
   );
+  const rootLayoutSource = fs.readFileSync(
+    path.join(process.cwd(), 'app/_layout.jsx'),
+    'utf8',
+  );
+  const authContextSource = fs.readFileSync(
+    path.join(process.cwd(), 'src/context/AuthContext.js'),
+    'utf8',
+  );
 
   it('the Home notification sheet resolves and pushes each canonical event destination', () => {
     expect(appHeaderSource).toMatch(/resolveNotificationRoute\(\{/);
+    expect(appHeaderSource).toMatch(/if \(destination\) setTimeout/);
     expect(appHeaderSource).toMatch(/router\.push\(destination\)/);
     expect(appHeaderSource).toMatch(/markNotificationRead\(notification\.notification_id\)/);
     expect(appHeaderSource).toContain('message_id: notification?.message_id');
@@ -110,8 +119,11 @@ describe('Phase 2 destination ownership guards', () => {
     expect(servicesSource).toMatch(/if \(!ownedRequest\) return/);
   });
 
-  it('does not let the normal authenticated-root redirect overwrite a cold-start notification route', () => {
-    expect(indexSource).toMatch(/pathnameRef\.current !== '\/'/);
-    expect(indexSource).toMatch(/clearTimeout\(redirectTimer\)/);
+  it('establishes Home before consuming a cold-start notification route', () => {
+    expect(rootLayoutSource).toMatch(/authenticatedAuthPath/);
+    expect(rootLayoutSource).toMatch(/resetToHome\(router\)/);
+    expect(authContextSource).toMatch(/isAuthenticatedNavigationReady\(authStatus, pathname, segments\)/);
+    expect(authContextSource).toMatch(/pendingNotificationRef\.current/);
+    expect(indexSource).not.toMatch(/redirectTimer/);
   });
 });

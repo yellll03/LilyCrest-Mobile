@@ -1,4 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
+import * as Crypto from 'expo-crypto';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   KeyboardAvoidingView,
@@ -31,7 +32,6 @@ import {
 } from '../services/firebaseStorageUpload';
 import { pickDocument, pickFromCamera, pickFromLibrary } from '../utils/attachmentPicker';
 import { openChatAttachment } from '../utils/chatAttachmentViewer';
-import { subscribeCanonicalRealtime } from '../services/realtime';
 import {
   getLatestOutgoingMessageId,
   inquiryTicketLabel,
@@ -50,6 +50,19 @@ const SUPPORT_UPLOAD_MIME_TYPES = [
   'image/heif',
   'application/pdf',
 ];
+
+function createClientOperationId(prefix) {
+  return `${prefix}:${Crypto.randomUUID()}`;
+}
+
+function supportMessageFingerprint(text, attachments = []) {
+  return JSON.stringify({
+    text: String(text || ''),
+    attachments: attachments.map((item) => (
+      item?.attachmentId || item?.id || item?.clientAttachmentId || attachmentKey(item)
+    )),
+  });
+}
 
 function FollowupChips({ suggestions, onSelect }) {
   if (!suggestions?.length) return null;
@@ -199,9 +212,25 @@ const ADMIN_KEYWORDS = [
 ];
 
 const MAX_CHAT_INPUT_CHARS = 800;
-const MAX_ATTACHMENT_COUNT = 3;
+// Human support chat and the Lily AI assistant are two different surfaces
+// sharing this one composer, and they have genuinely different server-side
+// caps — so the composer picks the cap for the mode it is in rather than
+// enforcing one number that would be wrong for the other half.
+//
+// Support: must equal MAX_SUPPORT_ATTACHMENTS in
+// backend/constants/supportAttachments.js, which in turn matches the admin
+// web repository's own cap of 5. Any mix of the supported types counts toward
+// the same 5 (e.g. 3 images + 2 PDFs is allowed; a 6th of anything is not).
+const MAX_SUPPORT_ATTACHMENT_COUNT = 5;
+// Assistant: bounded by MAX_ATTACHMENTS in
+// backend/services/assistantAttachment.service.js, which inlines each file
+// into a model request. Deliberately left at 3.
+const MAX_ASSISTANT_ATTACHMENT_COUNT = 3;
 const MAX_ASSISTANT_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const MAX_SUPPORT_ATTACHMENT_BYTES = 5 * 1024 * 1024;
+// Must match SUPPORT_ATTACHMENT_FOLDER in backend/controllers/chat.controller.js
+// — the server authorizes the uploaded object against `<folder>/<user_id>/`.
+const SUPPORT_ATTACHMENT_FOLDER = 'support-attachments';
 const LIVE_CHAT_POLL_MS = 5000;
 const SEND_RATE_LIMIT_MS = 900;
 const CHAT_MODE = {
@@ -293,6 +322,16 @@ const toSupportThreadMessage = (message) => ({
   readAt: message.readAt || null,
 });
 
+const mergeSupportThread = (older = [], current = []) => {
+  const seen = new Set();
+  return [...older, ...current].filter((item) => {
+    const id = String(item?.id || '');
+    if (!id || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+};
+
 const toInquiryCard = (conversation) => {
   const created = conversation.createdAt ? new Date(conversation.createdAt) : new Date();
   const last = conversation.lastMessageAt ? new Date(conversation.lastMessageAt) : created;
@@ -355,10 +394,14 @@ export default function LilyAssistantScreen() {
   const sendGuardRef = useRef(false);
   const escalationGuardRef = useRef(false);
   const replyGuardRef = useRef(false);
+  const escalationRequestIdRef = useRef('');
+  const supportMessageRequestRef = useRef(null);
+  const replyMessageRequestRef = useRef(null);
   const reopenGuardRef = useRef(false);
   const resolutionGuardRef = useRef(false);
   const sendCooldownRef = useRef(0);
   const handledNotificationConversationRef = useRef('');
+  const preserveDetailScrollRef = useRef(false);
   const { user, authReady } = useAuth();
   const { colors } = useTheme();
   const styles = useThemedStyles(createAssistantStyles);
@@ -391,6 +434,12 @@ export default function LilyAssistantScreen() {
   const [inquiries, setInquiries] = useState([]);
   const [selectedInquiry, setSelectedInquiry] = useState(null);
   const [refreshingSupport, setRefreshingSupport] = useState(false);
+  const [conversationPages, setConversationPages] = useState({});
+  const [isLoadingEarlier, setIsLoadingEarlier] = useState(false);
+  const [suggestionContext, setSuggestionContext] = useState({
+    tenantState: 'unresolved',
+    suggestions: [],
+  });
 
   const initialSession = useMemo(
     () => `${user?.user_id || 'guest'}-chat-${Date.now()}`,
@@ -399,9 +448,35 @@ export default function LilyAssistantScreen() {
   const chat = useAssistantChat(initialSession);
   const tabBarHeight = useBottomTabBarHeight();
   const suggestedQuestions = useMemo(
-    () => getLilyTopicSuggestions(selectedTopic),
-    [selectedTopic],
+    () => getLilyTopicSuggestions(selectedTopic, suggestionContext),
+    [selectedTopic, suggestionContext],
   );
+
+  useEffect(() => {
+    setSuggestionContext({ tenantState: 'unresolved', suggestions: [] });
+    if (!user?.user_id) return undefined;
+
+    let cancelled = false;
+
+    apiService.getChatbotSuggestions()
+      .then((response) => {
+        if (cancelled) return;
+        const payload = response?.data?.data || response?.data || {};
+        setSuggestionContext({
+          tenantState: payload.state || 'unresolved',
+          suggestions: Array.isArray(payload.suggestions) ? payload.suggestions : [],
+        });
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setSuggestionContext({ tenantState: 'unresolved', suggestions: [] });
+        }
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.user_id]);
 
   const markInteracted = () => {
     if (!hasInteracted) setHasInteracted(true);
@@ -510,6 +585,10 @@ export default function LilyAssistantScreen() {
     const conversation = data?.conversation || null;
     const rawMessages = Array.isArray(data?.messages) ? data.messages : [];
     const thread = rawMessages.map(toSupportThreadMessage);
+    setConversationPages((prev) => ({
+      ...prev,
+      [conversationId]: data?.pageInfo || { hasMore: false, nextCursor: null },
+    }));
 
     if (replaceMainFeed) {
       rawMessages.forEach((item) => seenSupportMsgIds.current.add(item.id));
@@ -536,6 +615,41 @@ export default function LilyAssistantScreen() {
     }
 
     return { conversation, thread };
+  };
+
+  const loadEarlierSupportMessages = async () => {
+    const conversationId = selectedInquiry?.id;
+    const pageInfo = conversationPages[conversationId];
+    if (!conversationId || !pageInfo?.hasMore || !pageInfo.nextCursor || isLoadingEarlier) return;
+
+    setIsLoadingEarlier(true);
+    setNetworkError(null);
+    try {
+      const { data } = await apiService.getSupportChatMessages(conversationId, {
+        before: pageInfo.nextCursor,
+        limit: 50,
+      });
+      const older = (Array.isArray(data?.messages) ? data.messages : []).map(toSupportThreadMessage);
+      preserveDetailScrollRef.current = true;
+      setSelectedInquiry((prev) => (
+        prev?.id === conversationId
+          ? { ...prev, thread: mergeSupportThread(older, prev.thread || []) }
+          : prev
+      ));
+      setInquiries((prev) => prev.map((item) => (
+        item.id === conversationId
+          ? { ...item, thread: mergeSupportThread(older, item.thread || []) }
+          : item
+      )));
+      setConversationPages((prev) => ({
+        ...prev,
+        [conversationId]: data?.pageInfo || { hasMore: false, nextCursor: null },
+      }));
+    } catch (error) {
+      setNetworkError(getChatErrorMessage(error, 'Unable to load earlier support messages.'));
+    } finally {
+      setIsLoadingEarlier(false);
+    }
   };
 
   const handlePullToRefresh = async (view = activeTab) => {
@@ -585,12 +699,16 @@ export default function LilyAssistantScreen() {
       const normalizedIntent = options.intent || pendingAdminIntent || 'general';
       const category = normalizeSupportCategory(normalizedReason, normalizedIntent);
       const priority = normalizeSupportPriority(category, normalizedReason);
+      if (!escalationRequestIdRef.current) {
+        escalationRequestIdRef.current = createClientOperationId('support-start');
+      }
 
       const { data } = await apiService.startSupportChat({
         category,
         priority,
         initialMessage: normalizedReason || undefined,
         assistantSessionId: chat.sessionId,
+        clientRequestId: escalationRequestIdRef.current,
       });
 
       const conversation = data?.conversation;
@@ -613,6 +731,7 @@ export default function LilyAssistantScreen() {
 
       await refreshSupportConversation(conversation.id, { replaceMainFeed: false, scroll: true });
       await loadSupportInquiries();
+      escalationRequestIdRef.current = '';
     } catch (error) {
       setChatMode(CHAT_MODE.UNAVAILABLE);
       setNetworkError(getChatErrorMessage(error, 'Admin support could not be started right now.'));
@@ -721,11 +840,24 @@ export default function LilyAssistantScreen() {
     sendCooldownRef.current = now;
     setIsSending(true);
     setNetworkError(null);
+    const fingerprint = supportMessageFingerprint(text, supportAttachments);
+    if (supportMessageRequestRef.current?.fingerprint !== fingerprint) {
+      supportMessageRequestRef.current = {
+        fingerprint,
+        id: createClientOperationId('support-message'),
+      };
+    }
 
     try {
-      await apiService.sendSupportMessage(supportConversationId, text, supportAttachments);
+      await apiService.sendSupportMessage(
+        supportConversationId,
+        text,
+        supportAttachments,
+        supportMessageRequestRef.current.id,
+      );
       await refreshSupportConversation(supportConversationId, { replaceMainFeed: false, scroll: true });
       await loadSupportInquiries();
+      supportMessageRequestRef.current = null;
     } catch (error) {
       setNetworkError(getChatErrorMessage(error, 'Failed to send your message to admin support.'));
       throw error;
@@ -804,31 +936,26 @@ export default function LilyAssistantScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supportConversationId, chatMode]);
 
-  useEffect(() => {
-    if (!user?.user_id) return undefined;
-    const refreshFromRealtime = async (payload = {}) => {
-      const conversationId = String(payload.conversationId || payload.id || '').trim();
-      const messageId = String(payload.message?.id || '').trim();
-      if (messageId && seenSupportMsgIds.current.has(messageId)) return;
-      if (messageId) seenSupportMsgIds.current.add(messageId);
-      await loadSupportInquiries().catch(() => undefined);
-      const visibleConversationId = selectedInquiry?.id || supportConversationId;
-      if (conversationId && conversationId === visibleConversationId) {
-        await refreshSupportConversation(conversationId, {
-          replaceMainFeed: !selectedInquiry && conversationId === supportConversationId,
-          scroll: true,
-        }).catch(() => undefined);
+  // A socket-fed refresh effect used to sit here, listening for
+  // 'chat:message-new'/'chat:conversation-updated'. No Socket.IO server has
+  // ever existed in this platform, so it never fired. Live delivery for an
+  // open conversation is the LIVE_CHAT_POLL_MS poll above; delivery to a
+  // backgrounded app is OS push. See services/realtime.js removal.
+
+  // Best effort, and deliberately never allowed to mask the original upload
+  // failure — the tenant needs to see why the send failed, not why cleanup did.
+  const discardRegisteredAttachments = async (conversationId, registered = []) => {
+    if (!conversationId || !registered.length) return;
+    for (const attachment of registered) {
+      const attachmentId = attachment?.attachmentId || attachment?.id;
+      if (!attachmentId) continue;
+      try {
+        await apiService.discardSupportAttachment(conversationId, attachmentId);
+      } catch (error) {
+        console.warn('[Support Chat] Attachment rollback failed:', error?.message);
       }
-    };
-    const unsubscribeMessage = subscribeCanonicalRealtime('chat:message-new', refreshFromRealtime);
-    const unsubscribeConversation = subscribeCanonicalRealtime('chat:conversation-updated', refreshFromRealtime);
-    return () => {
-      unsubscribeMessage();
-      unsubscribeConversation();
-    };
-    // Rebind only when the visible canonical conversation changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedInquiry?.id, supportConversationId, user?.user_id]);
+    }
+  };
 
   const handleSend = async (presetText) => {
     if (sendGuardRef.current || isEscalating) return;
@@ -870,15 +997,42 @@ export default function LilyAssistantScreen() {
         setIsSending(true);
         setAttachmentUploadStatus('Uploading attachment...');
         if (isSupportMode(chatMode)) {
+          // Same durable-storage pipeline the assistant branch below uses:
+          // bytes go to Firebase Storage through POST /upload/firebase-storage
+          // (which derives the tenant path segment server-side), then the
+          // resulting metadata is registered against this conversation, which
+          // re-proves ownership before the file can be referenced by a
+          // message. There is no separate multipart upload path.
+          // All-or-nothing: every file is uploaded and registered before any
+          // message exists, so a failure part-way through never produces a
+          // message claiming attachments that did not make it. The registered
+          // records from the successful files are then discarded so a failed
+          // send leaves no orphaned bytes behind.
           uploadedAttachments = [];
-          for (let index = 0; index < attachments.length; index += 1) {
-            setAttachmentUploadStatus(`Uploading attachment ${index + 1} of ${attachments.length}...`);
-            const response = await apiService.uploadSupportAttachment(
-              supportConversationId,
-              attachments[index],
-            );
-            if (!response.data?.attachment) throw new Error('Attachment upload did not complete.');
-            uploadedAttachments.push(response.data.attachment);
+          try {
+            for (let index = 0; index < attachments.length; index += 1) {
+              setAttachmentUploadStatus(`Uploading attachment ${index + 1} of ${attachments.length}...`);
+              const [stored] = await ensureFirebaseStorageAttachments([attachments[index]], {
+                allowedMimeTypes: SUPPORT_UPLOAD_MIME_TYPES,
+                conversationId: supportConversationId,
+                context: 'support-chat',
+                entityId: supportConversationId,
+                folder: SUPPORT_ATTACHMENT_FOLDER,
+                maxBytes: MAX_SUPPORT_ATTACHMENT_BYTES,
+                tenantId: user?.user_id || user?.id || 'unknown-tenant',
+              });
+              if (!stored) throw new Error('Attachment upload did not complete.');
+              const response = await apiService.registerSupportAttachment(
+                supportConversationId,
+                stored,
+                attachments[index].clientAttachmentId,
+              );
+              if (!response.data?.attachment) throw new Error('Attachment upload did not complete.');
+              uploadedAttachments.push(response.data.attachment);
+            }
+          } catch (uploadError) {
+            await discardRegisteredAttachments(supportConversationId, uploadedAttachments);
+            throw uploadError;
           }
         } else {
           uploadedAttachments = await ensureFirebaseStorageAttachments(attachments, {
@@ -987,42 +1141,104 @@ export default function LilyAssistantScreen() {
 
   const sendReply = async () => {
     const text = sanitizeChatInput(replyText).slice(0, MAX_CHAT_INPUT_CHARS);
-    if (!text || !selectedInquiry || replyGuardRef.current) return;
+    if ((!text && !attachments.length) || !selectedInquiry || replyGuardRef.current) return;
 
     replyGuardRef.current = true;
     setIsSendingReply(true);
     setReplyText('');
 
-    const optimisticMessage = {
-      id: `reply-${Date.now()}`,
-      sender: 'user',
-      text,
-      time: formatTime(new Date()),
-    };
-
-    setSelectedInquiry((prev) => (
-      prev
-        ? { ...prev, thread: [...(prev.thread || []), optimisticMessage] }
-        : prev
-    ));
+    const conversationId = selectedInquiry.id;
+    let uploadedAttachments = attachments;
+    let optimisticMessageId = '';
+    const fingerprint = supportMessageFingerprint(text, attachments);
+    if (replyMessageRequestRef.current?.fingerprint !== fingerprint) {
+      replyMessageRequestRef.current = {
+        fingerprint,
+        id: createClientOperationId('support-reply'),
+      };
+    }
 
     try {
-      await apiService.sendSupportMessage(selectedInquiry.id, text);
-      await refreshSupportConversation(selectedInquiry.id, { replaceMainFeed: false, scroll: true });
+      if (attachments.length) {
+        setAttachmentUploadStatus('Uploading attachment...');
+        // Same all-or-nothing upload-then-register pipeline as the main
+        // support composer's handleSend: every file is stored durably and
+        // bound to this conversation before any message is created, so a
+        // failure part-way through never produces a message claiming
+        // attachments that did not make it, and successfully registered
+        // files from a failed send are discarded rather than left orphaned.
+        uploadedAttachments = [];
+        try {
+          for (let index = 0; index < attachments.length; index += 1) {
+            setAttachmentUploadStatus(`Uploading attachment ${index + 1} of ${attachments.length}...`);
+            const [stored] = await ensureFirebaseStorageAttachments([attachments[index]], {
+              allowedMimeTypes: SUPPORT_UPLOAD_MIME_TYPES,
+              conversationId,
+              context: 'support-chat',
+              entityId: conversationId,
+              folder: SUPPORT_ATTACHMENT_FOLDER,
+              maxBytes: MAX_SUPPORT_ATTACHMENT_BYTES,
+              tenantId: user?.user_id || user?.id || 'unknown-tenant',
+            });
+            if (!stored) throw new Error('Attachment upload did not complete.');
+            const response = await apiService.registerSupportAttachment(
+              conversationId,
+              stored,
+              attachments[index].clientAttachmentId,
+            );
+            if (!response.data?.attachment) throw new Error('Attachment upload did not complete.');
+            uploadedAttachments.push(response.data.attachment);
+          }
+        } catch (uploadError) {
+          await discardRegisteredAttachments(conversationId, uploadedAttachments);
+          throw uploadError;
+        }
+        setAttachmentUploadStatus('Attachment uploaded');
+      } else {
+        setAttachmentUploadStatus('');
+      }
+
+      const optimisticMessage = {
+        id: `reply-${Date.now()}`,
+        sender: 'user',
+        text,
+        time: formatTime(new Date()),
+        attachments: uploadedAttachments,
+      };
+      optimisticMessageId = optimisticMessage.id;
+
+      setAttachments([]);
+      setSelectedInquiry((prev) => (
+        prev
+          ? { ...prev, thread: [...(prev.thread || []), optimisticMessage] }
+          : prev
+      ));
+
+      await apiService.sendSupportMessage(
+        conversationId,
+        text,
+        uploadedAttachments,
+        replyMessageRequestRef.current.id,
+      );
+      await refreshSupportConversation(conversationId, { replaceMainFeed: false, scroll: true });
       await loadSupportInquiries();
+      replyMessageRequestRef.current = null;
     } catch (error) {
       setReplyText(text);
       setNetworkError(getChatErrorMessage(error, 'Failed to send your message to admin support.'));
-      setSelectedInquiry((prev) => (
-        prev
-          ? { ...prev, thread: (prev.thread || []).filter((item) => item.id !== optimisticMessage.id) }
-          : prev
-      ));
-      await refreshSupportConversation(selectedInquiry.id, {
+      if (optimisticMessageId) {
+        setSelectedInquiry((prev) => (
+          prev
+            ? { ...prev, thread: (prev.thread || []).filter((item) => item.id !== optimisticMessageId) }
+            : prev
+        ));
+      }
+      await refreshSupportConversation(conversationId, {
         replaceMainFeed: false,
         scroll: false,
       }).catch(() => undefined);
     } finally {
+      setAttachmentUploadStatus('');
       replyGuardRef.current = false;
       setIsSendingReply(false);
       setTimeout(() => adminScrollRef.current?.scrollToEnd({ animated: true }), 80);
@@ -1119,6 +1335,14 @@ export default function LilyAssistantScreen() {
     }
   };
 
+  // A selected inquiry thread (opened from "My Inquiries") is always an
+  // admin-support conversation, even though it does not drive the shared
+  // `chatMode` state machine used by the main composer below it in this
+  // file. Treat it as support-mode for validation purposes so it shares the
+  // same cap/MIME/size rules as the main support composer rather than
+  // silently falling back to the AI-assistant's looser limits.
+  const isSupportAttachmentContext = isSupportMode(chatMode) || Boolean(selectedInquiry);
+
   const handleAttach = async (pickerFn) => {
     try {
       const file = await pickerFn();
@@ -1137,7 +1361,7 @@ export default function LilyAssistantScreen() {
       const selectedExtension = String(file.name).toLowerCase().split('.').pop();
       const supportedByExtension = ['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif', 'pdf'].includes(selectedExtension);
       if (
-        isSupportMode(chatMode)
+        isSupportAttachmentContext
         && !SUPPORT_UPLOAD_MIME_TYPES.includes(selectedMimeType)
         && !((!selectedMimeType || selectedMimeType === 'application/octet-stream') && supportedByExtension)
       ) {
@@ -1146,7 +1370,10 @@ export default function LilyAssistantScreen() {
         return;
       }
 
-      const maxAttachmentBytes = isSupportMode(chatMode)
+      const maxAttachmentCount = isSupportAttachmentContext
+        ? MAX_SUPPORT_ATTACHMENT_COUNT
+        : MAX_ASSISTANT_ATTACHMENT_COUNT;
+      const maxAttachmentBytes = isSupportAttachmentContext
         ? MAX_SUPPORT_ATTACHMENT_BYTES
         : MAX_ASSISTANT_ATTACHMENT_BYTES;
       if (file.size && file.size > maxAttachmentBytes) {
@@ -1161,13 +1388,16 @@ export default function LilyAssistantScreen() {
           setNetworkError('That attachment is already added.');
           return prev;
         }
-        if (prev.length >= MAX_ATTACHMENT_COUNT) {
-          setNetworkError(`You can attach up to ${MAX_ATTACHMENT_COUNT} files only.`);
+        if (prev.length >= maxAttachmentCount) {
+          setNetworkError(`You can attach up to ${maxAttachmentCount} files per message.`);
           return prev;
         }
         setAttachmentUploadStatus('');
         setNetworkError(null);
-        return [...prev, file];
+        return [...prev, {
+          ...file,
+          clientAttachmentId: file.clientAttachmentId || createClientOperationId('support-attachment'),
+        }];
       });
       markInteracted();
     } catch (error) {
@@ -1450,7 +1680,13 @@ export default function LilyAssistantScreen() {
           style={styles.detailMessages}
           contentContainerStyle={styles.detailMessagesContent}
           showsVerticalScrollIndicator={false}
-          onContentSizeChange={() => adminScrollRef.current?.scrollToEnd({ animated: false })}
+          onContentSizeChange={() => {
+            if (preserveDetailScrollRef.current) {
+              preserveDetailScrollRef.current = false;
+              return;
+            }
+            adminScrollRef.current?.scrollToEnd({ animated: false });
+          }}
           refreshControl={(
             <RefreshControl
               refreshing={refreshingSupport}
@@ -1472,6 +1708,18 @@ export default function LilyAssistantScreen() {
             <View style={styles.errorBanner}>
               <Text style={styles.errorBannerText}>{networkError}</Text>
             </View>
+          ) : null}
+
+          {conversationPages[selectedInquiry.id]?.hasMore ? (
+            <Pressable
+              style={[styles.supportGhostButton, isLoadingEarlier && styles.buttonDisabled]}
+              onPress={loadEarlierSupportMessages}
+              disabled={isLoadingEarlier}
+            >
+              <Text style={styles.supportGhostButtonText}>
+                {isLoadingEarlier ? 'Loading earlier messages...' : 'Load Earlier Messages'}
+              </Text>
+            </Pressable>
           ) : null}
 
           {selectedInquiry.thread.map((item) => (
@@ -1517,27 +1765,98 @@ export default function LilyAssistantScreen() {
               {renderResolutionConfirmation(selectedInquiry.id)}
             </View>
           ) : (
-            <View style={styles.replyBar}>
-              <TextInput
-                style={styles.replyInput}
-                placeholder="Reply to admin support..."
-                placeholderTextColor="#6B7280"
-                value={replyText}
-                onChangeText={setReplyText}
-                multiline
-                editable={!isSendingReply}
-              />
-              <Pressable
-                style={[
-                  styles.replySendButton,
-                  (!replyText.trim() || isSendingReply) && styles.buttonDisabled,
-                ]}
-                onPress={sendReply}
-                disabled={!replyText.trim() || isSendingReply}
-              >
-                <Text style={styles.replySendButtonText}>{isSendingReply ? '...' : 'Send'}</Text>
-              </Pressable>
-            </View>
+            <>
+              {attachments.length ? (
+                <View style={styles.attachmentRow}>
+                  <Text style={styles.attachmentCountText} testID="attachment-remaining-count">
+                    {`${attachments.length} of ${attachmentCountLimit} attached`}
+                  </Text>
+                  {attachments.map((file) => (
+                    <Pressable
+                      key={attachmentKey(file)}
+                      style={styles.attachmentChip}
+                      onLongPress={() => removeAttachment(getAttachmentDisplayName(file))}
+                    >
+                      <Text style={styles.attachmentChipText}>{getAttachmentDisplayName(file)}</Text>
+                    </Pressable>
+                  ))}
+                </View>
+              ) : null}
+              {attachmentUploadStatus ? (
+                <Text style={styles.attachmentStatusText}>{attachmentUploadStatus}</Text>
+              ) : null}
+
+              <View style={styles.replyBar}>
+                <View style={styles.attachWrapper}>
+                  <Pressable
+                    style={styles.attachButton}
+                    onPress={() => setShowAttachMenu((value) => !value)}
+                    disabled={isSendingReply}
+                  >
+                    <Ionicons name="attach" size={20} color="#0A1628" />
+                  </Pressable>
+                </View>
+
+                <TextInput
+                  style={styles.replyInput}
+                  placeholder="Reply to admin support..."
+                  placeholderTextColor="#6B7280"
+                  value={replyText}
+                  onChangeText={setReplyText}
+                  onFocus={() => setShowAttachMenu(false)}
+                  multiline
+                  editable={!isSendingReply}
+                />
+                <Pressable
+                  style={[
+                    styles.replySendButton,
+                    (!replyText.trim() && !attachments.length || isSendingReply) && styles.buttonDisabled,
+                  ]}
+                  onPress={sendReply}
+                  disabled={(!replyText.trim() && !attachments.length) || isSendingReply}
+                >
+                  <Text style={styles.replySendButtonText}>{isSendingReply ? '...' : 'Send'}</Text>
+                </Pressable>
+              </View>
+
+              {showAttachMenu ? (
+                <View pointerEvents="box-none" style={styles.attachOverlay}>
+                  <Pressable style={styles.attachBackdrop} onPress={() => setShowAttachMenu(false)} />
+                  <View style={styles.attachMenu}>
+                    <Pressable
+                      style={[styles.attachMenuItem, styles.attachMenuDivider]}
+                      onPress={() => handleAttach(pickFromLibrary)}
+                      disabled={isSendingReply}
+                    >
+                      <View style={styles.attachMenuRow}>
+                        <Ionicons name="images-outline" size={18} color={colors.text} />
+                        <Text style={styles.attachMenuText}>Upload Image</Text>
+                      </View>
+                    </Pressable>
+                    <Pressable
+                      style={[styles.attachMenuItem, styles.attachMenuDivider]}
+                      onPress={() => handleAttach(pickDocument)}
+                      disabled={isSendingReply}
+                    >
+                      <View style={styles.attachMenuRow}>
+                        <Ionicons name="document-text-outline" size={18} color={colors.text} />
+                        <Text style={styles.attachMenuText}>Upload Document</Text>
+                      </View>
+                    </Pressable>
+                    <Pressable
+                      style={styles.attachMenuItem}
+                      onPress={() => handleAttach(pickFromCamera)}
+                      disabled={isSendingReply}
+                    >
+                      <View style={styles.attachMenuRow}>
+                        <Ionicons name="camera-outline" size={18} color={colors.text} />
+                        <Text style={styles.attachMenuText}>Take Photo</Text>
+                      </View>
+                    </Pressable>
+                  </View>
+                </View>
+              ) : null}
+            </>
           )}
         </View>
       </View>
@@ -1556,6 +1875,11 @@ export default function LilyAssistantScreen() {
   const canAttach = chatMode === CHAT_MODE.AI
     || chatMode === CHAT_MODE.WAITING
     || chatMode === CHAT_MODE.ACTIVE;
+  // Same mode-aware cap handleAttach enforces, surfaced so the tenant can see
+  // how many of the allowance they have used before hitting the limit.
+  const attachmentCountLimit = isSupportAttachmentContext
+    ? MAX_SUPPORT_ATTACHMENT_COUNT
+    : MAX_ASSISTANT_ATTACHMENT_COUNT;
   const latestSupportOutgoingMessageId = getLatestOutgoingMessageId(
     messages.filter((message) => String(message.id || '').startsWith('support-')),
   );
@@ -1574,7 +1898,7 @@ export default function LilyAssistantScreen() {
             <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
               <View style={styles.headerLeft}>
                 <View style={styles.headerAvatar}>
-                  <LilyFlowerIcon size={38} pulse={isSending} />
+                  <LilyFlowerIcon size={34} pulse={isSending} imageScale={1.28} />
                 </View>
                 <View style={styles.headerTextWrap}>
                   <Text style={styles.headerTitle}>Lily</Text>
@@ -1642,7 +1966,7 @@ export default function LilyAssistantScreen() {
                   <View style={styles.heroCard}>
                     <View style={styles.heroRow}>
                       <View style={styles.heroBadge}>
-                        <LilyFlowerIcon size={46} pulse />
+                        <LilyFlowerIcon size={42} pulse imageScale={1.28} />
                       </View>
                       <View style={styles.heroTextWrap}>
                         <Text style={styles.heroTitle}>
@@ -1712,6 +2036,9 @@ export default function LilyAssistantScreen() {
 
                   {attachments.length ? (
                     <View style={styles.attachmentRow}>
+                      <Text style={styles.attachmentCountText} testID="attachment-remaining-count">
+                        {`${attachments.length} of ${attachmentCountLimit} attached`}
+                      </Text>
                       {attachments.map((file) => (
                         <Pressable
                           key={attachmentKey(file)}
@@ -1876,8 +2203,8 @@ function createAssistantStyles(c, dark) {
     backgroundColor: c.background,
   },
   header: {
-    paddingHorizontal: 16,
-    paddingBottom: 14,
+    paddingHorizontal: 14,
+    paddingBottom: 12,
     backgroundColor: c.headerBg,
     flexDirection: 'row',
     alignItems: 'center',
@@ -1889,13 +2216,13 @@ function createAssistantStyles(c, dark) {
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 9,
     flex: 1,
   },
   headerAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: 'rgba(255,255,255,0.1)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -1907,7 +2234,7 @@ function createAssistantStyles(c, dark) {
   },
   headerTitle: {
     color: '#f8fafc',
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
   },
   headerStatusRow: {
@@ -1950,7 +2277,7 @@ function createAssistantStyles(c, dark) {
   tab: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 13,
+    paddingVertical: 11,
     position: 'relative',
   },
   tabText: {
@@ -1973,9 +2300,9 @@ function createAssistantStyles(c, dark) {
   body: {
     flex: 1,
     paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 10,
-    gap: 10,
+    paddingTop: 8,
+    paddingBottom: 8,
+    gap: 8,
   },
   errorBanner: {
     backgroundColor: '#FEF2F2',
@@ -1995,27 +2322,27 @@ function createAssistantStyles(c, dark) {
     borderRadius: 12,
   },
   messagesContent: {
-    padding: 14,
-    paddingBottom: 24,
+    padding: 12,
+    paddingBottom: 18,
   },
   heroCard: {
     backgroundColor: c.surface,
     borderRadius: 12,
-    padding: 18,
-    marginBottom: 14,
+    padding: 16,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: c.border,
   },
   heroRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 14,
+    gap: 10,
+    marginBottom: 12,
   },
   heroBadge: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     backgroundColor: dark ? c.surfaceSecondary : '#FBF7EA',
     justifyContent: 'center',
     alignItems: 'center',
@@ -2027,7 +2354,7 @@ function createAssistantStyles(c, dark) {
   },
   heroTitle: {
     color: c.text,
-    fontSize: 20,
+    fontSize: 19,
     fontWeight: '800',
     marginBottom: 2,
   },
@@ -2039,13 +2366,14 @@ function createAssistantStyles(c, dark) {
   heroTopics: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 7,
   },
   heroTopic: {
-    height: 40,
-    paddingHorizontal: 12,
+    minHeight: 36,
+    paddingHorizontal: 11,
+    paddingVertical: 8,
     backgroundColor: c.surfaceSecondary,
-    borderRadius: 10,
+    borderRadius: 9,
     borderWidth: 1,
     borderColor: c.border,
     alignItems: 'center',
@@ -2064,8 +2392,8 @@ function createAssistantStyles(c, dark) {
     color: dark ? '#F6D86B' : '#7C5D0B',
   },
   suggestSection: {
-    marginBottom: 16,
-    gap: 10,
+    marginBottom: 12,
+    gap: 8,
   },
   suggestLabel: {
     fontSize: 12,
@@ -2076,12 +2404,12 @@ function createAssistantStyles(c, dark) {
   },
   suggestChips: {
     alignItems: 'flex-start',
-    gap: 8,
+    gap: 7,
   },
   suggestChip: {
     maxWidth: '100%',
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 9,
     backgroundColor: c.surface,
     borderRadius: 10,
     borderWidth: 1,
@@ -2094,9 +2422,8 @@ function createAssistantStyles(c, dark) {
     lineHeight: 18,
   },
   bottomZone: {
-    gap: 10,
-    paddingBottom: 10,
-    paddingHorizontal: 4,
+    gap: 8,
+    paddingBottom: 8,
   },
   supportBanner: {
     flexDirection: 'row',
@@ -2257,6 +2584,12 @@ function createAssistantStyles(c, dark) {
     borderColor: c.border,
     padding: 10,
   },
+  attachmentCountText: {
+    width: '100%',
+    fontSize: 11,
+    fontWeight: '600',
+    color: c.textMuted,
+  },
   attachmentChip: {
     paddingHorizontal: 10,
     paddingVertical: 7,
@@ -2278,14 +2611,14 @@ function createAssistantStyles(c, dark) {
   },
   inputBar: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     backgroundColor: c.surface,
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1.5,
     borderColor: c.border,
-    paddingHorizontal: 6,
-    paddingVertical: 6,
-    gap: 8,
+    paddingHorizontal: 5,
+    paddingVertical: 5,
+    gap: 6,
   },
   attachWrapper: {
     position: 'relative',
@@ -2306,12 +2639,14 @@ function createAssistantStyles(c, dark) {
     minHeight: 36,
     maxHeight: 120,
     paddingVertical: 6,
+    paddingHorizontal: 4,
     fontSize: 14,
+    lineHeight: 20,
     color: c.text,
   },
   sendButton: {
     backgroundColor: '#0A1628',
-    minHeight: 36,
+    minHeight: 38,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 10,
@@ -2573,9 +2908,10 @@ function createAssistantStyles(c, dark) {
     borderColor: c.border,
   },
   replySendButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    minHeight: 40,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
     backgroundColor: c.primary,
     justifyContent: 'center',
     alignItems: 'center',
@@ -2583,7 +2919,7 @@ function createAssistantStyles(c, dark) {
   replySendButtonText: {
     color: '#ffffff',
     fontWeight: '700',
-    fontSize: 12,
+    fontSize: 13,
   },
   });
 }

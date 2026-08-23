@@ -24,6 +24,17 @@ describe('News announcements remain isolated from Home notifications', () => {
     expect(announcementsScreen).not.toContain('trash-outline');
   });
 
+  it('keeps the tenant toolbar separated from the header with readable touch targets', () => {
+    const toolbarStart = announcementsScreen.indexOf('toolbarRow: {');
+    const toolbarEnd = announcementsScreen.indexOf('toolbarButtonActive:', toolbarStart);
+    const toolbarStyles = announcementsScreen.slice(toolbarStart, toolbarEnd);
+
+    expect(toolbarStyles).toContain('paddingTop: 12');
+    expect(toolbarStyles).toContain('paddingBottom: 12');
+    expect(toolbarStyles).toContain('minHeight: 42');
+    expect(toolbarStyles).toContain('paddingHorizontal: 12');
+  });
+
   it('does not read or mutate Home notification state from the News screen', () => {
     expect(announcementsScreen).toContain('useCanonicalAnnouncements()');
     expect(announcementsScreen).not.toContain('useAuth()');

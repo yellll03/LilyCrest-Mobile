@@ -9,6 +9,7 @@
 
 import { Alert } from 'react-native';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AppHeader from '../components/AppHeader';
 import { ThemeProvider } from '../context/ThemeContext';
 
@@ -44,9 +45,14 @@ jest.mock('../context/AuthContext', () => ({
 
 function renderHeader() {
   return render(
-    <ThemeProvider>
-      <AppHeader />
-    </ThemeProvider>,
+    <SafeAreaProvider initialMetrics={{
+      frame: { x: 0, y: 0, width: 320, height: 640 },
+      insets: { top: 24, left: 0, right: 0, bottom: 0 },
+    }}>
+      <ThemeProvider>
+        <AppHeader />
+      </ThemeProvider>
+    </SafeAreaProvider>,
   );
 }
 

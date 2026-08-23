@@ -15,6 +15,7 @@ import { emitSessionExpired } from '../services/sessionEvents';
 jest.mock('expo-router', () => ({
   useRouter: () => ({ replace: jest.fn(), push: jest.fn() }),
   usePathname: () => '/(tabs)/home',
+  useSegments: () => ['(tabs)', 'home'],
 }));
 
 jest.mock('../config/firebase', () => ({
@@ -67,6 +68,13 @@ jest.mock('../services/api', () => ({
     patch: jest.fn().mockResolvedValue({ data: {} }),
   },
   getApiErrorMessage: (error, fallback) => fallback,
+  getConfirmedSessionInvalidation: (error) => {
+    const code = error?.response?.data?.code;
+    if (code === 'ACCOUNT_INACTIVE') return 'account_inactive';
+    if (code === 'SESSION_EXPIRED') return 'session_expired';
+    if (code === 'SESSION_REVOKED') return 'session_invalid';
+    return null;
+  },
   teardownExpiredSession: jest.fn().mockResolvedValue(true),
 }));
 
@@ -100,6 +108,62 @@ describe('AuthContext forced session-expiry cleanup (behavioral)', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     getStoredPushToken.mockResolvedValue('device-push-token-abc');
+  });
+
+  it('email/OTP login persists the same secure refreshable session shape as Google login', async () => {
+    const { api } = require('../services/api');
+    const { setSessionToken } = require('../services/secureCredentials');
+    api.post.mockResolvedValueOnce({
+      data: {
+        user: { user_id: 'tenant-a', name: 'Tenant A', role: 'tenant' },
+        session_token: 'otp-access-token',
+        refresh_token: 'otp-refresh-token',
+        expires_at: '2026-08-29T00:00:00.000Z',
+        refresh_expires_at: '2026-08-29T00:00:00.000Z',
+      },
+    });
+
+    let latest;
+    renderAuth((state) => { latest = state; });
+    await waitFor(() => expect(latest.authStatus).toBe('authenticated'));
+
+    let result;
+    await act(async () => {
+      result = await latest.verifyLoginOtp('pending-otp-token', '123456');
+    });
+
+    expect(result).toEqual({ success: true });
+    expect(setSessionToken).toHaveBeenCalledWith('otp-access-token', {
+      refreshToken: 'otp-refresh-token',
+      expiresAt: '2026-08-29T00:00:00.000Z',
+      refreshExpiresAt: '2026-08-29T00:00:00.000Z',
+    });
+    expect(latest.authStatus).toBe('authenticated');
+    expect(latest.sessionState).toBe('online');
+  });
+
+  it('accepts the deployed user + session_token response after a correct OTP', async () => {
+    const { api } = require('../services/api');
+    const { setSessionToken } = require('../services/secureCredentials');
+    api.post.mockResolvedValueOnce({
+      data: {
+        user: { user_id: 'tenant-a', name: 'Tenant A', role: 'tenant' },
+        session_token: 'legacy-otp-session',
+      },
+    });
+
+    let latest;
+    renderAuth((state) => { latest = state; });
+    await waitFor(() => expect(latest.authStatus).toBe('authenticated'));
+
+    let result;
+    await act(async () => {
+      result = await latest.verifyLoginOtp('pending-otp-token', '123456');
+    });
+
+    expect(result).toEqual({ success: true });
+    expect(setSessionToken).toHaveBeenCalledWith('legacy-otp-session', {});
+    expect(latest.sessionState).toBe('online');
   });
 
   it('a single forced expiry clears user, sets unauthenticated, and runs full cleanup parity', async () => {
@@ -165,7 +229,13 @@ describe('AuthContext forced session-expiry cleanup (behavioral)', () => {
 
     // Tenant logs back in successfully.
     api.post.mockResolvedValueOnce({
-      data: { user: { user_id: 'tenant-a', name: 'Tenant A' }, session_token: 'fresh-session-token' },
+      data: {
+        user: { user_id: 'tenant-a', name: 'Tenant A' },
+        session_token: 'fresh-session-token',
+        refresh_token: 'fresh-refresh-token',
+        expires_at: '2026-08-29T00:00:00.000Z',
+        refresh_expires_at: '2026-08-29T00:00:00.000Z',
+      },
     });
     await act(async () => {
       await latest.login('a@example.com', 'correct-password');

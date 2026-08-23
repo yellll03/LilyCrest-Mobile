@@ -13,8 +13,16 @@ function announcementIdFilter(id) {
   if (ObjectId.isValid(id)) clauses.push({ _id: new ObjectId(id) });
   return { $or: clauses };
 }
-const { notifyNewAnnouncement, notifyPrivateAnnouncement } = require('../services/pushService');
-const { resolveTenantBranch, normalizedBranchReference } = require('../services/branchLocation.service');
+const { BRANCH_LOCATION_RECORDS } = require('../config/branchLocationRecords');
+const { normalizedBranchReference } = require('../services/branchLocation.service');
+const { deliverAnnouncementById } = require('../services/announcementDelivery.service');
+const {
+  filterAnnouncementsForTenant,
+  getTenantUserId,
+  hasTenantAudienceIdentity,
+  loadVisibleAnnouncementsForTenant,
+  resolveRequesterBranchCode,
+} = require('../services/announcementAudience.service');
 
 function getAnnouncementDateValue(doc = {}) {
   return doc.publishedAt || doc.sentAt || doc.created_at || doc.createdAt || doc.updated_at || doc.updatedAt || null;
@@ -72,6 +80,83 @@ function normalizeAnnouncement(doc) {
   };
 }
 
+function announcementLifecycleStatus(doc = {}, now = new Date()) {
+  if (
+    doc.is_active === false
+    || doc.isActive === false
+    || doc.isArchived === true
+    || doc.is_archived === true
+    || doc.archivedAt
+    || doc.archived_at
+    || String(doc.status || '').toLowerCase() === 'archived'
+  ) return 'archived';
+  const publishAt = doc.publishedAt || doc.publishAt || doc.publish_at;
+  const expiresAt = doc.expiresAt || doc.expiryAt || doc.expires_at || doc.expiry_at;
+  const nowTime = now.getTime();
+  if (publishAt && new Date(publishAt).getTime() > nowTime) return 'scheduled';
+  if (expiresAt && new Date(expiresAt).getTime() <= nowTime) return 'expired';
+  return 'active';
+}
+
+function normalizeAdminAnnouncement(doc, now = new Date()) {
+  return {
+    ...normalizeAnnouncement(doc),
+    is_private: doc.is_private === true || doc.isPrivate === true,
+    user_id: doc.user_id || doc.userId || null,
+    branch: normalizedBranchReference(doc.branch || doc.branchId || doc.branch_id || '') || null,
+    publish_at: doc.publishedAt || doc.publishAt || doc.publish_at || null,
+    expires_at: doc.expiresAt || doc.expiryAt || doc.expires_at || doc.expiry_at || null,
+    lifecycle_status: announcementLifecycleStatus(doc, now),
+    delivery: {
+      status: doc.delivery?.status || 'legacy',
+      attempts: Number(doc.delivery?.attempts || 0),
+      recipient_count: Number(doc.delivery?.recipientCount || 0),
+      completed_at: doc.delivery?.completedAt || null,
+      last_error: doc.delivery?.lastError || null,
+    },
+  };
+}
+
+function parsePageValue(value, fallback, maximum) {
+  const parsed = Number.parseInt(String(value || ''), 10);
+  if (!Number.isInteger(parsed) || parsed < 1) return fallback;
+  return Math.min(parsed, maximum);
+}
+
+function escapeRegex(value) {
+  return String(value || '').replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+function adminLifecycleFilter(status, now) {
+  const notArchived = {
+    $and: [
+      { is_active: { $ne: false } },
+      { isActive: { $ne: false } },
+      { isArchived: { $ne: true } },
+      { is_archived: { $ne: true } },
+      { $or: [{ archivedAt: { $exists: false } }, { archivedAt: null }] },
+      { $or: [{ archived_at: { $exists: false } }, { archived_at: null }] },
+      { status: { $nin: ['archived', 'Archived', 'ARCHIVED'] } },
+    ],
+  };
+  const published = { $or: [
+    { publishedAt: { $exists: false } },
+    { publishedAt: null },
+    { publishedAt: { $lte: now } },
+  ] };
+  const unexpired = { $or: [
+    { expiresAt: { $exists: false } },
+    { expiresAt: null },
+    { expiresAt: { $gt: now } },
+  ] };
+
+  if (status === 'archived') return { $nor: [notArchived] };
+  if (status === 'scheduled') return { $and: [notArchived, { publishedAt: { $gt: now } }] };
+  if (status === 'expired') return { $and: [notArchived, { expiresAt: { $lte: now } }] };
+  if (status === 'active') return { $and: [notArchived, published, unexpired] };
+  return {};
+}
+
 function getAnnouncementDedupKey(doc = {}, normalized = {}) {
   const mongoId = doc._id?.toString?.() || '';
   const explicitAnnouncementId = [doc.announcement_id, normalized.announcement_id]
@@ -85,85 +170,21 @@ function getAnnouncementDedupKey(doc = {}, normalized = {}) {
   return `fallback:${String(content).trim()}::${timestamp}`;
 }
 
-// Resolve the requesting tenant's authoritative branch code for filtering, or
-// null if unauthenticated or no branch could be confirmed (no active occupancy,
-// conflicting assignments, etc). Branch-restricted announcements are hidden
-// rather than shown when this can't be determined — never guessed client-side.
-async function resolveRequesterBranchCode(db, user) {
-  if (!user) return null;
-  try {
-    const resolved = await resolveTenantBranch(db, user);
-    const code = resolved?.branch?.branchCode;
-    return code ? normalizedBranchReference(code) : null;
-  } catch (_) {
-    return null;
-  }
-}
-
-// An announcement with no branch field (or blank) is global/legacy and stays
-// visible to everyone — existing announcements must not suddenly disappear.
-//
-// A private (user_id-targeted) announcement is already scoped to exactly one
-// tenant by the query-level ownership filter above — that's strictly more
-// precise targeting than a branch match. Additionally requiring the branch to
-// line up too would only ever narrow an already-exact match, and could hide a
-// private announcement from its own intended recipient if the branch value is
-// stale, mistyped, or the tenant transferred branches after it was sent — so
-// branch filtering is skipped entirely for private announcements.
-function isAnnouncementVisibleForBranch(doc, requesterBranchCode) {
-  const isPrivate = doc.is_private === true || doc.isPrivate === true;
-  if (isPrivate) return true;
-
-  const branchRef = doc.branch || doc.branchId || doc.branch_id;
-  if (!branchRef || !String(branchRef).trim()) return true;
-  if (!requesterBranchCode) return false;
-  return normalizedBranchReference(branchRef) === requesterBranchCode;
-}
-
-// Mongo-level portion of tenant announcement visibility: active, not
-// archived, and either public or privately targeted at this exact userId.
-// Branch scoping (isAnnouncementVisibleForBranch) is applied afterward in JS
-// since it needs the requester's resolved branch code, not just their id.
-// Shared by getAllAnnouncements and any other authenticated-tenant-scoped
-// consumer (the AI assistant) that needs the identical visibility rule
-// instead of a second, divergent query.
-function buildTenantAnnouncementQuery(userId) {
-  // Handle both snake_case (app-created) and camelCase (admin-panel-created) documents.
-  // Web admin docs may lack is_active/isActive entirely — treat missing as active.
-  const activeFilter = {
-    $or: [
-      { is_active: true },
-      { isActive: true },
-      { is_active: { $exists: false }, isActive: { $exists: false } },
-    ],
-  };
-  // Exclude archived announcements (web admin uses isArchived)
-  const notArchivedFilter = { isArchived: { $ne: true } };
-  const visibilityFilter = {
-    $or: [
-      { is_private: { $ne: true }, isPrivate: { $ne: true } },
-      ...(userId ? [{ is_private: true, user_id: userId }, { isPrivate: true, userId }] : []),
-    ],
-  };
-  return { $and: [activeFilter, notArchivedFilter, visibilityFilter] };
-}
-
 // Get all announcements
 async function getAllAnnouncements(req, res) {
   try {
     const db = getDb();
-    const userId = req.user?.user_id || null;
-    const requesterBranchCode = await resolveRequesterBranchCode(db, req.user);
-    const dismissedIds = userId
-      ? new Set((await db.collection('announcement_dismissals').find({ user_id: userId }).project({ announcement_id: 1 }).toArray().catch(() => []))
-        .map((entry) => String(entry.announcement_id || '')).filter(Boolean))
-      : new Set();
+    const userId = getTenantUserId(req.user);
+    if (!userId) return res.status(401).json({ detail: 'Authentication is required.' });
+    if (!hasTenantAudienceIdentity(req.user)) return res.status(403).json({ detail: 'Tenant access is required.' });
+    const dismissedIds = new Set((await db.collection('announcement_dismissals')
+      .find({ user_id: userId })
+      .project({ announcement_id: 1 })
+      .toArray()
+      .catch(() => []))
+      .map((entry) => String(entry.announcement_id || '')).filter(Boolean));
 
-    const announcements = (await db.collection('announcements')
-      .find(buildTenantAnnouncementQuery(userId))
-      .sort({ created_at: -1, createdAt: -1 })
-      .toArray())
-      .filter((doc) => isAnnouncementVisibleForBranch(doc, requesterBranchCode));
+    const announcements = await loadVisibleAnnouncementsForTenant(db, req.user);
 
     const normalizedAnnouncements = announcements.map(normalizeAnnouncement);
     const dedupedAnnouncements = [];
@@ -185,31 +206,249 @@ async function getAllAnnouncements(req, res) {
   }
 }
 
+async function getAdminAnnouncements(req, res) {
+  try {
+    const db = getDb();
+    const now = new Date();
+    const page = parsePageValue(req.query?.page, 1, 100000);
+    const limit = parsePageValue(req.query?.limit, 25, 100);
+    const status = String(req.query?.status || '').trim().toLowerCase();
+    const search = String(req.query?.search || '').trim().slice(0, 80);
+    if (status && !['active', 'scheduled', 'expired', 'archived'].includes(status)) {
+      return res.status(400).json({ detail: 'status must be active, scheduled, expired, or archived' });
+    }
+
+    const clauses = [];
+    const lifecycle = adminLifecycleFilter(status, now);
+    if (Object.keys(lifecycle).length) clauses.push(lifecycle);
+    if (search) {
+      const pattern = new RegExp(escapeRegex(search), 'i');
+      clauses.push({ $or: [{ title: pattern }, { content: pattern }, { announcement_id: pattern }] });
+    }
+    const query = clauses.length ? { $and: clauses } : {};
+    const collection = db.collection('announcements');
+    const [items, total] = await Promise.all([
+      collection.find(query)
+        .sort({ publishedAt: -1, created_at: -1, _id: -1 })
+        .skip((page - 1) * limit)
+        .limit(limit)
+        .toArray(),
+      collection.countDocuments(query),
+    ]);
+
+    return res.json({
+      items: items.map((item) => normalizeAdminAnnouncement(item, now)),
+      pagination: {
+        page,
+        limit,
+        total,
+        total_pages: Math.max(1, Math.ceil(total / limit)),
+      },
+    });
+  } catch (error) {
+    console.error('getAdminAnnouncements error:', error);
+    return res.status(500).json({ detail: 'Failed to fetch admin announcements' });
+  }
+}
+
+async function getAdminAnnouncementOptions(req, res) {
+  try {
+    const db = getDb();
+    const search = String(req.query?.search || '').trim().slice(0, 80);
+    const query = {
+      $and: [
+        { role: { $in: ['tenant', 'resident'] } },
+        { is_active: { $ne: false } },
+        { isActive: { $ne: false } },
+        { active: { $ne: false } },
+        ...(search ? [{ $or: [
+          { name: new RegExp(escapeRegex(search), 'i') },
+          { fullName: new RegExp(escapeRegex(search), 'i') },
+          { email: new RegExp(escapeRegex(search), 'i') },
+          { user_id: new RegExp(escapeRegex(search), 'i') },
+        ] }] : []),
+      ],
+    };
+    const tenants = await db.collection('users')
+      .find(query, { projection: { _id: 1, user_id: 1, userId: 1, name: 1, fullName: 1, email: 1, role: 1 } })
+      .sort({ name: 1, fullName: 1, user_id: 1 })
+      .limit(100)
+      .toArray();
+    const tenantOptions = await Promise.all(tenants.map(async (tenant) => ({
+      user_id: getTenantUserId(tenant),
+      name: String(tenant.name || tenant.fullName || tenant.email || getTenantUserId(tenant)).trim(),
+      email: String(tenant.email || '').trim() || null,
+      branch: await resolveRequesterBranchCode(db, tenant),
+    })));
+    return res.json({
+      branches: BRANCH_LOCATION_RECORDS
+        .filter((branch) => branch.isActive !== false)
+        .map((branch) => ({ code: branch.branchCode, name: branch.branchName })),
+      tenants: tenantOptions.filter((tenant) => tenant.user_id),
+    });
+  } catch (error) {
+    console.error('getAdminAnnouncementOptions error:', error);
+    return res.status(500).json({ detail: 'Failed to fetch announcement audience options' });
+  }
+}
+
+async function setAnnouncementLifecycle(req, res) {
+  try {
+    const announcementId = String(req.params?.announcementId || '').trim();
+    const action = String(req.body?.action || '').trim().toLowerCase();
+    if (!announcementId) return res.status(400).json({ detail: 'announcementId is required' });
+    if (!['archive', 'activate', 'retry_delivery'].includes(action)) {
+      return res.status(400).json({ detail: 'action must be archive, activate, or retry_delivery' });
+    }
+
+    const db = getDb();
+    const collection = db.collection('announcements');
+    const existing = await collection.findOne(announcementIdFilter(announcementId));
+    if (!existing) return res.status(404).json({ detail: 'Announcement not found' });
+    const stableId = existing.announcement_id || String(existing._id);
+    const now = new Date();
+
+    if (action === 'archive') {
+      await collection.updateOne(
+        { _id: existing._id },
+        {
+          $set: {
+            is_active: false,
+            isArchived: true,
+            status: 'archived',
+            archivedAt: now,
+            'delivery.cancelledAt': now,
+            updated_at: now,
+          },
+        },
+      );
+    } else {
+      if (action === 'retry_delivery' && announcementLifecycleStatus(existing, now) === 'archived') {
+        return res.status(409).json({ detail: 'Activate the announcement before retrying delivery.' });
+      }
+      const expiry = existing.expiresAt || existing.expires_at;
+      if (expiry && new Date(expiry).getTime() <= now.getTime()) {
+        return res.status(409).json({ detail: 'Expired announcements cannot be activated or delivered again.' });
+      }
+      const alreadyDelivered = Boolean(existing.delivery?.completedAt || existing.delivery?.status === 'delivered');
+      const publishTime = new Date(existing.publishedAt || existing.publish_at || now).getTime();
+      const nextDeliveryStatus = alreadyDelivered
+        ? 'delivered'
+        : publishTime > now.getTime() ? 'scheduled' : 'pending';
+      await collection.updateOne(
+        { _id: existing._id },
+        {
+          $set: {
+            is_active: true,
+            isArchived: false,
+            status: 'active',
+            'delivery.status': nextDeliveryStatus,
+            'delivery.updatedAt': now,
+            updated_at: now,
+          },
+          $unset: {
+            archivedAt: '',
+            archived_at: '',
+            'delivery.cancelledAt': '',
+            'delivery.lastError': '',
+            'delivery.leaseExpiresAt': '',
+          },
+        },
+      );
+      if (!alreadyDelivered && publishTime <= now.getTime()) {
+        try { await deliverAnnouncementById(db, stableId, { now }); } catch (error) {
+          console.warn(`[AnnouncementDelivery] Manual ${action} queued for retry:`, error?.message);
+        }
+      }
+    }
+
+    const updated = await collection.findOne({ _id: existing._id });
+    return res.json(normalizeAdminAnnouncement(updated, new Date()));
+  } catch (error) {
+    console.error('setAnnouncementLifecycle error:', error);
+    return res.status(500).json({ detail: 'Failed to update announcement lifecycle' });
+  }
+}
+
 // Admin: create a new announcement and push-notify all tenants
 async function createAnnouncement(req, res) {
   try {
-    const { priority, category, is_urgent, is_private, user_id: targetUserId, branch, publish_at, expires_at } = req.body;
+    const {
+      priority,
+      category,
+      is_urgent,
+      is_private,
+      user_id: targetUserId,
+      branch,
+      publish_at,
+      expires_at,
+      client_request_id: clientRequestId,
+    } = req.body;
     const title = typeof req.body?.title === 'string' ? req.body.title.trim() : '';
     const content = typeof req.body?.content === 'string' ? req.body.content.trim() : '';
     const normalizedPriority = String(priority || 'normal').trim().toLowerCase();
     const normalizedCategory = String(category || 'General').trim();
     const allowedPriorities = ['low', 'normal', 'high'];
-    const allowedCategories = ['General', 'Account', 'Announcement', 'Billing', 'Maintenance', 'Security', 'Reservation', 'Rules', 'Promo', 'Event'];
+    const allowedCategories = ['General', 'Account', 'Announcement', 'Billing', 'Maintenance', 'Security', 'Reservation', 'Rules', 'Promo', 'Event', 'Emergency'];
     if (!title || title.length > 120) return res.status(400).json({ detail: 'title is required and must be 120 characters or fewer' });
     if (!content || content.length > 5000) return res.status(400).json({ detail: 'content is required and must be 5000 characters or fewer' });
     if (!allowedPriorities.includes(normalizedPriority)) return res.status(400).json({ detail: `priority must be one of: ${allowedPriorities.join(', ')}` });
     if (!allowedCategories.includes(normalizedCategory)) return res.status(400).json({ detail: `category must be one of: ${allowedCategories.join(', ')}` });
+    if (is_private !== undefined && typeof is_private !== 'boolean') return res.status(400).json({ detail: 'is_private must be a boolean' });
+    if (is_urgent !== undefined && typeof is_urgent !== 'boolean') return res.status(400).json({ detail: 'is_urgent must be a boolean' });
+    const normalizedClientRequestId = String(clientRequestId || '').trim();
+    if (normalizedClientRequestId && !/^[a-zA-Z0-9_-]{8,100}$/.test(normalizedClientRequestId)) {
+      return res.status(400).json({ detail: 'client_request_id must be 8-100 letters, numbers, underscores, or hyphens' });
+    }
     const publishDate = publish_at ? new Date(publish_at) : new Date();
     const expiryDate = expires_at ? new Date(expires_at) : null;
     if (Number.isNaN(publishDate.getTime()) || (expiryDate && Number.isNaN(expiryDate.getTime()))) return res.status(400).json({ detail: 'publish_at and expires_at must be valid dates' });
     if (expiryDate && expiryDate <= publishDate) return res.status(400).json({ detail: 'expires_at must be after publish_at' });
 
     const db = getDb();
-    if (is_private === true && !targetUserId) return res.status(400).json({ detail: 'user_id is required for a private announcement' });
-    if (targetUserId) {
-      const target = await db.collection('users').findOne({ user_id: String(targetUserId).trim() });
-      if (!target) return res.status(400).json({ detail: 'Target user was not found' });
+    const normalizedTargetUserId = targetUserId ? String(targetUserId).trim() : '';
+    if (is_private === true && !normalizedTargetUserId) return res.status(400).json({ detail: 'user_id is required for a private announcement' });
+    if (is_private !== true && normalizedTargetUserId) return res.status(400).json({ detail: 'user_id is only valid for a private announcement' });
+    const normalizedBranch = normalizedBranchReference(branch);
+    const allowedBranchCodes = new Set(BRANCH_LOCATION_RECORDS
+      .filter((record) => record.isActive !== false)
+      .map((record) => normalizedBranchReference(record.branchCode)));
+    if (branch && (!normalizedBranch || !allowedBranchCodes.has(normalizedBranch))) {
+      return res.status(400).json({ detail: 'branch must be an active canonical LilyCrest branch' });
     }
+
+    const creatorUserId = String(req.user?.user_id || '').trim();
+    if (normalizedClientRequestId) {
+      const existingRequest = await db.collection('announcements').findOne({
+        created_by: creatorUserId,
+        client_request_id: normalizedClientRequestId,
+      });
+      if (existingRequest) {
+        return res.status(200).json({
+          ...normalizeAdminAnnouncement(existingRequest),
+          notification_sent: existingRequest.delivery?.status === 'delivered',
+          idempotent_replay: true,
+        });
+      }
+    }
+
+    let target = null;
+    if (normalizedTargetUserId) {
+      target = await db.collection('users').findOne({
+        $or: [{ user_id: normalizedTargetUserId }, { userId: normalizedTargetUserId }],
+      });
+      if (!target || !hasTenantAudienceIdentity(target) || target.is_active === false || target.isActive === false) {
+        return res.status(400).json({ detail: 'Target tenant was not found or is inactive' });
+      }
+    }
+    if (target && normalizedBranch) {
+      const targetBranch = await resolveRequesterBranchCode(db, target);
+      if (!targetBranch || targetBranch !== normalizedBranch) {
+        return res.status(400).json({ detail: 'The private target is not eligible for the selected branch.' });
+      }
+    }
+    const now = new Date();
+    const immediatelyDue = publishDate.getTime() <= now.getTime();
     const announcement = {
       announcement_id: `ann_${uuidv4().replace(/-/g, '').substring(0, 12)}`,
       title,
@@ -219,30 +458,55 @@ async function createAnnouncement(req, res) {
       category: normalizedCategory,
       is_urgent: is_urgent === true || normalizedPriority === 'high',
       is_active: true,
-      is_private: is_private || false,
-      user_id: targetUserId || null,
-      branch: typeof branch === 'string' && branch.trim() ? branch.trim() : null,
+      is_private: is_private === true,
+      user_id: normalizedTargetUserId || null,
+      branch: normalizedBranch || null,
       publishedAt: publishDate,
       expiresAt: expiryDate,
-      created_at: new Date(),
-      updated_at: new Date(),
+      created_by: creatorUserId,
+      ...(normalizedClientRequestId ? { client_request_id: normalizedClientRequestId } : {}),
+      delivery: {
+        status: immediatelyDue ? 'pending' : 'scheduled',
+        attempts: 0,
+        createdAt: now,
+        updatedAt: now,
+      },
+      created_at: now,
+      updated_at: now,
     };
 
-    await db.collection('announcements').insertOne(announcement);
-
-    // Push/in-app notification delivery
-    let notification_sent = false;
-    if (!announcement.is_private) {
-      notifyNewAnnouncement(db, announcement).catch(() => {});
-      notification_sent = true;
-    } else if (announcement.user_id) {
-      notifyPrivateAnnouncement(announcement.user_id, announcement).catch(() => {});
-      notification_sent = true;
-    } else {
-      console.log(`[createAnnouncement] Skipping push notification for private announcement "${announcement.title}" (user_id: ${announcement.user_id})`);
+    try {
+      await db.collection('announcements').insertOne(announcement);
+    } catch (error) {
+      if (error?.code === 11000 && normalizedClientRequestId) {
+        const replay = await db.collection('announcements').findOne({
+          created_by: creatorUserId,
+          client_request_id: normalizedClientRequestId,
+        });
+        if (replay) {
+          return res.status(200).json({
+            ...normalizeAdminAnnouncement(replay),
+            notification_sent: replay.delivery?.status === 'delivered',
+            idempotent_replay: true,
+          });
+        }
+      }
+      throw error;
     }
 
-    res.status(201).json({ ...normalizeAnnouncement(announcement), notification_sent });
+    if (immediatelyDue) {
+      try {
+        await deliverAnnouncementById(db, announcement.announcement_id, { now });
+      } catch (error) {
+        console.warn(`[AnnouncementDelivery] Immediate delivery queued for retry:`, error?.message);
+      }
+    }
+    const persisted = await db.collection('announcements').findOne({ announcement_id: announcement.announcement_id }) || announcement;
+    return res.status(201).json({
+      ...normalizeAdminAnnouncement(persisted),
+      notification_sent: persisted.delivery?.status === 'delivered',
+      idempotent_replay: false,
+    });
   } catch (error) {
     console.error('createAnnouncement error:', error);
     res.status(500).json({ detail: 'Failed to create announcement' });
@@ -260,13 +524,43 @@ async function dismissAnnouncement(req, res) {
   if (!announcementId) return res.status(400).json({ detail: 'announcementId is required.' });
   const db = getDb();
   const exists = await db.collection('announcements').findOne(announcementIdFilter(announcementId));
-  if (!exists) return res.status(404).json({ detail: 'Announcement not found.' });
+  const visible = exists ? await filterAnnouncementsForTenant(db, req.user, [exists]) : [];
+  if (!visible.length) return res.status(404).json({ detail: 'Announcement not found.' });
   await db.collection('announcement_dismissals').updateOne(
     { user_id: userId, announcement_id: announcementId },
     { $set: { dismissed_at: new Date() }, $setOnInsert: { created_at: new Date() } },
     { upsert: true },
   );
   return res.json({ status: 'dismissed', announcement_id: announcementId });
+}
+
+// Exact inverse of dismissAnnouncement: removes this tenant's dismissal row
+// so the announcement reappears in their News tab. Backs the "Undo" toast the
+// News tab shows immediately after a dismiss. Like dismiss, it only ever
+// touches the per-tenant announcement_dismissals junction — the shared
+// `announcements` document is never read-modified-written here, so a restore
+// can neither resurrect nor alter admin content.
+//
+// Idempotent: restoring an announcement that was never dismissed is a no-op
+// success, so a retried/duplicated Undo cannot fail. `restored` reports
+// whether a dismissal row actually existed.
+async function restoreAnnouncement(req, res) {
+  const userId = req.user?.user_id;
+  const announcementId = String(req.params.announcementId || '').trim();
+  if (!announcementId) return res.status(400).json({ detail: 'announcementId is required.' });
+  const db = getDb();
+  const exists = await db.collection('announcements').findOne(announcementIdFilter(announcementId));
+  const visible = exists ? await filterAnnouncementsForTenant(db, req.user, [exists]) : [];
+  if (!visible.length) return res.status(404).json({ detail: 'Announcement not found.' });
+  const result = await db.collection('announcement_dismissals').deleteOne({
+    user_id: userId,
+    announcement_id: announcementId,
+  });
+  return res.json({
+    status: 'restored',
+    announcement_id: announcementId,
+    restored: (result?.deletedCount || 0) > 0,
+  });
 }
 
 // Matches both id forms getAllAnnouncements can hand back: the explicit
@@ -294,10 +588,15 @@ async function dismissAnnouncementsBulk(req, res) {
   const ids = [...new Set(rawIds.map((id) => id.trim()))];
 
   const db = getDb();
-  const existingCount = await db.collection('announcements').countDocuments({
+  const existing = await db.collection('announcements').find({
     $or: ids.flatMap((id) => [{ announcement_id: id }, ...(ObjectId.isValid(id) ? [{ _id: new ObjectId(id) }] : [])]),
-  });
-  if (existingCount !== ids.length) {
+  }).toArray();
+  const visible = await filterAnnouncementsForTenant(db, req.user, existing);
+  const visibleIds = new Set(visible.flatMap((announcement) => [
+    String(announcement.announcement_id || ''),
+    String(announcement._id || ''),
+  ].filter(Boolean)));
+  if (ids.some((id) => !visibleIds.has(id))) {
     return res.status(400).json({ detail: 'One or more ids do not match an existing announcement.' });
   }
 
@@ -315,12 +614,12 @@ async function dismissAnnouncementsBulk(req, res) {
 
 module.exports = {
   getAllAnnouncements,
+  getAdminAnnouncements,
+  getAdminAnnouncementOptions,
   createAnnouncement,
+  setAnnouncementLifecycle,
   dismissAnnouncement,
+  restoreAnnouncement,
   dismissAnnouncementsBulk,
-  // exported for unit testing of branch-visibility rules in isolation, and
-  // for reuse by other authenticated-tenant-scoped consumers (chatbot)
-  isAnnouncementVisibleForBranch,
-  resolveRequesterBranchCode,
-  buildTenantAnnouncementQuery,
+  __test: { announcementLifecycleStatus, normalizeAdminAnnouncement, adminLifecycleFilter },
 };

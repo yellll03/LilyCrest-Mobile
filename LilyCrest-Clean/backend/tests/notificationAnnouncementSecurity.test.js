@@ -189,7 +189,8 @@ function fakeRes() {
 async function run(handler, db, req) {
   currentDb = db;
   const res = fakeRes();
-  await handler(req, res);
+  const request = req.user ? { ...req, user: { role: 'tenant', ...req.user } } : req;
+  await handler(request, res);
   return res;
 }
 
@@ -356,6 +357,12 @@ test('route registration: all four new routes require authMiddleware (and tenant
   const path = require('node:path');
   const notificationRoutesSrc = fs.readFileSync(path.join(__dirname, '../routes/notification.routes.js'), 'utf8');
   const announcementRoutesSrc = fs.readFileSync(path.join(__dirname, '../routes/announcement.routes.js'), 'utf8');
+
+  assert.match(
+    announcementRoutesSrc,
+    /router\.get\(\s*'\/'\s*,\s*authMiddleware\s*,\s*tenantMiddleware\s*,\s*announcementController\.getAllAnnouncements\s*\)/,
+    'GET /announcements must require an authenticated tenant identity',
+  );
 
   assert.match(
     notificationRoutesSrc,

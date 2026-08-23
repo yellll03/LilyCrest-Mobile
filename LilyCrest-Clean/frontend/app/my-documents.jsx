@@ -543,7 +543,7 @@ export default function MyDocumentsScreen() {
         strong
         title="My Documents"
         subtitle={`${POLICY_DOCUMENTS.length + uploadedDocs.length} records and policies`}
-        onBack={() => safeBack(router, '/(tabs)/profile')}
+        onBack={() => safeBack(router)}
       />
 
       {/* Category Filter Chips */}

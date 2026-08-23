@@ -15,11 +15,13 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { ThemeProvider } from '../context/ThemeContext';
 import { ToastProvider } from '../context/ToastContext';
+import { emitSessionRecovered } from '../services/sessionEvents';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ replace: jest.fn(), push: jest.fn() }),
   usePathname: () => '/(tabs)/home',
+  useSegments: () => ['(tabs)', 'home'],
 }));
 
 jest.mock('../config/firebase', () => ({
@@ -82,6 +84,7 @@ jest.mock('../services/api', () => ({
     patch: jest.fn().mockResolvedValue({ data: {} }),
   },
   getApiErrorMessage: (error, fallback) => fallback,
+  getConfirmedSessionInvalidation: (error) => error?.response?.data?.code === 'SESSION_REVOKED' ? 'session_invalid' : null,
   teardownExpiredSession: jest.fn().mockResolvedValue(true),
 }));
 
@@ -112,6 +115,18 @@ describe('AuthContext branch persistence across profile refreshes (regression)',
     mockSessionToken = 'valid-session-token';
     mockUsersMeError = null;
     mockUsersMeResponse = { data: { user_id: 'tenant-a', name: 'Tenant A', branch: GOOD_BRANCH } };
+  });
+
+  it('cold-start outage with a secure token shows retryable restore instead of Login', async () => {
+    const { clearCredentials, getSessionToken } = require('../services/secureCredentials');
+    mockUsersMeError = { response: { status: 503, data: { code: 'AUTH_SERVICE_UNAVAILABLE', retryable: true } } };
+
+    const screen = renderAuth(() => {});
+
+    await waitFor(() => expect(screen.getByText('Still restoring your session')).toBeTruthy());
+    expect(screen.getByText(/secure session is still saved/i)).toBeTruthy();
+    expect(getSessionToken).toHaveBeenCalled();
+    expect(clearCredentials).not.toHaveBeenCalled();
   });
 
   it('successful hydration replaces stale AsyncStorage/default/Firebase profile values with /users/me', async () => {
@@ -252,6 +267,43 @@ describe('AuthContext branch persistence across profile refreshes (regression)',
 
     expect(latest.authStatus).toBe('authenticated');
     expect(latest.user?.user_id).toBe('tenant-a');
+    expect(latest.sessionState).toBe('retryable');
     expect(clearCredentials).not.toHaveBeenCalled();
+  });
+
+  it('clears retryable session state after an authenticated request proves recovery', async () => {
+    let latest;
+    renderAuth((state) => { latest = state; });
+    await waitFor(() => expect(latest.authStatus).toBe('authenticated'));
+
+    mockUsersMeError = { response: { status: 503 } };
+    await act(async () => {
+      await latest.checkAuth();
+    });
+    expect(latest.sessionState).toBe('retryable');
+
+    await act(async () => {
+      emitSessionRecovered({ url: '/dashboard/me' });
+    });
+
+    expect(latest.authStatus).toBe('authenticated');
+    expect(latest.sessionState).toBe('online');
+    expect(latest.user?.user_id).toBe('tenant-a');
+  });
+
+  it('checkAuth() clears only a machine-confirmed revoked session', async () => {
+    const { clearCredentials } = require('../services/secureCredentials');
+    let latest;
+    renderAuth((state) => { latest = state; });
+    await waitFor(() => expect(latest.authStatus).toBe('authenticated'));
+
+    mockUsersMeError = { response: { status: 401, data: { code: 'SESSION_REVOKED', retryable: false } } };
+    await act(async () => {
+      await latest.checkAuth();
+    });
+
+    expect(latest.authStatus).toBe('unauthenticated');
+    expect(latest.user).toBeNull();
+    expect(clearCredentials).toHaveBeenCalledWith({ disableBiometric: false });
   });
 });

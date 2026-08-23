@@ -2,9 +2,10 @@ const axios = require('axios');
 const { getDb } = require('../config/database');
 const { admin } = require('../config/firebase');
 const {
-  saveNotificationForAllTenants,
   saveNotificationForUser,
+  saveNotificationForUsers,
 } = require('./notificationService');
+const { resolveAnnouncementRecipientUsers } = require('./announcementAudience.service');
 
 const DEFAULT_CHANNEL_ID = 'default';
 const MULTICAST_CHUNK_SIZE = 500;
@@ -325,6 +326,23 @@ async function sendPushToUser(userId, { title, body, data = {} }) {
   }
 }
 
+async function sendPushToUsers(users = [], { title, body, data = {} }) {
+  try {
+    const pushEntries = users.flatMap((user) => extractUserPushTokens(user));
+    if (!pushEntries.length) {
+      console.log('[Push] No eligible tenant device tokens found');
+      return 0;
+    }
+
+    const result = await sendMulticast(pushEntries, { title, body, data });
+    console.log(`[Push] Audience send reached ${result.successCount}/${pushEntries.length} devices: "${title}"`);
+    return result.successCount;
+  } catch (error) {
+    console.error('[Push] Audience send failed:', error?.message);
+    return 0;
+  }
+}
+
 async function sendPushToAllTenants(db, { title, body, data = {} }) {
   try {
     const tenants = await db.collection('users').find(
@@ -348,15 +366,7 @@ async function sendPushToAllTenants(db, { title, body, data = {} }) {
       }
     ).toArray();
 
-    const pushEntries = tenants.flatMap((tenant) => extractUserPushTokens(tenant));
-    if (!pushEntries.length) {
-      console.log('[Push] No tenant device tokens found');
-      return 0;
-    }
-
-    const result = await sendMulticast(pushEntries, { title, body, data });
-    console.log(`[Push] Broadcast sent to ${result.successCount}/${pushEntries.length} devices: "${title}"`);
-    return result.successCount;
+    return sendPushToUsers(tenants, { title, body, data });
   } catch (error) {
     console.error('[Push] Broadcast failed:', error?.message);
     return 0;
@@ -546,94 +556,58 @@ async function notifyNewAnnouncement(db, announcement) {
     },
   };
 
-  const [, pushResult] = await Promise.allSettled([
-    saveNotificationForAllTenants(db, {
-      ...payload,
-      category: announcement.category || 'Announcement',
-      source: 'announcement',
-      source_label: announcement.author_name || 'LilyCrest Admin',
-      author_name: announcement.author_name || 'LilyCrest Admin',
-      announcement_id: announcement.announcement_id,
-      eventKey: announcement.announcement_id ? `announcement:${announcement.announcement_id}` : '',
-      priority: isUrgent ? 'high' : (announcement.priority || 'normal'),
-      is_urgent: Boolean(isUrgent),
-      created_at: announcement.created_at || new Date(),
-    }),
-    sendPushToAllTenants(db, payload),
-  ]);
+  const recipients = await resolveAnnouncementRecipientUsers(db, announcement);
+  const recipientUserIds = recipients.map((user) => normalizeString(user.user_id || user.userId)).filter(Boolean);
+  if (!recipientUserIds.length) {
+    console.log(`[Push] Announcement "${announcement.title}" has no eligible recipients`);
+    return 0;
+  }
 
-  return pushResult.status === 'fulfilled' ? pushResult.value : 0;
+  // Persist the in-app feed first. Its event key makes retries idempotent and
+  // a storage failure must remain retryable instead of being hidden by an
+  // allSettled result. Native push is best-effort after the durable record.
+  await saveNotificationForUsers(recipientUserIds, {
+    ...payload,
+    category: announcement.category || 'Announcement',
+    source: 'announcement',
+    source_label: announcement.author_name || 'LilyCrest Admin',
+    author_name: announcement.author_name || 'LilyCrest Admin',
+    announcement_id: announcement.announcement_id,
+    eventKey: announcement.announcement_id ? `announcement:${announcement.announcement_id}` : '',
+    priority: isUrgent ? 'high' : (announcement.priority || 'normal'),
+    is_urgent: Boolean(isUrgent),
+    created_at: announcement.created_at || new Date(),
+  }, { db });
+
+  try {
+    await sendPushToUsers(recipients, payload);
+  } catch (error) {
+    console.warn(`[Push] Native delivery failed for announcement ${announcement.announcement_id}:`, error?.message);
+  }
+  return recipientUserIds.length;
 }
 
 async function notifyPrivateAnnouncement(userId, announcement = {}) {
-  const isUrgent = announcement.priority === 'high' || announcement.is_urgent;
-  const title = isUrgent ? `Urgent: ${announcement.title}` : announcement.title;
-  const body = clipText(announcement.content, 110);
-  const payload = {
-    title,
-    body,
-    data: {
-      type: 'announcement',
-      announcement_id: announcement.announcement_id,
-      screen: 'announcements',
-      url: '/(tabs)/announcements',
-    },
-  };
-
-  const [, pushResult] = await Promise.allSettled([
-    saveNotificationForUser(userId, {
-      ...payload,
-      category: announcement.category || 'Announcement',
-      source: 'announcement',
-      source_label: announcement.author_name || 'LilyCrest Admin',
-      author_name: announcement.author_name || 'LilyCrest Admin',
-      announcement_id: announcement.announcement_id,
-      eventKey: announcement.announcement_id ? `announcement:${announcement.announcement_id}` : '',
-      priority: isUrgent ? 'high' : (announcement.priority || 'normal'),
-      is_urgent: Boolean(isUrgent),
-      created_at: announcement.created_at || new Date(),
-    }),
-    sendPushToUser(userId, payload),
-  ]);
-
-  return pushResult.status === 'fulfilled' ? pushResult.value : false;
+  const db = getDb();
+  return notifyNewAnnouncement(db, {
+    ...announcement,
+    is_private: true,
+    user_id: normalizeString(userId),
+  });
 }
 
-async function notifyAdminChatAccepted(userId, adminName, sessionId) {
-  const payload = {
-    title: 'Admin Joined Your Chat',
-    body: `${adminName || 'An admin'} is now ready to assist you.`,
-    data: {
-      type: 'chat_assigned',
-      session_id: sessionId,
-      screen: 'chat',
-      url: '/(tabs)/chatbot',
-    },
-  };
-
-  const [, pushResult] = await Promise.allSettled([
-    saveNotificationForUser(userId, {
-      ...payload,
-      category: 'Assistant',
-      source: 'chat',
-      source_label: adminName || 'LilyCrest Support',
-      session_id: sessionId,
-      eventKey: sessionId ? `chat_assigned:${sessionId}` : '',
-      priority: 'normal',
-    }),
-    sendPushToUser(userId, payload),
-  ]);
-
-  return pushResult.status === 'fulfilled' ? pushResult.value : false;
-}
-
-async function notifyChatbotReply(userId, { adminName, message, sessionId }) {
+async function notifySupportReply(userId, { adminName, message, conversationId, messageId }) {
+  const canonicalConversationId = normalizeString(conversationId);
+  const canonicalMessageId = normalizeString(messageId);
   const payload = {
     title: `${adminName || 'Admin'} replied`,
     body: clipText(message, 110) || 'You have a new message from LilyCrest support.',
+    type: 'chat_reply',
+    url: '/(tabs)/chatbot',
     data: {
       type: 'chat_reply',
-      session_id: sessionId,
+      conversation_id: canonicalConversationId,
+      message_id: canonicalMessageId,
       screen: 'chat',
       url: '/(tabs)/chatbot',
     },
@@ -645,7 +619,9 @@ async function notifyChatbotReply(userId, { adminName, message, sessionId }) {
       category: 'Assistant',
       source: 'chat',
       source_label: adminName || 'LilyCrest Support',
-      session_id: sessionId,
+      eventKey: canonicalConversationId && canonicalMessageId
+        ? `chat_reply:${canonicalConversationId}:${canonicalMessageId}`
+        : '',
       priority: 'normal',
     }),
     sendPushToUser(userId, payload),
@@ -688,6 +664,7 @@ async function notifyReservationUpdate(userId, reservation = {}) {
 
 module.exports = {
   sendPushToUser,
+  sendPushToUsers,
   sendPushToAllTenants,
   notifyMaintenanceStatusChange,
   notifyMaintenanceTenantUpdate,
@@ -695,7 +672,6 @@ module.exports = {
   notifyPaymentConfirmed,
   notifyNewAnnouncement,
   notifyPrivateAnnouncement,
-  notifyAdminChatAccepted,
-  notifyChatbotReply,
+  notifySupportReply,
   notifyReservationUpdate,
 };

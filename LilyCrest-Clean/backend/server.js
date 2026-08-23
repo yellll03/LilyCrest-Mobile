@@ -11,8 +11,10 @@ const { buildAllowedOrigins, makeIsAllowedOrigin, hasBrowserOrigin } = require('
 const { connectToMongo } = require('./config/database');
 const { ensureIndexes: ensureSurveyIndexes } = require('./services/survey.service');
 const { sendDueSoonReminders } = require('./services/surveyNotification.service');
+const { runAnnouncementDeliverySweep } = require('./services/announcementDelivery.service');
 const { initializeFirebase } = require('./config/firebase');
 const { cacheMiddleware } = require('./middleware/cache');
+const { commonSecurityHeaders, adminSecurityHeaders } = require('./middleware/securityHeaders');
 
 // Import routes
 const apiRoutes = require('./routes');
@@ -67,6 +69,8 @@ function noStorePrivateApiResponses(_req, res, next) {
   return next();
 }
 
+app.use(commonSecurityHeaders);
+
 // Middleware - CORS Configuration
 app.use(cors({
   origin: (origin, callback) => {
@@ -77,7 +81,14 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'X-Requested-With', 'If-None-Match'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'X-Requested-With',
+    'If-None-Match',
+    'X-LilyCrest-Admin',
+    'X-CSRF-Token',
+  ],
   exposedHeaders: ['Content-Range', 'X-Content-Range', 'ETag', 'X-Cache'],
   maxAge: 86400
 }));
@@ -159,7 +170,7 @@ app.use('/api', apiRoutes);
 app.use('/api/m', apiRoutes);
 
 // Serve admin panel static files
-app.use('/admin', express.static(path.join(__dirname, 'public', 'admin')));
+app.use('/admin', adminSecurityHeaders, express.static(path.join(__dirname, 'public', 'admin')));
 
 // Validate required environment variables before anything else starts
 function validateEnv() {
@@ -318,6 +329,24 @@ async function startServer() {
       sendDueSoonReminders(db).catch((error) => console.warn('[Survey reminders]', error?.message));
     }, 6 * 60 * 60 * 1000).unref();
 
+    const announcements = db.collection('announcements');
+    await announcements.createIndex(
+      { created_by: 1, client_request_id: 1 },
+      {
+        unique: true,
+        partialFilterExpression: { client_request_id: { $type: 'string', $gt: '' } },
+        name: 'announcement_create_idempotency',
+      },
+    );
+    await announcements.createIndex(
+      { 'delivery.status': 1, publishedAt: 1, 'delivery.leaseExpiresAt': 1 },
+      { name: 'announcement_delivery_queue' },
+    );
+    runAnnouncementDeliverySweep(db).catch((error) => console.warn('[AnnouncementDelivery]', error?.message));
+    setInterval(() => {
+      runAnnouncementDeliverySweep(db).catch((error) => console.warn('[AnnouncementDelivery]', error?.message));
+    }, 60 * 1000).unref();
+
     // Billing collection indexes (frequently queried)
     const billing = db.collection('billing');
     await billing.createIndex({ user_id: 1, created_at: -1 }, { name: 'billing_user_id_created_at' });
@@ -332,6 +361,18 @@ async function startServer() {
     await bills.createIndex({ billing_id: 1 }, { sparse: true, name: 'bills_billing_id' });
     await bills.createIndex({ legacyBillingId: 1 }, { sparse: true, name: 'bills_legacyBillingId' });
     await bills.createIndex({ paymongoSessionId: 1 }, { sparse: true, name: 'bills_paymongoSessionId' });
+
+    // Durable PayMongo webhook inbox: event IDs are the idempotency boundary,
+    // while status/lease indexes support retrying an interrupted settlement.
+    const paymongoWebhookEvents = db.collection('paymongo_webhook_events');
+    await paymongoWebhookEvents.createIndex(
+      { eventId: 1 },
+      { unique: true, name: 'paymongo_webhook_event_id_unique' },
+    );
+    await paymongoWebhookEvents.createIndex(
+      { status: 1, leaseExpiresAt: 1, updatedAt: 1 },
+      { name: 'paymongo_webhook_retry_queue' },
+    );
 
     // Maintenance indexes for the canonical + legacy dual-read migration window.
     for (const collectionName of ['maintenance_requests', 'maintenancerequests']) {
@@ -354,6 +395,36 @@ async function startServer() {
       );
     }
 
+    // Canonical support idempotency. Mobile retries reuse client-generated
+    // operation ids; partial unique indexes make duplicate prevention atomic
+    // without indexing records created by older clients. Compound `sparse`
+    // indexes are intentionally avoided: the always-present scope fields
+    // would otherwise index a missing client key as null.
+    await db.collection('chat_conversations').createIndex(
+      { tenantUserId: 1, startRequestIds: 1 },
+      {
+        unique: true,
+        partialFilterExpression: { startRequestIds: { $exists: true, $type: 'array' } },
+        name: 'chat_tenant_start_request_unique',
+      },
+    );
+    await db.collection('chat_messages').createIndex(
+      { conversationId: 1, senderUserId: 1, clientMessageId: 1 },
+      {
+        unique: true,
+        partialFilterExpression: { clientMessageId: { $exists: true, $type: 'string' } },
+        name: 'chat_sender_message_request_unique',
+      },
+    );
+    await db.collection('chat_attachments').createIndex(
+      { conversationId: 1, uploadedBy: 1, clientAttachmentId: 1 },
+      {
+        unique: true,
+        partialFilterExpression: { clientAttachmentId: { $exists: true, $type: 'string' } },
+        name: 'chat_uploader_attachment_request_unique',
+      },
+    );
+
     // TTL index: auto-expire OTP records after expires_at
     const otpStore = db.collection('otp_store');
     await otpStore.createIndex({ expires_at: 1 }, { expireAfterSeconds: 0, name: 'otp_ttl' });
@@ -362,6 +433,14 @@ async function startServer() {
     const userSessions = db.collection('user_sessions');
     await userSessions.createIndex({ expires_at: 1 }, { expireAfterSeconds: 0, name: 'sessions_ttl' });
     await userSessions.createIndex({ user_id: 1 }, { name: 'sessions_user_id' });
+    await userSessions.createIndex(
+      { session_token: 1 },
+      { unique: true, sparse: true, name: 'sessions_token_unique' },
+    );
+    await userSessions.createIndex(
+      { refresh_token_hash: 1 },
+      { unique: true, sparse: true, name: 'sessions_refresh_token_unique' },
+    );
 
     const migrationDone = await migrationsCol.findOne({ name: 'v1_index_migration', completed: true });
     if (migrationDone) {
