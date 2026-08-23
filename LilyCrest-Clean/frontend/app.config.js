@@ -32,6 +32,9 @@ module.exports = {
     ios: {
       bundleIdentifier: 'com.lilycrest.lilycrestdorm',
       supportsTablet: true,
+      infoPlist: {
+        ITSAppUsesNonExemptEncryption: false,
+      },
       config: {
         googleMapsApiKey: GOOGLE_MAPS_API_KEY,
       },
@@ -85,6 +88,17 @@ module.exports = {
         },
       ],
       'expo-secure-store',
+      [
+        'expo-build-properties',
+        {
+          ios: {
+            extraPods: [
+              { name: 'GoogleUtilities', modular_headers: true },
+              { name: 'RecaptchaInterop', modular_headers: true },
+            ],
+          },
+        },
+      ],
       [
         'expo-splash-screen',
         {
