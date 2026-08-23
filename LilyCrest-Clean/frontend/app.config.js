@@ -109,7 +109,7 @@ module.exports = {
           image: './assets/images/splash-image.png',
           imageWidth: 200,
           resizeMode: 'contain',
-          backgroundColor: '#0A1628',
+          backgroundColor: '#000000',
         },
       ],
     ],

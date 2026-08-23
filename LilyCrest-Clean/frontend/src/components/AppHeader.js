@@ -174,7 +174,7 @@ export default function AppHeader() {
       request_id: notification?.request_id,
     });
     closeSheet();
-    setTimeout(() => router.push(destination), 270);
+    if (destination) setTimeout(() => router.push(destination), 270);
   }, [closeSheet, markNotificationRead, router]);
 
   // Dismiss is per-tenant hide only — for a shared announcement this never

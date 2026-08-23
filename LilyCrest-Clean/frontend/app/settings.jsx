@@ -166,7 +166,7 @@ export default function SettingsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScreenHeader strong title="Settings" subtitle="Preferences, security, and legal" onBack={() => safeBack(router, '/(tabs)/profile')} />
+      <ScreenHeader strong title="Settings" subtitle="Preferences, security, and legal" onBack={() => safeBack(router)} />
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         {/* Appearance */}
