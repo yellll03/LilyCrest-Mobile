@@ -32,7 +32,7 @@ import {
   removeSessionToken,
   setSessionToken,
 } from '../services/secureCredentials';
-import { subscribeSessionExpired } from '../services/sessionEvents';
+import { subscribeSessionExpired, subscribeSessionRecovered } from '../services/sessionEvents';
 import {
   canonicalNotificationKey,
   publishCanonicalNotification,
@@ -468,6 +468,13 @@ export function AuthProvider({ children }) {
       })();
     });
   }, [showToast]);
+
+  useEffect(() => subscribeSessionRecovered(() => {
+    if (authStatusRef.current !== 'authenticated') return;
+    // Only reconcile an already-retained session. Login/logout and confirmed
+    // invalidation continue to own every other session-state transition.
+    setSessionState((current) => current === 'retryable' ? 'online' : current);
+  }), []);
 
   useEffect(() => {
     const cleanup = setupNotificationListeners(

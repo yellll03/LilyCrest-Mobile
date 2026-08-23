@@ -6,7 +6,7 @@ import {
   removeSessionToken,
   setSessionToken,
 } from './secureCredentials';
-import { emitSessionExpired } from './sessionEvents';
+import { emitSessionExpired, emitSessionRecovered } from './sessionEvents';
 
 const IS_DEV = typeof __DEV__ !== 'undefined' && __DEV__;
 export const SERVER_STARTING_MESSAGE = 'The server is starting. Please try again in a few seconds.';
@@ -252,7 +252,22 @@ api.interceptors.request.use(
 
 // Response interceptor for error handling
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const headers = response?.config?.headers;
+    const authHeader = typeof headers?.get === 'function'
+      ? headers.get('Authorization')
+      : headers?.Authorization || headers?.authorization;
+    const isAuthEndpoint = /\/auth\//.test(response?.config?.url || '');
+
+    // The request interceptor attached this bearer to a protected request and
+    // the server accepted it. That is authoritative recovery evidence, so the
+    // global retryable-session banner can now clear. Public successes do not
+    // change auth/network presentation.
+    if (authHeader && !isAuthEndpoint) {
+      emitSessionRecovered({ url: response?.config?.url || null });
+    }
+    return response;
+  },
   async (error) => {
     const originalRequest = error.config;
     const invalidationReason = getConfirmedSessionInvalidation(error);

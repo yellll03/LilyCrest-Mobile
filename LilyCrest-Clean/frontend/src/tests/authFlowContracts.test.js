@@ -92,7 +92,9 @@ describe('auth flow implementation contracts', () => {
   test('a background session expiry (axios refresh failure) forces logout and tells the tenant why', () => {
     const apiSource = read('src/services/api.js');
     const contextSource = read('src/context/AuthContext.js');
-    expect(apiSource).toContain("import { emitSessionExpired } from './sessionEvents';");
+    expect(apiSource).toMatch(
+      /import\s*\{[^}]*\bemitSessionExpired\b[^}]*\}\s*from\s*['"]\.\/sessionEvents['"]/,
+    );
     expect(apiSource).toContain('emitSessionExpired(');
     expect(contextSource).toContain('subscribeSessionExpired');
     expect(contextSource).toContain("setAuthStatus('unauthenticated')");
