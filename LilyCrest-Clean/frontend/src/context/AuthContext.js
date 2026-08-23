@@ -190,6 +190,7 @@ export function AuthProvider({ children }) {
   // any await, so only the first of a burst of near-simultaneous events proceeds.
   const sessionExpiryHandlingRef = useRef(false);
   const pendingNotificationRef = useRef(null);
+  const discardInitialNotificationResponseRef = useRef(false);
   const lastNotificationNavigationRef = useRef({ key: '', at: 0 });
   const latestNotificationKeyRef = useRef('');
   const bannerHideTimerRef = useRef(null);
@@ -353,16 +354,34 @@ export function AuthProvider({ children }) {
   // from a previous session gets replayed by the authStatus effect below and
   // overrides login's own redirect (e.g. bouncing the user to News).
   const dismissPendingNotificationForFreshSignIn = useCallback(() => {
+    discardInitialNotificationResponseRef.current = true;
+    const responseId = pendingNotificationRef.current?.responseId;
     pendingNotificationRef.current = null;
-    clearLastNotificationResponse().catch(() => {});
+    clearLastNotificationResponse(responseId).catch(() => {});
   }, []);
 
-  const navigateFromNotification = useCallback(async (data) => {
-    const destination = resolveNotificationRoute(data);
-    if (!destination || !routerRef.current) return false;
+  const navigateFromNotification = useCallback(async (interactionOrData) => {
+    const isResponseInteraction = interactionOrData
+      && typeof interactionOrData === 'object'
+      && typeof interactionOrData.responseId === 'string'
+      && interactionOrData.data
+      && typeof interactionOrData.data === 'object';
+    const interaction = isResponseInteraction
+      ? interactionOrData
+      : { data: interactionOrData, responseId: null };
+    const destination = resolveNotificationRoute(interaction.data);
+
+    if (!destination) {
+      pendingNotificationRef.current = null;
+      if (interaction.responseId) {
+        await clearLastNotificationResponse(interaction.responseId).catch(() => {});
+      }
+      return true;
+    }
+    if (!routerRef.current) return false;
 
     if (!isAuthenticatedNavigationReady(authStatusRef.current, pathnameRef.current, segmentsRef.current)) {
-      pendingNotificationRef.current = data;
+      pendingNotificationRef.current = interaction;
       return false;
     }
 
@@ -371,26 +390,26 @@ export function AuthProvider({ children }) {
     const previous = lastNotificationNavigationRef.current;
     if (key && previous.key === key && now - previous.at < 1500) {
       pendingNotificationRef.current = null;
-      await clearLastNotificationResponse().catch(() => {});
+      await clearLastNotificationResponse(interaction.responseId).catch(() => {});
       return true;
     }
 
     if (!navigateToNotificationDestination(routerRef.current, destination)) return false;
     lastNotificationNavigationRef.current = { key, at: now };
     pendingNotificationRef.current = null;
-    await clearLastNotificationResponse().catch(() => {});
+    await clearLastNotificationResponse(interaction.responseId).catch(() => {});
     return true;
   }, []);
 
-  const handleNotificationTap = useCallback(async (data) => {
-    if (!data || typeof data !== 'object') return;
+  const handleNotificationTap = useCallback(async (interactionOrData) => {
+    if (!interactionOrData || typeof interactionOrData !== 'object') return;
 
     if (!isAuthenticatedNavigationReady(authStatusRef.current, pathnameRef.current, segmentsRef.current)) {
-      pendingNotificationRef.current = data;
+      pendingNotificationRef.current = interactionOrData;
       return;
     }
 
-    await navigateFromNotification(data);
+    await navigateFromNotification(interactionOrData);
   }, [navigateFromNotification]);
 
   useEffect(() => {
@@ -493,9 +512,9 @@ export function AuthProvider({ children }) {
         // notification-list item at all), so re-syncing with the backend
         // keeps the shared unread state accurate instead of drifting.
       },
-      (data) => {
-        pendingNotificationRef.current = data;
-        handleNotificationTap(data);
+      (interaction) => {
+        pendingNotificationRef.current = interaction;
+        handleNotificationTap(interaction);
       }
     );
 
@@ -561,11 +580,15 @@ export function AuthProvider({ children }) {
     let cancelled = false;
 
     (async () => {
-      const data = await getLastNotificationResponseData();
-      if (cancelled || !data) return;
+      const interaction = await getLastNotificationResponseData();
+      if (cancelled || !interaction) return;
+      if (discardInitialNotificationResponseRef.current) {
+        await clearLastNotificationResponse(interaction.responseId).catch(() => {});
+        return;
+      }
 
-      pendingNotificationRef.current = data;
-      await handleNotificationTap(data);
+      pendingNotificationRef.current = interaction;
+      await handleNotificationTap(interaction);
     })();
 
     return () => {
@@ -777,7 +800,7 @@ export function AuthProvider({ children }) {
         error: classified.message,
       };
     }
-  }, []);
+  }, [dismissPendingNotificationForFreshSignIn]);
 
   const verifyLoginOtp = useCallback(async (otpToken, otpCode) => {
     const normalizedToken = typeof otpToken === 'string' ? otpToken.trim() : '';
@@ -816,7 +839,7 @@ export function AuthProvider({ children }) {
       const attemptsRemaining = error.response?.data?.attempts_remaining;
       return { success: false, status, error: detail || getApiErrorMessage(error, 'Invalid code. Please try again.'), attemptsRemaining };
     }
-  }, []);
+  }, [dismissPendingNotificationForFreshSignIn]);
 
   const login = useCallback(async (email, password) => {
     const result = await loginWithEmail(email, password);
@@ -853,7 +876,7 @@ export function AuthProvider({ children }) {
       }
       return { success: false, error: detail || getApiErrorMessage(error, 'Unable to create account. Please try again later.') };
     }
-  }, []);
+  }, [dismissPendingNotificationForFreshSignIn]);
 
   const signInWithGoogle = useCallback(async (idToken) => {
     try {
@@ -913,7 +936,7 @@ export function AuthProvider({ children }) {
       }
       return { success: false, error: getApiErrorMessage(error, 'Unable to sign in with Google. Please try again.') };
     }
-  }, []);
+  }, [dismissPendingNotificationForFreshSignIn]);
 
   const logout = useCallback(async () => {
     const token = await getSessionToken().catch(() => null);

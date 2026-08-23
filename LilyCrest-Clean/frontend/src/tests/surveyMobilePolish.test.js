@@ -65,9 +65,9 @@ describe('tenant survey mobile validation and visibility', () => {
 
 describe('survey notification navigation — feature hidden for deployment testing', () => {
   it('never routes a survey notification into the (hidden) survey screens', () => {
-    expect(resolveNotificationRoute({ url: '/surveys/survey_q3' })).toBe('/(tabs)/announcements');
-    expect(resolveNotificationRoute({ type: 'survey', surveyId: 'move-out-1' })).toBe('/(tabs)/announcements');
-    expect(resolveNotificationRoute({ type: 'surveys' })).toBe('/(tabs)/announcements');
+    expect(resolveNotificationRoute({ url: '/surveys/survey_q3' })).toBeNull();
+    expect(resolveNotificationRoute({ type: 'survey', surveyId: 'move-out-1' })).toBeNull();
+    expect(resolveNotificationRoute({ type: 'surveys' })).toBeNull();
   });
 });
 

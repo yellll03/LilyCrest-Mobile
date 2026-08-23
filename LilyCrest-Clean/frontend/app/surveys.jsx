@@ -9,6 +9,7 @@ import { apiService } from '../src/services/api';
 import { saveCachedSurveyDashboard } from '../src/services/surveyDrafts';
 import { SURVEY_FEEDBACK_ENABLED } from '../src/config/features';
 import { ScreenHeader, StatusBadge } from '../src/components/ui/LilycrestUI';
+import { safeBack } from '../src/utils/navigation';
 
 const LABELS = { QUARTERLY: 'Quarterly Survey', MOVE_OUT: 'Move-Out Survey' };
 const RESPONSE_STATUS_LABELS = {
@@ -94,7 +95,7 @@ export default function SurveysScreen() {
 
   return (
     <SafeAreaView style={styles.safe}>
-      <ScreenHeader strong title="Survey and Feedback" subtitle="Tenant experience records" onBack={() => router.back()} />
+      <ScreenHeader strong title="Survey and Feedback" subtitle="Tenant experience records" onBack={() => safeBack(router)} />
       {loading ? <View style={styles.center}><ActivityIndicator color={colors.accent} /><Text style={styles.helper}>Loading surveys…</Text></View> : (
         <ScrollView contentContainerStyle={styles.content} refreshControl={<RefreshControl refreshing={loading} onRefresh={load} />}>
           {unavailable ? (

@@ -23,6 +23,7 @@ const PUSH_PERMISSION_REQUESTED_KEY = '@lilycrest_push_permission_requested';
 const PUSH_SETTING_KEY = 'notifications';
 const PUSH_SYNC_SIGNATURE_KEY = '@lilycrest_push_sync_signature';
 const PUSH_INSTALLATION_ID_KEY = '@lilycrest_push_installation_id';
+const LAST_HANDLED_NOTIFICATION_RESPONSE_KEY = '@lilycrest_last_handled_notification_response';
 const DEFAULT_CHANNEL_ID = 'default';
 
 export function initializeNotificationHandler() {
@@ -293,9 +294,9 @@ export function setupNotificationListeners(onNotificationReceived, onNotificatio
     });
 
     const responseSub = Notifications.addNotificationResponseReceivedListener((response) => {
-      const data = response?.notification?.request?.content?.data || {};
-      if (IS_DEV) console.log('[Notifications] Tapped, data:', data);
-      if (onNotificationTapped) onNotificationTapped(data);
+      const interaction = extractNotificationResponseInteraction(response);
+      if (IS_DEV) console.log('[Notifications] Tapped, data:', interaction?.data);
+      if (interaction && onNotificationTapped) onNotificationTapped(interaction);
     });
 
     return () => {
@@ -336,19 +337,62 @@ export async function getStoredPushToken() {
   return AsyncStorage.getItem(PUSH_TOKEN_KEY);
 }
 
+export function extractNotificationResponseInteraction(response) {
+  const requestId = typeof response?.notification?.request?.identifier === 'string'
+    ? response.notification.request.identifier.trim()
+    : '';
+  if (!requestId) return null;
+
+  const actionId = typeof response?.actionIdentifier === 'string' && response.actionIdentifier.trim()
+    ? response.actionIdentifier.trim()
+    : 'default';
+  const data = response?.notification?.request?.content?.data;
+
+  return {
+    data: data && typeof data === 'object' && !Array.isArray(data) ? data : {},
+    responseId: `${requestId}:${actionId}`,
+  };
+}
+
 export async function getLastNotificationResponseData() {
   if (!Notifications?.getLastNotificationResponseAsync || Platform.OS === 'web') return null;
 
   try {
     const response = await Notifications.getLastNotificationResponseAsync();
-    return response?.notification?.request?.content?.data || null;
+    if (!response) return null;
+
+    const interaction = extractNotificationResponseInteraction(response);
+    if (!interaction) {
+      await clearLastNotificationResponse();
+      return null;
+    }
+
+    const lastHandledResponseId = await AsyncStorage.getItem(LAST_HANDLED_NOTIFICATION_RESPONSE_KEY)
+      .catch(() => null);
+    if (lastHandledResponseId === interaction.responseId) {
+      // Expo can retain the last response after an Activity/process restart.
+      // Durable acknowledgement prevents a launcher resume from replaying it
+      // even when clearing the native response previously failed.
+      await clearLastNotificationResponse(interaction.responseId);
+      return null;
+    }
+
+    return interaction;
   } catch (error) {
     console.warn('[Notifications] Last response fetch skipped:', error?.message);
     return null;
   }
 }
 
-export async function clearLastNotificationResponse() {
+export async function clearLastNotificationResponse(responseId) {
+  const normalizedResponseId = typeof responseId === 'string' ? responseId.trim() : '';
+  if (normalizedResponseId) {
+    // Persist first. Native clearing is best-effort and has failed on some
+    // Android lifecycle paths, but a handled response must never be replayed.
+    await AsyncStorage.setItem(LAST_HANDLED_NOTIFICATION_RESPONSE_KEY, normalizedResponseId)
+      .catch((error) => console.warn('[Notifications] Response acknowledgement skipped:', error?.message));
+  }
+
   if (!Notifications?.clearLastNotificationResponseAsync || Platform.OS === 'web') return;
 
   try {
@@ -359,7 +403,7 @@ export async function clearLastNotificationResponse() {
 }
 
 export function resolveNotificationRoute(data = {}) {
-  if (!data || typeof data !== 'object') return '/(tabs)/announcements';
+  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
 
   const directUrl = typeof data?.url === 'string' ? data.url.trim() : '';
   const conversationId = data?.conversation_id || data?.conversationId || data?.session_id;
@@ -404,7 +448,7 @@ export function resolveNotificationRoute(data = {}) {
   if (directSurvey) {
     return SURVEY_FEEDBACK_ENABLED
       ? { pathname: '/survey-form', params: { surveyId: decodeURIComponent(directSurvey[1]) } }
-      : '/(tabs)/announcements';
+      : null;
   }
   if (directUrl.startsWith('/') && !/^\/surveys?(\/|$)/i.test(directUrl)) return directUrl;
 
@@ -460,7 +504,7 @@ export function resolveNotificationRoute(data = {}) {
       return '/(tabs)/home';
     case 'survey':
     case 'surveys':
-      if (!SURVEY_FEEDBACK_ENABLED) return '/(tabs)/announcements';
+      if (!SURVEY_FEEDBACK_ENABLED) return null;
       return surveyId
         ? { pathname: '/survey-form', params: { surveyId: String(surveyId) } }
         : '/surveys';
@@ -476,7 +520,9 @@ export function resolveNotificationRoute(data = {}) {
     case 'system':
       return '/(tabs)/profile';
     default:
-      return '/(tabs)/announcements';
+      // Unknown, empty, or stale payloads preserve the current route. News is
+      // only an intentional destination for explicit announcement events.
+      return null;
   }
 }
 

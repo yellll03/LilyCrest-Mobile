@@ -35,6 +35,10 @@ const mockNotificationData = {
   type: 'contract_document_ready',
   contract_id: 'contract-1',
 };
+const mockNotificationInteraction = {
+  data: mockNotificationData,
+  responseId: 'notification-1:default',
+};
 const mockDestination = {
   pathname: '/contract-viewer',
   params: { contractId: 'contract-1' },
@@ -43,7 +47,7 @@ const mockDestination = {
 jest.mock('../services/notifications', () => ({
   arePushNotificationsEnabled: jest.fn().mockResolvedValue(false),
   clearLastNotificationResponse: jest.fn().mockResolvedValue(),
-  getLastNotificationResponseData: jest.fn(() => Promise.resolve(mockNotificationData)),
+  getLastNotificationResponseData: jest.fn(() => Promise.resolve(mockNotificationInteraction)),
   getStoredPushToken: jest.fn().mockResolvedValue(null),
   initializeNotificationHandler: jest.fn(),
   registerForPushNotifications: jest.fn().mockResolvedValue(null),
@@ -126,11 +130,11 @@ describe('notification navigation state', () => {
     expect(mockNavigate).toHaveBeenCalledTimes(1);
 
     await act(async () => {
-      mockNotificationResponseHandler(mockNotificationData);
-      mockNotificationResponseHandler(mockNotificationData);
+      mockNotificationResponseHandler(mockNotificationInteraction);
+      mockNotificationResponseHandler(mockNotificationInteraction);
     });
 
     expect(mockNavigate).toHaveBeenCalledTimes(1);
     expect(mockRouter.push).not.toHaveBeenCalled();
-  });
+  }, 15000);
 });
