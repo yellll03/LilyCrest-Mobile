@@ -20,4 +20,14 @@ describe('standalone release artifact contract', () => {
     expect(gradle).toContain('versionName "1.2.2"');
     expect(gradle).toContain('versionCode 21');
   });
+
+  test('iOS release keeps Google sign-in pods modular and export compliance explicit', () => {
+    const config = read('app.config.js');
+    const packageJson = JSON.parse(read('package.json'));
+
+    expect(packageJson.dependencies['expo-build-properties']).toBe('~1.0.10');
+    expect(config).toContain("{ name: 'GoogleUtilities', modular_headers: true }");
+    expect(config).toContain("{ name: 'RecaptchaInterop', modular_headers: true }");
+    expect(config).toContain('ITSAppUsesNonExemptEncryption: false');
+  });
 });
