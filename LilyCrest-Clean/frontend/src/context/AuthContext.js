@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { usePathname, useRouter, useSegments } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, AppState, Platform, Pressable, StatusBar as RNStatusBar, StyleSheet, Text, View } from 'react-native';
+import { Animated, AppState, Platform, Pressable, StatusBar as RNStatusBar, StyleSheet, Text, View } from 'react-native';
 import { auth, getFreshIdToken, subscribeToAuthState } from '../config/firebase';
 import {
   api,
@@ -32,7 +32,7 @@ import {
   removeSessionToken,
   setSessionToken,
 } from '../services/secureCredentials';
-import { subscribeSessionExpired } from '../services/sessionEvents';
+import { subscribeSessionExpired, subscribeSessionRecovered } from '../services/sessionEvents';
 import {
   canonicalNotificationKey,
   publishCanonicalNotification,
@@ -52,11 +52,14 @@ const DEFAULT_NOTIFICATION_MESSAGE = 'Open LilyCrest to view the latest update.'
 async function persistSession(sessionPayload, userData) {
   const writes = [];
   if (sessionPayload?.session_token) {
-    writes.push(setSessionToken(sessionPayload.session_token, {
-      refreshToken: sessionPayload.refresh_token,
-      expiresAt: sessionPayload.expires_at,
-      refreshExpiresAt: sessionPayload.refresh_expires_at,
-    }));
+    const refreshOptions = isRefreshSessionPayloadShape(sessionPayload)
+      ? {
+          refreshToken: sessionPayload.refresh_token,
+          expiresAt: sessionPayload.expires_at,
+          refreshExpiresAt: sessionPayload.refresh_expires_at,
+        }
+      : {};
+    writes.push(setSessionToken(sessionPayload.session_token, refreshOptions));
   }
   if (userData) {
     writes.push(AsyncStorage.setItem(SESSION_USER_KEY, JSON.stringify(userData)));
@@ -117,7 +120,16 @@ function isSessionPayloadShape(value) {
   return isPlainObject(value)
     && isAuthUserShape(value.user)
     && typeof value.session_token === 'string'
-    && value.session_token.trim().length > 0
+    && value.session_token.trim().length > 0;
+}
+
+// The currently deployed API still returns the established user +
+// session_token response, while newer API builds add a rotating refresh
+// bundle. Both are valid login contracts during the rolling deployment.
+// Only persist refresh metadata when the complete bundle is present so a
+// partial/malformed optional bundle cannot break an otherwise valid login.
+function isRefreshSessionPayloadShape(value) {
+  return isSessionPayloadShape(value)
     && typeof value.refresh_token === 'string'
     && value.refresh_token.trim().length > 0
     && !Number.isNaN(Date.parse(value.expires_at))
@@ -178,6 +190,7 @@ export function AuthProvider({ children }) {
   // any await, so only the first of a burst of near-simultaneous events proceeds.
   const sessionExpiryHandlingRef = useRef(false);
   const pendingNotificationRef = useRef(null);
+  const discardInitialNotificationResponseRef = useRef(false);
   const lastNotificationNavigationRef = useRef({ key: '', at: 0 });
   const latestNotificationKeyRef = useRef('');
   const bannerHideTimerRef = useRef(null);
@@ -341,16 +354,34 @@ export function AuthProvider({ children }) {
   // from a previous session gets replayed by the authStatus effect below and
   // overrides login's own redirect (e.g. bouncing the user to News).
   const dismissPendingNotificationForFreshSignIn = useCallback(() => {
+    discardInitialNotificationResponseRef.current = true;
+    const responseId = pendingNotificationRef.current?.responseId;
     pendingNotificationRef.current = null;
-    clearLastNotificationResponse().catch(() => {});
+    clearLastNotificationResponse(responseId).catch(() => {});
   }, []);
 
-  const navigateFromNotification = useCallback(async (data) => {
-    const destination = resolveNotificationRoute(data);
-    if (!destination || !routerRef.current) return false;
+  const navigateFromNotification = useCallback(async (interactionOrData) => {
+    const isResponseInteraction = interactionOrData
+      && typeof interactionOrData === 'object'
+      && typeof interactionOrData.responseId === 'string'
+      && interactionOrData.data
+      && typeof interactionOrData.data === 'object';
+    const interaction = isResponseInteraction
+      ? interactionOrData
+      : { data: interactionOrData, responseId: null };
+    const destination = resolveNotificationRoute(interaction.data);
+
+    if (!destination) {
+      pendingNotificationRef.current = null;
+      if (interaction.responseId) {
+        await clearLastNotificationResponse(interaction.responseId).catch(() => {});
+      }
+      return true;
+    }
+    if (!routerRef.current) return false;
 
     if (!isAuthenticatedNavigationReady(authStatusRef.current, pathnameRef.current, segmentsRef.current)) {
-      pendingNotificationRef.current = data;
+      pendingNotificationRef.current = interaction;
       return false;
     }
 
@@ -359,26 +390,26 @@ export function AuthProvider({ children }) {
     const previous = lastNotificationNavigationRef.current;
     if (key && previous.key === key && now - previous.at < 1500) {
       pendingNotificationRef.current = null;
-      await clearLastNotificationResponse().catch(() => {});
+      await clearLastNotificationResponse(interaction.responseId).catch(() => {});
       return true;
     }
 
     if (!navigateToNotificationDestination(routerRef.current, destination)) return false;
     lastNotificationNavigationRef.current = { key, at: now };
     pendingNotificationRef.current = null;
-    await clearLastNotificationResponse().catch(() => {});
+    await clearLastNotificationResponse(interaction.responseId).catch(() => {});
     return true;
   }, []);
 
-  const handleNotificationTap = useCallback(async (data) => {
-    if (!data || typeof data !== 'object') return;
+  const handleNotificationTap = useCallback(async (interactionOrData) => {
+    if (!interactionOrData || typeof interactionOrData !== 'object') return;
 
     if (!isAuthenticatedNavigationReady(authStatusRef.current, pathnameRef.current, segmentsRef.current)) {
-      pendingNotificationRef.current = data;
+      pendingNotificationRef.current = interactionOrData;
       return;
     }
 
-    await navigateFromNotification(data);
+    await navigateFromNotification(interactionOrData);
   }, [navigateFromNotification]);
 
   useEffect(() => {
@@ -457,6 +488,13 @@ export function AuthProvider({ children }) {
     });
   }, [showToast]);
 
+  useEffect(() => subscribeSessionRecovered(() => {
+    if (authStatusRef.current !== 'authenticated') return;
+    // Only reconcile an already-retained session. Login/logout and confirmed
+    // invalidation continue to own every other session-state transition.
+    setSessionState((current) => current === 'retryable' ? 'online' : current);
+  }), []);
+
   useEffect(() => {
     const cleanup = setupNotificationListeners(
       (notification) => {
@@ -474,9 +512,9 @@ export function AuthProvider({ children }) {
         // notification-list item at all), so re-syncing with the backend
         // keeps the shared unread state accurate instead of drifting.
       },
-      (data) => {
-        pendingNotificationRef.current = data;
-        handleNotificationTap(data);
+      (interaction) => {
+        pendingNotificationRef.current = interaction;
+        handleNotificationTap(interaction);
       }
     );
 
@@ -542,11 +580,15 @@ export function AuthProvider({ children }) {
     let cancelled = false;
 
     (async () => {
-      const data = await getLastNotificationResponseData();
-      if (cancelled || !data) return;
+      const interaction = await getLastNotificationResponseData();
+      if (cancelled || !interaction) return;
+      if (discardInitialNotificationResponseRef.current) {
+        await clearLastNotificationResponse(interaction.responseId).catch(() => {});
+        return;
+      }
 
-      pendingNotificationRef.current = data;
-      await handleNotificationTap(data);
+      pendingNotificationRef.current = interaction;
+      await handleNotificationTap(interaction);
     })();
 
     return () => {
@@ -758,7 +800,7 @@ export function AuthProvider({ children }) {
         error: classified.message,
       };
     }
-  }, []);
+  }, [dismissPendingNotificationForFreshSignIn]);
 
   const verifyLoginOtp = useCallback(async (otpToken, otpCode) => {
     const normalizedToken = typeof otpToken === 'string' ? otpToken.trim() : '';
@@ -797,7 +839,7 @@ export function AuthProvider({ children }) {
       const attemptsRemaining = error.response?.data?.attempts_remaining;
       return { success: false, status, error: detail || getApiErrorMessage(error, 'Invalid code. Please try again.'), attemptsRemaining };
     }
-  }, []);
+  }, [dismissPendingNotificationForFreshSignIn]);
 
   const login = useCallback(async (email, password) => {
     const result = await loginWithEmail(email, password);
@@ -834,7 +876,7 @@ export function AuthProvider({ children }) {
       }
       return { success: false, error: detail || getApiErrorMessage(error, 'Unable to create account. Please try again later.') };
     }
-  }, []);
+  }, [dismissPendingNotificationForFreshSignIn]);
 
   const signInWithGoogle = useCallback(async (idToken) => {
     try {
@@ -894,7 +936,7 @@ export function AuthProvider({ children }) {
       }
       return { success: false, error: getApiErrorMessage(error, 'Unable to sign in with Google. Please try again.') };
     }
-  }, []);
+  }, [dismissPendingNotificationForFreshSignIn]);
 
   const logout = useCallback(async () => {
     const token = await getSessionToken().catch(() => null);
@@ -1053,30 +1095,6 @@ export function AuthProvider({ children }) {
     refreshNotifications,
   ]);
 
-  if (isLoading) {
-    return (
-      <View style={styles.authLoadingContainer}>
-        <ActivityIndicator size="large" color="#0A1628" />
-        <Text style={styles.authLoadingTitle}>Preparing LilyCrest</Text>
-        <Text style={styles.authLoadingText}>Checking your secure session...</Text>
-      </View>
-    );
-  }
-
-  if (authStatus === 'restoring_offline') {
-    return (
-      <View style={styles.authLoadingContainer}>
-        <Text style={styles.authLoadingTitle}>Still restoring your session</Text>
-        <Text style={styles.authLoadingText}>
-          LilyCrest could not reach the server. Your secure session is still saved.
-        </Text>
-        <Pressable style={styles.authRetryButton} onPress={() => checkAuth().catch(() => {})}>
-          <Text style={styles.authRetryButtonText}>Retry connection</Text>
-        </Pressable>
-      </View>
-    );
-  }
-
   return (
     <AuthContext.Provider value={contextValue}>
       <View style={styles.container}>
@@ -1092,6 +1110,17 @@ export function AuthProvider({ children }) {
           </Pressable>
         ) : null}
         {children}
+        {authStatus === 'restoring_offline' ? (
+          <View style={styles.authRestoringOverlay}>
+            <Text style={styles.authLoadingTitle}>Still restoring your session</Text>
+            <Text style={styles.authLoadingText}>
+              LilyCrest could not reach the server. Your secure session is still saved.
+            </Text>
+            <Pressable style={styles.authRetryButton} onPress={() => checkAuth().catch(() => {})}>
+              <Text style={styles.authRetryButtonText}>Retry connection</Text>
+            </Pressable>
+          </View>
+        ) : null}
         {notificationBanner ? (
           <View pointerEvents="box-none" style={styles.bannerOverlay}>
             <Animated.View
@@ -1167,12 +1196,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
   },
-  authLoadingContainer: {
-    flex: 1,
+  authRestoringOverlay: {
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
     backgroundColor: '#F8FAFC',
+    zIndex: 2000,
   },
   authLoadingTitle: {
     marginTop: 14,

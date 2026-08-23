@@ -26,6 +26,7 @@ import {
   enableBiometricSession,
   getPendingLogin,
 } from '../src/services/secureCredentials';
+import { saveRememberedEmail } from '../src/services/rememberedEmail';
 import { resetToHome, safeBack } from '../src/utils/navigation';
 
 const OTP_LENGTH = 6;
@@ -170,6 +171,12 @@ export default function OtpVerifyScreen() {
         return;
       }
 
+      await saveRememberedEmail({
+        rememberEmail: pendingLogin?.rememberEmail === true,
+        email: savedEmail,
+      }).catch((preferenceError) => {
+        console.warn('Remembered email update failed:', preferenceError?.message);
+      });
       await clearPendingLogin();
 
     // Offer biometric if available and not yet enabled

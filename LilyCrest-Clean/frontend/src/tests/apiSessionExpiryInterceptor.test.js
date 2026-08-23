@@ -7,6 +7,7 @@ jest.mock('../services/secureCredentials', () => ({
 
 jest.mock('../services/sessionEvents', () => ({
   emitSessionExpired: jest.fn(),
+  emitSessionRecovered: jest.fn(),
 }));
 
 const axios = require('axios');
@@ -17,7 +18,12 @@ const {
   removeSessionToken,
   setSessionToken,
 } = require('../services/secureCredentials');
-const { emitSessionExpired } = require('../services/sessionEvents');
+const { emitSessionExpired, emitSessionRecovered } = require('../services/sessionEvents');
+
+function getResponseFulfilledHandler() {
+  const handlers = api.interceptors.response.handlers.filter(Boolean);
+  return handlers[handlers.length - 1].fulfilled;
+}
 
 function getResponseRejectedHandler() {
   const handlers = api.interceptors.response.handlers.filter(Boolean);
@@ -46,6 +52,25 @@ describe('api.js confirmed-session-invalidation interceptor', () => {
     AsyncStorage.removeItem = jest.fn().mockResolvedValue();
     getSessionCredentials.mockResolvedValue(sessionCredentials);
     rejectedHandler = getResponseRejectedHandler();
+  });
+
+  it('emits recovery only after a successful authenticated API response', () => {
+    const fulfilledHandler = getResponseFulfilledHandler();
+    const response = {
+      data: { tenant: 'current' },
+      config: { url: '/dashboard/me', headers: { Authorization: 'Bearer current-token' } },
+    };
+
+    expect(fulfilledHandler(response)).toBe(response);
+    expect(emitSessionRecovered).toHaveBeenCalledWith({ url: '/dashboard/me' });
+  });
+
+  it('does not clear retryable state from a public unauthenticated success', () => {
+    const fulfilledHandler = getResponseFulfilledHandler();
+    const response = { data: { ok: true }, config: { url: '/health', headers: {} } };
+
+    expect(fulfilledHandler(response)).toBe(response);
+    expect(emitSessionRecovered).not.toHaveBeenCalled();
   });
 
   it('wrong-password 401 on /auth/login never clears a current session', async () => {

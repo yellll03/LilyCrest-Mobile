@@ -142,6 +142,30 @@ describe('AuthContext forced session-expiry cleanup (behavioral)', () => {
     expect(latest.sessionState).toBe('online');
   });
 
+  it('accepts the deployed user + session_token response after a correct OTP', async () => {
+    const { api } = require('../services/api');
+    const { setSessionToken } = require('../services/secureCredentials');
+    api.post.mockResolvedValueOnce({
+      data: {
+        user: { user_id: 'tenant-a', name: 'Tenant A', role: 'tenant' },
+        session_token: 'legacy-otp-session',
+      },
+    });
+
+    let latest;
+    renderAuth((state) => { latest = state; });
+    await waitFor(() => expect(latest.authStatus).toBe('authenticated'));
+
+    let result;
+    await act(async () => {
+      result = await latest.verifyLoginOtp('pending-otp-token', '123456');
+    });
+
+    expect(result).toEqual({ success: true });
+    expect(setSessionToken).toHaveBeenCalledWith('legacy-otp-session', {});
+    expect(latest.sessionState).toBe('online');
+  });
+
   it('a single forced expiry clears user, sets unauthenticated, and runs full cleanup parity', async () => {
     let latest;
     renderAuth((state) => { latest = state; });

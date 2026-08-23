@@ -1,10 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as LocalAuthentication from 'expo-local-authentication';
 import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator,
   Animated,
   Dimensions,
   FlatList,
@@ -18,8 +15,6 @@ import {
   View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAuth } from '../src/context/AuthContext';
-import { clearCredentials, getSessionToken, hasStoredCredentials } from '../src/services/secureCredentials';
 
 const { width, height } = Dimensions.get('window');
 
@@ -56,37 +51,10 @@ const ACCENT_LIGHT = '#B9921F';
 
 export default function OnboardingScreen() {
   const router = useRouter();
-  const { authStatus, checkAuth } = useAuth();
-  const [isAutoBiometricLoading, setIsAutoBiometricLoading] = useState(false);
   const [activeIndex, setActiveIndex] = useState(0);
   const flatListRef = useRef(null);
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const slideUpAnim = useRef(new Animated.Value(40)).current;
-
-  // ── Auth check + auto biometric ──────────────────────────────────────────
-  const tryAutoBiometric = useCallback(async () => {
-    try {
-      const bioSetting = await AsyncStorage.getItem('biometricLogin');
-      if (bioSetting !== 'true') return;
-      const hasBiometricSession = await hasStoredCredentials();
-      if (!hasBiometricSession) return;
-      const hasHardware = await LocalAuthentication.hasHardwareAsync();
-      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-      if (!hasHardware || !isEnrolled) return;
-      const authResult = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Sign in to LilyCrest',
-        cancelLabel: 'Use Password',
-        disableDeviceFallback: false,
-      });
-      if (!authResult.success) return;
-      const restored = await checkAuth();
-      if (!restored?.authenticated || restored?.restoredFromCache) {
-        await clearCredentials({ disableBiometric: false });
-      }
-    } catch (err) {
-      console.warn('[AutoBiometric] Skipped:', err?.message);
-    }
-  }, [checkAuth]);
 
   useEffect(() => {
     Animated.parallel([
@@ -94,31 +62,6 @@ export default function OnboardingScreen() {
       Animated.timing(slideUpAnim, { toValue: 0, duration: 900, useNativeDriver: true }),
     ]).start();
   }, [fadeAnim, slideUpAnim]);
-
-  const hasAttemptedAutoBiometric = useRef(false);
-  useEffect(() => {
-    if (authStatus !== 'unauthenticated' || hasAttemptedAutoBiometric.current) return undefined;
-
-    let cancelled = false;
-
-    const maybeAutoLogin = async () => {
-      hasAttemptedAutoBiometric.current = true;
-      const token = await getSessionToken();
-      if (!token) return;
-
-      if (!cancelled) setIsAutoBiometricLoading(true);
-      await tryAutoBiometric();
-      if (!cancelled) setIsAutoBiometricLoading(false);
-    };
-
-    maybeAutoLogin();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [authStatus, tryAutoBiometric]);
-
-  const checking = authStatus === 'initializing' || isAutoBiometricLoading;
 
   // ── Slide render ─────────────────────────────────────────────────────────
   const renderSlide = useCallback(({ item }) => (
@@ -143,22 +86,6 @@ export default function OnboardingScreen() {
       router.replace('/login');
     }
   }, [activeIndex, router]);
-
-  // ── Loading state ────────────────────────────────────────────────────────
-  if (checking) {
-    return (
-      <View style={styles.loadingScreen}>
-        <StatusBar barStyle="light-content" backgroundColor={NAVY} />
-        <Image
-          source={require('../assets/images/lilycrest-wordmark.png')}
-          style={styles.loadingLogo}
-          resizeMode="contain"
-          accessibilityLabel="LilyCrest logo"
-        />
-        <ActivityIndicator size="large" color={ACCENT} style={{ marginTop: 32 }} />
-      </View>
-    );
-  }
 
   return (
     <ImageBackground
@@ -247,18 +174,6 @@ export default function OnboardingScreen() {
 }
 
 const styles = StyleSheet.create({
-  // ── Loading ──
-  loadingScreen: {
-    flex: 1,
-    backgroundColor: NAVY,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  loadingLogo: {
-    width: 212,
-    height: 168,
-  },
-
   // ── Main layout ──
   bg: {
     flex: 1,

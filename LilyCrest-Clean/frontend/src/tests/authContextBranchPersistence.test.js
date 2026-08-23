@@ -15,6 +15,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '../context/AuthContext';
 import { ThemeProvider } from '../context/ThemeContext';
 import { ToastProvider } from '../context/ToastContext';
+import { emitSessionRecovered } from '../services/sessionEvents';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 jest.mock('expo-router', () => ({
@@ -268,6 +269,26 @@ describe('AuthContext branch persistence across profile refreshes (regression)',
     expect(latest.user?.user_id).toBe('tenant-a');
     expect(latest.sessionState).toBe('retryable');
     expect(clearCredentials).not.toHaveBeenCalled();
+  });
+
+  it('clears retryable session state after an authenticated request proves recovery', async () => {
+    let latest;
+    renderAuth((state) => { latest = state; });
+    await waitFor(() => expect(latest.authStatus).toBe('authenticated'));
+
+    mockUsersMeError = { response: { status: 503 } };
+    await act(async () => {
+      await latest.checkAuth();
+    });
+    expect(latest.sessionState).toBe('retryable');
+
+    await act(async () => {
+      emitSessionRecovered({ url: '/dashboard/me' });
+    });
+
+    expect(latest.authStatus).toBe('authenticated');
+    expect(latest.sessionState).toBe('online');
+    expect(latest.user?.user_id).toBe('tenant-a');
   });
 
   it('checkAuth() clears only a machine-confirmed revoked session', async () => {

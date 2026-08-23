@@ -1898,7 +1898,7 @@ export default function LilyAssistantScreen() {
             <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
               <View style={styles.headerLeft}>
                 <View style={styles.headerAvatar}>
-                  <LilyFlowerIcon size={38} pulse={isSending} />
+                  <LilyFlowerIcon size={34} pulse={isSending} imageScale={1.28} />
                 </View>
                 <View style={styles.headerTextWrap}>
                   <Text style={styles.headerTitle}>Lily</Text>
@@ -1966,7 +1966,7 @@ export default function LilyAssistantScreen() {
                   <View style={styles.heroCard}>
                     <View style={styles.heroRow}>
                       <View style={styles.heroBadge}>
-                        <LilyFlowerIcon size={46} pulse />
+                        <LilyFlowerIcon size={42} pulse imageScale={1.28} />
                       </View>
                       <View style={styles.heroTextWrap}>
                         <Text style={styles.heroTitle}>
@@ -2203,8 +2203,8 @@ function createAssistantStyles(c, dark) {
     backgroundColor: c.background,
   },
   header: {
-    paddingHorizontal: 16,
-    paddingBottom: 14,
+    paddingHorizontal: 14,
+    paddingBottom: 12,
     backgroundColor: c.headerBg,
     flexDirection: 'row',
     alignItems: 'center',
@@ -2216,13 +2216,13 @@ function createAssistantStyles(c, dark) {
   headerLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 10,
+    gap: 9,
     flex: 1,
   },
   headerAvatar: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     backgroundColor: 'rgba(255,255,255,0.1)',
     justifyContent: 'center',
     alignItems: 'center',
@@ -2234,7 +2234,7 @@ function createAssistantStyles(c, dark) {
   },
   headerTitle: {
     color: '#f8fafc',
-    fontSize: 18,
+    fontSize: 17,
     fontWeight: '800',
   },
   headerStatusRow: {
@@ -2277,7 +2277,7 @@ function createAssistantStyles(c, dark) {
   tab: {
     flex: 1,
     alignItems: 'center',
-    paddingVertical: 13,
+    paddingVertical: 11,
     position: 'relative',
   },
   tabText: {
@@ -2300,9 +2300,9 @@ function createAssistantStyles(c, dark) {
   body: {
     flex: 1,
     paddingHorizontal: 12,
-    paddingTop: 10,
-    paddingBottom: 10,
-    gap: 10,
+    paddingTop: 8,
+    paddingBottom: 8,
+    gap: 8,
   },
   errorBanner: {
     backgroundColor: '#FEF2F2',
@@ -2322,27 +2322,27 @@ function createAssistantStyles(c, dark) {
     borderRadius: 12,
   },
   messagesContent: {
-    padding: 14,
-    paddingBottom: 24,
+    padding: 12,
+    paddingBottom: 18,
   },
   heroCard: {
     backgroundColor: c.surface,
     borderRadius: 12,
-    padding: 18,
-    marginBottom: 14,
+    padding: 16,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: c.border,
   },
   heroRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    marginBottom: 14,
+    gap: 10,
+    marginBottom: 12,
   },
   heroBadge: {
-    width: 56,
-    height: 56,
-    borderRadius: 28,
+    width: 50,
+    height: 50,
+    borderRadius: 25,
     backgroundColor: dark ? c.surfaceSecondary : '#FBF7EA',
     justifyContent: 'center',
     alignItems: 'center',
@@ -2354,7 +2354,7 @@ function createAssistantStyles(c, dark) {
   },
   heroTitle: {
     color: c.text,
-    fontSize: 20,
+    fontSize: 19,
     fontWeight: '800',
     marginBottom: 2,
   },
@@ -2366,13 +2366,14 @@ function createAssistantStyles(c, dark) {
   heroTopics: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 8,
+    gap: 7,
   },
   heroTopic: {
-    height: 40,
-    paddingHorizontal: 12,
+    minHeight: 36,
+    paddingHorizontal: 11,
+    paddingVertical: 8,
     backgroundColor: c.surfaceSecondary,
-    borderRadius: 10,
+    borderRadius: 9,
     borderWidth: 1,
     borderColor: c.border,
     alignItems: 'center',
@@ -2391,8 +2392,8 @@ function createAssistantStyles(c, dark) {
     color: dark ? '#F6D86B' : '#7C5D0B',
   },
   suggestSection: {
-    marginBottom: 16,
-    gap: 10,
+    marginBottom: 12,
+    gap: 8,
   },
   suggestLabel: {
     fontSize: 12,
@@ -2403,12 +2404,12 @@ function createAssistantStyles(c, dark) {
   },
   suggestChips: {
     alignItems: 'flex-start',
-    gap: 8,
+    gap: 7,
   },
   suggestChip: {
     maxWidth: '100%',
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 9,
     backgroundColor: c.surface,
     borderRadius: 10,
     borderWidth: 1,
@@ -2421,9 +2422,8 @@ function createAssistantStyles(c, dark) {
     lineHeight: 18,
   },
   bottomZone: {
-    gap: 10,
-    paddingBottom: 10,
-    paddingHorizontal: 4,
+    gap: 8,
+    paddingBottom: 8,
   },
   supportBanner: {
     flexDirection: 'row',
@@ -2611,14 +2611,14 @@ function createAssistantStyles(c, dark) {
   },
   inputBar: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-end',
     backgroundColor: c.surface,
-    borderRadius: 16,
+    borderRadius: 14,
     borderWidth: 1.5,
     borderColor: c.border,
-    paddingHorizontal: 6,
-    paddingVertical: 6,
-    gap: 8,
+    paddingHorizontal: 5,
+    paddingVertical: 5,
+    gap: 6,
   },
   attachWrapper: {
     position: 'relative',
@@ -2639,12 +2639,14 @@ function createAssistantStyles(c, dark) {
     minHeight: 36,
     maxHeight: 120,
     paddingVertical: 6,
+    paddingHorizontal: 4,
     fontSize: 14,
+    lineHeight: 20,
     color: c.text,
   },
   sendButton: {
     backgroundColor: '#0A1628',
-    minHeight: 36,
+    minHeight: 38,
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 10,

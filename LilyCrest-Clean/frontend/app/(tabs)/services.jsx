@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Crypto from 'expo-crypto';
 import { format } from 'date-fns';
-import { Link, useFocusEffect, useLocalSearchParams } from 'expo-router';
+import { useFocusEffect, useLocalSearchParams } from 'expo-router';
 import * as FileSystem from 'expo-file-system/legacy';
 import * as Sharing from 'expo-sharing';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -23,7 +23,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AttachmentPickerSheet from '../../src/components/AttachmentPickerSheet';
-import LilyFlowerIcon from '../../src/components/assistant/LilyFlowerIcon';
+import LilyAssistantFab from '../../src/components/assistant/LilyAssistantFab';
 import { useAuth } from '../../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
 import { useToast } from '../../src/context/ToastContext';
@@ -335,7 +335,6 @@ export default function ServicesScreen() {
     urgencyBadge: { flexDirection: 'row', alignItems: 'center', marginTop: 10, gap: 4 },
     urgencyText: { fontSize: 12, color: '#DC2626', fontWeight: '500' },
     bottomSpacer: { height: Platform.OS === 'ios' ? 140 : 120 },
-    chatbotButton: { position: 'absolute', bottom: Platform.OS === 'ios' ? 120 : 100, right: 20, width: 52, height: 52, borderRadius: 26, backgroundColor: c.primary, justifyContent: 'center', alignItems: 'center', borderWidth: 1, borderColor: c.primaryHover, ...Platform.select({ ios: { shadowColor: '#0A1628', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.16, shadowRadius: 4 }, android: { elevation: 3 }, web: { boxShadow: '0 2px 8px rgba(10, 22, 40, 0.18)' } }) },
     modalContainer: { flex: 1 },
     modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
     modalContent: { backgroundColor: c.surface, borderTopLeftRadius: 12, borderTopRightRadius: 12, padding: 24, maxHeight: '90%', borderWidth: 1, borderColor: c.border },
@@ -1166,11 +1165,7 @@ export default function ServicesScreen() {
         ListFooterComponent={<View style={styles.bottomSpacer} />}
       />
 
-      <Link href="/(tabs)/chatbot" prefetch asChild>
-        <TouchableOpacity style={styles.chatbotButton}>
-          <LilyFlowerIcon size={26} />
-        </TouchableOpacity>
-      </Link>
+      <LilyAssistantFab />
 
       <Modal visible={showModal} animationType="slide" transparent={true} onRequestClose={confirmCloseModal}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalContainer}>

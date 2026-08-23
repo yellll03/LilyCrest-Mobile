@@ -1,8 +1,8 @@
 import { Stack, usePathname, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
-import React, { useEffect } from 'react';
-import { ActivityIndicator, Platform, Text, TextInput, View } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { Animated, Easing, Image, Platform, StyleSheet, Text, TextInput, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { AlertProvider } from '../src/context/AlertContext';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
@@ -44,6 +44,96 @@ function isProtectedPath(pathname = '/') {
   return !PUBLIC_ROUTE_PREFIXES.some((prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`));
 }
 
+function StartupOverlay({ onFinish }) {
+  const opacity = useRef(new Animated.Value(1)).current;
+  const rotation = useRef(new Animated.Value(0)).current;
+
+  useEffect(() => {
+    const spinAnimation = Animated.loop(
+      Animated.timing(rotation, {
+        toValue: 1,
+        duration: 800,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    );
+    const exitAnimation = Animated.sequence([
+      Animated.delay(700),
+      Animated.timing(opacity, {
+        toValue: 0,
+        duration: 250,
+        easing: Easing.out(Easing.quad),
+        useNativeDriver: true,
+      }),
+    ]);
+
+    spinAnimation.start();
+    exitAnimation.start(({ finished }) => {
+      spinAnimation.stop();
+      if (finished) onFinish(true);
+    });
+
+    return () => {
+      spinAnimation.stop();
+      exitAnimation.stop();
+    };
+  }, [onFinish, opacity, rotation]);
+
+  const spin = rotation.interpolate({
+    inputRange: [0, 1],
+    outputRange: ['0deg', '360deg'],
+  });
+
+  return (
+    <Animated.View
+      accessibilityViewIsModal
+      style={[startupStyles.overlay, { opacity }]}
+      testID="startup-loading-overlay"
+    >
+      <StatusBar style="light" backgroundColor="#000000" />
+      <Image
+        source={require('../assets/images/splash-image.png')}
+        style={startupStyles.logo}
+        resizeMode="contain"
+        accessibilityLabel="LilyCrest Residences"
+      />
+      <Animated.View
+        accessibilityLabel="Loading LilyCrest"
+        accessibilityRole="progressbar"
+        style={[startupStyles.spinner, { transform: [{ rotate: spin }] }]}
+      />
+    </Animated.View>
+  );
+}
+
+const startupStyles = StyleSheet.create({
+  placeholder: {
+    flex: 1,
+    backgroundColor: '#000000',
+  },
+  overlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 1000,
+    elevation: 1000,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#000000',
+  },
+  logo: {
+    width: 200,
+    height: 200,
+  },
+  spinner: {
+    width: 28,
+    height: 28,
+    marginTop: 22,
+    borderWidth: 2.5,
+    borderRadius: 14,
+    borderColor: 'rgba(212, 175, 55, 0.25)',
+    borderTopColor: '#D4AF37',
+  },
+});
+
 // ── Global font defaults ──
 // Sets a formal, clean font and slightly bigger base size across the entire app
 const globalFontFamily = Platform.select({
@@ -69,6 +159,7 @@ TextInput.defaultProps.style = {
 function LayoutContent() {
   const { isDarkMode, colors, isLoading } = useTheme();
   const { authReady, authStatus } = useAuth();
+  const [startupComplete, setStartupComplete] = useState(false);
   const router = useRouter();
   const pathname = usePathname();
   const segments = useSegments();
@@ -77,10 +168,12 @@ function LayoutContent() {
   const protectedPath = isProtectedPath(pathname) || segments.includes('(tabs)');
   const authenticatedAuthPath = authStatus === 'authenticated' && isAuthenticationPath(pathname, segments);
   const unauthenticatedProtectedPath = authStatus === 'unauthenticated' && protectedPath;
+  const redirectPending = authenticatedAuthPath || unauthenticatedProtectedPath;
+  const startupReady = !isLoading && authReady && !redirectPending;
 
   useEffect(() => {
-    if (!isLoading) SplashScreen.hideAsync();
-  }, [isLoading]);
+    if (startupReady && !startupComplete) SplashScreen.hideAsync().catch(() => {});
+  }, [startupComplete, startupReady]);
 
   useEffect(() => {
     clearDocumentCacheIfStaleBuild()
@@ -99,15 +192,8 @@ function LayoutContent() {
     }
   }, [authReady, authenticatedAuthPath, router, unauthenticatedProtectedPath]);
 
-  if (isLoading || !authReady || authenticatedAuthPath || unauthenticatedProtectedPath) {
-    return (
-      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, padding: 24 }}>
-        <ActivityIndicator size="large" color={colors.primary} />
-        <Text style={{ marginTop: 14, color: colors.textSecondary, fontSize: 14, fontWeight: '600' }}>
-          Preparing LilyCrest...
-        </Text>
-      </View>
-    );
+  if (!startupReady && !startupComplete) {
+    return <View style={startupStyles.placeholder} />;
   }
 
   return (
@@ -144,6 +230,7 @@ function LayoutContent() {
         <Stack.Screen name="terms-of-service" />
         <Stack.Screen name="debug/api-health" />
       </Stack>
+      {!startupComplete ? <StartupOverlay onFinish={setStartupComplete} /> : null}
     </>
   );
 }
