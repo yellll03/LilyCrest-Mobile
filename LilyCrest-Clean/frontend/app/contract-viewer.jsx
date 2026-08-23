@@ -111,7 +111,7 @@ export default function ContractViewer() {
               <View style={[styles.staleWarning, { borderColor: colors.border, backgroundColor: colors.card }]}>
                 <Ionicons name="alert-circle-outline" size={18} color={colors.textSecondary} />
                 <Text style={[styles.staleWarningText, { color: colors.textSecondary }]}>{error}</Text>
-                <TouchableOpacity onPress={reload}><Text style={[styles.staleWarningRetry, { color: colors.primary }]}>Retry</Text></TouchableOpacity>
+                <TouchableOpacity onPress={reload}><Text style={[styles.staleWarningRetry, { color: colors.interactive }]}>Retry</Text></TouchableOpacity>
               </View>
             ) : null}
 

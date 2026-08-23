@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../src/context/AuthContext';
 import { useTheme } from '../src/context/ThemeContext';
@@ -11,6 +11,7 @@ import { firstInvalidQuestionId, safeSurveyErrorMessage, toAnswerObject, validat
 import { SURVEY_FEEDBACK_ENABLED } from '../src/config/features';
 import { ScreenHeader } from '../src/components/ui/LilycrestUI';
 import { safeBack } from '../src/utils/navigation';
+import { useAlert } from '../src/context/AlertContext';
 
 const CHOICE_LABELS = {
   YES: 'Yes', NO: 'No', MAYBE: 'Maybe', CONTRACT_COMPLETED: 'Contract completed',
@@ -27,6 +28,7 @@ export default function SurveyFormScreen() {
   const { user } = useAuth();
   const tenantKey = user?.tenantId || user?.tenant_id || user?.user_id;
   const { colors } = useTheme();
+  const { showAlert } = useAlert();
   const styles = useMemo(() => createStyles(colors), [colors]);
   const [survey, setSurvey] = useState(null);
   const [answers, setAnswers] = useState({});
@@ -128,28 +130,32 @@ export default function SurveyFormScreen() {
       return;
     }
     confirmationOpen.current = true;
-    Alert.alert('Submit Survey?', 'You will not be able to edit your answers after submission.', [
-      { text: 'Cancel', style: 'cancel', onPress: () => { confirmationOpen.current = false; } },
-      {
-        text: 'Submit', onPress: async () => {
-          confirmationOpen.current = false;
-          if (saving) return;
-          setSaving(true); setMessage('');
-          try {
-            await apiService.submitSurvey(surveyId, answersObjectToArray(answers));
-            await clearSurveyDraft(tenantKey, surveyId);
-            setReadOnly(true);
-            setSubmittedAt(new Date().toISOString());
-            Alert.alert('Thank you', 'Thank you for sharing your feedback.', [{ text: 'Done', onPress: () => router.replace('/surveys') }]);
-          } catch (error) {
-            setErrors(error?.response?.data?.fields || {});
-            setMessage(isNetworkOrColdStartError(error)
-              ? 'Unable to submit your survey. Please check your connection and try again.'
-              : safeSurveyErrorMessage(error, 'Something went wrong while submitting your survey. Please try again later.'));
-          } finally { setSaving(false); }
-        },
-      },
-    ], { onDismiss: () => { confirmationOpen.current = false; } });
+    const decision = await showAlert({
+      title: 'Submit Survey?',
+      message: 'You will not be able to edit your answers after submission.',
+      type: 'warning',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Submit' },
+      ],
+    });
+    confirmationOpen.current = false;
+    if (decision !== 'Submit' || saving) return;
+
+    setSaving(true); setMessage('');
+    try {
+      await apiService.submitSurvey(surveyId, answersObjectToArray(answers));
+      await clearSurveyDraft(tenantKey, surveyId);
+      setReadOnly(true);
+      setSubmittedAt(new Date().toISOString());
+      await showAlert({ title: 'Thank you', message: 'Thank you for sharing your feedback.', type: 'success' });
+      router.replace('/surveys');
+    } catch (error) {
+      setErrors(error?.response?.data?.fields || {});
+      setMessage(isNetworkOrColdStartError(error)
+        ? 'Unable to submit your survey. Please check your connection and try again.'
+        : safeSurveyErrorMessage(error, 'Something went wrong while submitting your survey. Please try again later.'));
+    } finally { setSaving(false); }
   };
 
   const renderQuestion = (question) => {

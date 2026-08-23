@@ -152,7 +152,7 @@ export default function PaymentScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <View style={styles.center}><ActivityIndicator size="large" color={colors.primary} /></View>
+        <View style={styles.center}><ActivityIndicator size="large" color={colors.interactive} /></View>
       </SafeAreaView>
     );
   }
@@ -166,8 +166,8 @@ export default function PaymentScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={handleRefresh}
-              colors={[colors.primary]}
-              tintColor={colors.primary}
+              colors={[colors.interactive]}
+              tintColor={colors.interactive}
             />
           )}
         >
@@ -221,14 +221,14 @@ export default function PaymentScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            colors={[colors.primary]}
-            tintColor={colors.primary}
+            colors={[colors.interactive]}
+            tintColor={colors.interactive}
           />
         )}
       >
         <View style={styles.summaryCard}>
           <View style={styles.summaryRow}>
-            <Ionicons name="receipt-outline" size={20} color={colors.primary} />
+            <Ionicons name="receipt-outline" size={20} color={colors.interactive} />
             <Text style={styles.summaryTitle}>{bill.description || bill.billing_period || 'Billing Statement'}</Text>
           </View>
 

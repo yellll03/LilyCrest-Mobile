@@ -1,12 +1,12 @@
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
-import { statusColors } from '../../theme/tokens';
+import { semanticStatusPalette, statusTone } from '../../theme/tokens';
 import { supportStatusLabel } from '../../utils/supportConversationPresentation';
 
 export default function InquiryCard({ title, ticketId, preview, status, canonicalStatus, timestamp, onPress }) {
   const { colors } = useTheme();
   const actualStatus = canonicalStatus || (status === 'solved' ? 'resolved' : 'open');
-  const tone = statusColors(actualStatus);
+  const tone = semanticStatusPalette(colors, statusTone(actualStatus));
 
   return (
     <Pressable style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]} onPress={onPress}>

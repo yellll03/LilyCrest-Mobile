@@ -34,7 +34,7 @@ export default function AttachmentPickerSheet({
       statusBarTranslucent
       onRequestClose={onClose}
     >
-      <View style={styles.overlay}>
+      <View style={[styles.overlay, { backgroundColor: colors.overlay }]}>
         <Pressable
           style={StyleSheet.absoluteFillObject}
           onPress={onClose}
@@ -88,7 +88,6 @@ const styles = StyleSheet.create({
   overlay: {
     flex: 1,
     justifyContent: 'flex-end',
-    backgroundColor: 'rgba(2, 6, 23, 0.38)',
   },
   sheet: {
     borderTopLeftRadius: 18,

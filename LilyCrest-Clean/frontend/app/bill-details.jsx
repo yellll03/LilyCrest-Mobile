@@ -199,7 +199,7 @@ export default function BillDetailsScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color={colors.primary} />
+        <ActivityIndicator color={colors.interactive} />
       </View>
     );
   }
@@ -213,8 +213,8 @@ export default function BillDetailsScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            colors={[colors.primary]}
-            tintColor={colors.primary}
+            colors={[colors.interactive]}
+            tintColor={colors.interactive}
           />
         )}
       >
@@ -248,8 +248,8 @@ export default function BillDetailsScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            colors={[colors.primary]}
-            tintColor={colors.primary}
+            colors={[colors.interactive]}
+            tintColor={colors.interactive}
           />
         )}
       >
@@ -287,7 +287,7 @@ export default function BillDetailsScreen() {
         {/* ── Billing Summary Table ── */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
-            <Ionicons name="receipt-outline" size={16} color={colors.primary} />
+            <Ionicons name="receipt-outline" size={16} color={colors.interactive} />
             <Text style={styles.sectionTitle}>Billing Summary</Text>
           </View>
 
@@ -508,7 +508,7 @@ export default function BillDetailsScreen() {
         {/* ── Payment Section ── */}
         <View style={styles.sectionCard}>
           <View style={styles.sectionHeader}>
-            <Ionicons name="card-outline" size={16} color={colors.primary} />
+            <Ionicons name="card-outline" size={16} color={colors.interactive} />
             <Text style={styles.sectionTitle}>Payment</Text>
           </View>
 
@@ -597,8 +597,8 @@ export default function BillDetailsScreen() {
               });
             }}
           >
-            <Ionicons name="receipt-outline" size={18} color={colors.primary} />
-            <Text style={[styles.downloadText, { color: colors.primary }]}>View Receipt</Text>
+            <Ionicons name="receipt-outline" size={18} color={colors.interactive} />
+            <Text style={[styles.downloadText, { color: colors.interactive }]}>View Receipt</Text>
           </Pressable>
         )}
 
@@ -614,7 +614,7 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16, backgroundColor: c.background },
   errorText: { color: c.error, fontWeight: '800', marginBottom: 12 },
   backBtn: { paddingHorizontal: 14, paddingVertical: 10, backgroundColor: c.primary, borderRadius: 10 },
-  backBtnText: { color: c.surface, fontWeight: '700' },
+  backBtnText: { color: c.onPrimary, fontWeight: '700' },
 
   content: { padding: 16, gap: 14 },
 

@@ -100,12 +100,12 @@ export default function ResetPasswordHandoffScreen() {
           <Ionicons
             name={invalid || network ? 'alert-circle' : ready ? 'open-outline' : 'shield-checkmark-outline'}
             size={46}
-            color={colors.primary}
+            color={colors.interactive}
           />
         </View>
         <Text style={styles.title}>{title}</Text>
         <Text style={styles.subtitle}>{subtitle}</Text>
-        {checking ? <ActivityIndicator color={colors.primary} style={styles.checking} /> : null}
+        {checking ? <ActivityIndicator color={colors.interactive} style={styles.checking} /> : null}
         {openFailed ? <Text style={styles.error}>We couldn&apos;t open the browser. Try again below.</Text> : null}
         {ready ? (
           <TouchableOpacity style={[styles.primaryButton, opening && styles.disabled]} onPress={openSecureReset} disabled={opening}>
@@ -140,7 +140,7 @@ const createStyles = (colors) => StyleSheet.create({
   disabled: { opacity: 0.6 },
   primaryText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   secondaryButton: { borderWidth: 1, borderColor: colors.border, borderRadius: 12, paddingVertical: 14, alignItems: 'center', marginTop: 12 },
-  secondaryText: { color: colors.primary, fontWeight: '600', fontSize: 15 },
+  secondaryText: { color: colors.interactive, fontWeight: '600', fontSize: 15 },
   loginLink: { paddingVertical: 14, alignItems: 'center', marginTop: 4 },
   loginText: { color: colors.textSecondary, fontSize: 14 },
 });

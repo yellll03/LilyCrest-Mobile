@@ -119,7 +119,7 @@ export default function HouseRulesScreen() {
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         <View style={styles.introCard}>
-          <Ionicons name="document-text" size={32} color={colors.primary} />
+          <Ionicons name="document-text" size={32} color={colors.interactive} />
           <View style={styles.introContent}>
             <Text style={styles.introTitle}>LilyCrest Dormitory Rules</Text>
             <Text style={styles.introText}>Please read and follow all rules to ensure a comfortable living environment for everyone.</Text>
@@ -181,7 +181,7 @@ const createStyles = (colors) => StyleSheet.create({
   ruleSectionTitle: { fontSize: 16, fontWeight: '600', color: colors.text, flex: 1 },
   rulesList: { padding: 16, paddingTop: 12 },
   ruleItem: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: 10, gap: 10 },
-  bulletPoint: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.primary, marginTop: 6 },
+  bulletPoint: { width: 6, height: 6, borderRadius: 3, backgroundColor: colors.interactive, marginTop: 6 },
   ruleText: { flex: 1, fontSize: 14, color: colors.textSecondary, lineHeight: 20 },
   warningCard: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: colors.errorBg, borderRadius: 12, padding: 16, marginBottom: 16, gap: 12, borderWidth: 1, borderColor: colors.error },
   warningText: { flex: 1, fontSize: 13, color: colors.errorText, lineHeight: 20 },

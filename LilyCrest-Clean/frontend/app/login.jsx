@@ -430,11 +430,11 @@ export default function LoginScreen() {
             <View style={styles.inputContainer}>
               <Text style={styles.label}>Email Address</Text>
               <View style={[styles.inputWrapper, showEmailFieldError && styles.inputWrapperError, !showEmailFieldError && touched.email && isEmailValid && styles.inputWrapperSuccess]}>
-                <Ionicons name="mail-outline" size={20} color={showEmailFieldError ? '#DC2626' : '#6B7280'} style={styles.inputIcon} />
+                <Ionicons name="mail-outline" size={20} color={showEmailFieldError ? colors.error : colors.iconSecondary} style={styles.inputIcon} />
                 <TextInput 
                   style={styles.input} 
                   placeholder="Enter your email" 
-                  placeholderTextColor="#6B7280"
+                  placeholderTextColor={colors.textMuted}
                   value={email} 
                   onChangeText={(text) => setEmail((text || '').replace(/\s+/g, ''))} 
                   onBlur={() => setTouched(prev => ({ ...prev, email: true }))} 
@@ -456,18 +456,18 @@ export default function LoginScreen() {
             <View style={[styles.inputContainer, styles.passwordInputContainer]}>
               <Text style={styles.label}>Password</Text>
               <View style={[styles.inputWrapper, showPasswordFieldError && styles.inputWrapperError, !showPasswordFieldError && touched.password && isPasswordValid && styles.inputWrapperSuccess]}>
-                <Ionicons name="lock-closed-outline" size={20} color={showPasswordFieldError ? '#DC2626' : '#6B7280'} style={styles.inputIcon} />
+                <Ionicons name="lock-closed-outline" size={20} color={showPasswordFieldError ? colors.error : colors.iconSecondary} style={styles.inputIcon} />
                 <TextInput 
                   style={styles.input} 
                   placeholder="Enter your password" 
-                  placeholderTextColor="#6B7280"
+                  placeholderTextColor={colors.textMuted}
                   value={password} 
                   onChangeText={handlePasswordChange}
                   onBlur={() => setTouched(prev => ({ ...prev, password: true }))} 
                   secureTextEntry={!showPassword} 
                 />
                 <TouchableOpacity onPress={() => setShowPassword(!showPassword)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                  <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color="#6B7280" />
+                  <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.iconSecondary} />
                 </TouchableOpacity>
               </View>
               {touched.password && errors.password && !loginError ? (
@@ -490,7 +490,7 @@ export default function LoginScreen() {
                 <Ionicons
                   name={rememberEmail ? 'checkbox' : 'square-outline'}
                   size={22}
-                  color={rememberEmail ? colors.primary : colors.textMuted}
+                  color={rememberEmail ? colors.interactive : colors.textMuted}
                 />
                 <Text style={styles.rememberText}>Remember me</Text>
               </TouchableOpacity>
@@ -517,7 +517,7 @@ export default function LoginScreen() {
                 disabled={isBiometricLoading}
               >
                 {isBiometricLoading ? (
-                  <ActivityIndicator color={colors.primary} />
+                  <ActivityIndicator color={colors.interactive} />
                 ) : (
                   <>
                     <Ionicons name="finger-print" size={20} color={colors.accent} />
@@ -552,7 +552,7 @@ export default function LoginScreen() {
             disabled={isGoogleLoading}
           >
             {isGoogleLoading ? (
-              <ActivityIndicator color={colors.primary} />
+              <ActivityIndicator color={colors.interactive} />
             ) : (
               <>
                 <View style={styles.googleIconSlot}>
@@ -576,7 +576,7 @@ export default function LoginScreen() {
 
           {__DEV__ ? (
             <TouchableOpacity style={styles.debugButton} onPress={() => router.push('/debug/api-health')}>
-              <Ionicons name="pulse-outline" size={17} color={colors.primary} />
+              <Ionicons name="pulse-outline" size={17} color={colors.interactive} />
               <Text style={styles.debugButtonText}>Run API Diagnostics</Text>
             </TouchableOpacity>
           ) : null}
@@ -609,7 +609,7 @@ const createStyles = (c) => StyleSheet.create({
   rememberOption: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
   rememberText: { color: c.text, fontSize: 14, fontWeight: '500' },
   forgotPassword: { minHeight: 44, justifyContent: 'center', alignItems: 'flex-end', flexShrink: 0 },
-  forgotPasswordText: { color: c.primary, fontSize: 14, fontWeight: '600' },
+  forgotPasswordText: { color: c.interactive, fontSize: 14, fontWeight: '600' },
   loginErrorContainer: { flexDirection: 'row', alignItems: 'flex-start', borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 20, gap: 10 },
   loginErrorText: { flex: 1, fontSize: 13, fontWeight: '500', lineHeight: 18 },
   signInButton: {
@@ -675,6 +675,6 @@ const createStyles = (c) => StyleSheet.create({
   debugButtonText: {
     fontSize: 13,
     fontWeight: '800',
-    color: c.primary,
+    color: c.interactive,
   },
 });

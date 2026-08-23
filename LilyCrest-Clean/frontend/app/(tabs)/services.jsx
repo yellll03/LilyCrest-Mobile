@@ -23,6 +23,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AttachmentPickerSheet from '../../src/components/AttachmentPickerSheet';
+import StyledModal from '../../src/components/StyledModal';
 import LilyAssistantFab from '../../src/components/assistant/LilyAssistantFab';
 import { useAuth } from '../../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
@@ -47,7 +48,7 @@ import {
   MAINTENANCE_GROUPS,
   MAINTENANCE_STATUS_STAGES,
 } from '../../src/utils/maintenanceStatus';
-import { STATUS } from '../../src/theme/tokens';
+import { semanticStatusPalette } from '../../src/theme/tokens';
 
 function safeFormat(dateStr, fmt) {
   try {
@@ -295,7 +296,7 @@ export default function ServicesScreen() {
     container: { flex: 1, backgroundColor: c.background },
     loadingContainer: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: c.background },
     header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16, backgroundColor: c.headerBg, borderBottomWidth: 2, borderBottomColor: c.accent },
-    headerTitle: { fontSize: 20, fontWeight: 'bold', color: '#FFFFFF' },
+    headerTitle: { fontSize: 20, fontWeight: 'bold', color: c.onPrimary },
     headerSubtitle: { color: c.accentLight, fontSize: 12, fontWeight: '700', marginTop: 2 },
     refreshIndicator: { width: 36, height: 36, borderRadius: 8, backgroundColor: c.primaryHover, justifyContent: 'center', alignItems: 'center' },
     scrollView: { flex: 1 },
@@ -315,7 +316,7 @@ export default function ServicesScreen() {
     tab: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 9, borderRadius: 10, gap: 4 },
     tabActive: { backgroundColor: c.primary },
     tabText: { fontSize: 11, fontWeight: '600', color: c.textMuted },
-    tabTextActive: { color: c.surface },
+    tabTextActive: { color: c.onPrimary },
     emptyState: { alignItems: 'center', paddingVertical: 40, backgroundColor: c.surface, borderRadius: 12, borderWidth: 1, borderColor: c.border },
     emptyIcon: { width: 64, height: 64, borderRadius: 32, backgroundColor: c.surfaceSecondary, justifyContent: 'center', alignItems: 'center', marginBottom: 12 },
     emptyTitle: { fontSize: 16, fontWeight: '600', color: c.text, marginBottom: 6 },
@@ -336,17 +337,17 @@ export default function ServicesScreen() {
     urgencyText: { fontSize: 12, color: '#DC2626', fontWeight: '500' },
     bottomSpacer: { height: Platform.OS === 'ios' ? 140 : 120 },
     modalContainer: { flex: 1 },
-    modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+    modalOverlay: { flex: 1, backgroundColor: c.overlay, justifyContent: 'flex-end' },
     modalContent: { backgroundColor: c.surface, borderTopLeftRadius: 12, borderTopRightRadius: 12, padding: 24, maxHeight: '90%', borderWidth: 1, borderColor: c.border },
     modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 },
     modalTitle: { fontSize: 20, fontWeight: 'bold', color: c.text },
     modalSectionTitle: { fontSize: 14, fontWeight: '600', color: c.text, marginBottom: 12, marginTop: 8 },
     typeGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: 16 },
     typeItem: { width: '31%', alignItems: 'center', paddingVertical: 12, paddingHorizontal: 8, borderRadius: 12, backgroundColor: c.surfaceSecondary },
-    typeItemSelected: { backgroundColor: c.primaryLight, borderWidth: 1, borderColor: c.primary },
+    typeItemSelected: { backgroundColor: c.primaryLight, borderWidth: 1, borderColor: c.interactive },
     typeIcon: { width: 40, height: 40, borderRadius: 10, justifyContent: 'center', alignItems: 'center', marginBottom: 6 },
     typeLabel: { fontSize: 10, color: c.textMuted, textAlign: 'center' },
-    typeLabelSelected: { color: c.primary, fontWeight: '600' },
+    typeLabelSelected: { color: c.interactive, fontWeight: '600' },
     urgencyOptions: { gap: 10, marginBottom: 16 },
     urgencyOption: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.surfaceSecondary, borderRadius: 12, padding: 14, borderWidth: 1, borderColor: c.border },
     urgencyDot: { width: 12, height: 12, borderRadius: 6, marginRight: 12 },
@@ -372,13 +373,13 @@ export default function ServicesScreen() {
     conversationMessageRow: { width: '100%', marginBottom: 8 },
     conversationBubble: { maxWidth: '82%', paddingVertical: 9, paddingHorizontal: 12 },
     conversationTimestamp: { fontSize: 10, color: c.textMuted, marginTop: 3, marginHorizontal: 4 },
-    replyComposer: { marginTop: 2, marginBottom: 14 },
-    replyComposerBar: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.surfaceSecondary, borderRadius: 16, borderWidth: 1, borderColor: c.border, paddingHorizontal: 6, paddingVertical: 6 },
+    replyComposer: { marginTop: 10, paddingTop: 12, borderTopWidth: 1, borderTopColor: c.border },
+    replyComposerBar: { minHeight: 50, flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: c.inputBackground, borderRadius: 16, borderWidth: 1, borderColor: c.border, paddingHorizontal: 6, paddingVertical: 5 },
     replyAttachButton: { width: 36, height: 36, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
-    replyInput: { flex: 1, minHeight: 36, maxHeight: 100, fontSize: 14, color: c.text, paddingVertical: 6, paddingHorizontal: 2 },
+    replyInput: { flex: 1, minHeight: 40, maxHeight: 100, fontSize: 14, lineHeight: 20, color: c.text, paddingVertical: 0, paddingHorizontal: 2 },
     submitButton: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', backgroundColor: c.primary, borderRadius: 12, paddingVertical: 16, gap: 8, marginBottom: 20 },
     submitButtonDisabled: { opacity: 0.7 },
-    submitButtonText: { color: c.surface, fontSize: 16, fontWeight: '600' },
+    submitButtonText: { color: c.onPrimary, fontSize: 16, fontWeight: '600' },
     banner: {
       flexDirection: 'row',
       alignItems: 'center',
@@ -389,22 +390,14 @@ export default function ServicesScreen() {
       borderWidth: 1,
     },
     bannerText: { flex: 1, fontSize: 14, fontWeight: '700', color: c.text },
-    bannerSuccess: { backgroundColor: '#ECFDF5', borderColor: '#059669' },
-    bannerError: { backgroundColor: '#fef2f2', borderColor: '#DC2626' },
-    bannerWarning: { backgroundColor: '#fffbeb', borderColor: '#F3E4B0' },
-    fieldError: { color: '#991B1B', fontSize: 12, marginBottom: 10 },
+    bannerSuccess: { backgroundColor: c.successBg, borderColor: c.success },
+    bannerError: { backgroundColor: c.errorBg, borderColor: c.error },
+    bannerWarning: { backgroundColor: c.warningBg, borderColor: c.warning },
+    fieldError: { color: c.errorText, fontSize: 12, marginBottom: 10 },
     descriptionCounter: { alignSelf: 'flex-end', fontSize: 11, color: colors.textMuted, marginTop: 4, marginBottom: 6 },
-    descriptionCounterOver: { color: '#991B1B', fontWeight: '600' },
-    confirmOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center' },
-    confirmCard: { width: '84%', backgroundColor: c.surface, borderRadius: 12, padding: 20, gap: 10, borderWidth: 1, borderColor: c.border },
-    confirmTitle: { fontSize: 17, fontWeight: '700', color: c.text },
-    confirmText: { fontSize: 14, color: c.textMuted, lineHeight: 20 },
-    confirmActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10, marginTop: 4 },
-    confirmBtn: { paddingVertical: 10, paddingHorizontal: 14, borderRadius: 10 },
-    confirmCancel: { backgroundColor: c.surfaceSecondary },
-    confirmDiscard: { backgroundColor: '#FEF2F2' },
-    confirmDiscardText: { color: '#991B1B', fontWeight: '700' },
-    confirmCancelText: { color: c.text, fontWeight: '700' },
+    descriptionCounterOver: { color: c.errorText, fontWeight: '600' },
+    confirmOverlay: { flex: 1, backgroundColor: c.overlay, justifyContent: 'center', alignItems: 'center' },
+    reopenInput: { backgroundColor: c.inputBackground, borderRadius: 10, borderWidth: 1, borderColor: c.border, padding: 12, fontSize: 14, lineHeight: 20, color: c.text, minHeight: 76 },
   }));
   const [requests, setRequests] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -710,25 +703,26 @@ export default function ServicesScreen() {
     setAttachments((prev) => prev.filter((_, itemIndex) => itemIndex !== index));
   };
 
-  const getStatusColor = (status) => {
+  const getStatusColor = useCallback((status) => {
+    const tone = (name) => semanticStatusPalette(colors, name);
     switch ((status || '').toLowerCase()) {
-      case 'viewed': return { bg: STATUS.info.background, text: STATUS.info.text, solid: STATUS.info.solid, label: 'Viewed', icon: 'eye' };
-      case 'reviewed': return { bg: STATUS.info.background, text: STATUS.info.text, solid: STATUS.info.solid, label: 'Reviewed', icon: 'eye' };
-      case 'in_progress': case 'in process': return { bg: STATUS.info.background, text: STATUS.info.text, solid: STATUS.info.solid, label: 'In Progress', icon: 'construct' };
-      case 'assigned': case 'provider_assigned': return { bg: STATUS.info.background, text: STATUS.info.text, solid: STATUS.info.solid, label: 'Provider Assigned', icon: 'person' };
-      case 'scheduled': return { bg: STATUS.info.background, text: STATUS.info.text, solid: STATUS.info.solid, label: 'Scheduled', icon: 'calendar' };
-      case 'waiting_tenant': return { bg: STATUS.warning.background, text: STATUS.warning.text, solid: STATUS.warning.solid, label: 'Waiting for You', icon: 'chatbubble-ellipses' };
-      case 'reopened': return { bg: STATUS.warning.background, text: STATUS.warning.text, solid: STATUS.warning.solid, label: 'Reopened', icon: 'refresh-circle' };
-      case 'resolved': return { bg: STATUS.success.background, text: STATUS.success.text, solid: STATUS.success.solid, label: 'Resolved', icon: 'checkmark-done-circle' };
-      case 'completed': return { bg: STATUS.success.background, text: STATUS.success.text, solid: STATUS.success.solid, label: 'Completed', icon: 'checkmark-circle' };
-      case 'rejected': return { bg: STATUS.danger.background, text: STATUS.danger.text, solid: STATUS.danger.solid, label: 'Rejected', icon: 'close-circle' };
-      case 'cancelled': return { bg: STATUS.danger.background, text: STATUS.danger.text, solid: STATUS.danger.solid, label: 'Cancelled', icon: 'ban' };
-      case 'closed': return { bg: STATUS.neutral.background, text: STATUS.neutral.text, solid: STATUS.neutral.solid, label: 'Closed', icon: 'lock-closed' };
-      case 'pending_review': return { bg: STATUS.warning.background, text: STATUS.warning.text, solid: STATUS.warning.solid, label: 'Pending Review', icon: 'time' };
-      case 'pending': return { bg: STATUS.warning.background, text: STATUS.warning.text, solid: STATUS.warning.solid, label: 'Pending', icon: 'time' };
-      default: return { bg: STATUS.neutral.background, text: STATUS.neutral.text, solid: STATUS.neutral.solid, label: status || 'Pending', icon: 'help-circle' };
+      case 'viewed': return { ...tone('info'), bg: tone('info').background, label: 'Viewed', icon: 'eye' };
+      case 'reviewed': return { ...tone('info'), bg: tone('info').background, label: 'Reviewed', icon: 'eye' };
+      case 'in_progress': case 'in process': return { ...tone('info'), bg: tone('info').background, label: 'In Progress', icon: 'construct' };
+      case 'assigned': case 'provider_assigned': return { ...tone('info'), bg: tone('info').background, label: 'Provider Assigned', icon: 'person' };
+      case 'scheduled': return { ...tone('info'), bg: tone('info').background, label: 'Scheduled', icon: 'calendar' };
+      case 'waiting_tenant': return { ...tone('warning'), bg: tone('warning').background, label: 'Waiting for You', icon: 'chatbubble-ellipses' };
+      case 'reopened': return { ...tone('warning'), bg: tone('warning').background, label: 'Reopened', icon: 'refresh-circle' };
+      case 'resolved': return { ...tone('success'), bg: tone('success').background, label: 'Resolved', icon: 'checkmark-done-circle' };
+      case 'completed': return { ...tone('success'), bg: tone('success').background, label: 'Completed', icon: 'checkmark-circle' };
+      case 'rejected': return { ...tone('danger'), bg: tone('danger').background, label: 'Rejected', icon: 'close-circle' };
+      case 'cancelled': return { ...tone('danger'), bg: tone('danger').background, label: 'Cancelled', icon: 'ban' };
+      case 'closed': return { ...tone('neutral'), bg: tone('neutral').background, label: 'Closed', icon: 'lock-closed' };
+      case 'pending_review': return { ...tone('warning'), bg: tone('warning').background, label: 'Pending Review', icon: 'time' };
+      case 'pending': return { ...tone('warning'), bg: tone('warning').background, label: 'Pending', icon: 'time' };
+      default: return { ...tone('neutral'), bg: tone('neutral').background, label: status || 'Pending', icon: 'help-circle' };
     }
-  };
+  }, [colors]);
 
   const getTypeInfo = (type) => REQUEST_TYPES.find(t => t.id === type) || REQUEST_TYPES[7];
 
@@ -1059,14 +1053,14 @@ export default function ServicesScreen() {
         </View>
       </TouchableOpacity>
     );
-  }, [colors, styles, openDetail]);
+  }, [colors, getStatusColor, styles, openDetail]);
 
   const requestListHeader = (
     <>
       {!showModal ? renderBanner() : null}
 
       <TouchableOpacity style={styles.submitCard} onPress={() => setShowModal(true)}>
-        <View style={styles.submitIcon}><Ionicons name="add-circle" size={32} color={colors.primary} /></View>
+        <View style={styles.submitIcon}><Ionicons name="add-circle" size={32} color={colors.interactive} /></View>
         <View style={styles.submitContent}>
           <Text style={styles.submitTitle}>Submit New Inquiry</Text>
           <Text style={styles.submitDescription}>Report issues, request maintenance, or send concerns</Text>
@@ -1106,15 +1100,15 @@ export default function ServicesScreen() {
 
       <View style={styles.tabContainer}>
         <TouchableOpacity style={[styles.tab, activeTab === 'active' && styles.tabActive]} onPress={() => setActiveTab('active')}>
-          <Ionicons name="time-outline" size={15} color={activeTab === 'active' ? colors.surface : colors.textMuted} />
+          <Ionicons name="time-outline" size={15} color={activeTab === 'active' ? colors.onPrimary : colors.textMuted} />
           <Text style={[styles.tabText, activeTab === 'active' && styles.tabTextActive]}>Active ({activeRequests.length})</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.tab, activeTab === 'resolved' && styles.tabActive]} onPress={() => setActiveTab('resolved')}>
-          <Ionicons name="checkmark-circle-outline" size={15} color={activeTab === 'resolved' ? colors.surface : colors.textMuted} />
+          <Ionicons name="checkmark-circle-outline" size={15} color={activeTab === 'resolved' ? colors.onPrimary : colors.textMuted} />
           <Text style={[styles.tabText, activeTab === 'resolved' && styles.tabTextActive]}>Resolved ({resolvedRequests.length})</Text>
         </TouchableOpacity>
         <TouchableOpacity style={[styles.tab, activeTab === 'cancelled' && styles.tabActive]} onPress={() => setActiveTab('cancelled')}>
-          <Ionicons name="close-circle-outline" size={15} color={activeTab === 'cancelled' ? colors.surface : colors.textMuted} />
+          <Ionicons name="close-circle-outline" size={15} color={activeTab === 'cancelled' ? colors.onPrimary : colors.textMuted} />
           <Text style={[styles.tabText, activeTab === 'cancelled' && styles.tabTextActive]}>Cancelled ({cancelledRequests.length})</Text>
         </TouchableOpacity>
       </View>
@@ -1124,7 +1118,7 @@ export default function ServicesScreen() {
   const requestListEmpty = (
     <View style={styles.emptyState}>
       <View style={styles.emptyIcon}>
-        <Ionicons name={activeTab === 'active' ? 'construct-outline' : activeTab === 'resolved' ? 'checkmark-done-circle' : 'close-circle-outline'} size={36} color={activeTab === 'active' ? colors.primary : activeTab === 'resolved' ? '#059669' : '#6B7280'} />
+        <Ionicons name={activeTab === 'active' ? 'construct-outline' : activeTab === 'resolved' ? 'checkmark-done-circle' : 'close-circle-outline'} size={36} color={activeTab === 'active' ? colors.interactive : activeTab === 'resolved' ? colors.success : colors.textMuted} />
       </View>
       <Text style={styles.emptyTitle}>
         {activeTab === 'active' ? 'No Active Requests' : activeTab === 'resolved' ? 'No Resolved Requests' : 'No Cancelled Requests'}
@@ -1135,7 +1129,7 @@ export default function ServicesScreen() {
     </View>
   );
 
-  if (isLoading) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color={colors.primary} /></View>;
+  if (isLoading) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color={colors.interactive} /></View>;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -1148,7 +1142,7 @@ export default function ServicesScreen() {
           onPress={() => { setRefreshing(true); fetchRequests(); }}
           accessibilityLabel="Refresh service requests"
         >
-          <Ionicons name="sync" size={18} color="#FFFFFF" />
+          <Ionicons name="sync" size={18} color={colors.onPrimary} />
         </TouchableOpacity>
       </View>
 
@@ -1158,7 +1152,7 @@ export default function ServicesScreen() {
         data={currentList}
         keyExtractor={requestKeyExtractor}
         renderItem={renderRequestItem}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.interactive]} tintColor={colors.interactive} />}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={requestListHeader}
         ListEmptyComponent={requestListEmpty}
@@ -1189,7 +1183,7 @@ export default function ServicesScreen() {
                       }}
                     >
                       <View style={[styles.typeIcon, { backgroundColor: selectedType === type.id ? type.color : `${type.color}15` }]}>
-                        <Ionicons name={type.icon} size={20} color={selectedType === type.id ? '#FFFFFF' : type.color} />
+                        <Ionicons name={type.icon} size={20} color={selectedType === type.id ? colors.onPrimary : type.color} />
                       </View>
                       <Text style={[styles.typeLabel, selectedType === type.id && styles.typeLabelSelected]}>{type.label}</Text>
                     </TouchableOpacity>
@@ -1243,7 +1237,7 @@ export default function ServicesScreen() {
                   accessibilityHint="Choose a photo or document to include with this maintenance inquiry"
                 >
                   <View style={styles.attachmentActionIcon}>
-                    <Ionicons name="attach" size={21} color={colors.primary} />
+                    <Ionicons name="attach" size={21} color={colors.interactive} />
                   </View>
                   <View style={styles.attachmentActionContent}>
                     <Text style={styles.attachmentActionTitle}>
@@ -1279,7 +1273,7 @@ export default function ServicesScreen() {
                   onPress={handleSubmit}
                   disabled={submitting || !isCreateFormValid}
                 >
-                  {submitting ? <ActivityIndicator color={colors.surface} /> : <><Ionicons name="send" size={20} color={colors.surface} /><Text style={styles.submitButtonText}>Submit Request</Text></>}
+                  {submitting ? <ActivityIndicator color={colors.onPrimary} /> : <><Ionicons name="send" size={20} color={colors.onPrimary} /><Text style={styles.submitButtonText}>Submit Request</Text></>}
                 </TouchableOpacity>
               </ScrollView>
             </View>
@@ -1287,22 +1281,17 @@ export default function ServicesScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      <Modal visible={showDiscardConfirm} transparent animationType="fade" onRequestClose={() => setShowDiscardConfirm(false)}>
-        <View style={styles.confirmOverlay}>
-          <View style={styles.confirmCard}>
-            <Text style={styles.confirmTitle}>Discard this inquiry?</Text>
-            <Text style={styles.confirmText}>Your current selections and description will be lost. This cannot be undone.</Text>
-            <View style={styles.confirmActions}>
-              <TouchableOpacity style={[styles.confirmBtn, styles.confirmCancel]} onPress={() => setShowDiscardConfirm(false)}>
-                <Text style={styles.confirmCancelText}>Keep Editing</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.confirmBtn, styles.confirmDiscard]} onPress={discardAndClose}>
-                <Text style={styles.confirmDiscardText}>Discard</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <StyledModal
+        visible={showDiscardConfirm}
+        onClose={() => setShowDiscardConfirm(false)}
+        title="Discard this inquiry?"
+        message="Your current selections and description will be lost. This cannot be undone."
+        type="warning"
+        buttons={[
+          { text: 'Keep Editing', style: 'cancel', onPress: () => setShowDiscardConfirm(false) },
+          { text: 'Discard', style: 'destructive', onPress: discardAndClose },
+        ]}
+      />
 
       {/* ===== REQUEST DETAIL MODAL ===== */}
       <Modal visible={showDetailModal} animationType="slide" transparent onRequestClose={() => { setEditMode(false); setShowReplyAttachMenu(false); setShowDetailModal(false); }}>
@@ -1320,7 +1309,7 @@ export default function ServicesScreen() {
                 <ScrollView showsVerticalScrollIndicator={false}>
                   {detailLoading ? (
                     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.surfaceSecondary, borderRadius: 12, padding: 12, marginBottom: 14 }}>
-                      <ActivityIndicator size="small" color={colors.primary} />
+                      <ActivityIndicator size="small" color={colors.interactive} />
                       <Text style={{ color: colors.textMuted, fontSize: 13 }}>Loading latest updates...</Text>
                     </View>
                   ) : null}
@@ -1342,10 +1331,10 @@ export default function ServicesScreen() {
                             const isCurrent = i === currentIdx;
                             return (
                               <View key={stage.label} style={{ flex: 1, alignItems: 'center' }}>
-                                <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: isActive ? colors.primary : colors.surfaceSecondary, justifyContent: 'center', alignItems: 'center', borderWidth: isCurrent ? 2 : 0, borderColor: isCurrent ? colors.primary : 'transparent' }}>
-                                  {isActive ? <Ionicons name="checkmark" size={14} color={colors.surface} /> : <Text style={{ fontSize: 10, color: colors.textMuted }}>{i + 1}</Text>}
+                                <View style={{ width: 28, height: 28, borderRadius: 14, backgroundColor: isActive ? colors.primary : colors.surfaceSecondary, justifyContent: 'center', alignItems: 'center', borderWidth: isCurrent ? 2 : 0, borderColor: isCurrent ? colors.interactive : 'transparent' }}>
+                                  {isActive ? <Ionicons name="checkmark" size={14} color={colors.onPrimary} /> : <Text style={{ fontSize: 10, color: colors.textMuted }}>{i + 1}</Text>}
                                 </View>
-                                <Text style={{ fontSize: 9, color: isActive ? colors.primary : colors.textMuted, marginTop: 4, textAlign: 'center' }}>{stage.label}</Text>
+                                <Text style={{ fontSize: 9, color: isActive ? colors.interactive : colors.textMuted, marginTop: 4, textAlign: 'center' }}>{stage.label}</Text>
                                 {i < MAINTENANCE_STATUS_STAGES.length - 1 && (
                                   <View style={{ position: 'absolute', top: 13, left: '60%', right: '-40%', height: 2, backgroundColor: isActive && i < currentIdx ? colors.primary : colors.surfaceSecondary }} />
                                 )}
@@ -1379,9 +1368,9 @@ export default function ServicesScreen() {
 
                   {/* Estimated Resolution */}
                   {!editMode && !['resolved', 'completed', 'rejected', 'cancelled', 'closed'].includes((detailRequest.status || '').toLowerCase()) && (
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: '#EFF6FF', borderRadius: 10, padding: 12, marginBottom: 14 }}>
-                      <Ionicons name="timer-outline" size={18} color="#2563EB" />
-                      <Text style={{ fontSize: 13, color: '#1e40af', fontWeight: '500' }}>Estimated: {RESOLUTION_ESTIMATES[detailRequest.urgency] || RESOLUTION_ESTIMATES.normal}</Text>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.infoBg, borderRadius: 10, padding: 12, marginBottom: 14 }}>
+                      <Ionicons name="timer-outline" size={18} color={colors.infoText} />
+                      <Text style={{ fontSize: 13, color: colors.infoText, fontWeight: '500' }}>Estimated: {RESOLUTION_ESTIMATES[detailRequest.urgency] || RESOLUTION_ESTIMATES.normal}</Text>
                     </View>
                   )}
 
@@ -1390,15 +1379,15 @@ export default function ServicesScreen() {
                     const currentIdx = MAINTENANCE_STATUS_STAGES.findIndex((s) => s.statuses.includes(currentStatus));
                     const currentStage = currentIdx !== -1 ? MAINTENANCE_STATUS_STAGES[currentIdx] : null;
                     return (
-                      <View style={{ backgroundColor: '#F8FAFC', borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#E5E7EB' }}>
+                      <View style={{ backgroundColor: colors.surfaceSecondary, borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: colors.border }}>
                         <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 8 }}>
                           <Ionicons name={getStatusColor(detailRequest.status).icon} size={18} color={getStatusColor(detailRequest.status).text} />
                           <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text, marginLeft: 8, flex: 1 }}>
                             {currentStage ? `Stage ${currentIdx + 1}: ${currentStage.cardTitle} • ${currentStage.detail}` : 'Current Status'}
                           </Text>
                           {currentStage?.badge && (
-                            <View style={{ backgroundColor: '#EEF2FF', borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, marginLeft: 8 }}>
-                              <Text style={{ fontSize: 10, fontWeight: '700', color: '#4338CA' }}>{currentStage.badge}</Text>
+                            <View style={{ backgroundColor: colors.infoBg, borderRadius: 8, paddingHorizontal: 8, paddingVertical: 4, marginLeft: 8 }}>
+                              <Text style={{ fontSize: 10, fontWeight: '700', color: colors.infoText }}>{currentStage.badge}</Text>
                             </View>
                           )}
                         </View>
@@ -1424,7 +1413,7 @@ export default function ServicesScreen() {
                         {REQUEST_TYPES.map((type) => (
                           <TouchableOpacity key={type.id} style={[styles.typeItem, editType === type.id && styles.typeItemSelected]} onPress={() => setEditType(type.id)}>
                             <View style={[styles.typeIcon, { backgroundColor: editType === type.id ? type.color : `${type.color}15` }]}>
-                              <Ionicons name={type.icon} size={20} color={editType === type.id ? '#FFFFFF' : type.color} />
+                              <Ionicons name={type.icon} size={20} color={editType === type.id ? colors.onPrimary : type.color} />
                             </View>
                             <Text style={[styles.typeLabel, editType === type.id && styles.typeLabelSelected]}>{type.label}</Text>
                           </TouchableOpacity>
@@ -1465,10 +1454,10 @@ export default function ServicesScreen() {
                   )}
 
                   {!editMode && detailTenantSummary && !hasConversationSummary && (
-                    <View style={{ backgroundColor: '#FFFBEB', borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#F3E4B0' }}>
+                    <View style={{ backgroundColor: colors.warningBg, borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: colors.warning }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                        <Ionicons name="reader-outline" size={18} color="#92400E" />
-                        <Text style={{ fontSize: 14, fontWeight: '800', color: '#92400E' }}>Maintenance Summary</Text>
+                        <Ionicons name="reader-outline" size={18} color={colors.warningText} />
+                        <Text style={{ fontSize: 14, fontWeight: '800', color: colors.warningText }}>Maintenance Summary</Text>
                       </View>
                       {[
                         ['Current status', formatStatusLabel(detailTenantSummary.current_status)],
@@ -1479,16 +1468,16 @@ export default function ServicesScreen() {
                         ['Completion note', detailTenantSummary.completion_note],
                       ].filter(([, value]) => Boolean(value)).map(([label, value]) => (
                         <View key={label} style={{ marginBottom: 8 }}>
-                          <Text style={{ fontSize: 11, color: '#92400E', fontWeight: '800', textTransform: 'uppercase' }}>{label}</Text>
-                          <Text style={{ fontSize: 13, color: '#92400E', lineHeight: 19 }}>{value}</Text>
+                          <Text style={{ fontSize: 11, color: colors.warningText, fontWeight: '800', textTransform: 'uppercase' }}>{label}</Text>
+                          <Text style={{ fontSize: 13, color: colors.warningText, lineHeight: 19 }}>{value}</Text>
                         </View>
                       ))}
                       {detailTenantSummary.attachments?.length ? (
                         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 }}>
                           {detailTenantSummary.attachments.map((att, idx) => (
-                            <TouchableOpacity key={`${getAttachmentDisplayName(att, idx)}_${idx}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: '#FFFBEB', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 }} onPress={() => openAttachment(att)}>
-                              <Ionicons name={isImageAttachment(att) ? 'image-outline' : 'document-outline'} size={13} color="#92400E" />
-                              <Text style={{ fontSize: 11, color: '#92400E', fontWeight: '700' }} numberOfLines={1}>{getAttachmentDisplayName(att, idx)}</Text>
+                            <TouchableOpacity key={`${getAttachmentDisplayName(att, idx)}_${idx}`} style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: colors.warningBg, borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6 }} onPress={() => openAttachment(att)}>
+                              <Ionicons name={isImageAttachment(att) ? 'image-outline' : 'document-outline'} size={13} color={colors.warningText} />
+                              <Text style={{ fontSize: 11, color: colors.warningText, fontWeight: '700' }} numberOfLines={1}>{getAttachmentDisplayName(att, idx)}</Text>
                             </TouchableOpacity>
                           ))}
                         </View>
@@ -1555,12 +1544,12 @@ export default function ServicesScreen() {
                                   }]}
                                 >
                                   {entry.isSummary ? (
-                                    <Text style={{ fontSize: 11, fontWeight: '800', color: isTenant ? colors.surface : colors.text, marginBottom: 3, textTransform: 'uppercase', opacity: 0.8 }}>
+                                    <Text style={{ fontSize: 11, fontWeight: '800', color: isTenant ? colors.onPrimary : colors.text, marginBottom: 3, textTransform: 'uppercase', opacity: 0.8 }}>
                                       Maintenance Summary
                                     </Text>
                                   ) : null}
                                   {entry.message ? (
-                                    <Text style={{ fontSize: 14, color: isTenant ? colors.surface : colors.text, lineHeight: 20 }}>
+                                    <Text style={{ fontSize: 14, color: isTenant ? colors.onPrimary : colors.text, lineHeight: 20 }}>
                                       {entry.message}
                                     </Text>
                                   ) : null}
@@ -1575,7 +1564,7 @@ export default function ServicesScreen() {
                                         {entry.attachments.map((att, idx) => (
                                           <TouchableOpacity
                                             key={`${getAttachmentDownloadUrl(att) || 'attachment'}_${idx}`}
-                                            style={{ width: 84, height: 84, borderRadius: 10, backgroundColor: colors.surface, marginRight: 8, overflow: 'hidden', borderWidth: 1, borderColor: '#E5E7EB', justifyContent: 'center', alignItems: 'center' }}
+                                            style={{ width: 84, height: 84, borderRadius: 10, backgroundColor: colors.surface, marginRight: 8, overflow: 'hidden', borderWidth: 1, borderColor: colors.border, justifyContent: 'center', alignItems: 'center' }}
                                             activeOpacity={0.85}
                                             onPress={() => openAttachment(att)}
                                           >
@@ -1613,9 +1602,6 @@ export default function ServicesScreen() {
                           })}
                           </View>
                         )}
-                        </View>
-                    </View>
-                  )}
 
                   {/* Attachment Thumbnails */}
                   {!editMode && detailRequest.attachments?.length > 0 && (
@@ -1640,12 +1626,12 @@ export default function ServicesScreen() {
 
                   {/* Reopen note if exists */}
                   {!editMode && detailRequest.reopen_note && (
-                    <View style={{ backgroundColor: '#EFF6FF', borderRadius: 12, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: '#2563EB' }}>
+                    <View style={{ backgroundColor: colors.infoBg, borderRadius: 12, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: colors.info }}>
                       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                        <Ionicons name="refresh" size={14} color="#2563EB" />
-                        <Text style={{ fontSize: 12, fontWeight: '600', color: '#2563EB' }}>Reopened</Text>
+                        <Ionicons name="refresh" size={14} color={colors.infoText} />
+                        <Text style={{ fontSize: 12, fontWeight: '600', color: colors.infoText }}>Reopened</Text>
                       </View>
-                      <Text style={{ fontSize: 13, color: '#1E40AF' }}>{detailRequest.reopen_note}</Text>
+                      <Text style={{ fontSize: 13, color: colors.infoText }}>{detailRequest.reopen_note}</Text>
                     </View>
                   )}
 
@@ -1660,7 +1646,7 @@ export default function ServicesScreen() {
                           ))}
                         </View>
                       ) : null}
-                      {replyUploadStatus ? <Text style={{ color: replyUploadStatus.includes('failed') ? '#DC2626' : colors.textMuted, fontSize: 12, marginBottom: 6 }}>{replyUploadStatus}</Text> : null}
+                      {replyUploadStatus ? <Text style={{ color: replyUploadStatus.includes('failed') ? colors.errorText : colors.textMuted, fontSize: 12, marginBottom: 6 }}>{replyUploadStatus}</Text> : null}
                       <View style={styles.replyComposerBar}>
                         <TouchableOpacity
                           accessibilityLabel="Add attachment"
@@ -1676,6 +1662,7 @@ export default function ServicesScreen() {
                           placeholder="Type a message..."
                           placeholderTextColor={colors.textMuted}
                           multiline
+                          textAlignVertical="center"
                           value={replyMessage}
                           onChangeText={setReplyMessage}
                         />
@@ -1692,8 +1679,11 @@ export default function ServicesScreen() {
                           onPress={sendMaintenanceReply}
                           disabled={sendingReply || (!replyMessage.trim() && replyAttachments.length === 0)}
                         >
-                          {sendingReply ? <ActivityIndicator size="small" color={colors.surface} /> : <Ionicons name="send" size={16} color={colors.surface} />}
+                          {sendingReply ? <ActivityIndicator size="small" color={colors.onPrimary} /> : <Ionicons name="send" size={16} color={colors.onPrimary} />}
                         </TouchableOpacity>
+                      </View>
+                    </View>
+                  )}
                       </View>
                     </View>
                   )}
@@ -1706,7 +1696,7 @@ export default function ServicesScreen() {
                           <Text style={{ fontWeight: '700', color: colors.text }}>Discard</Text>
                         </TouchableOpacity>
                         <TouchableOpacity style={{ flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: colors.primary, alignItems: 'center' }} onPress={saveEdit} disabled={saving}>
-                          {saving ? <ActivityIndicator color={colors.surface} size="small" /> : <Text style={{ fontWeight: '700', color: colors.surface }}>Save Changes</Text>}
+                          {saving ? <ActivityIndicator color={colors.onPrimary} size="small" /> : <Text style={{ fontWeight: '700', color: colors.onPrimary }}>Save Changes</Text>}
                         </TouchableOpacity>
                       </View>
                     ) : (
@@ -1715,8 +1705,8 @@ export default function ServicesScreen() {
                           <>
                             {detailAllowedActions.has(MAINTENANCE_ACTIONS.EDIT) && (
                               <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.primary, borderRadius: 12, paddingVertical: 14 }} onPress={enterEditMode}>
-                                <Ionicons name="create-outline" size={20} color={colors.surface} />
-                                <Text style={{ color: colors.surface, fontWeight: '700', fontSize: 15 }}>Edit Request</Text>
+                                <Ionicons name="create-outline" size={20} color={colors.onPrimary} />
+                                <Text style={{ color: colors.onPrimary, fontWeight: '700', fontSize: 15 }}>Edit Request</Text>
                               </TouchableOpacity>
                             )}
                             {detailAllowedActions.has(MAINTENANCE_ACTIONS.CANCEL) && (
@@ -1829,49 +1819,40 @@ export default function ServicesScreen() {
       </Modal>
 
       {/* Cancel Confirmation */}
-      <Modal visible={showCancelConfirm} transparent animationType="fade" onRequestClose={() => setShowCancelConfirm(false)}>
-        <View style={styles.confirmOverlay}>
-          <View style={styles.confirmCard}>
-            <Text style={styles.confirmTitle}>Cancel this request?</Text>
-            <Text style={styles.confirmText}>This action will cancel your service request. You can submit a new one anytime.</Text>
-            <View style={styles.confirmActions}>
-              <TouchableOpacity style={[styles.confirmBtn, styles.confirmCancel]} onPress={() => setShowCancelConfirm(false)}>
-                <Text style={styles.confirmCancelText}>Keep Request</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.confirmBtn, styles.confirmDiscard]} onPress={handleCancel} disabled={saving}>
-                {saving ? <ActivityIndicator size="small" color="#991B1B" /> : <Text style={styles.confirmDiscardText}>Cancel Request</Text>}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <StyledModal
+        visible={showCancelConfirm}
+        onClose={() => setShowCancelConfirm(false)}
+        title="Cancel this request?"
+        message="This action will cancel your service request. You can submit a new one anytime."
+        type="error"
+        buttons={[
+          { text: 'Keep Request', style: 'cancel', onPress: () => setShowCancelConfirm(false) },
+          { text: 'Cancel Request', style: 'destructive', onPress: handleCancel, loading: saving },
+        ]}
+      />
 
       {/* Reopen Modal */}
-      <Modal visible={showReopenModal} transparent animationType="fade" onRequestClose={() => setShowReopenModal(false)}>
-        <View style={styles.confirmOverlay}>
-          <View style={styles.confirmCard}>
-            <Text style={styles.confirmTitle}>Reopen this request?</Text>
-            <Text style={styles.confirmText}>The request will be set back to Pending so the team can review it again.</Text>
-            <TextInput
-              style={{ backgroundColor: colors.surfaceSecondary, borderRadius: 10, padding: 12, fontSize: 14, color: colors.text, minHeight: 70, marginTop: 8, marginBottom: 4 }}
-              placeholder="Add a note (optional)..."
-              placeholderTextColor={colors.textMuted}
-              multiline
-              textAlignVertical="top"
-              value={reopenNote}
-              onChangeText={setReopenNote}
-            />
-            <View style={styles.confirmActions}>
-              <TouchableOpacity style={[styles.confirmBtn, styles.confirmCancel]} onPress={() => { setShowReopenModal(false); setReopenNote(''); }}>
-                <Text style={styles.confirmCancelText}>Nevermind</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.confirmBtn, { backgroundColor: '#EFF6FF' }]} onPress={handleReopen} disabled={saving}>
-                {saving ? <ActivityIndicator size="small" color="#2563EB" /> : <Text style={{ color: '#2563EB', fontWeight: '700' }}>Reopen</Text>}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <StyledModal
+        visible={showReopenModal}
+        onClose={() => { setShowReopenModal(false); setReopenNote(''); }}
+        title="Reopen this request?"
+        message="The request will be set back to Pending so the team can review it again."
+        type="info"
+        buttons={[
+          { text: 'Nevermind', style: 'cancel', onPress: () => { setShowReopenModal(false); setReopenNote(''); } },
+          { text: 'Reopen', style: 'info', onPress: handleReopen, loading: saving },
+        ]}
+      >
+        <TextInput
+          style={styles.reopenInput}
+          placeholder="Add a note (optional)..."
+          placeholderTextColor={colors.textMuted}
+          multiline
+          textAlignVertical="top"
+          value={reopenNote}
+          onChangeText={setReopenNote}
+        />
+      </StyledModal>
     </SafeAreaView>
   );
 }

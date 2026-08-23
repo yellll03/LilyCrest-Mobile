@@ -235,7 +235,7 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     marginTop: 10,
     fontSize: 12,
     fontWeight: '700',
-    color: colors.primary,
+    color: colors.interactive,
   },
   runButton: {
     minHeight: 50,

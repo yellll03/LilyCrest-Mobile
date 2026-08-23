@@ -7,7 +7,6 @@
 // than an assumption; and (2) "Clear" uses tenant-local wording, never
 // language implying a global/admin delete.
 
-import { Alert } from 'react-native';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import AppHeader from '../components/AppHeader';
@@ -25,6 +24,11 @@ const mockDismissNotification = jest.fn().mockResolvedValue();
 const mockClearNotifications = jest.fn().mockResolvedValue();
 const mockMarkNotificationRead = jest.fn().mockResolvedValue();
 const mockRefreshNotifications = jest.fn().mockResolvedValue(true);
+const mockShowAlert = jest.fn();
+
+jest.mock('../context/AlertContext', () => ({
+  useAlert: () => ({ showAlert: mockShowAlert }),
+}));
 
 const FIXTURE = [
   { notification_id: 'n1', title: 'Bill released', body: 'Your rent bill is ready.', read: false, created_at: '2026-08-16T00:00:00.000Z' },
@@ -84,37 +88,33 @@ describe('AppHeader notification controls', () => {
   });
 
   it('Clear uses tenant-local wording and only calls clearNotifications after explicit confirmation', async () => {
-    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    mockShowAlert.mockResolvedValueOnce('Clear');
     const screen = renderHeader();
     fireEvent.press(screen.getByLabelText('Open notifications'));
     await waitFor(() => expect(screen.getByLabelText('Clear notifications')).toBeTruthy());
 
     fireEvent.press(screen.getByLabelText('Clear notifications'));
 
-    expect(alertSpy).toHaveBeenCalledTimes(1);
-    const [title, message, buttons] = alertSpy.mock.calls[0];
+    await waitFor(() => expect(mockShowAlert).toHaveBeenCalledTimes(1));
+    const { title, message, buttons } = mockShowAlert.mock.calls[0][0];
     expect(title.toLowerCase()).not.toMatch(/delete announcement|delete notification/);
     expect(message).toMatch(/this list/i);
-    expect(mockClearNotifications).not.toHaveBeenCalled();
-
-    const confirmButton = buttons.find((b) => b.text === 'Clear');
-    confirmButton.onPress();
+    expect(buttons.find((b) => b.text === 'Clear')?.style).toBe('destructive');
 
     await waitFor(() => expect(mockClearNotifications).toHaveBeenCalledTimes(1));
-    alertSpy.mockRestore();
   });
 
   it('Clear does nothing if the confirmation is cancelled', async () => {
-    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(() => {});
+    mockShowAlert.mockResolvedValueOnce('Cancel');
     const screen = renderHeader();
     fireEvent.press(screen.getByLabelText('Open notifications'));
     await waitFor(() => expect(screen.getByLabelText('Clear notifications')).toBeTruthy());
 
     fireEvent.press(screen.getByLabelText('Clear notifications'));
-    const [, , buttons] = alertSpy.mock.calls[0];
+    await waitFor(() => expect(mockShowAlert).toHaveBeenCalledTimes(1));
+    const { buttons } = mockShowAlert.mock.calls[0][0];
     expect(buttons.find((b) => b.text === 'Cancel')).toBeTruthy();
 
     expect(mockClearNotifications).not.toHaveBeenCalled();
-    alertSpy.mockRestore();
   });
 });

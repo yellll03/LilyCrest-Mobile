@@ -71,7 +71,7 @@ export default function ImageViewer() {
           />
         </ScrollView>
       ) : null}
-      {loading && !error && <View style={styles.overlay}><ActivityIndicator size="large" color={colors.primary} /><Text style={styles.message}>Loading image… {progress ? `${Math.round(progress * 100)}%` : ''}</Text></View>}
+      {loading && !error && <View style={styles.overlay}><ActivityIndicator size="large" color={colors.interactive} /><Text style={styles.message}>Loading image… {progress ? `${Math.round(progress * 100)}%` : ''}</Text></View>}
       {!!error && <View style={styles.overlay}><Ionicons name="image-outline" size={54} color="#6B7280" /><Text style={styles.message}>{error}</Text><TouchableOpacity style={[styles.retry, { backgroundColor: colors.primary }]} onPress={() => load(true)}><Text style={styles.retryText}>Retry</Text></TouchableOpacity></View>}
     </SafeAreaView>
   );

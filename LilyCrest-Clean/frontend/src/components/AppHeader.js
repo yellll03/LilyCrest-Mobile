@@ -4,7 +4,6 @@ import { useRouter } from 'expo-router';
 import { useCallback, useMemo, useRef, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import {
-  Alert,
   Animated,
   Dimensions,
   Modal,
@@ -17,6 +16,7 @@ import {
   View,
 } from 'react-native';
 import { useAuth } from '../context/AuthContext';
+import { useAlert } from '../context/AlertContext';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
 import { resolveNotificationRoute } from '../services/notifications';
 
@@ -87,7 +87,8 @@ function getCategoryMeta(notification = {}) {
 
 export default function AppHeader() {
   const router = useRouter();
-  const { isDarkMode } = useTheme();
+  const { colors } = useTheme();
+  const { showAlert } = useAlert();
   const insets = useSafeAreaInsets();
   const {
     notifications, notificationUnreadCount, hasUnreadNotifications,
@@ -190,22 +191,18 @@ export default function AppHeader() {
   // "Clear" only affects what's currently visible — it's a cutoff, not a
   // permanent hide-all, so a new notification or newly published
   // announcement still appears afterward (see AuthContext.clearNotifications).
-  const handleClearAll = useCallback(() => {
-    Alert.alert(
-      'Clear notifications?',
-      'This will remove your current notifications from this list. New notifications will still appear.',
-      [
+  const handleClearAll = useCallback(async () => {
+    const decision = await showAlert({
+      title: 'Clear notifications?',
+      message: 'This will remove your current notifications from this list. New notifications will still appear.',
+      type: 'warning',
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear',
-          style: 'destructive',
-          onPress: () => {
-            if (clearNotifications) clearNotifications();
-          },
-        },
+        { text: 'Clear', style: 'destructive' },
       ],
-    );
-  }, [clearNotifications]);
+    });
+    if (decision === 'Clear' && clearNotifications) clearNotifications();
+  }, [clearNotifications, showAlert]);
 
   const styles = useThemedStyles((c, dark) =>
     StyleSheet.create({
@@ -287,7 +284,7 @@ export default function AppHeader() {
       },
       backdrop: {
         ...StyleSheet.absoluteFillObject,
-        backgroundColor: 'rgba(10, 18, 36, 0.52)',
+        backgroundColor: c.overlay,
       },
       sheet: {
         maxHeight: SHEET_MAX_HEIGHT,
@@ -364,12 +361,12 @@ export default function AppHeader() {
       headerAction: {
         fontSize: 12,
         fontWeight: '500',
-        color: c.primary || '#0A1628',
+        color: c.interactive,
       },
       headerActionBold: {
         fontSize: 12,
         fontWeight: '600',
-        color: c.primary || '#0A1628',
+        color: c.interactive,
       },
       closeBtn: {
         width: 24,
@@ -380,7 +377,7 @@ export default function AppHeader() {
         alignItems: 'center',
       },
       closeBtnIcon: {
-        color: dark ? '#6B7280' : '#4B5563',
+        color: c.iconSecondary,
       },
 
       // ── Notification items ──────────────────────────────────────────────
@@ -671,7 +668,7 @@ export default function AppHeader() {
                     <Ionicons
                       name="notifications-off-outline"
                       size={22}
-                      color={isDarkMode ? '#6B7280' : '#6B7280'}
+                      color={colors.textMuted}
                     />
                   </View>
                   <Text style={styles.emptyTitle}>All caught up</Text>

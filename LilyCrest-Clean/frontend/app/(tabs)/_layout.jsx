@@ -11,7 +11,7 @@ function TabBarItem({ focused, iconName, focusedIconName, label, colors, styles,
         <Ionicons
           name={focused ? focusedIconName : iconName}
           size={22}
-          color={focused ? colors.primary : colors.textMuted}
+          color={focused ? colors.interactive : colors.textMuted}
         />
         {badgeCount > 0 && (
           <View style={styles.badgeDot}>
@@ -35,7 +35,7 @@ export default function TabLayout() {
       backBehavior="initialRoute"
       screenOptions={{
         headerShown: false,
-        tabBarActiveTintColor: colors.primary,
+        tabBarActiveTintColor: colors.interactive,
         tabBarInactiveTintColor: colors.textMuted,
         tabBarStyle: styles.tabBar,
         tabBarShowLabel: false,
@@ -192,7 +192,7 @@ const createStyles = (colors) => StyleSheet.create({
     textAlign: 'center',
   },
   tabLabelActive: {
-    color: colors.primary,
+    color: colors.interactive,
     fontWeight: '600',
   },
   badgeDot: {

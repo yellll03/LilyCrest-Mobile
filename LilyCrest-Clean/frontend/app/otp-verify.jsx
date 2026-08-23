@@ -343,7 +343,7 @@ export default function OtpVerifyScreen() {
 
           {/* Info note */}
           <View style={styles.infoBox}>
-            <Ionicons name="information-circle-outline" size={16} color="#6B7280" />
+            <Ionicons name="information-circle-outline" size={16} color={colors.iconSecondary} />
             <Text style={styles.infoText}>
               The code expires in 10 minutes. If you requested more than one code, use the newest email you received.
             </Text>
@@ -415,7 +415,7 @@ const createStyles = (c) => StyleSheet.create({
 
   resendRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginBottom: 28 },
   resendLabel: { fontSize: 13, color: c.textSecondary },
-  resendLink: { fontSize: 13, fontWeight: '700', color: c.primary },
+  resendLink: { fontSize: 13, fontWeight: '700', color: c.interactive },
   resendCooldown: { fontSize: 13, color: c.textMuted },
 
   infoBox: {

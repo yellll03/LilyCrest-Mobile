@@ -136,7 +136,7 @@ export default function OutstandingBalanceScreen() {
   if (loading) {
     return (
       <View style={styles.center}>
-        <ActivityIndicator color={colors.primary} />
+        <ActivityIndicator color={colors.interactive} />
         <Text style={styles.muted}>Loading your outstanding balance…</Text>
       </View>
     );
@@ -152,7 +152,7 @@ export default function OutstandingBalanceScreen() {
       />
       <ScrollView
         contentContainerStyle={styles.content}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.primary]} tintColor={colors.primary} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={handleRefresh} colors={[colors.interactive]} tintColor={colors.interactive} />}
       >
         {error ? (
           <View style={styles.stateCard}>
@@ -242,7 +242,7 @@ const createStyles = (c) => StyleSheet.create({
   breakdownAmount: { color: c.text, fontSize: 14, fontWeight: '700' },
   divider: { height: 1, backgroundColor: c.border, marginVertical: 2 },
   grandTotalLabel: { color: c.text, fontSize: 16, fontWeight: '900' },
-  grandTotalAmount: { color: c.primary, fontSize: 18, fontWeight: '900' },
+  grandTotalAmount: { color: c.interactive, fontSize: 18, fontWeight: '900' },
   billRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingTop: 4 },
   billCopy: { flex: 1, gap: 2 },
   billTitle: { color: c.text, fontSize: 14, fontWeight: '700' },

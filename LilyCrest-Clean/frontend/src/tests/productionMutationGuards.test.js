@@ -40,6 +40,7 @@ describe('production mutation guards', () => {
     const profile = read('../../app/(tabs)/profile.jsx');
     expect(profile).toContain('Are you sure you want to sign out of your Lilycrest account?');
     expect(profile).toContain('if (logoutGuardRef.current) return');
-    expect(profile).toContain("backgroundColor: '#DC2626'");
+    expect(profile).toContain('<StyledModal');
+    expect(profile).toContain("style: 'destructive', onPress: confirmLogout");
   });
 });

@@ -85,7 +85,7 @@ export default function ForgotPasswordScreen() {
         >
           <TouchableOpacity style={styles.backButton} onPress={() => safeBack(router, '/login')}><Ionicons name="arrow-back" size={24} color={colors.text} /></TouchableOpacity>
           
-          <View style={styles.iconContainer}><Ionicons name={sent ? 'mail-open' : 'lock-closed'} size={48} color={colors.primary} /></View>
+          <View style={styles.iconContainer}><Ionicons name={sent ? 'mail-open' : 'lock-closed'} size={48} color={colors.interactive} /></View>
           <Text style={styles.title}>{sent ? 'Check Your Email' : 'Forgot Password?'}</Text>
           <Text style={styles.subtitle}>{sent ? AUTH_MESSAGES.forgotSuccess : 'Enter your email address and we\'ll send you a link to reset your password.'}</Text>
 
@@ -94,11 +94,11 @@ export default function ForgotPasswordScreen() {
               <View style={styles.inputContainer}>
                 <Text style={styles.label}>Email Address</Text>
                 <View style={[styles.inputWrapper, touched.email && errors.email ? styles.inputWrapperError : null, touched.email && !errors.email && isEmailValid ? styles.inputWrapperSuccess : null]}>
-                  <Ionicons name="mail-outline" size={20} color={touched.email && errors.email ? '#DC2626' : '#6B7280'} style={styles.inputIcon} />
+                  <Ionicons name="mail-outline" size={20} color={touched.email && errors.email ? colors.error : colors.iconSecondary} style={styles.inputIcon} />
                   <TextInput
                     style={styles.input}
                     placeholder="Enter your email"
-                    placeholderTextColor="#6B7280"
+                    placeholderTextColor={colors.textMuted}
                     value={email}
                     onChangeText={setEmail}
                     onBlur={() => setTouched((prev) => ({ ...prev, email: true }))}
@@ -131,7 +131,7 @@ export default function ForgotPasswordScreen() {
 
           {!sent ? (
             <TouchableOpacity style={styles.backToLogin} onPress={handleBackToLogin}>
-              <Ionicons name="arrow-back" size={18} color={colors.primary} /><Text style={styles.backToLoginText}>Back to Login</Text>
+              <Ionicons name="arrow-back" size={18} color={colors.interactive} /><Text style={styles.backToLoginText}>Back to Login</Text>
             </TouchableOpacity>
           ) : null}
         </ScrollView>
@@ -162,6 +162,6 @@ function createStyles(c) {
     resetButtonDisabled: { backgroundColor: c.textMuted },
     resetButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '600' },
     backToLogin: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingTop: 12, paddingBottom: 12, marginTop: 'auto' },
-    backToLoginText: { color: c.primary, fontSize: 15, fontWeight: '600' },
+    backToLoginText: { color: c.interactive, fontSize: 15, fontWeight: '600' },
   });
 }
