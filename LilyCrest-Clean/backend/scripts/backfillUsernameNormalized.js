@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+const { assertStagingWriteTarget } = require('./stagingWriteGuard');
+
 'use strict';
 
 require('dotenv').config();
@@ -200,6 +202,7 @@ process.once('SIGTERM', () => {
 });
 
 if (require.main === module) {
+  assertStagingWriteTarget(process.env, { toolName: 'backfillUsernameNormalized.js' });
   run()
     .catch((error) => {
       console.error(`Migration failed: ${error.message}`);

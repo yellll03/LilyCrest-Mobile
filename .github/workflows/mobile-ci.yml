@@ -108,7 +108,40 @@ jobs:
             echo "GOOGLE_SERVICES_JSON repository secret is required for release builds." >&2
             exit 1
           fi
-          printf '%s' "$GOOGLE_SERVICES_JSON" > android/app/google-services.json
+          node - <<'NODE'
+          const fs = require('fs');
+          const path = require('path');
+          const config = JSON.parse(process.env.GOOGLE_SERVICES_JSON);
+          const packageName = 'com.lilycrest.lilycrestdorm';
+          const client = (config.client || []).find((entry) => entry.client_info?.android_client_info?.package_name === packageName);
+          if (!client) throw new Error(`google-services.json does not contain ${packageName}`);
+          const apiKey = client.api_key?.[0]?.current_key || '';
+          const androidClientId = client.oauth_client?.find((entry) => entry.client_type === 1)?.client_id || '';
+          const webClientId = client.oauth_client?.find((entry) => entry.client_type === 3)?.client_id || '';
+          const projectId = config.project_info?.project_id || '';
+          const appId = client.client_info?.mobilesdk_app_id || '';
+          if (![apiKey, androidClientId, webClientId, projectId, appId].every(Boolean)) {
+            throw new Error('google-services.json is missing required production Firebase/OAuth client data');
+          }
+          const target = path.join('android', 'app', 'src', 'production', 'google-services.json');
+          fs.mkdirSync(path.dirname(target), { recursive: true });
+          fs.writeFileSync(target, process.env.GOOGLE_SERVICES_JSON);
+          fs.appendFileSync(process.env.GITHUB_ENV, [
+            'NODE_ENV=production',
+            'EXPO_PUBLIC_DEPLOYMENT_ENV=production',
+            'EXPO_PUBLIC_BACKEND_URL=https://api.lilycrest.space',
+            'LILYCREST_ANDROID_FLAVOR=production',
+            `EXPO_PUBLIC_FIREBASE_API_KEY=${apiKey}`,
+            `EXPO_PUBLIC_FIREBASE_ANDROID_API_KEY=${apiKey}`,
+            `EXPO_PUBLIC_FIREBASE_PROJECT_ID=${projectId}`,
+            `EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN=${projectId}.firebaseapp.com`,
+            `EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET=${config.project_info?.storage_bucket || `${projectId}.firebasestorage.app`}`,
+            `EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${config.project_info?.project_number || ''}`,
+            `EXPO_PUBLIC_FIREBASE_ANDROID_APP_ID=${appId}`,
+            `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID=${androidClientId}`,
+            `EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID=${webClientId}`,
+          ].join('\n') + '\n');
+          NODE
 
       - name: Make Gradle wrapper executable
         working-directory: LilyCrest-Clean/frontend/android
@@ -116,4 +149,4 @@ jobs:
 
       - name: Build release APK
         working-directory: LilyCrest-Clean/frontend/android
-        run: ./gradlew assembleRelease
+        run: ./gradlew assembleProductionRelease

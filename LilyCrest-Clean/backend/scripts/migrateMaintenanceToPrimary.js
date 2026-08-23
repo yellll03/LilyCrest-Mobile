@@ -1,3 +1,6 @@
+const { assertStagingWriteTarget } = require('./stagingWriteGuard');
+assertStagingWriteTarget(process.env, { toolName: 'migrateMaintenanceToPrimary.js' });
+
 require('dotenv').config();
 
 const { MongoClient, ObjectId } = require('mongodb');

@@ -3,6 +3,7 @@ apply plugin: "org.jetbrains.kotlin.android"
 apply plugin: "com.facebook.react"
 
 def projectRoot = rootDir.getAbsoluteFile().getParentFile().getAbsolutePath()
+def configuredMobileBackendUrl = System.getenv("EXPO_PUBLIC_BACKEND_URL") ?: ""
 
 /**
  * This is the configuration block to customize your React Native Android app.
@@ -32,7 +33,7 @@ react {
     //   The list of variants to that are debuggable. For those we're going to
     //   skip the bundling of the JS bundle and the assets. By default is just 'debug'.
     //   If you add flavors like lite, prod, etc. you'll have to list your debuggableVariants.
-    // debuggableVariants = ["liteDebug", "prodDebug"]
+    debuggableVariants = ["developmentDebug", "stagingDebug", "productionDebug"]
 
     /* Bundling */
     //   A list containing the node command and its flags. Default is just 'node'.
@@ -111,6 +112,28 @@ android {
 
         ndk {
             abiFilters "arm64-v8a"
+        }
+    }
+    flavorDimensions "environment"
+    productFlavors {
+        development {
+            dimension "environment"
+            applicationIdSuffix ".dev"
+            versionNameSuffix "-dev"
+            manifestPlaceholders = [lilycrestScheme: "lilycrest-dev", lilycrestApiBaseUrl: configuredMobileBackendUrl]
+            buildConfigField "String", "LILYCREST_ENVIRONMENT", '"development"'
+        }
+        staging {
+            dimension "environment"
+            applicationIdSuffix ".staging"
+            versionNameSuffix "-staging"
+            manifestPlaceholders = [lilycrestScheme: "lilycrest-staging", lilycrestApiBaseUrl: configuredMobileBackendUrl]
+            buildConfigField "String", "LILYCREST_ENVIRONMENT", '"staging"'
+        }
+        production {
+            dimension "environment"
+            manifestPlaceholders = [lilycrestScheme: "frontend", lilycrestApiBaseUrl: "https://api.lilycrest.space"]
+            buildConfigField "String", "LILYCREST_ENVIRONMENT", '"production"'
         }
     }
     signingConfigs {
@@ -216,6 +239,40 @@ dependencies {
 }
 
 apply plugin: 'com.google.gms.google-services'
+
+// A direct Gradle invocation receives the same fail-closed checks as the npm
+// and EAS entry points. This prevents a staging-flavor APK from silently
+// bundling production JS/Firebase values (or vice versa).
+tasks.register("verifyStagingEnvironment", Exec) {
+    workingDir projectRoot
+    commandLine "node", "scripts/verify-mobile-environment.js", "staging"
+}
+
+tasks.register("verifyProductionEnvironment", Exec) {
+    workingDir projectRoot
+    commandLine "node", "scripts/verify-mobile-environment.js", "production"
+}
+
+tasks.register("verifyStagingApkTarget", Exec) {
+    workingDir projectRoot
+    commandLine "node", "scripts/verify-apk-environment.js", "staging", "android/app/build/outputs/apk/staging/release/app-staging-release.apk"
+}
+
+tasks.register("verifyProductionApkTarget", Exec) {
+    workingDir projectRoot
+    commandLine "node", "scripts/verify-apk-environment.js", "production", "android/app/build/outputs/apk/production/release/app-production-release.apk"
+}
+
+afterEvaluate {
+    tasks.matching { it.name.startsWith("preStaging") && it.name.endsWith("Build") }
+        .configureEach { dependsOn("verifyStagingEnvironment") }
+    tasks.matching { it.name.startsWith("preProduction") && it.name.endsWith("Build") }
+        .configureEach { dependsOn("verifyProductionEnvironment") }
+    tasks.matching { it.name == "assembleStagingRelease" }
+        .configureEach { finalizedBy("verifyStagingApkTarget") }
+    tasks.matching { it.name == "assembleProductionRelease" }
+        .configureEach { finalizedBy("verifyProductionApkTarget") }
+}
 
 gradle.projectsEvaluated {
     def workletsProject = findProject(":react-native-worklets")

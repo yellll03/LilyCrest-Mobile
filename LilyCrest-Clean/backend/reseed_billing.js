@@ -1,3 +1,6 @@
+const { assertStagingWriteTarget } = require('./scripts/stagingWriteGuard');
+assertStagingWriteTarget(process.env, { toolName: 'reseed_billing.js' });
+
 /**
  * Quick script to reseed billing data with the new format.
  * Run: node reseed_billing.js

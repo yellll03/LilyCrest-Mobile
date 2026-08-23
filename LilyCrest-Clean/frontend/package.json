@@ -16,7 +16,12 @@
     "lint": "expo lint",
     "test": "jest",
     "verify:release-contract": "node ./scripts/verify-release-contract.js",
-    "android:release-apk": "npm run verify:release-contract && cd android && .\\gradlew.bat assembleRelease",
+    "verify:environment": "node ./scripts/verify-mobile-environment.js",
+    "verify:staging-apk-target": "node ./scripts/verify-apk-environment.js staging ./android/app/build/outputs/apk/staging/release/app-staging-release.apk",
+    "verify:production-apk-target": "node ./scripts/verify-apk-environment.js production ./android/app/build/outputs/apk/production/release/app-production-release.apk",
+    "android:staging-apk": "node ./scripts/verify-mobile-environment.js staging && cd android && .\\gradlew.bat assembleStagingRelease",
+    "android:production-apk": "node ./scripts/verify-mobile-environment.js production && cd android && .\\gradlew.bat assembleProductionRelease",
+    "android:release-apk": "npm run android:production-apk",
     "eas-build-pre-install": "node ./scripts/eas-copy-google-services.js"
   },
   "dependencies": {

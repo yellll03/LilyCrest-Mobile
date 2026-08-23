@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+const { assertStagingWriteTarget } = require('./stagingWriteGuard');
+assertStagingWriteTarget(process.env, { toolName: 'createBranchIndexes.js' });
+
 'use strict';
 
 require('dotenv').config();

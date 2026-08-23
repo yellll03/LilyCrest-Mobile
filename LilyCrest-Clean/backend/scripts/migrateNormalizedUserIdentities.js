@@ -1,3 +1,6 @@
+const { assertStagingWriteTarget } = require('./stagingWriteGuard');
+assertStagingWriteTarget(process.env, { toolName: 'migrateNormalizedUserIdentities.js' });
+
 const { connectToMongo, getDb, closeConnection } = require('../config/database');
 
 async function run() {

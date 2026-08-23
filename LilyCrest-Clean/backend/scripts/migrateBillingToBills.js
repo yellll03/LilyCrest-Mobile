@@ -1,3 +1,5 @@
+const { assertStagingWriteTarget } = require('./stagingWriteGuard');
+
 'use strict';
 
 require('dotenv').config();
@@ -281,6 +283,7 @@ async function run({ argv = process.argv.slice(2), clientFactory = () => new Mon
 }
 
 if (require.main === module) {
+  assertStagingWriteTarget(process.env, { toolName: 'migrateBillingToBills.js' });
   run().catch((error) => {
     console.error('[billing:migrate-to-bills] Failed:', error.message);
     if (error.differences) console.error(JSON.stringify(error.differences, null, 2));

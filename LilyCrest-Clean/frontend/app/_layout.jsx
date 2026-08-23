@@ -15,6 +15,8 @@ import {
   resetToLogin,
 } from '../src/utils/navigation';
 
+const IS_STAGING = process.env.EXPO_PUBLIC_DEPLOYMENT_ENV === 'staging';
+
 SplashScreen.preventAutoHideAsync();
 
 // When the app is opened through a deep link, Expo Router seeds the root stack
@@ -105,40 +107,49 @@ function LayoutContent() {
   }
 
   return (
-    <>
+    <View style={{ flex: 1 }}>
       <StatusBar style={isDarkMode ? 'light' : 'dark'} backgroundColor={colors.headerBg} />
-      <Stack
-        screenOptions={{
-          headerShown: false,
-          contentStyle: { backgroundColor: colors.background },
-          animation: 'slide_from_right',
-        }}
-      >
-        <Stack.Screen name="index" />
-        <Stack.Screen name="login" />
-        <Stack.Screen name="forgot-password" />
-        <Stack.Screen name="reset-password" />
-        <Stack.Screen name="change-password" />
-        <Stack.Screen name="(tabs)" />
-        <Stack.Screen name="auth-callback" />
-        <Stack.Screen name="otp-verify" />
-        <Stack.Screen name="documents" options={{ presentation: 'modal' }} />
-        <Stack.Screen name="my-documents" />
-        <Stack.Screen name="surveys" />
-        <Stack.Screen name="survey-form" />
-        <Stack.Screen name="house-rules" />
-        <Stack.Screen name="billing-history" />
-        <Stack.Screen name="bill-details" />
-        <Stack.Screen name="payment" />
-        <Stack.Screen name="payment-success" />
-        <Stack.Screen name="payment-cancel" />
-        <Stack.Screen name="settings" />
-        <Stack.Screen name="about" />
-        <Stack.Screen name="privacy-policy" />
-        <Stack.Screen name="terms-of-service" />
-        <Stack.Screen name="debug/api-health" />
-      </Stack>
-    </>
+      {IS_STAGING ? (
+        <View style={{ backgroundColor: '#B91C1C', paddingVertical: 4, alignItems: 'center' }}>
+          <Text style={{ color: '#FFFFFF', fontSize: 11, fontWeight: '800', letterSpacing: 0.8 }}>
+            STAGING · SYNTHETIC QA DATA ONLY
+          </Text>
+        </View>
+      ) : null}
+      <View style={{ flex: 1 }}>
+        <Stack
+          screenOptions={{
+            headerShown: false,
+            contentStyle: { backgroundColor: colors.background },
+            animation: 'slide_from_right',
+          }}
+        >
+          <Stack.Screen name="index" />
+          <Stack.Screen name="login" />
+          <Stack.Screen name="forgot-password" />
+          <Stack.Screen name="reset-password" />
+          <Stack.Screen name="change-password" />
+          <Stack.Screen name="(tabs)" />
+          <Stack.Screen name="auth-callback" />
+          <Stack.Screen name="otp-verify" />
+          <Stack.Screen name="documents" options={{ presentation: 'modal' }} />
+          <Stack.Screen name="my-documents" />
+          <Stack.Screen name="surveys" />
+          <Stack.Screen name="survey-form" />
+          <Stack.Screen name="house-rules" />
+          <Stack.Screen name="billing-history" />
+          <Stack.Screen name="bill-details" />
+          <Stack.Screen name="payment" />
+          <Stack.Screen name="payment-success" />
+          <Stack.Screen name="payment-cancel" />
+          <Stack.Screen name="settings" />
+          <Stack.Screen name="about" />
+          <Stack.Screen name="privacy-policy" />
+          <Stack.Screen name="terms-of-service" />
+          <Stack.Screen name="debug/api-health" />
+        </Stack>
+      </View>
+    </View>
   );
 }
 

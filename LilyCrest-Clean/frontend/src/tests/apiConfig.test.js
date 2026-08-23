@@ -1,35 +1,41 @@
 import {
   isLocalOrPrivateBackendUrl,
   resolveBackendUrl,
+  resolveDeploymentEnvironment,
 } from '../config/api';
 
 describe('api config backend URL resolver', () => {
-  const productionOptions = { isDevelopment: false };
+  const productionOptions = { isDevelopment: false, environment: 'production' };
+  const stagingOptions = { isDevelopment: false, environment: 'staging' };
 
-  it('accepts the canonical LilyCrest API URL', () => {
+  it('pins production to the canonical LilyCrest API URL', () => {
     expect(resolveBackendUrl('https://api.lilycrest.space', productionOptions))
+      .toBe('https://api.lilycrest.space');
+    expect(resolveBackendUrl('https://staging-api.lilycrest.space', productionOptions))
       .toBe('https://api.lilycrest.space');
   });
 
-  it('does NOT rewrite the canonical host back to the retired mobile-api host', () => {
-    // Regression guard for the pre-cutover blocker: api.lilycrest.space used to be
-    // treated as disallowed and silently rewritten to mobile-api.lilycrest.space.
-    expect(resolveBackendUrl('https://api.lilycrest.space', productionOptions))
-      .not.toBe('https://mobile-api.lilycrest.space');
+  it('uses production as the non-development default and development during dev', () => {
+    expect(resolveDeploymentEnvironment('', { isDevelopment: false })).toBe('production');
+    expect(resolveDeploymentEnvironment('', { isDevelopment: true })).toBe('development');
   });
 
-  it('falls back to the canonical API URL when no host is configured', () => {
-    expect(resolveBackendUrl('', productionOptions)).toBe('https://api.lilycrest.space');
-    expect(resolveBackendUrl(undefined, productionOptions)).toBe('https://api.lilycrest.space');
+  it('accepts a clearly named public HTTPS staging host', () => {
+    expect(resolveBackendUrl('https://staging-api.lilycrest.space/', stagingOptions))
+      .toBe('https://staging-api.lilycrest.space');
+    expect(resolveBackendUrl('https://lilycrest-qa.onrender.com', stagingOptions))
+      .toBe('https://lilycrest-qa.onrender.com');
   });
 
-  it('rejects the retired mobile-api host even if explicitly configured, and falls back to the canonical API URL', () => {
-    // Host lock: production resolution is an allowlist of exactly the
-    // canonical API host, not a denylist of hosts we already know are bad.
-    // The old rollback host must never be reachable again, even via a
-    // misconfigured EXPO_PUBLIC_BACKEND_URL.
-    expect(resolveBackendUrl('https://mobile-api.lilycrest.space', productionOptions))
-      .toBe('https://api.lilycrest.space');
+  it.each([
+    '',
+    'https://api.lilycrest.space',
+    'https://lilycrest-mobile.onrender.com',
+    'http://staging-api.lilycrest.space',
+    'http://10.0.2.2:8001',
+    'https://api.lilycrest.space.evil.com',
+  ])('refuses an unsafe staging backend URL: %s', (url) => {
+    expect(() => resolveBackendUrl(url, stagingOptions)).toThrow('Invalid staging backend URL');
   });
 
   it.each([
@@ -51,35 +57,16 @@ describe('api config backend URL resolver', () => {
     expect(isLocalOrPrivateBackendUrl('https://8.8.8.8')).toBe(false);
   });
 
-  it('preserves existing development behavior for local backend URLs', () => {
-    expect(resolveBackendUrl('http://localhost:8001', { isDevelopment: true }))
+  it('preserves local development URLs', () => {
+    expect(resolveBackendUrl('http://localhost:8001', { isDevelopment: true, environment: 'development' }))
       .toBe('http://localhost:8001');
   });
 
-  it('rejects onrender.com and falls back to the canonical API URL', () => {
-    expect(resolveBackendUrl('https://lilycrest-mobile.onrender.com', productionOptions))
-      .toBe('https://api.lilycrest.space');
-    expect(resolveBackendUrl('https://something.onrender.com', productionOptions))
-      .toBe('https://api.lilycrest.space');
-  });
-
-  it('rejects trycloudflare.com and falls back to the canonical API URL', () => {
-    expect(resolveBackendUrl('https://random-tunnel.trycloudflare.com', productionOptions))
-      .toBe('https://api.lilycrest.space');
-  });
-
-  // Host lock regression guard: production resolution must be an allowlist of
-  // exactly api.lilycrest.space. Every other historically-referenced host
-  // (retired Render mobile backend, this repo's own Render service name,
-  // ad-hoc tunnels) must always resolve back to the canonical host — never be
-  // returned as-is — so nothing can silently fail over to a different host.
   it.each([
     'https://mobile-api.lilycrest.space',
     'https://lilycrest-mobile.onrender.com',
     'https://lilycrest-api.onrender.com',
-    'https://something.onrender.com',
     'https://random-tunnel.trycloudflare.com',
-    'https://api.lilycrest.space.evil.com',
   ])('never resolves %s as the production backend host', (url) => {
     expect(resolveBackendUrl(url, productionOptions)).toBe('https://api.lilycrest.space');
   });

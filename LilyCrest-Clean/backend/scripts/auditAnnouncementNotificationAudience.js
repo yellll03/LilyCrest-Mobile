@@ -1,3 +1,5 @@
+const { assertStagingWriteTarget } = require('./stagingWriteGuard');
+
 'use strict';
 
 const path = require('node:path');
@@ -197,6 +199,7 @@ async function main() {
 }
 
 if (require.main === module) {
+  assertStagingWriteTarget(process.env, { toolName: 'auditAnnouncementNotificationAudience.js' });
   main().catch((error) => {
     console.error('[AnnouncementAudienceAudit] Failed:', error?.message || error);
     process.exitCode = 1;

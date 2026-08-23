@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+const { assertStagingWriteTarget } = require('./stagingWriteGuard');
+assertStagingWriteTarget(process.env, { toolName: 'approveIdentityCrosswalk.js' });
+
 'use strict';
 
 require('dotenv').config();

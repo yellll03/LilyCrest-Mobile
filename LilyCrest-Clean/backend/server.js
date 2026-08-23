@@ -6,6 +6,7 @@ const rateLimit = require('express-rate-limit');
 
 const path = require('path');
 const { buildAllowedOrigins, makeIsAllowedOrigin, hasBrowserOrigin } = require('./config/corsOriginPolicy');
+const { assertStagingServiceIsolation } = require('./config/environmentSafety');
 
 // Import configurations
 const { connectToMongo } = require('./config/database');
@@ -174,6 +175,8 @@ app.use('/admin', adminSecurityHeaders, express.static(path.join(__dirname, 'pub
 
 // Validate required environment variables before anything else starts
 function validateEnv() {
+  assertStagingServiceIsolation(process.env, { requireContract: true });
+
   const required = [
     'MONGO_URL',
     'FIREBASE_PROJECT_ID',

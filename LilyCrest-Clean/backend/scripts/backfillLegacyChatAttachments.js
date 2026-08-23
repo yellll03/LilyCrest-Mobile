@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+const { assertStagingWriteTarget } = require('./stagingWriteGuard');
+assertStagingWriteTarget(process.env, { toolName: 'backfillLegacyChatAttachments.js' });
+
 'use strict';
 
 // Backfill legacy support-chat attachment embeds onto the canonical

@@ -1,3 +1,6 @@
+const { assertStagingWriteTarget } = require('./stagingWriteGuard');
+assertStagingWriteTarget(process.env, { toolName: 'publishTenantTestContract.js' });
+
 'use strict';
 
 require('dotenv').config();

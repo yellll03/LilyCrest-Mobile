@@ -21,8 +21,29 @@ describe('Android release identity', () => {
   });
 
   it('keeps the production application ID unchanged', () => {
-    expect(config).toContain("package: 'com.lilycrest.lilycrestdorm'");
+    const previousEnvironment = process.env.EXPO_PUBLIC_DEPLOYMENT_ENV;
+    process.env.EXPO_PUBLIC_DEPLOYMENT_ENV = 'production';
+    jest.resetModules();
+    const productionConfig = require('../../app.config.js');
+    if (previousEnvironment === undefined) delete process.env.EXPO_PUBLIC_DEPLOYMENT_ENV;
+    else process.env.EXPO_PUBLIC_DEPLOYMENT_ENV = previousEnvironment;
+
+    expect(productionConfig.expo.android.package).toBe('com.lilycrest.lilycrestdorm');
+    expect(productionConfig.expo.ios.bundleIdentifier).toBe('com.lilycrest.lilycrestdorm');
     expect(gradle).toContain("applicationId 'com.lilycrest.lilycrestdorm'");
+  });
+
+  it('gives staging an installable identity distinct from production', () => {
+    const previousEnvironment = process.env.EXPO_PUBLIC_DEPLOYMENT_ENV;
+    process.env.EXPO_PUBLIC_DEPLOYMENT_ENV = 'staging';
+    jest.resetModules();
+    const stagingConfig = require('../../app.config.js');
+    if (previousEnvironment === undefined) delete process.env.EXPO_PUBLIC_DEPLOYMENT_ENV;
+    else process.env.EXPO_PUBLIC_DEPLOYMENT_ENV = previousEnvironment;
+
+    expect(stagingConfig.expo.android.package).toBe('com.lilycrest.lilycrestdorm.staging');
+    expect(stagingConfig.expo.ios.bundleIdentifier).toBe('com.lilycrest.lilycrestdorm.staging');
+    expect(stagingConfig.expo.scheme).toBe('lilycrest-staging');
   });
 
   it('renders the configured release version instead of stale hardcoded copy', () => {

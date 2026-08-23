@@ -76,11 +76,21 @@ describe('auth flow implementation contracts', () => {
     expect(source).toContain('auth.signOut()');
   });
 
-  test('preview configuration cannot resolve to localhost', () => {
+  test('staging configuration is isolated and never inlines production', () => {
     const eas = JSON.parse(read('eas.json'));
-    expect(eas.build.preview.android.buildType).toBe('apk');
-    expect(eas.build.preview.env.EXPO_PUBLIC_BACKEND_URL)
-      .toBe('https://api.lilycrest.space');
+    expect(eas.build.staging.android.buildType).toBe('apk');
+    expect(eas.build.staging.android.gradleCommand).toBe(':app:assembleStagingRelease');
+    expect(eas.build.staging.env.EXPO_PUBLIC_DEPLOYMENT_ENV).toBe('staging');
+    expect(eas.build.staging.env.EXPO_PUBLIC_BACKEND_URL).not.toBe('https://api.lilycrest.space');
+    expect(eas.build.preview.extends).toBe('staging');
+  });
+
+  test('staging app is visibly distinguishable from production', () => {
+    const layout = read('app/_layout.jsx');
+    const config = read('app.config.js');
+    expect(layout).toContain('STAGING · SYNTHETIC QA DATA ONLY');
+    expect(config).toContain("'LilyCrest STAGING'");
+    expect(config).toContain("'com.lilycrest.lilycrestdorm.staging'");
   });
 
   test('email login allows time for backend authentication and OTP delivery', () => {
