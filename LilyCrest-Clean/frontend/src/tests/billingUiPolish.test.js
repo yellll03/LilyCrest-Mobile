@@ -17,12 +17,12 @@ describe('tenant billing UI polish', () => {
   test('adapts the hero without adding a duplicate payment entry point', () => {
     expect(source).toContain('No Outstanding Balance');
     expect(source).toContain('Payment Under Review');
-    expect(source).toContain('Waiting for admin verification.');
+    expect(source).toContain('Waiting for payment confirmation.');
     expect(source).toContain('Bill Paid');
     expect(source).toContain('Overdue by');
-    expect(source).toContain("<Text style={styles.heroPayText}>Pay Now</Text>");
+    expect(source).toContain("<Text style={styles.heroPayText}>View & Pay {safeCurrency(totalOutstanding)}</Text>");
     expect(source).not.toContain("<Text style={styles.payBtnText}>Pay</Text>");
-    expect(source).toContain("pathname: '/bill-details'");
+    expect(source).toContain("router.push('/outstanding-balance')");
     expect(source).not.toContain("pathname: '/payment'");
   });
 
@@ -58,8 +58,10 @@ describe('tenant billing UI polish', () => {
 
   test('billing and payment details display the shared move-in computation', () => {
     const details = fs.readFileSync(path.resolve(__dirname, '../../app/bill-details.jsx'), 'utf8');
+    const breakdown = fs.readFileSync(path.resolve(__dirname, '../utils/billingBreakdown.js'), 'utf8');
     const payment = fs.readFileSync(path.resolve(__dirname, '../../app/payment.jsx'), 'utf8');
-    for (const screen of [details, payment]) {
+    expect(details).toContain('getBillChargeRows(bill)');
+    for (const screen of [breakdown, payment]) {
       expect(screen).toContain('move_in_financials');
       expect(screen).toContain('One Month Advance Rent');
       expect(screen).toContain('Security Deposit');

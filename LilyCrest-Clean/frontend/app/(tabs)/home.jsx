@@ -1019,7 +1019,11 @@ export default function HomeScreen() {
 
               <TouchableOpacity
                 style={styles.billingHeroActionButton}
-                onPress={() => router.push('/(tabs)/billing')}
+                onPress={() => router.push(
+                  billingCardMode === 'overdue' || billingCardMode === 'open'
+                    ? '/outstanding-balance'
+                    : '/(tabs)/billing'
+                )}
                 activeOpacity={0.88}
               >
                 <Text style={styles.billingHeroActionText}>{billingHeroActionLabel}</Text>

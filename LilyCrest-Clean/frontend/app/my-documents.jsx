@@ -135,7 +135,7 @@ function getDocumentSections(docId, user) {
             { label: 'Cash', detail: 'Admin Office: Mon-Sat, 8:00 AM - 5:00 PM' },
           ]
         },
-        { title: 'Important Reminders', bullets: ['Always upload proof of payment in the app', 'Keep your transaction receipts', 'Payments are verified within 24–48 hours'] },
+        { title: 'Important Reminders', bullets: ['Use the secure Billing checkout for online payments', 'Keep your transaction receipts', 'Online payments are confirmed through the payment provider'] },
         { title: 'Utilities', items: [{ label: 'Water', value: 'Included' }, { label: 'WiFi', value: 'Included' }, { label: 'Electricity', value: 'Separate (sub-metered)' }] },
         { title: 'Non-Payment Consequences', items: [{ label: '15 days overdue', value: 'Final notice' }, { label: '30 days overdue', value: 'Service restrictions' }, { label: '45 days overdue', value: 'Tenancy review' }] },
       ],
@@ -456,13 +456,10 @@ export default function MyDocumentsScreen() {
       });
 
       await fetchUploadedDocs();
-      const uploadMessage = /payment|receipt|proof/i.test(`${docType.key} ${docType.label}`)
-        ? 'Payment proof uploaded successfully.'
-        : `${docType.label} uploaded successfully.`;
       showToast({
         type: 'success',
         title: 'Upload Successful',
-        message: `${uploadMessage} It will be reviewed by the admin.`,
+        message: `${docType.label} uploaded successfully. It will be reviewed by the admin.`,
       });
     } catch (error) {
       console.error('Upload error:', error?.message || error);

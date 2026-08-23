@@ -389,10 +389,10 @@ export const apiService = {
   getPaymentHistory: () => api.get('/billing/history/paid'),
   getLatestBilling: () => api.get('/billing/me/latest'),
   getBillingById: (billingId) => api.get(`/billing/${billingId}`),
-  submitPaymentProof: (billingId, proof) => api.post(`/billing/${billingId}/payment-proof`, { proof }),
 
   // PayMongo
   createPaymongoCheckout: (billingId) => api.post('/paymongo/checkout', { billingId }),
+  createPaymongoBatchCheckout: (billIds) => api.post('/paymongo/checkout-batch', { billIds }),
   getPaymongoCheckoutStatus: (checkoutId) => api.get(`/paymongo/checkout/${checkoutId}/status`),
 
   // Documents

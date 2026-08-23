@@ -164,7 +164,9 @@ export default function PaymentSuccessScreen() {
           <Pressable
             style={styles.primaryBtn}
             onPress={() => {
-              if (billing_id) {
+              if (billing_id === 'outstanding') {
+                router.replace('/outstanding-balance');
+              } else if (billing_id) {
                 router.replace({ pathname: '/payment', params: { billId: billing_id } });
               } else {
                 router.replace('/(tabs)/billing');

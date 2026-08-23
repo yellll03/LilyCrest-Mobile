@@ -223,6 +223,7 @@ function LayoutContent() {
         <Stack.Screen name="survey-form" />
         <Stack.Screen name="house-rules" />
         <Stack.Screen name="billing-history" />
+        <Stack.Screen name="outstanding-balance" />
         <Stack.Screen name="bill-details" />
         <Stack.Screen name="payment" />
         <Stack.Screen name="payment-success" />
