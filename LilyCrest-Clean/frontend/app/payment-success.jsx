@@ -153,7 +153,7 @@ export default function PaymentSuccessScreen() {
         <Text style={styles.title}>{copy.title}</Text>
         <Text style={styles.subtitle}>{copy.subtitle}</Text>
         <View style={styles.verifyRow}>
-          {isVerifying ? <ActivityIndicator size="small" color={colors.primary} /> : <Ionicons name="information-circle-outline" size={16} color={colors.textSecondary} />}
+          {isVerifying ? <ActivityIndicator size="small" color={colors.interactive} /> : <Ionicons name="information-circle-outline" size={16} color={colors.textSecondary} />}
           <Text style={styles.verifyText}>{verifyMessage}</Text>
         </View>
         {billing_id && (
@@ -226,5 +226,5 @@ const createStyles = (c) => StyleSheet.create({
   secondaryBtn: {
     paddingVertical: 12, paddingHorizontal: 24,
   },
-  secondaryBtnText: { color: c.primary, fontWeight: '600', fontSize: 14 },
+  secondaryBtnText: { color: c.interactive, fontWeight: '600', fontSize: 14 },
 });

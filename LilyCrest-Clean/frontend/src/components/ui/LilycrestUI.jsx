@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useTheme } from '../../context/ThemeContext';
-import { RADII, SPACING, STATUS, statusTone } from '../../theme/tokens';
+import { RADII, semanticStatusPalette, SPACING, statusTone } from '../../theme/tokens';
 
 export function ScreenHeader({ title, subtitle, onBack, action, strong = false }) {
   const { colors } = useTheme();
@@ -40,8 +40,9 @@ export function SectionHeader({ icon, title, trailing }) {
 }
 
 export function StatusBadge({ status, label = status, tone }) {
+  const { colors } = useTheme();
   const resolvedTone = tone || statusTone(status);
-  const palette = STATUS[resolvedTone] || STATUS.neutral;
+  const palette = semanticStatusPalette(colors, resolvedTone);
   return (
     <View style={[styles.statusBadge, { backgroundColor: palette.background, borderColor: palette.solid }]}>
       <Text style={[styles.statusText, { color: palette.text }]}>{label}</Text>
@@ -76,7 +77,7 @@ export function EmptyState({ icon = 'document-outline', title, description, acti
 export function ActionButton({ label, onPress, icon, variant = 'primary', disabled = false, style }) {
   const { colors } = useTheme();
   const variants = {
-    primary: { background: colors.primary, border: colors.primary, text: '#FFFFFF' },
+    primary: { background: colors.primary, border: colors.primary, text: colors.onPrimary },
     gold: { background: colors.accent, border: colors.accent, text: '#0A1628' },
     positive: { background: colors.success, border: colors.success, text: '#FFFFFF' },
     secondary: { background: colors.surface, border: colors.border, text: colors.heading },

@@ -255,29 +255,36 @@ class ErrorBoundary extends React.Component {
   render() {
     if (this.state.hasError) {
       return (
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF', padding: 24 }}>
-          <Text style={{ fontSize: 20, fontWeight: '700', color: '#0A1628', marginBottom: 8 }}>Something went wrong</Text>
-          <Text style={{ fontSize: 14, color: '#4B5563', textAlign: 'center', marginBottom: 20 }}>
-            {this.state.error?.message || 'An unexpected error occurred.'}
-          </Text>
-          <Text
-            style={{ fontSize: 15, fontWeight: '600', color: '#0A1628' }}
-            onPress={() => this.setState({ hasError: false, error: null })}
-          >
-            Tap to Retry
-          </Text>
-        </View>
+        <ErrorFallback
+          error={this.state.error}
+          onRetry={() => this.setState({ hasError: false, error: null })}
+        />
       );
     }
     return this.props.children;
   }
 }
 
+function ErrorFallback({ error, onRetry }) {
+  const { colors } = useTheme();
+  return (
+    <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.background, padding: 24 }}>
+      <Text style={{ fontSize: 20, fontWeight: '700', color: colors.heading, marginBottom: 8 }}>Something went wrong</Text>
+      <Text style={{ fontSize: 14, color: colors.textSecondary, textAlign: 'center', marginBottom: 20 }}>
+        {error?.message || 'An unexpected error occurred.'}
+      </Text>
+      <Text style={{ fontSize: 15, fontWeight: '600', color: colors.interactive }} onPress={onRetry}>
+        Tap to Retry
+      </Text>
+    </View>
+  );
+}
+
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <ErrorBoundary>
-        <ThemeProvider>
+      <ThemeProvider>
+        <ErrorBoundary>
           <AlertProvider>
             <ToastProvider>
               <AuthProvider>
@@ -285,8 +292,8 @@ export default function RootLayout() {
               </AuthProvider>
             </ToastProvider>
           </AlertProvider>
-        </ThemeProvider>
-      </ErrorBoundary>
+        </ErrorBoundary>
+      </ThemeProvider>
     </GestureHandlerRootView>
   );
 }

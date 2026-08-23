@@ -22,6 +22,7 @@ import { getSessionToken } from '../src/services/secureCredentials';
 import { useTenantContract } from '../src/hooks/useTenantContract';
 import { buildContractSummary } from '../src/utils/contractPresentation';
 import { ScreenHeader } from '../src/components/ui/LilycrestUI';
+import StyledModal from '../src/components/StyledModal';
 
 // ── Document types for upload picker ──
 const UPLOAD_TYPES = [
@@ -181,7 +182,7 @@ function PreviewSection({ section, colors, isDarkMode }) {
         <Text style={[pStyles.sectionTitle, { color: colors.text }]}>{section.title}</Text>
         {section.bullets.map((b, i) => (
           <View key={i} style={pStyles.bulletRow}>
-            <View style={[pStyles.bulletDot, { backgroundColor: colors.primary }]} />
+            <View style={[pStyles.bulletDot, { backgroundColor: colors.interactive }]} />
             <Text style={[pStyles.bulletText, { color: colors.textSecondary }]}>{b}</Text>
           </View>
         ))}
@@ -883,27 +884,18 @@ export default function MyDocumentsScreen() {
       </Modal>
 
       {/* ── Delete Confirmation Modal ── */}
-      <Modal visible={!!deleteTarget} transparent animationType="fade" onRequestClose={() => setDeleteTarget(null)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalIconWrap}><Ionicons name="trash-outline" size={32} color="#DC2626" /></View>
-            <Text style={styles.modalTitle}>Delete Document?</Text>
-            <Text style={styles.modalMessage}>Are you sure you want to delete &quot;{deleteTarget?.label}&quot;? This action cannot be undone.</Text>
-            <View style={styles.modalButtons}>
-              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setDeleteTarget(null)} disabled={Boolean(deletingDocId)}>
-                <Text style={styles.modalCancelText}>Cancel</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.modalDeleteBtn} onPress={() => handleDelete(deleteTarget?.doc_id)} disabled={Boolean(deletingDocId)}>
-                {deletingDocId === deleteTarget?.doc_id ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Text style={styles.modalDeleteText}>Delete</Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <StyledModal
+        visible={Boolean(deleteTarget)}
+        onClose={() => setDeleteTarget(null)}
+        title="Delete Document?"
+        message={`Are you sure you want to delete "${deleteTarget?.label || 'this document'}"? This action cannot be undone.`}
+        type="error"
+        icon="trash-outline"
+        buttons={[
+          { text: 'Cancel', style: 'cancel', onPress: () => setDeleteTarget(null), disabled: Boolean(deletingDocId) },
+          { text: 'Delete', style: 'destructive', onPress: () => handleDelete(deleteTarget?.doc_id), loading: deletingDocId === deleteTarget?.doc_id },
+        ]}
+      />
 
       {/* ── Image Preview Modal ── */}
       <Modal visible={!!previewImage} transparent animationType="fade" onRequestClose={() => setPreviewImage(null)}>
@@ -969,7 +961,7 @@ export default function MyDocumentsScreen() {
             </TouchableOpacity>
             <Text style={styles.previewHeaderTitle} numberOfLines={1}>{previewDoc?.title || 'Document'}</Text>
             <TouchableOpacity style={styles.downloadBtnSmall} onPress={() => { setShowPreview(false); handleDownload(previewDoc); }}>
-              <Ionicons name="download-outline" size={22} color={colors.primary} />
+              <Ionicons name="download-outline" size={22} color={colors.interactive} />
             </TouchableOpacity>
           </View>
 
@@ -1022,7 +1014,7 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   scrollContent: { padding: 16 },
   errorBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: colors.warningBg, borderWidth: 1, borderColor: colors.warning, borderRadius: 12, padding: 12, marginBottom: 14 },
   errorBannerText: { flex: 1, fontSize: 13, fontWeight: '600', color: colors.warningText },
-  errorRetryText: { fontSize: 13, fontWeight: '800', color: colors.primary },
+  errorRetryText: { fontSize: 13, fontWeight: '800', color: colors.interactive },
   categoryGroup: { marginBottom: 24 },
   categoryHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   categoryIcon: { width: 28, height: 28, borderRadius: 8, justifyContent: 'center', alignItems: 'center' },
@@ -1068,7 +1060,7 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   reservationBadgeText: { fontSize: 11, fontWeight: '700', color: colors.successText, letterSpacing: 0.3 },
   reservationLock: { width: 32, height: 32, borderRadius: 8, justifyContent: 'center', alignItems: 'center', marginLeft: 8, backgroundColor: isDarkMode ? 'rgba(255,255,255,0.05)' : '#F8FAFC' },
   // Upload Type Picker
-  pickerOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  pickerOverlay: { flex: 1, backgroundColor: colors.overlay, justifyContent: 'flex-end' },
   pickerSheet: { backgroundColor: colors.surface, borderTopLeftRadius: 12, borderTopRightRadius: 12, paddingHorizontal: 20, paddingBottom: Platform.OS === 'ios' ? 34 : 20, maxHeight: '70%', borderWidth: 1, borderColor: colors.border },
   pickerHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: colors.border, alignSelf: 'center', marginTop: 12, marginBottom: 16 },
   pickerTitle: { fontSize: 18, fontWeight: '700', color: colors.text, marginBottom: 4 },
@@ -1077,19 +1069,8 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   pickerItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: colors.border },
   pickerItemIcon: { width: 40, height: 40, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   pickerItemLabel: { flex: 1, fontSize: 15, fontWeight: '500', color: colors.text },
-  pickerCancel: { marginTop: 12, paddingVertical: 14, borderRadius: 12, backgroundColor: isDarkMode ? 'rgba(255,255,255,0.06)' : '#F1F5F9', alignItems: 'center' },
+  pickerCancel: { marginTop: 12, paddingVertical: 14, borderRadius: 12, backgroundColor: colors.surfaceSecondary, alignItems: 'center' },
   pickerCancelText: { fontSize: 15, fontWeight: '600', color: colors.textSecondary },
-  // Modals
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalContent: { backgroundColor: colors.surface, borderRadius: 12, padding: 24, width: '100%', maxWidth: 320, alignItems: 'center', borderWidth: 1, borderColor: colors.border },
-  modalIconWrap: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.errorBg, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
-  modalTitle: { fontSize: 20, fontWeight: '600', color: colors.text, marginBottom: 8 },
-  modalMessage: { fontSize: 14, color: colors.textSecondary, textAlign: 'center', marginBottom: 24, lineHeight: 20 },
-  modalButtons: { flexDirection: 'row', gap: 12, width: '100%' },
-  modalCancelBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1.5, borderColor: colors.border, alignItems: 'center' },
-  modalCancelText: { fontSize: 15, fontWeight: '600', color: colors.textSecondary },
-  modalDeleteBtn: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: '#DC2626', alignItems: 'center' },
-  modalDeleteText: { fontSize: 15, fontWeight: '600', color: '#fff' },
   // Image Preview
   imagePreviewContainer: { flex: 1, backgroundColor: colors.background },
   imagePreviewHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border },

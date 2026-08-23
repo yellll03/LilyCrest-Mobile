@@ -133,7 +133,7 @@ export default function AnnouncementsScreen() {
     toolbarButtonTextActive: { color: dark ? c.accent : c.heading },
 
     readMoreBtn: { marginTop: 6, alignSelf: 'flex-start' },
-    readMoreText: { fontSize: 13, fontWeight: '600', color: c.primary },
+    readMoreText: { fontSize: 13, fontWeight: '600', color: c.interactive },
 
     // ── Cards ──
     scrollView: { flex: 1 },
@@ -675,7 +675,7 @@ export default function AnnouncementsScreen() {
     );
   }, [colors.textMuted, dismissalInFlight, expandedIds, styles, toggleExpanded, selectionMode, selectedIds, toggleSelected, enterSelectionMode, removeAnnouncements]);
 
-  if (!hasLoadedOnce) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color={colors.primary} /></View>;
+  if (!hasLoadedOnce) return <View style={styles.loadingContainer}><ActivityIndicator size="large" color={colors.interactive} /></View>;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -766,7 +766,7 @@ export default function AnnouncementsScreen() {
             accessibilityState={{ disabled: refreshing, busy: refreshing }}
           >
             {refreshing
-              ? <ActivityIndicator size={15} color={colors.primary} />
+              ? <ActivityIndicator size={15} color={colors.interactive} />
               : <Ionicons name="refresh" size={15} color={colors.textMuted} />
             }
             <Text numberOfLines={1} style={styles.toolbarButtonText}>{refreshing ? 'Refreshing' : 'Refresh'}</Text>
@@ -781,7 +781,7 @@ export default function AnnouncementsScreen() {
         data={visibleAnnouncements}
         keyExtractor={announcementKeyExtractor}
         renderItem={renderAnnouncementItem}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.interactive]} tintColor={colors.interactive} />}
         showsVerticalScrollIndicator={false}
         ListHeaderComponent={fetchError ? (
           <View style={styles.errorBanner}>

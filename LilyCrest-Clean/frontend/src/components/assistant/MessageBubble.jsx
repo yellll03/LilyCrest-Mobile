@@ -16,6 +16,7 @@ const formatFileSize = (value) => {
 };
 
 function AttachmentCard({ file, isUser, onOpen }) {
+  const { colors } = useTheme();
   const [sessionToken, setSessionToken] = useState('');
   const [previewOpen, setPreviewOpen] = useState(false);
   const mimeType = String(file?.mimeType || file?.type || '').toLowerCase();
@@ -40,7 +41,11 @@ function AttachmentCard({ file, isUser, onOpen }) {
 
   return (
     <Pressable
-      style={[styles.attachmentCard, isUser && styles.attachmentCardUser]}
+      style={[
+        styles.attachmentCard,
+        { backgroundColor: colors.surfaceSecondary, borderColor: colors.border },
+        isUser && styles.attachmentCardUser,
+      ]}
       onPress={() => {
         if (protectedImageSource) setPreviewOpen(true);
         else onOpen?.(file);
@@ -51,19 +56,19 @@ function AttachmentCard({ file, isUser, onOpen }) {
     >
       {protectedImageSource ? (
         <Image
-          style={styles.attachmentThumbnail}
+          style={[styles.attachmentThumbnail, { backgroundColor: colors.border }]}
           source={protectedImageSource}
           contentFit="cover"
           transition={120}
         />
       ) : (
-        <View style={[styles.documentIcon, isUser && styles.documentIconUser]}>
-          <Ionicons name={isImage ? 'image-outline' : 'document-text-outline'} size={22} color={isUser ? '#F8FAFC' : '#0A1628'} />
+        <View style={[styles.documentIcon, { backgroundColor: colors.border }, isUser && styles.documentIconUser]}>
+          <Ionicons name={isImage ? 'image-outline' : 'document-text-outline'} size={22} color={isUser ? colors.onPrimary : colors.iconPrimary} />
         </View>
       )}
       <View style={styles.attachmentCopy}>
-        <Text style={[styles.attachmentName, isUser && styles.attachmentTextUser]} numberOfLines={2}>{fileName}</Text>
-        <Text style={[styles.attachmentMeta, isUser && styles.attachmentMetaUser]}>
+        <Text style={[styles.attachmentName, { color: colors.text }, isUser && styles.attachmentTextUser]} numberOfLines={2}>{fileName}</Text>
+        <Text style={[styles.attachmentMeta, { color: colors.textSecondary }, isUser && styles.attachmentMetaUser]}>
           {isImage ? 'Image' : mimeType === 'application/pdf' ? 'PDF' : 'Document'}
           {formatFileSize(file?.size) ? ` · ${formatFileSize(file.size)}` : ''}
           {' · Open'}
@@ -80,8 +85,8 @@ function AttachmentCard({ file, isUser, onOpen }) {
             </View>
             <Image style={styles.previewImage} source={protectedImageSource} contentFit="contain" />
             <Pressable style={styles.previewOpenButton} onPress={() => onOpen?.(file)} accessibilityRole="button">
-              <Ionicons name="open-outline" size={17} color="#0A1628" />
-              <Text style={styles.previewOpenText}>Open or Share</Text>
+              <Ionicons name="open-outline" size={17} color={colors.onAccent} />
+              <Text style={[styles.previewOpenText, { color: colors.onAccent }]}>Open or Share</Text>
             </Pressable>
           </View>
         </Modal>
@@ -99,8 +104,8 @@ export default function MessageBubble({ message, isUser, onOpenAttachment, showD
   const botBubbleColor = colors.surface;
   const botBubbleBorder = colors.border;
   const avatarBg = colors.primary;
-  const adminBubbleBg = colors.surface;
-  const adminBubbleBorder = colors.border;
+  const adminBubbleBg = colors.surfaceSecondary;
+  const adminBubbleBorder = colors.info;
   const botTextColor = colors.text;
 
   // ── System divider (transfer notice, resolved notice) ──
@@ -121,19 +126,19 @@ export default function MessageBubble({ message, isUser, onOpenAttachment, showD
     <View style={[styles.row, isUser ? styles.rowUser : styles.rowBot, highlighted && styles.highlighted]}>
       {/* Left avatar — Lily or Admin */}
       {!isUser && (
-        <View style={[styles.avatar, { backgroundColor: avatarBg }, isAdmin && styles.adminAvatar]}>
+        <View style={[styles.avatar, { backgroundColor: avatarBg }, isAdmin && { backgroundColor: colors.accentSubtle, borderColor: colors.accent }]}>
           {isAdmin
             ? message.avatarUri
               ? <Image source={{ uri: message.avatarUri }} style={styles.avatarImage} contentFit="cover" />
-              : <Text style={styles.adminAvatarText}>A</Text>
+              : <Text style={[styles.adminAvatarText, { color: colors.onAccent }]}>A</Text>
             : <LilyFlowerIcon size={22} />
           }
         </View>
       )}
 
       <View style={[styles.bubble, isUser ? [styles.userBubble, { backgroundColor: userBubbleColor, borderColor: userBubbleColor }] : isAdmin ? [styles.adminBubble, { backgroundColor: adminBubbleBg, borderColor: adminBubbleBorder }] : [styles.botBubble, { backgroundColor: botBubbleColor, borderColor: botBubbleBorder }]]}>
-        {isAdmin && <Text style={styles.adminLabel}>LilyCrest Admin</Text>}
-        {message.text ? <Text style={[styles.text, { color: isUser ? '#f1f5f9' : botTextColor }]}>{message.text}</Text> : null}
+        {isAdmin && <Text style={[styles.adminLabel, { color: colors.interactive }]}>LilyCrest Admin</Text>}
+        {message.text ? <Text style={[styles.text, { color: isUser ? colors.onPrimary : botTextColor }]}>{message.text}</Text> : null}
         {message.attachments?.length ? (
           <View style={styles.attachmentsRow}>
             {message.attachments.map((file, idx) => (
@@ -146,7 +151,7 @@ export default function MessageBubble({ message, isUser, onOpenAttachment, showD
             ))}
           </View>
         ) : null}
-        <Text style={[styles.time, isUser && styles.userTime]}>
+        <Text style={[styles.time, { color: colors.textMuted }, isUser && styles.userTime]}>
           {message.time}{deliveryStatus ? ` · ${deliveryStatus}` : ''}
         </Text>
       </View>
@@ -156,7 +161,7 @@ export default function MessageBubble({ message, isUser, onOpenAttachment, showD
         <View style={[styles.avatar, styles.userAvatar, { backgroundColor: userBubbleColor }]}>
           {message.avatarUri
             ? <Image source={{ uri: message.avatarUri }} style={styles.avatarImage} contentFit="cover" />
-            : <Text style={styles.avatarUserText}>{message.avatar || 'U'}</Text>}
+            : <Text style={[styles.avatarUserText, { color: colors.onPrimary }]}>{message.avatar || 'U'}</Text>}
         </View>
       )}
     </View>
@@ -219,17 +224,13 @@ const styles = StyleSheet.create({
   },
   userAvatar: {},
   adminAvatar: {
-    backgroundColor: '#FBF7EA',
     borderWidth: 1,
-    borderColor: '#D4AF37',
   },
   avatarUserText: {
-    color: '#0A1628',
     fontWeight: '700',
     fontSize: 14,
   },
   adminAvatarText: {
-    color: '#ffffff',
     fontWeight: '800',
     fontSize: 14,
   },
@@ -248,8 +249,6 @@ const styles = StyleSheet.create({
     borderWidth: 1,
   },
   botBubble: {
-    backgroundColor: '#ffffff',
-    borderColor: '#E5E7EB',
     borderBottomLeftRadius: 4,
     ...Platform.select({
       web: { boxShadow: '0 1px 4px rgba(0,0,0,0.04)' },
@@ -258,8 +257,6 @@ const styles = StyleSheet.create({
     }),
   },
   adminBubble: {
-    backgroundColor: '#F1F5F9',
-    borderColor: '#2563EB',
     borderBottomLeftRadius: 4,
     ...Platform.select({
       ios: { shadowColor: '#000', shadowOpacity: 0.04, shadowOffset: { width: 0, height: 1 }, shadowRadius: 4 },
@@ -279,13 +276,11 @@ const styles = StyleSheet.create({
   adminLabel: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#B9921F',
     marginBottom: 4,
     letterSpacing: 0.2,
   },
   text: {
     fontSize: 14.5,
-    color: '#1e293b',
     lineHeight: 21,
   },
   // note: botTextColor applied inline via colors.text
@@ -295,7 +290,6 @@ const styles = StyleSheet.create({
   time: {
     marginTop: 5,
     fontSize: 10,
-    color: '#6B7280',
     textAlign: 'right',
   },
   userTime: {
@@ -316,9 +310,7 @@ const styles = StyleSheet.create({
     gap: 9,
     padding: 8,
     borderRadius: 8,
-    backgroundColor: '#f1f5f9',
     borderWidth: 1,
-    borderColor: '#E5E7EB',
   },
   attachmentCardUser: {
     backgroundColor: 'rgba(255,255,255,0.12)',
@@ -328,7 +320,6 @@ const styles = StyleSheet.create({
     width: 64,
     height: 48,
     borderRadius: 6,
-    backgroundColor: '#E5E7EB',
   },
   documentIcon: {
     width: 42,
@@ -336,7 +327,6 @@ const styles = StyleSheet.create({
     borderRadius: 7,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#E2E8F0',
   },
   documentIconUser: {
     backgroundColor: 'rgba(255,255,255,0.12)',
@@ -347,13 +337,11 @@ const styles = StyleSheet.create({
   },
   attachmentName: {
     fontSize: 11.5,
-    color: '#4B5563',
     fontWeight: '700',
   },
   attachmentMeta: {
     marginTop: 3,
     fontSize: 10,
-    color: '#64748B',
   },
   attachmentTextUser: {
     color: '#E5E7EB',
@@ -396,7 +384,6 @@ const styles = StyleSheet.create({
     paddingVertical: 11,
   },
   previewOpenText: {
-    color: '#0A1628',
     fontSize: 13,
     fontWeight: '800',
   },

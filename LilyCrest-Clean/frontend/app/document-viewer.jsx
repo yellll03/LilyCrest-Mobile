@@ -83,7 +83,7 @@ export default function DocumentViewer() {
           <Ionicons name="share-outline" size={24} color={uri ? colors.heading : colors.textSecondary} />
         </TouchableOpacity>
       </View>
-      {loading ? <View style={styles.center}><ActivityIndicator size="large" color={colors.primary} /><Text style={{ color: colors.textSecondary }}>Loading document… {progress ? `${Math.round(progress * 100)}%` : ''}</Text></View>
+      {loading ? <View style={styles.center}><ActivityIndicator size="large" color={colors.interactive} /><Text style={{ color: colors.textSecondary }}>Loading document… {progress ? `${Math.round(progress * 100)}%` : ''}</Text></View>
       : error ? <View style={styles.center}><Ionicons name="document-outline" size={54} color={colors.textSecondary} /><Text style={[styles.error, { color: colors.text }]}>{error}</Text><TouchableOpacity style={[styles.retry, { backgroundColor: colors.primary }]} onPress={() => load(true)}><Text style={styles.retryText}>Retry</Text></TouchableOpacity></View>
       : Platform.OS === 'web' ? <View style={styles.center}><Text style={{ color: colors.text }}>Download this document to view it in your browser.</Text></View>
       : isImage ? (

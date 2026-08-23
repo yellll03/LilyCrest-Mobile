@@ -60,5 +60,5 @@ const createStyles = (c) => StyleSheet.create({
   },
   primaryBtnText: { color: '#fff', fontWeight: '700', fontSize: 16 },
   secondaryBtn: { paddingVertical: 12, paddingHorizontal: 24 },
-  secondaryBtnText: { color: c.primary, fontWeight: '600', fontSize: 14 },
+  secondaryBtnText: { color: c.interactive, fontWeight: '600', fontSize: 14 },
 });

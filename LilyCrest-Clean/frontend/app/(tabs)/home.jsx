@@ -616,7 +616,7 @@ export default function HomeScreen() {
         <ScrollView
           style={styles.scrollView}
           contentContainerStyle={styles.loadErrorContent}
-          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
+          refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.interactive]} tintColor={colors.interactive} />}
         >
           <View style={styles.loadErrorState} accessibilityRole="alert">
             <View style={styles.loadErrorIcon}>
@@ -649,18 +649,18 @@ export default function HomeScreen() {
       <ScrollView
         style={styles.scrollView}
         contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.primary]} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} colors={[colors.interactive]} tintColor={colors.interactive} />}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
         {/* ── Search Bar ── */}
         <View style={[styles.searchContainer, searchFocused && styles.searchContainerFocused]}>
-          <Ionicons name="search" size={20} color={searchFocused ? colors.primary : '#6B7280'} />
+          <Ionicons name="search" size={20} color={searchFocused ? colors.interactive : colors.textMuted} />
           <TextInput
             ref={searchInputRef}
             style={styles.searchInput}
             placeholder="Search bills, maintenance, policies…"
-            placeholderTextColor="#6B7280"
+            placeholderTextColor={colors.textMuted}
             value={searchQuery}
             onChangeText={(text) => setSearchQuery(text.replace(/[<>]/g, ''))}
             onFocus={() => setSearchFocused(true)}
@@ -671,7 +671,7 @@ export default function HomeScreen() {
           />
           {searchQuery.length > 0 && (
             <TouchableOpacity onPress={() => { setSearchQuery(''); setDebouncedQuery(''); Keyboard.dismiss(); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-              <Ionicons name="close-circle" size={20} color="#6B7280" />
+              <Ionicons name="close-circle" size={20} color={colors.textMuted} />
             </TouchableOpacity>
           )}
         </View>
@@ -720,7 +720,7 @@ export default function HomeScreen() {
                           <Text style={styles.searchResultTitle}>{highlightMatch(item.title, debouncedQuery)}</Text>
                           <Text style={styles.searchResultSubtitle} numberOfLines={1}>{highlightMatch(item.subtitle, debouncedQuery)}</Text>
                         </View>
-                        {item.route && <Ionicons name="chevron-forward" size={16} color="#6B7280" />}
+                        {item.route && <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />}
                       </TouchableOpacity>
                     ))}
                   </View>
@@ -734,14 +734,14 @@ export default function HomeScreen() {
         {/* ── Location Card ── */}
         <TouchableOpacity style={styles.locationCard} onPress={openMap} activeOpacity={0.7} disabled={!user?.branch?.isActive || !user?.branch?.googleMapsUrl}>
           <View style={styles.locationIconContainer}>
-            <Ionicons name="location" size={22} color={colors.primary} />
+            <Ionicons name="location" size={22} color={colors.interactive} />
           </View>
           <View style={styles.locationInfo}>
             <Text style={styles.branchName}>{user?.branch?.branchName || 'Branch location is not available yet.'}</Text>
             <Text style={styles.addressText}>{user?.branch?.branchAddress || 'Branch location is not available yet.'}</Text>
           </View>
           <View style={styles.mapButton}>
-            <Ionicons name="navigate" size={16} color={colors.primary} />
+            <Ionicons name="navigate" size={16} color={colors.interactive} />
           </View>
         </TouchableOpacity>
 
@@ -967,7 +967,7 @@ export default function HomeScreen() {
             <View style={styles.billingInsightTrustRow}>
               {billingMetaChips.map((chip) => (
                 <View key={chip.id} style={styles.billingInsightTrustChip}>
-                  <Ionicons name={chip.icon} size={13} color={colors.primary} />
+                  <Ionicons name={chip.icon} size={13} color={colors.interactive} />
                   <Text style={styles.billingInsightTrustText}>{chip.label}</Text>
                 </View>
               ))}
@@ -1165,13 +1165,13 @@ function createStyles(c) {
     loadErrorRetryText: { color: '#FFFFFF', fontSize: 13, fontWeight: '700' },
     staleBanner: { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 12, paddingVertical: 8, marginHorizontal: 16, marginTop: 8, borderRadius: 10, backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border },
     staleText: { flex: 1, color: c.textSecondary, fontWeight: '500', fontSize: 11, lineHeight: 15 },
-    staleRetryText: { color: c.primary, fontWeight: '700', fontSize: 11 },
+    staleRetryText: { color: c.interactive, fontWeight: '700', fontSize: 11 },
 
     // Search
     searchContainer: {
       flexDirection: 'row', alignItems: 'center', backgroundColor: c.surface, paddingHorizontal: 16, borderRadius: 12, marginBottom: 16, borderWidth: 1, borderColor: c.border,
     },
-    searchContainerFocused: { borderColor: c.primary },
+    searchContainerFocused: { borderColor: c.interactive },
     searchInput: { flex: 1, paddingVertical: 13, paddingHorizontal: 12, fontSize: 15, color: c.text },
     searchResultsCard: {
       backgroundColor: c.surface, borderRadius: 12, padding: 14, marginBottom: 16, borderWidth: 1, borderColor: c.border,
@@ -1230,7 +1230,7 @@ function createStyles(c) {
     roomInfoText: { fontSize: 13, color: c.textSecondary },
     priceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: c.border },
     priceLabel: { fontSize: 12, color: c.textSecondary },
-    priceValue: { fontSize: 18, fontWeight: '700', color: c.primary },
+    priceValue: { fontSize: 18, fontWeight: '700', color: c.interactive },
     tenancyDates: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.surfaceSecondary, borderRadius: 12, padding: 14 },
     dateItem: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
     dateItemIcon: { width: 34, height: 34, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },
@@ -1328,7 +1328,7 @@ function createStyles(c) {
       borderWidth: 1,
       borderColor: c.border,
     },
-    billingInsightHeaderCtaText: { fontSize: 12, fontWeight: '700', color: c.primary },
+    billingInsightHeaderCtaText: { fontSize: 12, fontWeight: '700', color: c.interactive },
     billingInsightTrustRow: {
       flexDirection: 'row',
       flexWrap: 'wrap',
@@ -1596,7 +1596,7 @@ function createStyles(c) {
     },
 
     // Notifications
-    viewAllText: { color: c.primary, fontSize: 13, fontWeight: '600' },
+    viewAllText: { color: c.interactive, fontSize: 13, fontWeight: '600' },
     notifRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, borderBottomWidth: 1, borderBottomColor: c.border },
     notifIconWrap: { width: 36, height: 36, borderRadius: 10, backgroundColor: c.primaryLight, justifyContent: 'center', alignItems: 'center' },
     notifTitle: { fontSize: 14, fontWeight: '600', color: c.text },

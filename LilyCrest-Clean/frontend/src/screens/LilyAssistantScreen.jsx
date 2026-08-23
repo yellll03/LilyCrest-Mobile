@@ -4,7 +4,6 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Keyboard,
   KeyboardAvoidingView,
-  Alert,
   Platform,
   Pressable,
   RefreshControl,
@@ -22,6 +21,7 @@ import AttachmentPickerSheet from '../components/AttachmentPickerSheet';
 import LilyFlowerIcon from '../components/assistant/LilyFlowerIcon';
 import MessageBubble from '../components/assistant/MessageBubble';
 import { useAuth } from '../context/AuthContext';
+import { useAlert } from '../context/AlertContext';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
 import { useAssistantChat } from '../hooks/useAssistantChat';
 import { apiService } from '../services/api';
@@ -66,6 +66,8 @@ function supportMessageFingerprint(text, attachments = []) {
 }
 
 function FollowupChips({ suggestions, onSelect }) {
+  const { colors } = useTheme();
+  const followupStyles = useThemedStyles(createFollowupStyles);
   if (!suggestions?.length) return null;
 
   return (
@@ -76,16 +78,16 @@ function FollowupChips({ suggestions, onSelect }) {
           style={followupStyles.chip}
           onPress={() => onSelect(suggestion.prompt)}
         >
-          <Ionicons name="chatbubble-ellipses-outline" size={13} color="#D4AF37" />
+          <Ionicons name="chatbubble-ellipses-outline" size={13} color={colors.accent} />
           <Text style={followupStyles.text}>{suggestion.label}</Text>
-          <Ionicons name="chevron-forward" size={12} color="#D4AF37" />
+          <Ionicons name="chevron-forward" size={12} color={colors.accent} />
         </Pressable>
       ))}
     </View>
   );
 }
 
-const followupStyles = StyleSheet.create({
+const createFollowupStyles = (colors) => StyleSheet.create({
   container: {
     flexDirection: 'row',
     flexWrap: 'wrap',
@@ -100,19 +102,20 @@ const followupStyles = StyleSheet.create({
     gap: 6,
     paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: '#FFFBEB',
+    backgroundColor: colors.warningBg,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#F3E4B0',
+    borderColor: colors.warning,
   },
   text: {
-    color: '#92400E',
+    color: colors.warningText,
     fontWeight: '600',
     fontSize: 12,
   },
 });
 
 function TypingIndicator({ label = 'Lily is thinking...' }) {
+  const typingStyles = useThemedStyles(createTypingStyles);
   return (
     <View style={typingStyles.row}>
       <View style={typingStyles.avatar}>
@@ -128,7 +131,7 @@ function TypingIndicator({ label = 'Lily is thinking...' }) {
   );
 }
 
-const typingStyles = StyleSheet.create({
+const createTypingStyles = (colors) => StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -140,30 +143,30 @@ const typingStyles = StyleSheet.create({
     width: 34,
     height: 34,
     borderRadius: 17,
-    backgroundColor: '#0A1628',
+    backgroundColor: colors.headerBg,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.08)',
+    borderColor: colors.border,
   },
   bubble: {
     flexDirection: 'row',
     gap: 6,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.surface,
     borderRadius: 16,
     paddingHorizontal: 14,
     paddingVertical: 10,
     borderWidth: 1,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border,
   },
   dot: {
     width: 7,
     height: 7,
     borderRadius: 4,
-    backgroundColor: '#0A1628',
+    backgroundColor: colors.accent,
   },
   label: {
-    color: '#6B7280',
+    color: colors.textMuted,
     fontSize: 12,
     fontWeight: '600',
     fontStyle: 'italic',
@@ -404,6 +407,7 @@ export default function LilyAssistantScreen() {
   const handledNotificationConversationRef = useRef('');
   const preserveDetailScrollRef = useRef(false);
   const { user, authReady } = useAuth();
+  const { showAlert } = useAlert();
   const { colors } = useTheme();
   const styles = useThemedStyles(createAssistantStyles);
   const insets = useSafeAreaInsets();
@@ -517,19 +521,19 @@ export default function LilyAssistantScreen() {
     switch (chatMode) {
       case CHAT_MODE.WAITING:
       case CHAT_MODE.NEEDS_ADMIN:
-        return { backgroundColor: '#D97706' };
+        return { backgroundColor: colors.warning };
       case CHAT_MODE.ACTIVE:
       case CHAT_MODE.AWAITING_CONFIRMATION:
-        return { backgroundColor: '#2563EB' };
+        return { backgroundColor: colors.info };
       case CHAT_MODE.RESOLVED:
       case CHAT_MODE.CLOSED:
-        return { backgroundColor: '#059669' };
+        return { backgroundColor: colors.success };
       case CHAT_MODE.UNAVAILABLE:
-        return { backgroundColor: '#DC2626' };
+        return { backgroundColor: colors.error };
       default:
-        return { backgroundColor: '#059669' };
+        return { backgroundColor: colors.success };
     }
-  }, [chatMode]);
+  }, [chatMode, colors]);
 
   const clearEscalationPrompt = () => {
     setPendingAdminReason('');
@@ -801,16 +805,18 @@ export default function LilyAssistantScreen() {
     }
   };
 
-  const closeSupportConversation = () => {
+  const closeSupportConversation = async () => {
     if (!supportConversationId) return;
-    Alert.alert(
-      'Close support conversation?',
-      'This ends the current thread. You can reopen it later from My Inquiries if the concern returns.',
-      [
+    const decision = await showAlert({
+      title: 'Close support conversation?',
+      message: 'This ends the current thread. You can reopen it later from My Inquiries if the concern returns.',
+      type: 'warning',
+      buttons: [
         { text: 'Keep Open', style: 'cancel' },
-        { text: 'Close', style: 'destructive', onPress: performCloseSupportConversation },
+        { text: 'Close', style: 'destructive' },
       ],
-    );
+    });
+    if (decision === 'Close') await performCloseSupportConversation();
   };
 
   const returnToLilyAssistant = async (options = {}) => {
@@ -1429,16 +1435,18 @@ export default function LilyAssistantScreen() {
     setAttachments((prev) => prev.filter((item) => getAttachmentDisplayName(item) !== name));
   };
 
-  const reopenSelectedInquiry = (conversationId = selectedInquiry?.id) => {
+  const reopenSelectedInquiry = async (conversationId = selectedInquiry?.id) => {
     if (!conversationId || isReopeningInquiry) return;
-    Alert.alert(
-      'Reopen this concern?',
-      'The same support conversation will become active again so you can explain what still needs attention.',
-      [
+    const decision = await showAlert({
+      title: 'Reopen this concern?',
+      message: 'The same support conversation will become active again so you can explain what still needs attention.',
+      type: 'info',
+      buttons: [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Reopen', onPress: () => performReopenSelectedInquiry(conversationId) },
+        { text: 'Reopen' },
       ],
-    );
+    });
+    if (decision === 'Reopen') await performReopenSelectedInquiry(conversationId);
   };
 
   const renderContractContext = (conversation) => {
@@ -1454,12 +1462,12 @@ export default function LilyAssistantScreen() {
         accessibilityRole="button"
         accessibilityLabel="View related contract"
       >
-        <Ionicons name="document-text-outline" size={17} color="#D4AF37" />
+        <Ionicons name="document-text-outline" size={17} color={colors.interactive} />
         <View style={styles.contextCopy}>
           <Text style={styles.contextTitle}>Related to Contract</Text>
           <Text style={styles.contextAction}>View Contract</Text>
         </View>
-        <Ionicons name="chevron-forward" size={16} color="#D4AF37" />
+        <Ionicons name="chevron-forward" size={16} color={colors.interactive} />
       </Pressable>
     );
   };
@@ -1478,7 +1486,7 @@ export default function LilyAssistantScreen() {
             <Ionicons
               name={rating <= satisfactionRating ? 'star' : 'star-outline'}
               size={24}
-              color="#D4AF37"
+              color={colors.interactive}
             />
           </Pressable>
         ))}
@@ -1488,7 +1496,7 @@ export default function LilyAssistantScreen() {
         value={satisfactionFeedback}
         onChangeText={setSatisfactionFeedback}
         placeholder="Optional feedback"
-        placeholderTextColor="#6B7280"
+        placeholderTextColor={colors.textMuted}
         maxLength={1000}
         multiline
       />
@@ -1678,7 +1686,7 @@ export default function LilyAssistantScreen() {
       <View style={[styles.detailScreen, { paddingBottom: bottomTabInset }]}>
         <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
           <Pressable style={styles.backButton} onPress={() => setSelectedInquiry(null)}>
-            <Ionicons name="arrow-back" size={22} color="#f8fafc" />
+            <Ionicons name="arrow-back" size={22} color={colors.onPrimary} />
           </Pressable>
           <View style={styles.detailHeaderInfo}>
             <Text style={styles.headerTitle}>Admin Support</Text>
@@ -1708,8 +1716,8 @@ export default function LilyAssistantScreen() {
             <RefreshControl
               refreshing={refreshingSupport}
               onRefresh={() => handlePullToRefresh('detail')}
-              colors={[colors.primary]}
-              tintColor={colors.primary}
+              colors={[colors.interactive]}
+              tintColor={colors.interactive}
             />
           )}
         >
@@ -1755,7 +1763,7 @@ export default function LilyAssistantScreen() {
           {isSolved ? (
             <View style={styles.resolvedActions}>
               <View style={styles.resolvedNotice}>
-                <Ionicons name="checkmark-circle" size={16} color="#065F46" />
+                <Ionicons name="checkmark-circle" size={16} color={colors.successText} />
                 <Text style={styles.resolvedNoticeText}>This support conversation is resolved.</Text>
               </View>
               {resolvedTimestamp ? (
@@ -1769,7 +1777,7 @@ export default function LilyAssistantScreen() {
                 accessibilityRole="button"
                 accessibilityLabel="Reopen inquiry"
               >
-                <Ionicons name="refresh-circle-outline" size={17} color="#ffffff" />
+                <Ionicons name="refresh-circle-outline" size={17} color={colors.onPrimary} />
                 <Text style={styles.primaryFooterButtonText}>
                   {isReopeningInquiry ? 'Reopening...' : 'Reopen Inquiry'}
                 </Text>
@@ -1810,14 +1818,14 @@ export default function LilyAssistantScreen() {
                     onPress={() => setShowAttachMenu((value) => !value)}
                     disabled={isSendingReply}
                   >
-                    <Ionicons name="attach" size={20} color="#0A1628" />
+                    <Ionicons name="attach" size={20} color={colors.iconPrimary} />
                   </Pressable>
                 </View>
 
                 <TextInput
                   style={styles.replyInput}
                   placeholder="Reply to admin support..."
-                  placeholderTextColor="#6B7280"
+                  placeholderTextColor={colors.textMuted}
                   value={replyText}
                   onChangeText={setReplyText}
                   onFocus={() => setShowAttachMenu(false)}
@@ -1940,7 +1948,7 @@ export default function LilyAssistantScreen() {
                     clearEscalationPrompt();
                   }}
                 >
-                  <Ionicons name="refresh-outline" size={16} color="#D4AF37" />
+                  <Ionicons name="refresh-outline" size={16} color={colors.interactive} />
                   <Text style={styles.newChatButtonText}>New</Text>
                 </Pressable>
               ) : null}
@@ -1952,7 +1960,7 @@ export default function LilyAssistantScreen() {
                   <Text style={[styles.tabText, activeTab === tab ? styles.tabTextActive : null]}>
                     {tab === 'chat' ? 'Chat' : 'My Inquiries'}
                   </Text>
-                  {activeTab === tab ? <View style={[styles.tabIndicator, { backgroundColor: '#D4AF37' }]} /> : null}
+                  {activeTab === tab ? <View style={[styles.tabIndicator, { backgroundColor: colors.interactive }]} /> : null}
                 </Pressable>
               ))}
             </View>
@@ -1975,8 +1983,8 @@ export default function LilyAssistantScreen() {
                     <RefreshControl
                       refreshing={refreshingSupport}
                       onRefresh={() => handlePullToRefresh('chat')}
-                      colors={[colors.primary]}
-                      tintColor={colors.primary}
+                      colors={[colors.interactive]}
+                      tintColor={colors.interactive}
                     />
                   )}
                 >
@@ -2080,7 +2088,7 @@ export default function LilyAssistantScreen() {
                         accessibilityRole="button"
                         accessibilityLabel="Add attachment"
                       >
-                        <Ionicons name="attach" size={19} color="#0A1628" />
+                        <Ionicons name="attach" size={19} color={colors.iconPrimary} />
                       </Pressable>
                     </View> : null}
 
@@ -2093,7 +2101,7 @@ export default function LilyAssistantScreen() {
                             ? 'Continue with Lily when ready.'
                             : 'Type your concern here...'
                       }
-                      placeholderTextColor="#6B7280"
+                      placeholderTextColor={colors.textMuted}
                       value={inputValue}
                       onChangeText={(value) => {
                         setInputValue(value);
@@ -2139,8 +2147,8 @@ export default function LilyAssistantScreen() {
                     <RefreshControl
                       refreshing={refreshingSupport}
                       onRefresh={() => handlePullToRefresh('inquiries')}
-                      colors={[colors.primary]}
-                      tintColor={colors.primary}
+                      colors={[colors.interactive]}
+                      tintColor={colors.interactive}
                     />
                   )}
                 >
@@ -2156,7 +2164,7 @@ export default function LilyAssistantScreen() {
                                 : 'chatbubbles-outline'
                           }
                           size={36}
-                          color="#6B7280"
+                          color={colors.textMuted}
                         />
                       </View>
                       <Text style={styles.emptyStateTitle}>
@@ -2303,7 +2311,7 @@ function createAssistantStyles(c, dark) {
     fontWeight: '700',
   },
   tabTextActive: {
-    color: '#ffffff',
+    color: c.onPrimary,
   },
   tabIndicator: {
     position: 'absolute',
@@ -2322,14 +2330,14 @@ function createAssistantStyles(c, dark) {
     gap: 8,
   },
   errorBanner: {
-    backgroundColor: '#FEF2F2',
-    borderColor: '#DC2626',
+    backgroundColor: c.errorBg,
+    borderColor: c.error,
     borderWidth: 1,
     padding: 10,
     borderRadius: 12,
   },
   errorBannerText: {
-    color: '#991B1B',
+    color: c.errorText,
     fontSize: 12,
     fontWeight: '600',
   },
@@ -2446,10 +2454,10 @@ function createAssistantStyles(c, dark) {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: '#FFFBEB',
+    backgroundColor: c.warningBg,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#F3E4B0',
+    borderColor: c.warning,
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
@@ -2457,10 +2465,10 @@ function createAssistantStyles(c, dark) {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: '#EFF6FF',
+    backgroundColor: c.infoBg,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#2563EB',
+    borderColor: c.info,
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
@@ -2472,10 +2480,10 @@ function createAssistantStyles(c, dark) {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    backgroundColor: '#FEF2F2',
+    backgroundColor: c.errorBg,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#DC2626',
+    borderColor: c.error,
     paddingHorizontal: 14,
     paddingVertical: 12,
   },
@@ -2549,18 +2557,18 @@ function createAssistantStyles(c, dark) {
     marginTop: 2,
   },
   supportPrimaryButton: {
-    backgroundColor: '#0A1628',
+    backgroundColor: c.primary,
     borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 8,
   },
   supportPrimaryButtonText: {
-    color: '#ffffff',
+    color: c.onPrimary,
     fontWeight: '700',
     fontSize: 12,
   },
   supportPositiveButton: {
-    backgroundColor: '#059669',
+    backgroundColor: c.success,
     borderRadius: 8,
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -2579,15 +2587,15 @@ function createAssistantStyles(c, dark) {
     fontSize: 12,
   },
   supportDangerButton: {
-    backgroundColor: '#FEF2F2',
+    backgroundColor: c.errorBg,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#DC2626',
+    borderColor: c.error,
     paddingHorizontal: 12,
     paddingVertical: 8,
   },
   supportDangerButtonText: {
-    color: '#991B1B',
+    color: c.errorText,
     fontWeight: '700',
     fontSize: 12,
   },
@@ -2662,7 +2670,7 @@ function createAssistantStyles(c, dark) {
     color: c.text,
   },
   sendButton: {
-    backgroundColor: '#0A1628',
+    backgroundColor: c.primary,
     minHeight: 38,
     paddingHorizontal: 14,
     paddingVertical: 8,
@@ -2670,7 +2678,7 @@ function createAssistantStyles(c, dark) {
     justifyContent: 'center',
   },
   sendButtonText: {
-    color: '#ffffff',
+    color: c.onPrimary,
     fontWeight: '700',
     fontSize: 13,
   },
@@ -2699,7 +2707,7 @@ function createAssistantStyles(c, dark) {
     fontWeight: '600',
   },
   filterTextActive: {
-    color: '#f8fafc',
+    color: c.onPrimary,
   },
   inquiryList: {
     flex: 1,
@@ -2755,21 +2763,21 @@ function createAssistantStyles(c, dark) {
     paddingHorizontal: 10,
     paddingVertical: 5,
     borderRadius: 12,
-    backgroundColor: '#FFFBEB',
+    backgroundColor: c.warningBg,
     borderWidth: 1,
-    borderColor: '#D97706',
+    borderColor: c.warning,
   },
   statusChipSolved: {
-    backgroundColor: '#ECFDF5',
-    borderColor: '#059669',
+    backgroundColor: c.successBg,
+    borderColor: c.success,
   },
   statusChipText: {
     fontSize: 11,
     fontWeight: '700',
-    color: '#92400E',
+    color: c.warningText,
   },
   statusChipTextSolved: {
-    color: '#065F46',
+    color: c.successText,
   },
   detailMessages: {
     flex: 1,
@@ -2814,13 +2822,13 @@ function createAssistantStyles(c, dark) {
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: '#0A1628',
+    backgroundColor: c.primary,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 2,
   },
   threadAvatarText: {
-    color: '#ffffff',
+    color: c.onPrimary,
     fontWeight: '800',
     fontSize: 11,
   },
@@ -2836,7 +2844,7 @@ function createAssistantStyles(c, dark) {
     borderBottomLeftRadius: 4,
   },
   threadBubbleUser: {
-    backgroundColor: '#0A1628',
+    backgroundColor: c.primary,
     borderBottomRightRadius: 4,
   },
   threadLabel: {
@@ -2851,11 +2859,11 @@ function createAssistantStyles(c, dark) {
     lineHeight: 20,
   },
   threadTextUser: {
-    color: '#ffffff',
+    color: c.onPrimary,
   },
   threadTime: {
     fontSize: 10,
-    color: '#6B7280',
+    color: c.textMuted,
     textAlign: 'right',
     marginTop: 4,
   },
@@ -2886,25 +2894,25 @@ function createAssistantStyles(c, dark) {
   resolvedNoticeText: {
     fontSize: 13,
     fontWeight: '500',
-    color: '#065F46',
+    color: c.successText,
   },
   primaryFooterButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 8,
-    backgroundColor: '#0A1628',
+    backgroundColor: c.primary,
     borderRadius: 8,
     paddingVertical: 12,
     paddingHorizontal: 20,
   },
   primaryFooterButtonText: {
-    color: '#ffffff',
+    color: c.onPrimary,
     fontWeight: '700',
     fontSize: 14,
   },
   positiveFooterButton: {
-    backgroundColor: '#059669',
+    backgroundColor: c.success,
   },
   replyBar: {
     flexDirection: 'row',
@@ -2934,7 +2942,7 @@ function createAssistantStyles(c, dark) {
     alignItems: 'center',
   },
   replySendButtonText: {
-    color: '#ffffff',
+    color: c.onPrimary,
     fontWeight: '700',
     fontSize: 13,
   },

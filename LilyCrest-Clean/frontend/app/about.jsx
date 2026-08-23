@@ -77,7 +77,7 @@ const createStyles = (c) => StyleSheet.create({
   contactText: { fontSize: 14, color: c.textSecondary },
   linksSection: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 12, marginTop: 8 },
   linkItem: {},
-  linkText: { fontSize: 14, color: c.primary, fontWeight: '500' },
+  linkText: { fontSize: 14, color: c.interactive, fontWeight: '500' },
   linkDivider: { color: c.border },
   copyright: { textAlign: 'center', fontSize: 12, color: c.textMuted, marginTop: 16, lineHeight: 18 },
 });

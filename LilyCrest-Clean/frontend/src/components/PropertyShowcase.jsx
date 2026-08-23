@@ -70,7 +70,7 @@ export default function PropertyShowcase() {
   return (
     <View style={s.container}>
       <View style={s.header}>
-        <Ionicons name="images-outline" size={16} color={colors.primary} />
+        <Ionicons name="images-outline" size={16} color={colors.interactive} />
         <Text style={s.headerTitle}>Our Property</Text>
       </View>
 
@@ -157,6 +157,6 @@ function createStyles(c, isDarkMode) {
       width: 6, height: 6, borderRadius: 3,
       backgroundColor: isDarkMode ? 'rgba(255,255,255,0.2)' : 'rgba(0,0,0,0.15)',
     },
-    dotActive: { width: 18, borderRadius: 4, backgroundColor: c.primary },
+    dotActive: { width: 18, borderRadius: 4, backgroundColor: c.interactive },
   });
 }

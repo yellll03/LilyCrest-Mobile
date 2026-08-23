@@ -3,7 +3,7 @@ import Constants from 'expo-constants';
 import * as ImagePicker from 'expo-image-picker';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Image, Linking, Modal, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { ActivityIndicator, Image, Linking, Platform, RefreshControl, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
 import { useTheme } from '../../src/context/ThemeContext';
@@ -14,6 +14,7 @@ import { buildContractSummary } from '../../src/utils/contractPresentation';
 import { SURVEY_FEEDBACK_ENABLED } from '../../src/config/features';
 import { API_BASE_URL } from '../../src/config/api';
 import { persistCanonicalProfileImage } from '../../src/services/profileImage';
+import StyledModal from '../../src/components/StyledModal';
 
 const BUILD_INFO = (() => {
   const config = Constants.expoConfig || {};
@@ -363,8 +364,8 @@ export default function ProfileScreen() {
       : colors.error
     : 'transparent';
   const bannerIconColor = profileBanner
-    ? profileBanner.type === 'success' ? '#059669' : profileBanner.type === 'warning' ? '#D97706' : '#DC2626'
-    : '#000';
+    ? profileBanner.type === 'success' ? colors.success : profileBanner.type === 'warning' ? colors.warning : colors.error
+    : colors.iconPrimary;
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -664,33 +665,30 @@ export default function ProfileScreen() {
         <View style={styles.bottomSpacer} />
       </ScrollView>
 
-      <Modal visible={logoutModalVisible} transparent={true} animationType="fade" onRequestClose={() => setLogoutModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={styles.modalIconContainer}><Ionicons name="log-out-outline" size={32} color="#DC2626" /></View>
-            <Text style={styles.modalTitle}>Sign Out?</Text>
-            <Text style={styles.modalMessage}>Are you sure you want to sign out of your Lilycrest account?</Text>
-            <View style={styles.modalButtons}>
-              <TouchableOpacity style={styles.modalCancelButton} onPress={() => setLogoutModalVisible(false)}><Text style={styles.modalCancelText}>Cancel</Text></TouchableOpacity>
-              <TouchableOpacity style={[styles.modalConfirmButton, isLoggingOut && styles.btnDisabled]} onPress={confirmLogout} disabled={isLoggingOut}>{isLoggingOut ? <ActivityIndicator size="small" color="#ffffff" /> : <Text style={styles.modalConfirmText}>Sign Out</Text>}</TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <StyledModal
+        visible={logoutModalVisible}
+        onClose={() => setLogoutModalVisible(false)}
+        title="Sign Out?"
+        message="Are you sure you want to sign out of your Lilycrest account?"
+        type="error"
+        icon="log-out-outline"
+        buttons={[
+          { text: 'Cancel', style: 'cancel', onPress: () => setLogoutModalVisible(false) },
+          { text: 'Sign Out', style: 'destructive', onPress: confirmLogout, loading: isLoggingOut },
+        ]}
+      />
 
-      <Modal visible={discardModalVisible} transparent={true} animationType="fade" onRequestClose={() => setDiscardModalVisible(false)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContent}>
-            <View style={[styles.modalIconContainer, { backgroundColor: isDarkMode ? 'rgba(245,158,11,0.2)' : '#FFFBEB' }]}><Ionicons name="alert-circle" size={32} color="#D97706" /></View>
-            <Text style={styles.modalTitle}>Discard Changes?</Text>
-            <Text style={styles.modalMessage}>You have unsaved edits. Are you sure you want to discard them?</Text>
-            <View style={styles.modalButtons}>
-              <TouchableOpacity style={styles.modalCancelButton} onPress={() => setDiscardModalVisible(false)}><Text style={styles.modalCancelText}>Keep Editing</Text></TouchableOpacity>
-              <TouchableOpacity style={[styles.modalConfirmButton, { backgroundColor: '#D97706' }]} onPress={confirmDiscard}><Text style={styles.modalConfirmText}>Discard</Text></TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      <StyledModal
+        visible={discardModalVisible}
+        onClose={() => setDiscardModalVisible(false)}
+        title="Discard Changes?"
+        message="You have unsaved edits. Are you sure you want to discard them?"
+        type="warning"
+        buttons={[
+          { text: 'Keep Editing', style: 'cancel', onPress: () => setDiscardModalVisible(false) },
+          { text: 'Discard', style: 'destructive', onPress: confirmDiscard },
+        ]}
+      />
     </SafeAreaView>
   );
 }
@@ -723,7 +721,7 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   outlineButtonText: { color: colors.accent, fontSize: 14, fontWeight: '700' },
   surveyHeader: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   surveyTitle: { flex: 1, color: colors.text, fontSize: 15, fontWeight: '700' },
-  cooldownText: { color: '#D97706', fontSize: 12, lineHeight: 18, marginTop: 6 },
+  cooldownText: { color: colors.warningText, fontSize: 12, lineHeight: 18, marginTop: 6 },
 
   header: {
     backgroundColor: colors.headerBg,
@@ -761,8 +759,8 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     borderColor: colors.error,
     gap: 8,
   },
-  errorText: { flex: 1, fontSize: 13, color: isDarkMode ? '#DC2626' : '#991B1B' },
-  retryText: { color: '#991B1B', fontWeight: '600' },
+  errorText: { flex: 1, fontSize: 13, color: colors.errorText },
+  retryText: { color: colors.errorText, fontWeight: '600' },
 
   profileCard: {
     backgroundColor: colors.surface,
@@ -848,7 +846,7 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     backgroundColor: colors.errorBg,
     gap: 8,
   },
-  logoutText: { fontSize: 15, fontWeight: '600', color: '#DC2626' },
+  logoutText: { fontSize: 15, fontWeight: '600', color: colors.errorText },
   buildInfoBlock: { marginTop: 16 },
   versionText: { textAlign: 'center', fontSize: 10, color: colors.textMuted, marginTop: 2 },
 
@@ -872,7 +870,7 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   inputError: { borderColor: colors.error, backgroundColor: colors.errorBg },
   textArea: { minHeight: 80, textAlignVertical: 'top' },
   errorContainer: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  fieldErrorText: { fontSize: 12, color: '#DC2626' },
+  fieldErrorText: { fontSize: 12, color: colors.errorText },
   fieldFooter: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 6 },
   helperRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6, marginTop: 8 },
   helperText: { flex: 1, fontSize: 12, lineHeight: 18, color: colors.textMuted },
@@ -882,14 +880,4 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   saveButtonText: { color: '#0A1628', fontSize: 15, fontWeight: '700' },
 
   bottomSpacer: { height: Platform.OS === 'ios' ? 100 : 80 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'center', alignItems: 'center', padding: 20 },
-  modalContent: { backgroundColor: colors.surface, borderRadius: 12, padding: 24, width: '100%', maxWidth: 320, alignItems: 'center' },
-  modalIconContainer: { width: 64, height: 64, borderRadius: 32, backgroundColor: colors.errorBg, justifyContent: 'center', alignItems: 'center', marginBottom: 16 },
-  modalTitle: { fontSize: 20, fontWeight: '700', color: colors.text, marginBottom: 8 },
-  modalMessage: { fontSize: 14, color: colors.textSecondary, textAlign: 'center', marginBottom: 24, lineHeight: 20 },
-  modalButtons: { flexDirection: 'row', gap: 12, width: '100%' },
-  modalCancelButton: { flex: 1, paddingVertical: 12, borderRadius: 10, borderWidth: 1.5, borderColor: colors.border, alignItems: 'center' },
-  modalCancelText: { fontSize: 15, fontWeight: '600', color: colors.textSecondary },
-  modalConfirmButton: { flex: 1, paddingVertical: 12, borderRadius: 10, backgroundColor: '#DC2626', alignItems: 'center' },
-  modalConfirmText: { fontSize: 15, fontWeight: '600', color: '#FFFFFF' },
 });

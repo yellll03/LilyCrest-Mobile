@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
-import { Animated, Modal, Platform, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+import { ActivityIndicator, Animated, Modal, Platform, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useTheme, useThemedStyles } from '../context/ThemeContext';
+import { useTheme } from '../context/ThemeContext';
 
 /**
  * StyledModal — premium replacement for Alert.alert
@@ -25,10 +25,11 @@ export default function StyledModal({
   iconColor,
   buttons,
   type,
+  children,
 }) {
   const scaleAnim = useRef(new Animated.Value(0.85)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
-  const { colors } = useTheme();
+  const { colors, isDarkMode } = useTheme();
 
   useEffect(() => {
     if (visible) {
@@ -43,10 +44,10 @@ export default function StyledModal({
   }, [opacityAnim, scaleAnim, visible]);
 
   const typeConfig = {
-    success: { icon: 'checkmark-circle', color: '#059669' },
-    error: { icon: 'close-circle', color: '#DC2626' },
-    warning: { icon: 'warning', color: '#D97706' },
-    info: { icon: 'information-circle', color: '#2563EB' },
+    success: { icon: 'checkmark-circle', color: colors.success, background: colors.successBg },
+    error: { icon: 'close-circle', color: colors.error, background: colors.errorBg },
+    warning: { icon: 'warning', color: colors.warning, background: colors.warningBg },
+    info: { icon: 'information-circle', color: colors.info, background: colors.infoBg },
   };
 
   const cfg = type ? typeConfig[type] : null;
@@ -55,11 +56,10 @@ export default function StyledModal({
 
   const actionButtons = buttons || [{ text: 'OK', onPress: onClose }];
 
-  const styles = useThemedStyles((c, isDark) =>
-    StyleSheet.create({
+  const styles = StyleSheet.create({
       overlay: {
         flex: 1,
-        backgroundColor: 'rgba(0,0,0,0.5)',
+        backgroundColor: colors.overlay,
         justifyContent: 'center',
         alignItems: 'center',
         padding: 28,
@@ -67,7 +67,9 @@ export default function StyledModal({
       card: {
         width: '100%',
         maxWidth: 340,
-        backgroundColor: c.surface,
+        backgroundColor: colors.modalBackground,
+        borderWidth: 1,
+        borderColor: colors.border,
         borderRadius: 20,
         overflow: 'hidden',
         ...Platform.select({
@@ -77,7 +79,7 @@ export default function StyledModal({
       },
       accentBar: {
         height: 4,
-        backgroundColor: resolvedColor || c.primary || '#0A1628',
+        backgroundColor: resolvedColor || colors.interactive,
       },
       body: {
         paddingHorizontal: 24,
@@ -89,7 +91,7 @@ export default function StyledModal({
         width: 56,
         height: 56,
         borderRadius: 28,
-        backgroundColor: `${resolvedColor || c.primary || '#0A1628'}18`,
+        backgroundColor: cfg?.background || colors.primaryLight,
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 16,
@@ -97,20 +99,24 @@ export default function StyledModal({
       title: {
         fontSize: 18,
         fontWeight: '700',
-        color: c.text,
+        color: colors.text,
         textAlign: 'center',
         marginBottom: 8,
       },
       message: {
         fontSize: 14,
         lineHeight: 20,
-        color: c.textSecondary,
+        color: colors.textSecondary,
         textAlign: 'center',
+        marginBottom: 20,
+      },
+      childContent: {
+        width: '100%',
         marginBottom: 20,
       },
       divider: {
         height: StyleSheet.hairlineWidth,
-        backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+        backgroundColor: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
       },
       btnRow: {
         flexDirection: 'row',
@@ -123,38 +129,48 @@ export default function StyledModal({
       },
       btnDivider: {
         width: StyleSheet.hairlineWidth,
-        backgroundColor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
+        backgroundColor: isDarkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)',
       },
       btnText: {
         fontSize: 15,
         fontWeight: '600',
-        color: c.primary || '#0A1628',
+        color: colors.interactive,
       },
       btnTextCancel: {
-        color: c.textSecondary,
+        color: colors.textSecondary,
         fontWeight: '500',
       },
       btnTextDestructive: {
-        color: '#DC2626',
+        color: colors.errorText,
       },
-    })
-  );
+      btnTextInfo: {
+        color: colors.infoText,
+      },
+      btnDisabled: {
+        opacity: 0.55,
+      },
+    });
 
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
+    <Modal visible={visible} transparent statusBarTranslucent animationType="none" onRequestClose={onClose}>
       <TouchableWithoutFeedback onPress={onClose}>
-        <View style={styles.overlay}>
+        <View accessibilityViewIsModal style={styles.overlay}>
           <TouchableWithoutFeedback>
-            <Animated.View style={[styles.card, { opacity: opacityAnim, transform: [{ scale: scaleAnim }] }]}>
+            <Animated.View
+              accessibilityRole="alert"
+              accessibilityLabel={[title, message].filter(Boolean).join('. ')}
+              style={[styles.card, { opacity: opacityAnim, transform: [{ scale: scaleAnim }] }]}
+            >
               <View style={styles.accentBar} />
               <View style={styles.body}>
                 {resolvedIcon && (
                   <View style={styles.iconWrap}>
-                    <Ionicons name={resolvedIcon} size={28} color={resolvedColor || colors.primary || '#0A1628'} />
+                    <Ionicons name={resolvedIcon} size={28} color={resolvedColor || colors.interactive} />
                   </View>
                 )}
                 {title ? <Text style={styles.title}>{title}</Text> : null}
                 {message ? <Text style={styles.message}>{message}</Text> : null}
+                {children ? <View style={styles.childContent}>{children}</View> : null}
               </View>
               <View style={styles.divider} />
               <View style={styles.btnRow}>
@@ -162,22 +178,33 @@ export default function StyledModal({
                   <View key={idx} style={{ flex: 1, flexDirection: 'row' }}>
                     {idx > 0 && <View style={styles.btnDivider} />}
                     <TouchableOpacity
-                      style={styles.btn}
+                      accessibilityRole="button"
+                      accessibilityLabel={btn.text}
+                      style={[styles.btn, (btn.disabled || btn.loading) && styles.btnDisabled]}
+                      disabled={btn.disabled || btn.loading}
                       onPress={() => {
                         if (btn.onPress) btn.onPress();
                         else if (onClose) onClose();
                       }}
                       activeOpacity={0.6}
                     >
-                      <Text
-                        style={[
-                          styles.btnText,
-                          btn.style === 'cancel' && styles.btnTextCancel,
-                          btn.style === 'destructive' && styles.btnTextDestructive,
-                        ]}
-                      >
-                        {btn.text}
-                      </Text>
+                      {btn.loading ? (
+                        <ActivityIndicator
+                          size="small"
+                          color={btn.style === 'destructive' ? colors.errorText : colors.interactive}
+                        />
+                      ) : (
+                        <Text
+                          style={[
+                            styles.btnText,
+                            btn.style === 'cancel' && styles.btnTextCancel,
+                            btn.style === 'destructive' && styles.btnTextDestructive,
+                            btn.style === 'info' && styles.btnTextInfo,
+                          ]}
+                        >
+                          {btn.text}
+                        </Text>
+                      )}
                     </TouchableOpacity>
                   </View>
                 ))}
