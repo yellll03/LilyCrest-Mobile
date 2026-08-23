@@ -23,10 +23,10 @@ export default function BrandHeader({
     >
       <View style={[styles.badge, compact && styles.badgeCompact]}>
         <Image
-          source={require('../../assets/images/logo-main.png')}
+          source={require('../../assets/images/lilycrest-mark.png')}
           style={[styles.badgeImage, compact && styles.badgeImageCompact]}
-          resizeMode="cover"
-          accessibilityLabel="LilyCrest logo"
+          resizeMode="contain"
+          accessibilityLabel="LilyCrest diamond logo"
         />
       </View>
 
@@ -94,14 +94,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   badgeImage: {
-    width: 180,
-    height: 180,
-    transform: [{ translateY: -24 }],
+    width: 88,
+    height: 88,
   },
   badgeImageCompact: {
-    width: 152,
-    height: 152,
-    transform: [{ translateY: -20 }],
+    width: 72,
+    height: 72,
   },
   textWrap: {
     alignItems: 'center',

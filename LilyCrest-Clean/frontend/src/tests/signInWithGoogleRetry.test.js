@@ -180,6 +180,10 @@ describe('AuthContext.signInWithGoogle connect-failure retry', () => {
 
     expect(result).toEqual({
       success: false,
+      status: 403,
+      errorType: 'access',
+      stage: 'backend-authorization',
+      code: 'backend-request-failed',
       error: 'Access denied. Your account is not registered as an active tenant.',
     });
     // A real server response must never trigger the connect-failure retry.

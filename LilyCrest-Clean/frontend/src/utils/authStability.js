@@ -57,7 +57,8 @@ export function classifyAuthError(error) {
   if (status === 429 || code === 'auth/too-many-requests') {
     return { type: 'rate-limit', status: status || 429, message: AUTH_MESSAGES.tooManyRequests };
   }
-  if (status === 503 && String(error?.response?.data?.code || '').toUpperCase() === 'OTP_DELIVERY_UNAVAILABLE') {
+  const responseCode = String(error?.response?.data?.code || '').toUpperCase();
+  if (status === 503 && ['OTP_DELIVERY_UNAVAILABLE', 'OTP_EMAIL_SEND_FAILED'].includes(responseCode)) {
     return { type: 'otp-delivery', status, message: AUTH_MESSAGES.otpDeliveryUnavailable };
   }
   if (code === 'ECONNABORTED' || code === 'ETIMEDOUT' || /timeout|timed out/i.test(message)) {

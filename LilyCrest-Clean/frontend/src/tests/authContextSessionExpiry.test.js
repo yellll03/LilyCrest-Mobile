@@ -166,6 +166,82 @@ describe('AuthContext forced session-expiry cleanup (behavioral)', () => {
     expect(latest.sessionState).toBe('online');
   });
 
+  it('email/password success is reported as an OTP challenge, not as a login failure', async () => {
+    const { api } = require('../services/api');
+    api.post.mockResolvedValueOnce({
+      data: {
+        otp_required: true,
+        otp_token: 'pending-otp-token',
+        masked_email: 'te***@example.com',
+      },
+    });
+
+    let latest;
+    renderAuth((state) => { latest = state; });
+    await waitFor(() => expect(latest.authStatus).toBe('authenticated'));
+
+    let result;
+    await act(async () => {
+      result = await latest.loginWithEmail('tenant@example.com', 'CorrectPassword1!');
+    });
+
+    expect(result).toEqual({
+      success: false,
+      otpRequired: true,
+      otpToken: 'pending-otp-token',
+      maskedEmail: 'te***@example.com',
+    });
+  });
+
+  it('incorrect email/password remains distinct from network, OTP, and profile failures', async () => {
+    const { api } = require('../services/api');
+    api.post.mockRejectedValueOnce({
+      response: { status: 401, data: { code: 'AUTHENTICATION_FAILED' } },
+    });
+
+    let latest;
+    renderAuth((state) => { latest = state; });
+    await waitFor(() => expect(latest.authStatus).toBe('authenticated'));
+
+    let result;
+    await act(async () => {
+      result = await latest.loginWithEmail('tenant@example.com', 'WrongPassword1!');
+    });
+
+    expect(result).toMatchObject({
+      success: false,
+      status: 401,
+      error: 'Incorrect email or password.',
+    });
+  });
+
+  it('a profile refresh failure after valid OTP does not downgrade successful authentication', async () => {
+    const { api } = require('../services/api');
+    api.post.mockResolvedValueOnce({
+      data: {
+        user: { user_id: 'tenant-profile-fallback', name: 'Fallback Tenant', role: 'tenant' },
+        session_token: 'profile-fallback-session',
+      },
+    });
+    let latest;
+    renderAuth((state) => { latest = state; });
+    await waitFor(() => expect(latest.authStatus).toBe('authenticated'));
+    api.get.mockRejectedValueOnce(new Error('profile service temporarily unavailable'));
+
+    let result;
+    await act(async () => {
+      result = await latest.verifyLoginOtp('pending-otp-token', '123456');
+    });
+
+    expect(result).toEqual({ success: true });
+    expect(latest.authStatus).toBe('authenticated');
+    expect(latest.user).toMatchObject({
+      user_id: 'tenant-profile-fallback',
+      name: 'Fallback Tenant',
+      branch: null,
+    });
+  });
+
   it('a single forced expiry clears user, sets unauthenticated, and runs full cleanup parity', async () => {
     let latest;
     renderAuth((state) => { latest = state; });

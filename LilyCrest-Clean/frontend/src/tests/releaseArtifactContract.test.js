@@ -23,11 +23,21 @@ describe('standalone release artifact contract', () => {
 
   test('iOS release keeps Google sign-in pods modular and export compliance explicit', () => {
     const config = read('app.config.js');
+    const firebase = read('src/config/firebase.js');
     const packageJson = JSON.parse(read('package.json'));
+    const eas = JSON.parse(read('eas.json'));
 
     expect(packageJson.dependencies['expo-build-properties']).toBe('~1.0.10');
     expect(config).toContain("{ name: 'GoogleUtilities', modular_headers: true }");
     expect(config).toContain("{ name: 'RecaptchaInterop', modular_headers: true }");
     expect(config).toContain('ITSAppUsesNonExemptEncryption: false');
+    expect(config).toContain("buildNumber: '2'");
+    expect(config).toContain("googleServicesFile: process.env.GOOGLE_SERVICES_PLIST || './GoogleService-Info.plist'");
+    expect(config).toContain("'@react-native-google-signin/google-signin'");
+    expect(config).toContain("'expo-local-authentication'");
+    expect(config).toContain('Allow LilyCrest to use Face ID to unlock your authorized session.');
+    expect(firebase).toContain("Platform.OS === 'android' ? firebaseNativeConfig : firebaseWebConfig");
+    expect(eas.build.release.environment).toBe('production');
+    expect(eas.build.production.environment).toBe('production');
   });
 });

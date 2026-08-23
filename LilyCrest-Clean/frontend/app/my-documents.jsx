@@ -354,6 +354,14 @@ export default function MyDocumentsScreen() {
     setShowPreview(true);
   };
 
+  const closePreview = useCallback(() => {
+    setShowPreview(false);
+  }, []);
+
+  const clearClosedPreview = useCallback(() => {
+    setPreviewDoc(null);
+  }, []);
+
   const handleDownload = async (doc) => {
     if (doc.id === 'contract') {
       router.push('/contract-viewer');
@@ -943,10 +951,23 @@ export default function MyDocumentsScreen() {
       </Modal>
 
       {/* ── Rich Document Preview Modal ── */}
-      <Modal visible={showPreview} animationType="slide" onRequestClose={() => setShowPreview(false)}>
+      <Modal
+        visible={showPreview}
+        animationType="slide"
+        presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}
+        allowSwipeDismissal={Platform.OS === 'ios'}
+        onRequestClose={closePreview}
+        onDismiss={clearClosedPreview}
+      >
         <SafeAreaView style={styles.previewContainer}>
           <View style={styles.previewHeader}>
-            <TouchableOpacity style={styles.closeButton} onPress={() => setShowPreview(false)}>
+            <TouchableOpacity
+              style={styles.closeButton}
+              onPress={closePreview}
+              hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
+              accessibilityRole="button"
+              accessibilityLabel="Close document preview"
+            >
               <Ionicons name="close" size={24} color={colors.text} />
             </TouchableOpacity>
             <Text style={styles.previewHeaderTitle} numberOfLines={1}>{previewDoc?.title || 'Document'}</Text>
@@ -1079,7 +1100,7 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   imagePreviewBody: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 16 },
   imagePreviewImage: { width: '100%', height: '100%', borderRadius: 12 },
   imagePreviewDate: { textAlign: 'center', fontSize: 12, color: colors.textMuted, paddingVertical: 12 },
-  closeButton: { width: 40, height: 40, borderRadius: 20, justifyContent: 'center', alignItems: 'center' },
+  closeButton: { width: 48, height: 48, borderRadius: 24, justifyContent: 'center', alignItems: 'center' },
   // Preview Modal
   previewContainer: { flex: 1, backgroundColor: colors.background },
   previewHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 12, backgroundColor: colors.surface, borderBottomWidth: 1, borderBottomColor: colors.border },

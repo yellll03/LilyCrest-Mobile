@@ -49,6 +49,7 @@ describe('authentication stability', () => {
     [{ code: 'ECONNABORTED', message: 'timeout of 15000ms exceeded' }, AUTH_MESSAGES.timeout],
     [{ response: { status: 503 }, message: 'Request failed' }, AUTH_MESSAGES.backendUnavailable],
     [{ response: { status: 503, data: { code: 'OTP_DELIVERY_UNAVAILABLE' } } }, AUTH_MESSAGES.otpDeliveryUnavailable],
+    [{ response: { status: 503, data: { code: 'OTP_EMAIL_SEND_FAILED' } } }, AUTH_MESSAGES.otpDeliveryUnavailable],
     [{ response: { status: 401, data: { detail: 'Firebase: secret raw error' } } }, AUTH_MESSAGES.invalidCredentials],
     [{ response: { status: 429, data: { detail: 'Axios raw error' } } }, AUTH_MESSAGES.tooManyRequests],
   ])('maps provider/network errors without leaking raw details', (error, expected) => {

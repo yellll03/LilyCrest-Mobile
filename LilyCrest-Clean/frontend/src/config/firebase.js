@@ -96,7 +96,11 @@ const firebaseNativeConfig = {
   appId: firebaseAndroidAppId,
 };
 
-const firebaseConfig = Platform.OS === 'web' ? firebaseWebConfig : firebaseNativeConfig;
+// The React Native app uses the Firebase JavaScript SDK. On iOS there is no
+// Android application identity, so initialize the JS SDK with the Web app
+// configuration while the native Google Sign-In SDK reads its iOS client from
+// GoogleService-Info.plist. Keep Android on its existing native configuration.
+const firebaseConfig = Platform.OS === 'android' ? firebaseNativeConfig : firebaseWebConfig;
 
 // Use a global cache to avoid re-initializing Firebase/Auth during fast refresh or hot reloads
 const globalForFirebase = globalThis.__lilycrestFirebase ?? {};

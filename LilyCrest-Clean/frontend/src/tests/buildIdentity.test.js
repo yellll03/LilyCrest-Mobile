@@ -6,6 +6,7 @@ describe('Android release identity', () => {
   const config = fs.readFileSync(path.resolve(__dirname, '../../app.config.js'), 'utf8');
   const gradle = fs.readFileSync(path.resolve(__dirname, '../../android/app/build.gradle'), 'utf8');
   const about = fs.readFileSync(path.resolve(__dirname, '../../app/about.jsx'), 'utf8');
+  const brandHeader = fs.readFileSync(path.resolve(__dirname, '../components/BrandHeader.jsx'), 'utf8');
   const settings = fs.readFileSync(path.resolve(__dirname, '../../app/settings.jsx'), 'utf8');
 
   it('keeps Expo and native Android version declarations synchronized', () => {
@@ -30,5 +31,12 @@ describe('Android release identity', () => {
     expect(settings).toContain("Constants.expoConfig?.version || 'Unknown'");
     expect(about).not.toContain('Version 1.0.0');
     expect(settings).not.toContain('v1.0.0');
+  });
+
+  it('uses the current diamond mark in the About screen branding', () => {
+    expect(about).toContain('<BrandHeader compact');
+    expect(brandHeader).toContain("require('../../assets/images/lilycrest-mark.png')");
+    expect(brandHeader).not.toContain("require('../../assets/images/logo-main.png')");
+    expect(brandHeader).toContain('accessibilityLabel="LilyCrest diamond logo"');
   });
 });

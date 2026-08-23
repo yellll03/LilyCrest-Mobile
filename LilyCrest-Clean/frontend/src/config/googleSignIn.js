@@ -3,11 +3,13 @@ import { GoogleAuthProvider, signInWithCredential, signInWithPopup } from 'fireb
 import { useState } from 'react';
 import { Platform } from 'react-native';
 import { auth, GOOGLE_WEB_CLIENT_ID } from './firebase';
+import { classifyGoogleAuthError } from '../utils/googleAuthError';
 
 const IS_DEV = typeof __DEV__ !== 'undefined' && __DEV__;
 
 let GoogleSignin;
 let statusCodes;
+let nativeConfigurationError = null;
 if (Platform.OS !== 'web') {
   try {
     const googleSignInModule = require('@react-native-google-signin/google-signin');
@@ -26,7 +28,13 @@ if (Platform.OS !== 'web') {
       console.warn('Google Sign-In skipped configure because webClientId is missing.');
     }
   } catch (nativeModuleError) {
-    console.warn('Native Google Sign-In module not available:', nativeModuleError?.message);
+    nativeConfigurationError = nativeModuleError;
+    const classified = classifyGoogleAuthError(nativeModuleError, statusCodes, 'native-configuration');
+    console.warn('[GoogleAuth]', {
+      stage: classified.stage,
+      code: classified.code,
+      type: classified.type,
+    });
   }
 }
 
@@ -40,6 +48,7 @@ export function useGoogleSignIn() {
   const [isLoading, setIsLoading] = useState(false);
 
   const signInWithGoogle = async () => {
+    let stage = 'native-configuration';
     try {
       // Web: prefer Firebase popup for parity with existing behavior
       if (isWeb) {
@@ -47,21 +56,34 @@ export function useGoogleSignIn() {
       }
 
       setIsLoading(true);
+      if (nativeConfigurationError) {
+        const classified = classifyGoogleAuthError(nativeConfigurationError, statusCodes, stage);
+        return { success: false, ...classified, error: classified.message };
+      }
       if (!GoogleSignin) {
         return {
           success: false,
-          error: 'Native Google Sign-In is unavailable. Rebuild and install the dev client.',
+          type: 'configuration',
+          stage,
+          code: 'native-module-unavailable',
+          error: 'Google Sign-In is unavailable in this app build. Please install the latest version.',
         };
       }
 
       if (!GOOGLE_WEB_CLIENT_ID) {
         return {
           success: false,
-          error: 'Google Sign-In is not configured in this build. Please reinstall the latest APK.',
+          type: 'configuration',
+          stage,
+          code: 'web-client-id-missing',
+          error: 'Google Sign-In is not configured in this app build. Please install the latest version.',
         };
       }
 
-      await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      if (Platform.OS === 'android') {
+        stage = 'play-services';
+        await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
+      }
 
       try {
         await GoogleSignin.signOut();
@@ -69,6 +91,7 @@ export function useGoogleSignIn() {
         // Ignore sign-out failures before account selection.
       }
 
+      stage = 'account-selection';
       const googleResult = await GoogleSignin.signIn();
 
       if (googleResult?.type === 'cancelled') {
@@ -81,6 +104,7 @@ export function useGoogleSignIn() {
       }
 
       const signInData = googleResult.data;
+      stage = 'token-retrieval';
       let idToken = signInData?.idToken;
       let accessToken = signInData?.accessToken;
 
@@ -115,12 +139,19 @@ export function useGoogleSignIn() {
       }
 
       if (!idToken && !accessToken) {
-        console.warn('[Google] All token methods exhausted.');
-        return { success: false, error: 'No authentication token returned from Google.' };
+        console.warn('[GoogleAuth]', { stage, code: 'token-missing', type: 'credential' });
+        return {
+          success: false,
+          type: 'credential',
+          stage,
+          code: 'token-missing',
+          error: 'Google did not return a sign-in credential. Please try again.',
+        };
       }
 
       // Some Android/Play Services flows return only an access token.
       // Firebase accepts either the Google ID token, the access token, or both.
+      stage = 'firebase-credential';
       const credential = GoogleAuthProvider.credential(idToken ?? null, accessToken ?? null);
       const userCredential = await signInWithCredential(auth, credential);
 
@@ -130,19 +161,19 @@ export function useGoogleSignIn() {
 
       return {
         success: true,
+        stage: 'firebase-authenticated',
         user: userCredential.user,
         idToken: firebaseIdToken,
         accessToken,
       };
     } catch (error) {
-      if (statusCodes && error?.code === statusCodes.SIGN_IN_CANCELLED) {
-        return { success: false, cancelled: true, error: 'Sign-in cancelled' };
-      }
-      if (error?.message?.toLowerCase().includes('canceled') || error?.message?.toLowerCase().includes('cancelled')) {
-        return { success: false, cancelled: true, error: 'Sign-in cancelled' };
-      }
-      console.error('Google Sign-In Error:', error?.message || 'Unexpected error');
-      return { success: false, error: error.message || 'Failed to sign in with Google' };
+      const classified = classifyGoogleAuthError(error, statusCodes, stage);
+      console.warn('[GoogleAuth]', {
+        stage: classified.stage,
+        code: classified.code,
+        type: classified.type,
+      });
+      return { success: false, ...classified, error: classified.message };
     } finally {
       setIsLoading(false);
     }
