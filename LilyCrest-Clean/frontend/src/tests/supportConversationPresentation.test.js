@@ -38,10 +38,14 @@ describe('support inquiry presentation', () => {
     expect(screen).toContain('showDeliveryStatus={item.id === latestOutgoingMessageId}');
   });
 
-  test('detail footer reserves measured tab-bar space on Android and keyboard resize remains enabled', () => {
+  test('composer releases hidden tab-bar space while the keyboard is visible', () => {
     const screen = read('src/screens/LilyAssistantScreen.jsx');
     expect(screen).toContain('useBottomTabBarHeight()');
-    expect(screen).toContain('styles.detailScreen, { paddingBottom: tabBarHeight }');
+    expect(screen).toContain("Keyboard.addListener('keyboardDidShow'");
+    expect(screen).toContain("Keyboard.addListener('keyboardDidHide'");
+    expect(screen).toContain('const bottomTabInset = isKeyboardVisible ? 0 : tabBarHeight;');
+    expect(screen).toContain('styles.detailScreen, { paddingBottom: bottomTabInset }');
+    expect(screen).toContain('styles.screen, { paddingBottom: bottomTabInset }');
     expect(screen).toContain("behavior={Platform.OS === 'ios' ? 'padding' : 'height'}");
   });
 });

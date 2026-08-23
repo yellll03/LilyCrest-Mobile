@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Crypto from 'expo-crypto';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  Keyboard,
   KeyboardAvoidingView,
   Alert,
   Platform,
@@ -440,6 +441,7 @@ export default function LilyAssistantScreen() {
     tenantState: 'unresolved',
     suggestions: [],
   });
+  const [isKeyboardVisible, setIsKeyboardVisible] = useState(false);
 
   const initialSession = useMemo(
     () => `${user?.user_id || 'guest'}-chat-${Date.now()}`,
@@ -447,10 +449,25 @@ export default function LilyAssistantScreen() {
   );
   const chat = useAssistantChat(initialSession);
   const tabBarHeight = useBottomTabBarHeight();
+  const bottomTabInset = isKeyboardVisible ? 0 : tabBarHeight;
   const suggestedQuestions = useMemo(
     () => getLilyTopicSuggestions(selectedTopic, suggestionContext),
     [selectedTopic, suggestionContext],
   );
+
+  useEffect(() => {
+    const showSubscription = Keyboard.addListener('keyboardDidShow', () => {
+      setIsKeyboardVisible(true);
+    });
+    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+      setIsKeyboardVisible(false);
+    });
+
+    return () => {
+      showSubscription.remove();
+      hideSubscription.remove();
+    };
+  }, []);
 
   useEffect(() => {
     setSuggestionContext({ tenantState: 'unresolved', suggestions: [] });
@@ -1658,7 +1675,7 @@ export default function LilyAssistantScreen() {
       : '';
     const latestOutgoingMessageId = getLatestOutgoingMessageId(selectedInquiry.thread);
     return (
-      <View style={[styles.detailScreen, { paddingBottom: tabBarHeight }]}>
+      <View style={[styles.detailScreen, { paddingBottom: bottomTabInset }]}>
         <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
           <Pressable style={styles.backButton} onPress={() => setSelectedInquiry(null)}>
             <Ionicons name="arrow-back" size={22} color="#f8fafc" />
@@ -1889,12 +1906,12 @@ export default function LilyAssistantScreen() {
       <KeyboardAvoidingView
         style={styles.root}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? tabBarHeight : 0}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? bottomTabInset : 0}
       >
         {selectedInquiry ? (
           renderInquiryDetail()
         ) : (
-          <View style={[styles.screen, { paddingBottom: tabBarHeight }]}>
+          <View style={[styles.screen, { paddingBottom: bottomTabInset }]}>
             <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
               <View style={styles.headerLeft}>
                 <View style={styles.headerAvatar}>

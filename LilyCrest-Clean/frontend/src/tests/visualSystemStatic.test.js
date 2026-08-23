@@ -48,7 +48,8 @@ describe('canonical Lilycrest visual-system guardrails', () => {
     expect(tabs).not.toContain('HomeTabIcon');
     expect(tabs).toContain('TabBarItem');
     expect(tabs).not.toContain('AnimatedTabIcon');
-    expect(support).toContain('paddingBottom: tabBarHeight');
+    expect(support).toContain('paddingBottom: bottomTabInset');
+    expect(support).toContain('const bottomTabInset = isKeyboardVisible ? 0 : tabBarHeight;');
     expect(billDetails).toContain("<SafeAreaView style={styles.container} edges={['top']}>");
   });
 });
