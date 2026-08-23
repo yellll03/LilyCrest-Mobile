@@ -1,8 +1,10 @@
 const { getDb } = require('../config/database');
+const { assertStagingWriteTarget } = require('../config/environmentSafety');
 
 // Seed database with sample data
 async function seedData(req, res) {
   try {
+    assertStagingWriteTarget(process.env, { toolName: 'legacy seed endpoint' });
     const db = getDb();
 
     // ── Rooms ──────────────────────────────────────────────────────────────

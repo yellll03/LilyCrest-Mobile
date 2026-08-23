@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+const { assertStagingWriteTarget } = require('./stagingWriteGuard');
+
 'use strict';
 
 require('dotenv').config();
@@ -70,6 +72,7 @@ async function run(options = parseCliArgs(process.argv.slice(2))) {
 }
 
 if (require.main === module) {
+  assertStagingWriteTarget(process.env, { toolName: 'approveCanonicalBranch.js' });
   const options = parseCliArgs(process.argv.slice(2));
   try {
     validateCommand(options);

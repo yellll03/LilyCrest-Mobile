@@ -1,6 +1,16 @@
 const { execSync } = require('child_process');
 
 const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
+const DEPLOYMENT_ENVIRONMENT = String(process.env.EXPO_PUBLIC_DEPLOYMENT_ENV || 'development').trim().toLowerCase();
+const IS_STAGING = DEPLOYMENT_ENVIRONMENT === 'staging';
+const IS_DEVELOPMENT = DEPLOYMENT_ENVIRONMENT === 'development';
+const APP_SCHEME = IS_STAGING ? 'lilycrest-staging' : IS_DEVELOPMENT ? 'lilycrest-dev' : 'frontend';
+const GOOGLE_SERVICES_FILE = process.env.GOOGLE_SERVICES_JSON
+  || `./android/app/src/${DEPLOYMENT_ENVIRONMENT}/google-services.json`;
+
+if (!['development', 'staging', 'production'].includes(DEPLOYMENT_ENVIRONMENT)) {
+  throw new Error(`Unsupported EXPO_PUBLIC_DEPLOYMENT_ENV: ${DEPLOYMENT_ENVIRONMENT}`);
+}
 
 // EAS build workers set these; a local `expo start`/`eas build` also has git
 // available, so fall back to reading the checked-out commit directly. Only
@@ -17,7 +27,7 @@ function resolveGitCommit() {
 
 module.exports = {
   expo: {
-    name: 'LilyCrest',
+    name: IS_STAGING ? 'LilyCrest STAGING' : IS_DEVELOPMENT ? 'LilyCrest DEV' : 'LilyCrest',
     slug: 'frontend',
     // Keep in sync with android/app/build.gradle's versionName — that file is
     // the authoritative source for native Android builds (this repo commits a
@@ -26,21 +36,29 @@ module.exports = {
     version: '1.2.2',
     orientation: 'default',
     icon: './assets/images/icon.png',
-    scheme: 'frontend',
+    scheme: APP_SCHEME,
     userInterfaceStyle: 'automatic',
     newArchEnabled: true,
     ios: {
-      bundleIdentifier: 'com.lilycrest.lilycrestdorm',
+      bundleIdentifier: IS_STAGING
+        ? 'com.lilycrest.lilycrestdorm.staging'
+        : IS_DEVELOPMENT
+          ? 'com.lilycrest.lilycrestdorm.dev'
+          : 'com.lilycrest.lilycrestdorm',
       supportsTablet: true,
       config: {
         googleMapsApiKey: GOOGLE_MAPS_API_KEY,
       },
     },
     android: {
-      package: 'com.lilycrest.lilycrestdorm',
+      package: IS_STAGING
+        ? 'com.lilycrest.lilycrestdorm.staging'
+        : IS_DEVELOPMENT
+          ? 'com.lilycrest.lilycrestdorm.dev'
+          : 'com.lilycrest.lilycrestdorm',
       // Keep in sync with android/app/build.gradle's versionCode (see note above).
       versionCode: 21,
-      googleServicesFile: process.env.GOOGLE_SERVICES_JSON || './google-services.json',
+      googleServicesFile: GOOGLE_SERVICES_FILE,
       config: {
         googleSignIn: {
           apiKey: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_API_KEY || '',
@@ -59,7 +77,7 @@ module.exports = {
         {
           action: 'VIEW',
           autoVerify: false,
-          data: [{ scheme: 'frontend' }],
+          data: [{ scheme: APP_SCHEME }],
           category: ['DEFAULT', 'BROWSABLE'],
         },
       ],
@@ -106,6 +124,7 @@ module.exports = {
       },
       gitCommit: resolveGitCommit(),
       buildTime: new Date().toISOString(),
+      deploymentEnvironment: DEPLOYMENT_ENVIRONMENT,
     },
   },
 };

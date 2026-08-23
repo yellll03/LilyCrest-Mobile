@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+const { assertStagingWriteTarget } = require('./stagingWriteGuard');
+
 'use strict';
 
 require('dotenv').config();
@@ -146,6 +148,7 @@ async function main() {
 }
 
 if (require.main === module) {
+  assertStagingWriteTarget(process.env, { toolName: 'seedSampleSurvey.js' });
   main().catch((error) => {
     console.error(`Sample survey operation blocked: ${error.message}`);
     process.exitCode = 1;

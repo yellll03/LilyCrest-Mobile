@@ -1,4 +1,6 @@
 #!/usr/bin/env node
+const { assertStagingWriteTarget } = require('./stagingWriteGuard');
+
 'use strict';
 
 // Inventory the old support work-item collections and, when explicitly
@@ -162,6 +164,7 @@ async function main() {
 }
 
 if (require.main === module) {
+  assertStagingWriteTarget(process.env, { toolName: 'auditLegacySupportWorkItems.js' });
   main().catch((error) => {
     console.error('Legacy support audit failed:', error.message);
     process.exitCode = 1;

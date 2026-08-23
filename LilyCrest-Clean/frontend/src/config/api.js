@@ -1,4 +1,6 @@
-const MOBILE_BACKEND_URL = 'https://api.lilycrest.space';
+export const PRODUCTION_MOBILE_BACKEND_URL = 'https://api.lilycrest.space';
+
+const NON_PRODUCTION_HOST_MARKER = /(?:^|[-.])(staging|stage|qa|e2e|test|dev)(?:[-.]|$)/i;
 
 export const normalizeBackendUrl = (value) => String(value || '').trim().replace(/\/+$/, '');
 
@@ -30,50 +32,73 @@ export function isLocalOrPrivateBackendUrl(value) {
   return false;
 }
 
-// Production runtime host allowlist. This is intentionally an allowlist
-// (only the canonical API host resolves) rather than a denylist of known-bad
-// hosts — a denylist only blocks hosts already known to us and silently lets
-// anything else through
-// unnoticed if EXPO_PUBLIC_BACKEND_URL is ever misconfigured. There is no
-// runtime failover: a request to the canonical host that fails is retried
-// against that same host (see services/api.js) or surfaced as an error —
-// this function only guards which host the app is even allowed to build
-// requests against in the first place.
-export const isDisallowedMobileRuntimeUrl = (value) => {
+function hasNonProductionHostMarker(value) {
+  return NON_PRODUCTION_HOST_MARKER.test(extractBackendHost(value));
+}
+
+export const isDisallowedMobileRuntimeUrl = (value, environment = 'production') => {
   const normalized = normalizeBackendUrl(value);
-  return normalized !== MOBILE_BACKEND_URL;
+  if (environment === 'staging') {
+    return !normalized
+      || normalized === PRODUCTION_MOBILE_BACKEND_URL
+      || isLocalOrPrivateBackendUrl(normalized)
+      || !/^https:\/\//i.test(normalized)
+      || !hasNonProductionHostMarker(normalized);
+  }
+  return normalized !== PRODUCTION_MOBILE_BACKEND_URL;
 };
 
 function isDevelopmentRuntime() {
   return typeof __DEV__ !== 'undefined' ? __DEV__ : process.env.NODE_ENV !== 'production';
 }
 
-export function resolveBackendUrl(value, { isDevelopment = isDevelopmentRuntime() } = {}) {
+export function resolveDeploymentEnvironment(
+  value,
+  { isDevelopment = isDevelopmentRuntime() } = {},
+) {
+  const configured = String(value || '').trim().toLowerCase();
+  if (configured) return configured;
+  return isDevelopment ? 'development' : 'production';
+}
+
+export function resolveBackendUrl(value, options = {}) {
+  const isDevelopment = options.isDevelopment ?? isDevelopmentRuntime();
+  const environment = resolveDeploymentEnvironment(options.environment, { isDevelopment });
   const normalized = normalizeBackendUrl(value);
 
-  // Development builds may legitimately point at a local machine, emulator
-  // loopback, or LAN IP for Metro/dev-server testing — the production
-  // allowlist below does not apply to them. Production is never reached
-  // through this branch (isDevelopment is derived from __DEV__/NODE_ENV).
-  if (isDevelopment) {
-    return normalized || MOBILE_BACKEND_URL;
+  if (environment === 'development') {
+    return normalized || PRODUCTION_MOBILE_BACKEND_URL;
+  }
+
+  if (environment === 'staging') {
+    if (isDisallowedMobileRuntimeUrl(normalized, 'staging')) {
+      throw new Error('Invalid staging backend URL. Staging requires a public HTTPS QA/staging host and must never use api.lilycrest.space.');
+    }
+    return normalized;
+  }
+
+  if (environment !== 'production') {
+    throw new Error(`Unsupported LilyCrest deployment environment: ${environment}`);
   }
 
   if (isLocalOrPrivateBackendUrl(normalized)) {
-    throw new Error('Invalid production backend URL. Configure EXPO_PUBLIC_BACKEND_URL with a public HTTPS LilyCrest API host.');
+    throw new Error('Invalid production backend URL. Configure EXPO_PUBLIC_BACKEND_URL with the canonical public HTTPS LilyCrest API host.');
   }
 
-  return isDisallowedMobileRuntimeUrl(normalized)
-    ? MOBILE_BACKEND_URL
+  // Production remains pinned to the canonical host. A misconfigured value
+  // cannot make a release APK talk to staging or an arbitrary third party.
+  return isDisallowedMobileRuntimeUrl(normalized, 'production')
+    ? PRODUCTION_MOBILE_BACKEND_URL
     : normalized;
 }
 
+export const DEPLOYMENT_ENVIRONMENT = resolveDeploymentEnvironment(
+  process.env.EXPO_PUBLIC_DEPLOYMENT_ENV,
+);
 const configuredBackendUrl = normalizeBackendUrl(process.env.EXPO_PUBLIC_BACKEND_URL);
 
-const RAW_BACKEND_URL = resolveBackendUrl(configuredBackendUrl);
-
-export const API_BASE_URL = RAW_BACKEND_URL;
-
+export const API_BASE_URL = resolveBackendUrl(configuredBackendUrl, {
+  environment: DEPLOYMENT_ENVIRONMENT,
+});
 export const MOBILE_API_BASE_URL = `${API_BASE_URL}/api/m`;
-
 export const MOBILE_HEALTH_URL = `${MOBILE_API_BASE_URL}/health`;

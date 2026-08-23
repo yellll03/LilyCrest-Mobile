@@ -9,6 +9,8 @@ import {
     onAuthStateChanged
 } from 'firebase/auth';
 import { Platform } from 'react-native';
+import { DEPLOYMENT_ENVIRONMENT } from './api';
+import { validateFirebaseEnvironment } from './firebaseEnvironment';
 
 const ENV = {
   FIREBASE_API_KEY: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || '',
@@ -52,11 +54,18 @@ const firebaseProjectId = requiredEnv('EXPO_PUBLIC_FIREBASE_PROJECT_ID', ENV.FIR
 const firebaseStorageBucket = requiredEnv(
   'EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET',
   ENV.FIREBASE_STORAGE_BUCKET,
-  FIREBASE_STORAGE_BUCKET_FALLBACK,
+  DEPLOYMENT_ENVIRONMENT === 'production' ? FIREBASE_STORAGE_BUCKET_FALLBACK : '',
 );
 const firebaseMessagingSenderId = requiredEnv('EXPO_PUBLIC_FIREBASE_MESSAGING_SENDER_ID', ENV.FIREBASE_MESSAGING_SENDER_ID);
 const firebaseWebAppId = requiredEnv('EXPO_PUBLIC_FIREBASE_WEB_APP_ID', ENV.FIREBASE_WEB_APP_ID);
 const firebaseAndroidAppId = requiredEnv('EXPO_PUBLIC_FIREBASE_ANDROID_APP_ID', ENV.FIREBASE_ANDROID_APP_ID);
+
+validateFirebaseEnvironment({
+  environment: DEPLOYMENT_ENVIRONMENT,
+  projectId: firebaseProjectId,
+  storageBucket: firebaseStorageBucket,
+  appId: Platform.OS === 'web' ? firebaseWebAppId : firebaseAndroidAppId,
+});
 
 const firebaseMeasurementId = ENV.FIREBASE_MEASUREMENT_ID || undefined;
 

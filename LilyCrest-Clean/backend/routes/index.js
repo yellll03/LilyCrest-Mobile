@@ -90,7 +90,7 @@ const contractRoutes = require('./contracts.routes');
 router.use('/contracts', contractRoutes);
 
 function seedAccessMiddleware(req, res, next) {
-  if (process.env.NODE_ENV === 'production') {
+  if (String(process.env.LILYCREST_ENVIRONMENT || '').toLowerCase() !== 'staging') {
     return res.status(404).json({ detail: 'Not found' });
   }
 
@@ -102,7 +102,8 @@ function seedAccessMiddleware(req, res, next) {
   return next();
 }
 
-// Seed route is development-only and admin/owner gated.
+// Legacy seed route is staging-only, admin/owner gated, and additionally
+// protected by the target guard inside seedData. Prefer the QA fixture CLI.
 router.post('/seed', authMiddleware, seedAccessMiddleware, seedController.seedData);
 
 // Health check — also the source of truth for "which commit is this backend

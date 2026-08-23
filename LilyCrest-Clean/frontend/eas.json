@@ -7,36 +7,50 @@
       "developmentClient": true,
       "distribution": "internal",
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleDevelopmentDebug"
       },
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://api.lilycrest.space"
+        "NODE_ENV": "development",
+        "EXPO_PUBLIC_DEPLOYMENT_ENV": "development",
+        "LILYCREST_ANDROID_FLAVOR": "development"
       }
     },
-    "release": {
+    "staging": {
       "developmentClient": false,
+      "distribution": "internal",
+      "environment": "preview",
       "android": {
-        "buildType": "apk"
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleStagingRelease"
       },
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://api.lilycrest.space"
+        "NODE_ENV": "production",
+        "EXPO_PUBLIC_DEPLOYMENT_ENV": "staging",
+        "LILYCREST_ANDROID_FLAVOR": "staging"
       }
     },
     "preview": {
-      "developmentClient": false,
-      "distribution": "internal",
-      "environment": "production",
+      "extends": "staging"
+    },
+    "release": {
+      "extends": "production",
       "android": {
-        "buildType": "apk"
-      },
-      "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://api.lilycrest.space"
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleProductionRelease"
       }
     },
     "production": {
       "developmentClient": false,
+      "environment": "production",
+      "android": {
+        "gradleCommand": ":app:bundleProductionRelease"
+      },
       "env": {
-        "EXPO_PUBLIC_BACKEND_URL": "https://api.lilycrest.space"
+        "NODE_ENV": "production",
+        "EXPO_PUBLIC_DEPLOYMENT_ENV": "production",
+        "EXPO_PUBLIC_BACKEND_URL": "https://api.lilycrest.space",
+        "LILYCREST_ANDROID_FLAVOR": "production"
       }
     }
   },
