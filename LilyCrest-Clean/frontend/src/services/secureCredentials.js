@@ -1,9 +1,8 @@
 /**
- * Secure auth helpers for biometric unlock and pending OTP verification.
+ * Secure session and pending OTP verification helpers.
  *
  * This module intentionally does not store raw passwords. Legacy password
- * keys are deleted during migration, and biometrics only unlock an existing
- * valid session token.
+ * and retired local-auth preference keys are deleted during migration.
  */
 
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -20,15 +19,15 @@ try {
 
 const LEGACY_SESSION_TOKEN_KEY = 'session_token';
 const SESSION_CREDENTIALS_KEY = 'lilycrest_session_credentials_v2';
-const BIOMETRIC_SETTING_KEY = 'biometricLogin';
-const BIOMETRIC_SESSION_KEY = 'lilycrest_bio_session_enabled';
 const PENDING_LOGIN_KEY = 'lilycrest_pending_login';
 const PENDING_LOGIN_TTL_MS = 10 * 60 * 1000;
 
-const LEGACY_KEYS = {
+const RETIRED_LOCAL_AUTH_KEYS = {
   email: 'lilycrest_bio_email',
   password: 'lilycrest_bio_pass',
   stored: 'lilycrest_bio_stored',
+  setting: 'biometricLogin',
+  session: 'lilycrest_bio_session_enabled',
 };
 
 let memoryPendingLogin = null;
@@ -61,9 +60,11 @@ async function getSecureItem(key) {
 export async function migrateLegacyCredentials() {
   try {
     await Promise.all([
-      deleteSecureItem(LEGACY_KEYS.email),
-      deleteSecureItem(LEGACY_KEYS.password),
-      AsyncStorage.removeItem(LEGACY_KEYS.stored).catch(() => {}),
+      deleteSecureItem(RETIRED_LOCAL_AUTH_KEYS.email),
+      deleteSecureItem(RETIRED_LOCAL_AUTH_KEYS.password),
+      AsyncStorage.removeItem(RETIRED_LOCAL_AUTH_KEYS.stored).catch(() => {}),
+      AsyncStorage.removeItem(RETIRED_LOCAL_AUTH_KEYS.setting).catch(() => {}),
+      AsyncStorage.removeItem(RETIRED_LOCAL_AUTH_KEYS.session).catch(() => {}),
       AsyncStorage.removeItem('remember_me').catch(() => {}),
     ]);
   } catch (err) {
@@ -223,55 +224,14 @@ export async function clearPendingLogin() {
   await deleteSecureItem(PENDING_LOGIN_KEY);
 }
 
-export async function enableBiometricSession(email = '') {
-  await migrateLegacyCredentials();
-  await AsyncStorage.setItem(BIOMETRIC_SESSION_KEY, 'true');
-  if (email) {
-    await AsyncStorage.setItem('last_email', String(email).trim().toLowerCase());
-  }
-  return true;
-}
-
-// Backward-compatible name. It no longer stores email/password credentials.
-export async function saveCredentials(email = '') {
-  return enableBiometricSession(email);
-}
-
-export async function getCredentials() {
-  await migrateLegacyCredentials();
-  const token = await getSessionToken();
-  if (!token) return null;
-  const email = await AsyncStorage.getItem('last_email').catch(() => '');
-  return { email: email || '', sessionToken: token };
-}
-
-export async function clearCredentials(options = {}) {
-  const disableBiometric = options.disableBiometric !== false;
+export async function clearCredentials() {
   try {
     await Promise.all([
       migrateLegacyCredentials(),
       clearPendingLogin(),
-      AsyncStorage.removeItem(BIOMETRIC_SESSION_KEY).catch(() => {}),
-      disableBiometric
-        ? AsyncStorage.removeItem(BIOMETRIC_SETTING_KEY).catch(() => {})
-        : Promise.resolve(),
     ]);
-    if (IS_DEV) console.log('[SecureAuth] Stored biometric auth state cleared');
+    if (IS_DEV) console.log('[SecureAuth] Pending and retired local-auth state cleared');
   } catch (err) {
-    console.warn('[SecureAuth] Failed to clear biometric auth state:', err?.message);
+    console.warn('[SecureAuth] Failed to clear pending/retired auth state:', err?.message);
   }
-}
-
-export async function hasStoredCredentials() {
-  await migrateLegacyCredentials();
-  const [biometricSetting, biometricSession, sessionToken] = await Promise.all([
-    AsyncStorage.getItem(BIOMETRIC_SETTING_KEY).catch(() => null),
-    AsyncStorage.getItem(BIOMETRIC_SESSION_KEY).catch(() => null),
-    getSessionToken(),
-  ]);
-
-  return biometricSetting === 'true'
-    && biometricSession === 'true'
-    && typeof sessionToken === 'string'
-    && sessionToken.trim().length > 0;
 }

@@ -414,7 +414,11 @@ export function resolveNotificationRoute(data = {}) {
   const explicitScreen = typeof data?.screen === 'string' ? data.screen.trim().toLowerCase() : '';
   const type = typeof data?.type === 'string' ? data.type.trim().toLowerCase() : '';
   const category = typeof data?.category === 'string' ? data.category.trim().toLowerCase() : '';
-  const screen = explicitScreen || type || category;
+  // Some bridge records use the generic type "notification" while their
+  // category carries the actual destination (billing, maintenance, etc.).
+  // Never let that generic envelope misroute a non-News item to News.
+  const genericNotificationType = type === 'notification' || type === 'notifications';
+  const screen = explicitScreen || (genericNotificationType && category ? category : type) || category;
 
   if (type === 'chat_reply') {
     return conversationId
@@ -473,11 +477,12 @@ export function resolveNotificationRoute(data = {}) {
     case 'announcements':
     case 'announcement':
     case 'news':
-    case 'notification':
-    case 'notifications':
       return announcementId
         ? { pathname: '/(tabs)/announcements', params: { announcementId: String(announcementId) } }
         : '/(tabs)/announcements';
+    case 'notification':
+    case 'notifications':
+      return '/notifications';
     case 'maintenance':
     case 'services':
     case 'maintenance_update':
@@ -517,6 +522,11 @@ export function resolveNotificationRoute(data = {}) {
         ? { pathname: '/contract-viewer', params: { contractId: String(contractId) } }
         : '/contract-viewer';
     case 'profile':
+    case 'account':
+    case 'account_update':
+    case 'move_in':
+    case 'move-in':
+    case 'tenant_approved':
     case 'system':
       return '/(tabs)/profile';
     default:

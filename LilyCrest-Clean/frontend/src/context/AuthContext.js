@@ -652,7 +652,7 @@ export function AuthProvider({ children }) {
         }
         if (!isTenantRole(response.data.role)) {
           await clearPersistedSession();
-          await clearCredentials({ disableBiometric: false });
+          await clearCredentials();
           if (!cancelled) {
             setUser(null);
             setAuthStatus('unauthenticated');
@@ -673,7 +673,7 @@ export function AuthProvider({ children }) {
 
         if (invalidation) {
           await clearPersistedSession();
-          await clearCredentials({ disableBiometric: false });
+          await clearCredentials();
           if (!cancelled) {
             setUser(null);
             setAuthStatus('unauthenticated');
@@ -1043,7 +1043,7 @@ export function AuthProvider({ children }) {
       }
       if (!isTenantRole(response.data.role)) {
         await clearPersistedSession();
-        await clearCredentials({ disableBiometric: false });
+        await clearCredentials();
         setUser(null);
         setAuthStatus('unauthenticated');
         setSessionState('unauthenticated');
@@ -1057,7 +1057,7 @@ export function AuthProvider({ children }) {
     } catch (error) {
       if (getConfirmedSessionInvalidation(error)) {
         await clearPersistedSession();
-        await clearCredentials({ disableBiometric: false });
+        await clearCredentials();
         setUser(null);
         setAuthStatus('unauthenticated');
         setSessionState('unauthenticated');

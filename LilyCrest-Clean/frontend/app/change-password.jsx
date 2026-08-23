@@ -105,7 +105,7 @@ export default function ChangePasswordScreen() {
         notifyEmail: true,
       });
 
-      // Clear biometric credentials since password changed.
+      // Clear pending and retired local-auth state since the password changed.
       // Isolated: a Keychain/SecureStore failure must not surface as a "change password failed" error.
       try {
         await clearCredentials();

@@ -115,4 +115,25 @@ describe('secure session persistence', () => {
     });
     expect(secureValues.get('lilycrest_pending_login')).not.toMatch(/password|otpCode/i);
   });
+
+  it('purges retired local-auth preferences without deleting the valid session bundle', async () => {
+    const credentials = require('../services/secureCredentials');
+    await credentials.setSessionToken('active-session-token');
+    secureValues.set('lilycrest_bio_email', 'tenant@example.com');
+    secureValues.set('lilycrest_bio_pass', 'must-delete');
+    await AsyncStorage.multiSet([
+      ['lilycrest_bio_stored', 'true'],
+      ['biometricLogin', 'true'],
+      ['lilycrest_bio_session_enabled', 'true'],
+    ]);
+
+    await credentials.migrateLegacyCredentials();
+
+    expect(secureValues.has('lilycrest_bio_email')).toBe(false);
+    expect(secureValues.has('lilycrest_bio_pass')).toBe(false);
+    expect(await AsyncStorage.getItem('lilycrest_bio_stored')).toBeNull();
+    expect(await AsyncStorage.getItem('biometricLogin')).toBeNull();
+    expect(await AsyncStorage.getItem('lilycrest_bio_session_enabled')).toBeNull();
+    await expect(credentials.getSessionToken()).resolves.toBe('active-session-token');
+  });
 });

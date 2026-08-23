@@ -26,7 +26,9 @@ import { useAuth } from '../../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
 import { apiService, getApiErrorMessage } from '../../src/services/api';
 import { subscribeBillingRefresh } from '../../src/services/billingState';
+import { resolveNotificationRoute } from '../../src/services/notifications';
 import { getBillingInsightPanel } from '../../src/utils/billingInsights';
+import { buildNotificationRouteData } from '../../src/utils/notificationPresentation';
 import {
   formatHomeCurrency,
   formatRoomCapacity,
@@ -430,7 +432,8 @@ export default function HomeScreen() {
 
     (Array.isArray(notifications) ? notifications : []).forEach((n) => {
       if (matchText(n.title) || matchText(n.body) || matchText(n.type)) {
-        results.push({ category: 'Notifications', title: n.title || 'Alert', subtitle: ((n.body || n.content || '')).slice(0, 60), route: '/(tabs)/announcements', icon: 'notifications' });
+        const route = resolveNotificationRoute(buildNotificationRouteData(n)) || '/notifications';
+        results.push({ category: 'Notifications', title: n.title || 'Alert', subtitle: ((n.body || n.content || '')).slice(0, 60), route, icon: 'notifications' });
       }
     });
 

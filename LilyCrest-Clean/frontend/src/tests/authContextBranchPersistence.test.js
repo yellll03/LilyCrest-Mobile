@@ -304,6 +304,6 @@ describe('AuthContext branch persistence across profile refreshes (regression)',
 
     expect(latest.authStatus).toBe('unauthenticated');
     expect(latest.user).toBeNull();
-    expect(clearCredentials).toHaveBeenCalledWith({ disableBiometric: false });
+    expect(clearCredentials).toHaveBeenCalled();
   });
 });
