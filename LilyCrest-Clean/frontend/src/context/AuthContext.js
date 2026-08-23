@@ -886,7 +886,14 @@ export function AuthProvider({ children }) {
       }
 
       if (!tokenToUse) {
-        return { success: false, error: 'No authentication token available' };
+        return {
+          success: false,
+          status: 0,
+          errorType: 'credential',
+          stage: 'backend-token',
+          code: 'firebase-token-missing',
+          error: 'Google did not return a sign-in credential. Please try again.',
+        };
       }
 
       let response;
@@ -908,12 +915,26 @@ export function AuthProvider({ children }) {
       }
       if (!isSessionPayloadShape(response.data)) {
         await clearPersistedSession();
-        return { success: false, error: 'Received an invalid Google sign-in response. Please try again.' };
+        return {
+          success: false,
+          status: 500,
+          errorType: 'server',
+          stage: 'backend-session',
+          code: 'invalid-session-payload',
+          error: 'Received an invalid Google sign-in response. Please try again.',
+        };
       }
       const { user: userData } = response.data;
       if (!isTenantRole(userData.role)) {
         await clearPersistedSession();
-        return { success: false, error: NOT_A_TENANT_MESSAGE };
+        return {
+          success: false,
+          status: 403,
+          errorType: 'access',
+          stage: 'backend-authorization',
+          code: 'tenant-role-required',
+          error: NOT_A_TENANT_MESSAGE,
+        };
       }
 
       await persistSession(response.data, userData);
@@ -927,14 +948,46 @@ export function AuthProvider({ children }) {
     } catch (error) {
       const status = error.response?.status;
       const detail = error.response?.data?.detail;
+      const code = String(error.response?.data?.code || '').trim() || 'backend-request-failed';
+      const classified = classifyAuthError(error);
+      if (typeof __DEV__ !== 'undefined' && __DEV__) {
+        console.warn('[GoogleAuthBackend]', {
+          stage: 'backend-session',
+          status: status || 0,
+          code,
+          type: classified.type,
+          message: String(error?.message || 'unexpected'),
+        });
+      }
 
       if (status === 403) {
-        return { success: false, error: detail || 'Access denied. Your account is not registered as an active tenant.' };
+        return {
+          success: false,
+          status,
+          errorType: 'access',
+          stage: 'backend-authorization',
+          code,
+          error: detail || 'Access denied. Your account is not registered as an active tenant.',
+        };
       }
       if (status === 401) {
-        return { success: false, error: detail || 'Invalid authentication. Please try again.' };
+        return {
+          success: false,
+          status,
+          errorType: 'credential',
+          stage: 'backend-token-verification',
+          code,
+          error: detail || 'Invalid authentication. Please try again.',
+        };
       }
-      return { success: false, error: getApiErrorMessage(error, 'Unable to sign in with Google. Please try again.') };
+      return {
+        success: false,
+        status: classified.status,
+        errorType: classified.type,
+        stage: 'backend-session',
+        code,
+        error: getApiErrorMessage(error, 'Unable to sign in with Google. Please try again.'),
+      };
     }
   }, [dismissPendingNotificationForFreshSignIn]);
 

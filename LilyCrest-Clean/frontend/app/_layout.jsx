@@ -8,6 +8,7 @@ import { AlertProvider } from '../src/context/AlertContext';
 import { AuthProvider, useAuth } from '../src/context/AuthContext';
 import { ThemeProvider, useTheme } from '../src/context/ThemeContext';
 import { ToastProvider } from '../src/context/ToastContext';
+import BiometricSessionGate from '../src/components/auth/BiometricSessionGate';
 import { clearDocumentCacheIfStaleBuild, evictStaleDocumentCache } from '../src/services/documentManager';
 import {
   isAuthenticationPath,
@@ -113,8 +114,10 @@ const startupStyles = StyleSheet.create({
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
-    zIndex: 1000,
-    elevation: 1000,
+    // Keep the branded handoff above the authenticated Face ID gate while
+    // session restoration finishes; the gate takes over after this unmounts.
+    zIndex: 3000,
+    elevation: 3000,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#000000',
@@ -230,6 +233,7 @@ function LayoutContent() {
         <Stack.Screen name="terms-of-service" />
         <Stack.Screen name="debug/api-health" />
       </Stack>
+      <BiometricSessionGate />
       {!startupComplete ? <StartupOverlay onFinish={setStartupComplete} /> : null}
     </>
   );

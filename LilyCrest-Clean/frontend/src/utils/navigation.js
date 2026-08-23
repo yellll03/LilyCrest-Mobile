@@ -5,10 +5,16 @@ const AUTHENTICATION_PATHS = new Set([
   '/',
   '/login',
   '/forgot-password',
-  '/reset-password',
   '/otp-verify',
   '/auth-callback',
 ]);
+
+export function isPasswordResetPath(pathname = '') {
+  const normalizedPath = typeof pathname === 'string'
+    ? pathname.split('?')[0].replace(/\/+$/, '') || '/'
+    : '';
+  return normalizedPath === '/reset-password';
+}
 
 export function isAuthenticationPath(pathname = '', segments = []) {
   // Expo can collapse the anchored initial tab route to pathname "/" after

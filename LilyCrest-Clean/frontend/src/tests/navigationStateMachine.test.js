@@ -3,6 +3,7 @@ import {
   HOME_ROUTE,
   isAuthenticatedNavigationReady,
   isAuthenticationPath,
+  isPasswordResetPath,
   navigateToNotificationDestination,
   notificationDestinationKey,
   resetToHome,
@@ -16,12 +17,17 @@ describe('canonical navigation state helpers', () => {
     '/login',
     '/otp-verify',
     '/forgot-password',
-    '/reset-password',
     '/auth-callback',
     '/login/',
   ])('recognizes authentication entry path %s', (pathname) => {
     expect(isAuthenticationPath(pathname)).toBe(true);
     expect(isAuthenticatedNavigationReady('authenticated', pathname)).toBe(false);
+  });
+
+  test('a password-reset action takes priority over authenticated-route redirects', () => {
+    expect(isPasswordResetPath('/reset-password?token=one-time')).toBe(true);
+    expect(isAuthenticationPath('/reset-password')).toBe(false);
+    expect(isAuthenticatedNavigationReady('authenticated', '/reset-password')).toBe(true);
   });
 
   test.each([

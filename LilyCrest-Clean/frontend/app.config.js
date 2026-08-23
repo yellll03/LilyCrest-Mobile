@@ -31,7 +31,9 @@ module.exports = {
     newArchEnabled: true,
     ios: {
       bundleIdentifier: 'com.lilycrest.lilycrestdorm',
+      buildNumber: '2',
       supportsTablet: true,
+      googleServicesFile: process.env.GOOGLE_SERVICES_PLIST || './GoogleService-Info.plist',
       infoPlist: {
         ITSAppUsesNonExemptEncryption: false,
       },
@@ -88,6 +90,13 @@ module.exports = {
         },
       ],
       'expo-secure-store',
+      [
+        'expo-local-authentication',
+        {
+          faceIDPermission: 'Allow LilyCrest to use Face ID to unlock your authorized session.',
+        },
+      ],
+      '@react-native-google-signin/google-signin',
       [
         'expo-build-properties',
         {

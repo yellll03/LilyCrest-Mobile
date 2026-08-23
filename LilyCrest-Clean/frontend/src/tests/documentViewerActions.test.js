@@ -4,6 +4,7 @@ const path = require('path');
 
 const pdfViewer = fs.readFileSync(path.resolve(__dirname, '../../app/document-viewer.jsx'), 'utf8');
 const imageViewer = fs.readFileSync(path.resolve(__dirname, '../../app/image-viewer.jsx'), 'utf8');
+const myDocuments = fs.readFileSync(path.resolve(__dirname, '../../app/my-documents.jsx'), 'utf8');
 const imageManager = fs.readFileSync(path.resolve(__dirname, '../services/imageDocumentManager.js'), 'utf8');
 
 describe('authenticated document viewer actions', () => {
@@ -32,5 +33,13 @@ describe('authenticated document viewer actions', () => {
     expect(imageViewer).toContain('Print image');
     expect(imageViewer).toContain('Share image');
     expect(imageViewer).toContain('load(true)');
+  });
+
+  test('iOS policy previews provide close-button and swipe-down dismissal paths', () => {
+    expect(myDocuments).toContain("presentationStyle={Platform.OS === 'ios' ? 'pageSheet' : 'fullScreen'}");
+    expect(myDocuments).toContain("allowSwipeDismissal={Platform.OS === 'ios'}");
+    expect(myDocuments).toContain('onRequestClose={closePreview}');
+    expect(myDocuments).toContain('accessibilityLabel="Close document preview"');
+    expect(myDocuments).toContain('hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}');
   });
 });

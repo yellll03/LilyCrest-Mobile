@@ -30,10 +30,33 @@ describe('auth flow implementation contracts', () => {
 
   test('the mobile reset route is only a legacy browser handoff, with no password form or reset submission', () => {
     const source = read('app/reset-password.jsx');
+    const apiSource = read('src/services/api.js');
     expect(source).toContain('/api/m/auth/reset-password?token=');
+    expect(source).toContain('apiService.checkResetPasswordToken(normalizedToken)');
+    expect(source).toContain("response?.data?.valid === true ? 'ready' : 'invalid'");
     expect(source).toContain('Linking.openURL(legacyWebUrl)');
     expect(source).not.toContain('newPassword');
     expect(source).not.toContain("api.post('/auth/reset-password'");
+    expect(apiSource).toContain('`${MOBILE_API_BASE_URL}/auth/reset-password/status`');
+  });
+
+  test('Face ID is a local gate over an existing session and explicit logout remains authoritative', () => {
+    const gate = read('src/components/auth/BiometricSessionGate.jsx');
+    expect(gate).toContain("authStatus !== 'authenticated'");
+    expect(gate).toContain('hasStoredCredentials()');
+    expect(gate).toContain('await logout()');
+    expect(gate).toContain('disableDeviceFallback: true');
+    expect(gate).not.toContain('signInWithEmailAndPassword');
+    expect(gate).not.toContain('signInWithCredential');
+  });
+
+  test('email, OTP, and Google success share iOS biometric enrollment semantics', () => {
+    const login = read('app/login.jsx');
+    const otp = read('app/otp-verify.jsx');
+    expect(login).toContain('await completeAuthenticatedLogin(normalizedEmail)');
+    expect(login).toMatch(/Platform\.OS === 'ios'[\s\S]*?await completeAuthenticatedLogin\(result\.user\?\.email \|\| ''\)/);
+    expect(login).toContain("disableDeviceFallback: Platform.OS === 'ios'");
+    expect(otp).toContain("disableDeviceFallback: Platform.OS === 'ios'");
   });
 
   test('login preserves the exact entered password', () => {

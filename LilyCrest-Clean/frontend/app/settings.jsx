@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
@@ -50,10 +50,13 @@ export default function SettingsScreen() {
 
   const checkBiometricSupport = async () => {
     try {
-      const compatible = await LocalAuthentication.hasHardwareAsync();
-      setBiometricAvailable(compatible);
+      const [compatible, enrolled] = await Promise.all([
+        LocalAuthentication.hasHardwareAsync(),
+        LocalAuthentication.isEnrolledAsync(),
+      ]);
+      setBiometricAvailable(compatible && enrolled);
       
-      if (compatible) {
+      if (compatible && enrolled) {
         setBiometricType('Biometrics');
       }
     } catch (error) {
@@ -127,7 +130,7 @@ export default function SettingsScreen() {
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: 'Verify your identity to enable biometric login',
         cancelLabel: 'Cancel',
-        disableDeviceFallback: false,
+        disableDeviceFallback: Platform.OS === 'ios',
       });
       
       if (result.success) {

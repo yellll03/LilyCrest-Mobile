@@ -202,7 +202,7 @@ export default function OtpVerifyScreen() {
                 const bioResult = await LocalAuthentication.authenticateAsync({
                   promptMessage: 'Confirm your identity to enable biometric login',
                   cancelLabel: 'Skip',
-                  disableDeviceFallback: false,
+                  disableDeviceFallback: Platform.OS === 'ios',
                 });
                 if (bioResult.success) {
                   await AsyncStorage.setItem('biometricLogin', 'true');

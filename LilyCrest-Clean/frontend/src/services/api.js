@@ -514,6 +514,14 @@ export const apiService = {
     { email },
     { timeout: 15000 },
   ),
+  // Read-only validation for already-issued legacy custom-scheme reset links.
+  // The server never consumes the one-time token here and returns only a
+  // boolean, so expired/used links cannot expose account data.
+  checkResetPasswordToken: (token) => axios.post(
+    `${MOBILE_API_BASE_URL}/auth/reset-password/status`,
+    { token },
+    { timeout: 15000 },
+  ),
   changePassword: (currentPassword, newPassword, options = {}) =>
     api.post('/auth/change-password', {
       current_password: currentPassword,

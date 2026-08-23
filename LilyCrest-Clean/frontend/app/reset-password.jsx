@@ -3,14 +3,15 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Linking, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useTheme } from '../src/context/ThemeContext';
 import { API_BASE_URL } from '../src/config/api';
+import { useTheme } from '../src/context/ThemeContext';
+import { apiService } from '../src/services/api';
 
 /**
  * Transitional handoff for custom-scheme links issued by the retired mobile
- * reset-token system. New reset emails point directly to the canonical web
- * /auth-action flow. Keeping password entry out of this screen ensures the
- * mobile client no longer implements an independent reset authority or policy.
+ * reset-token system. New Firebase action-code links intentionally stay in the
+ * canonical website. This screen verifies a legacy token before opening that
+ * hosted flow, and never accepts or submits a password itself.
  */
 export default function ResetPasswordHandoffScreen() {
   const router = useRouter();
@@ -18,8 +19,10 @@ export default function ResetPasswordHandoffScreen() {
   const { token: rawToken } = useLocalSearchParams();
   const token = Array.isArray(rawToken) ? rawToken[0] : rawToken;
   const normalizedToken = typeof token === 'string' ? token.trim() : '';
+  const [linkState, setLinkState] = useState(normalizedToken ? 'checking' : 'invalid');
   const [opening, setOpening] = useState(false);
   const [openFailed, setOpenFailed] = useState(false);
+  const [verificationAttempt, setVerificationAttempt] = useState(0);
   const attempted = useRef(false);
   const legacyWebUrl = useMemo(
     () => normalizedToken
@@ -29,7 +32,7 @@ export default function ResetPasswordHandoffScreen() {
   );
 
   const openSecureReset = useCallback(async () => {
-    if (!legacyWebUrl || opening) return;
+    if (!legacyWebUrl || linkState !== 'ready' || opening) return;
     setOpening(true);
     setOpenFailed(false);
     try {
@@ -39,33 +42,79 @@ export default function ResetPasswordHandoffScreen() {
     } finally {
       setOpening(false);
     }
-  }, [legacyWebUrl, opening]);
+  }, [legacyWebUrl, linkState, opening]);
 
   useEffect(() => {
-    if (!legacyWebUrl || attempted.current) return;
+    if (!normalizedToken) {
+      setLinkState('invalid');
+      return undefined;
+    }
+
+    let cancelled = false;
+    attempted.current = false;
+    setLinkState('checking');
+    setOpenFailed(false);
+    apiService.checkResetPasswordToken(normalizedToken)
+      .then((response) => {
+        if (!cancelled) setLinkState(response?.data?.valid === true ? 'ready' : 'invalid');
+      })
+      .catch(() => {
+        if (!cancelled) setLinkState('network');
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [normalizedToken, verificationAttempt]);
+
+  useEffect(() => {
+    if (linkState !== 'ready' || attempted.current) return;
     attempted.current = true;
     openSecureReset();
-  }, [legacyWebUrl, openSecureReset]);
+  }, [linkState, openSecureReset]);
 
   const styles = createStyles(colors);
-  const invalid = !normalizedToken;
+  const invalid = linkState === 'invalid';
+  const checking = linkState === 'checking';
+  const network = linkState === 'network';
+  const ready = linkState === 'ready';
+  const title = invalid
+    ? 'Reset Link Unavailable'
+    : network
+      ? 'Unable to Verify Link'
+      : checking
+        ? 'Checking Reset Link'
+        : 'Continue Securely';
+  const subtitle = invalid
+    ? 'This password reset link has already been used, expired, or is no longer valid. Request a new link to continue.'
+    : network
+      ? 'We could not verify this one-time link. Check your connection and try again.'
+      : checking
+        ? 'Please wait while LilyCrest verifies this one-time password reset link.'
+        : 'This link is valid. Password reset will continue in LilyCrest\'s verified web flow.';
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.card}>
         <View style={styles.iconBox}>
-          <Ionicons name={invalid ? 'alert-circle' : 'open-outline'} size={46} color={colors.primary} />
+          <Ionicons
+            name={invalid || network ? 'alert-circle' : ready ? 'open-outline' : 'shield-checkmark-outline'}
+            size={46}
+            color={colors.primary}
+          />
         </View>
-        <Text style={styles.title}>{invalid ? 'Reset Link Unavailable' : 'Continue Securely'}</Text>
-        <Text style={styles.subtitle}>
-          {invalid
-            ? 'This password reset link is no longer valid. Request a new link to continue.'
-            : 'Password reset now uses Lilycrest’s verified web flow. We are opening it in your browser.'}
-        </Text>
+        <Text style={styles.title}>{title}</Text>
+        <Text style={styles.subtitle}>{subtitle}</Text>
+        {checking ? <ActivityIndicator color={colors.primary} style={styles.checking} /> : null}
         {openFailed ? <Text style={styles.error}>We couldn&apos;t open the browser. Try again below.</Text> : null}
-        {!invalid ? (
+        {ready ? (
           <TouchableOpacity style={[styles.primaryButton, opening && styles.disabled]} onPress={openSecureReset} disabled={opening}>
             {opening ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryText}>Open Password Reset</Text>}
+          </TouchableOpacity>
+        ) : null}
+        {network ? (
+          <TouchableOpacity style={styles.primaryButton} onPress={() => setVerificationAttempt((attempt) => attempt + 1)}>
+            <Text style={styles.primaryText}>Try Again</Text>
           </TouchableOpacity>
         ) : null}
         <TouchableOpacity style={styles.secondaryButton} onPress={() => router.replace('/forgot-password')}>
@@ -86,6 +135,7 @@ const createStyles = (colors) => StyleSheet.create({
   title: { color: colors.text, fontSize: 26, fontWeight: '700', textAlign: 'center', marginBottom: 10 },
   subtitle: { color: colors.textSecondary, fontSize: 15, lineHeight: 22, textAlign: 'center', marginBottom: 24 },
   error: { color: '#991B1B', textAlign: 'center', marginBottom: 14 },
+  checking: { marginBottom: 18 },
   primaryButton: { backgroundColor: colors.primary, borderRadius: 8, paddingVertical: 15, alignItems: 'center' },
   disabled: { opacity: 0.6 },
   primaryText: { color: '#fff', fontWeight: '700', fontSize: 16 },

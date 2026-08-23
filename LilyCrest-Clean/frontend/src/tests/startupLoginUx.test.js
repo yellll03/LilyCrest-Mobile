@@ -21,6 +21,7 @@ describe('single-splash and Login UX contracts', () => {
     expect(layout).toContain("require('../assets/images/splash-image.png')");
     expect(layout).toContain('accessibilityLabel="Loading LilyCrest"');
     expect(layout).toContain("outputRange: ['0deg', '360deg']");
+    expect(layout).toContain('zIndex: 3000');
     expect(authContext).not.toContain('Preparing LilyCrest');
     expect(index).not.toMatch(/ActivityIndicator|loadingScreen|loadingLogo|PRE_LOGIN_LOADING_MIN_MS/);
   });

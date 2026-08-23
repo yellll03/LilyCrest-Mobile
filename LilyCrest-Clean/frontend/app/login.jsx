@@ -31,6 +31,7 @@ import {
 import { loadRememberedEmail, saveRememberedEmail } from '../src/services/rememberedEmail';
 import { resetToHome } from '../src/utils/navigation';
 import { AUTH_MESSAGES, authErrorTypeForUi, normalizeEmail, validateEmail as validateAuthEmail } from '../src/utils/authStability';
+import { BIOMETRIC_ACCESS_STATE, classifyBiometricResult } from '../src/utils/biometricAccess';
 import { validateLoginPassword } from '../src/utils/passwordValidation';
 
 /* cspell:words creds prefs lilycrest wordmark */
@@ -129,7 +130,57 @@ export default function LoginScreen() {
     init();
   }, []);
 
+  const completeAuthenticatedLogin = async (sessionEmail = '') => {
+    try {
+      if (!biometricAvailable) {
+        resetToHome(router);
+        return;
+      }
 
+      const bioSetting = await AsyncStorage.getItem('biometricLogin');
+      if (bioSetting === 'true') {
+        await enableBiometricSession(sessionEmail);
+        setCanUseBiometric(true);
+        resetToHome(router);
+        return;
+      }
+
+      showAlert({
+        title: 'Enable Biometric Login',
+        message: `Use ${biometricType} to unlock this valid session on this device. For your security, you will need to log in again when the session expires.`,
+        type: 'info',
+        icon: 'finger-print',
+        buttons: [
+          {
+            text: 'Not Now',
+            style: 'cancel',
+            onPress: () => resetToHome(router),
+          },
+          {
+            text: 'Enable',
+            onPress: async () => {
+              try {
+                const bioResult = await LocalAuthentication.authenticateAsync({
+                  promptMessage: 'Confirm your identity to enable biometric login',
+                  cancelLabel: 'Skip',
+                  disableDeviceFallback: Platform.OS === 'ios',
+                });
+                if (bioResult.success) {
+                  await AsyncStorage.setItem('biometricLogin', 'true');
+                  await enableBiometricSession(sessionEmail);
+                  setCanUseBiometric(true);
+                }
+              } catch (_) {}
+              resetToHome(router);
+            },
+          },
+        ],
+      });
+    } catch (_error) {
+      // Optional local protection must never downgrade a valid backend login.
+      resetToHome(router);
+    }
+  };
 
   const handleLogin = async () => {
     if (emailRequestInFlight.current) return;
@@ -192,52 +243,7 @@ export default function LoginScreen() {
       await saveRememberedEmail({ rememberEmail, email: normalizedEmail })
         .catch((error) => console.warn('Remembered email update failed:', error?.message));
 
-      // Handle biometric credential storage
-      if (biometricAvailable) {
-        const bioSetting = await AsyncStorage.getItem('biometricLogin');
-        if (bioSetting === 'true') {
-          // Biometric was previously enabled — refresh stored credentials silently
-          // (covers password-change scenario where old credentials were cleared)
-          await enableBiometricSession(normalizedEmail);
-          setCanUseBiometric(true);
-          resetToHome(router);
-        } else {
-          // First time on this device — offer to enable biometric login
-          showAlert({
-            title: 'Enable Biometric Login',
-            message: `Use ${biometricType} to unlock this valid session on this device. For your security, you will need to log in again when the session expires.`,
-            type: 'info',
-            icon: 'finger-print',
-            buttons: [
-              {
-                text: 'Not Now',
-                style: 'cancel',
-                onPress: () => resetToHome(router),
-              },
-              {
-                text: 'Enable',
-                onPress: async () => {
-                  try {
-                    const bioResult = await LocalAuthentication.authenticateAsync({
-                      promptMessage: 'Confirm your identity to enable biometric login',
-                      cancelLabel: 'Skip',
-                      disableDeviceFallback: false,
-                    });
-                    if (bioResult.success) {
-                      await AsyncStorage.setItem('biometricLogin', 'true');
-                      await enableBiometricSession(normalizedEmail);
-                      setCanUseBiometric(true);
-                    }
-                  } catch (_) {}
-                  resetToHome(router);
-                },
-              },
-            ],
-          });
-        }
-      } else {
-        resetToHome(router);
-      }
+      await completeAuthenticatedLogin(normalizedEmail);
     } catch (error) {
       console.error('Login error:', error?.message || 'Unexpected error');
       setLoginError({ message: 'An unexpected error occurred. Please try again.', type: 'unexpected' });
@@ -278,21 +284,45 @@ export default function LoginScreen() {
         }
 
         const backendResult = await signInWithGoogle(idToken);
-        const { success: backendSuccess, status, error: backendError } = backendResult;
+        const {
+          success: backendSuccess,
+          status,
+          error: backendError,
+          errorType,
+        } = backendResult;
 
         if (backendSuccess) {
-          resetToHome(router);
+          if (Platform.OS === 'ios') {
+            await completeAuthenticatedLogin(result.user?.email || '');
+          } else {
+            resetToHome(router);
+          }
         } else {
-          const type = status === 403 ? 'access' : 'credentials';
+          const type = status === 403 || errorType === 'access'
+            ? 'access'
+            : errorType === 'rate-limit'
+              ? 'ratelimit'
+              : ['offline', 'timeout', 'server'].includes(errorType)
+                ? 'network'
+                : 'credentials';
           setLoginError({ message: backendError || 'Failed to create session.', type });
         }
       } else if (cancelled) {
         // User deliberately cancelled — not an error
       } else {
-        setLoginError({ message: 'Google sign-in failed. Please try again.', type: 'credentials' });
+        const type = result.type === 'network'
+          ? 'network'
+          : result.type === 'configuration'
+            ? 'access'
+            : 'credentials';
+        setLoginError({ message: result.error || 'Unable to sign in with Google. Please try again.', type });
       }
     } catch (error) {
-      console.error('Google login error:', error?.message || 'Unexpected error');
+      console.warn('[GoogleAuth]', {
+        stage: 'login-orchestration',
+        code: String(error?.code || 'unexpected'),
+        type: 'unexpected',
+      });
       setLoginError({ message: 'Google sign-in failed. Please try again or use email/password.', type: 'network' });
     } finally {
       googleRequestInFlight.current = false;
@@ -321,11 +351,17 @@ export default function LoginScreen() {
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: 'Sign in to LilyCrest',
         cancelLabel: 'Cancel',
-        disableDeviceFallback: false,
+        disableDeviceFallback: Platform.OS === 'ios',
       });
 
       if (!result.success) {
-        setLoginError({ message: 'Biometric verification failed. Please try again.', type: 'credentials' });
+        const biometricState = classifyBiometricResult(result);
+        const message = biometricState === BIOMETRIC_ACCESS_STATE.CANCELLED
+          ? `${biometricType} was cancelled. Your session remains protected.`
+          : biometricState === BIOMETRIC_ACCESS_STATE.LOCKED_OUT
+            ? `${biometricType} is temporarily locked. Please use email or Google.`
+            : `${biometricType} verification failed. Please try again.`;
+        setLoginError({ message, type: biometricState === BIOMETRIC_ACCESS_STATE.FAILED ? 'credentials' : 'access' });
         return;
       }
 
