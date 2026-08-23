@@ -15,6 +15,7 @@
     "prebuild": "expo prebuild --clean",
     "lint": "expo lint",
     "test": "jest",
+    "generate:icons": "node ./generate-icons.js",
     "verify:release-contract": "node ./scripts/verify-release-contract.js",
     "android:release-apk": "npm run verify:release-contract && cd android && .\\gradlew.bat assembleRelease",
     "eas-build-pre-install": "node ./scripts/eas-copy-google-services.js"
