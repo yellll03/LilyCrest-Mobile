@@ -265,7 +265,7 @@ export default function BillDetailsScreen() {
         )}
       >
         <Text style={styles.errorText}>{error || BILL_UNAVAILABLE_MESSAGE}</Text>
-        <Pressable onPress={() => safeBack(router, '/(tabs)/billing')} style={styles.backBtn}><Text style={styles.backBtnText}>Go Back</Text></Pressable>
+        <Pressable onPress={() => safeBack(router)} style={styles.backBtn}><Text style={styles.backBtnText}>Go Back</Text></Pressable>
       </ScrollView>
     );
   }
@@ -334,7 +334,7 @@ export default function BillDetailsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScreenHeader title="Billing Statement" subtitle={bill.billing_period || 'Statement details'} onBack={() => safeBack(router, '/(tabs)/billing')} strong />
+      <ScreenHeader title="Billing Statement" subtitle={bill.billing_period || 'Statement details'} onBack={() => safeBack(router)} strong />
 
       <ScrollView
         contentContainerStyle={styles.content}

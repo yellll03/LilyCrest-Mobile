@@ -177,7 +177,7 @@ export default function PaymentScreen() {
             <Pressable style={styles.retryBtnSmall} onPress={loadBill}>
               <Text style={styles.retryBtnSmallText}>Try Again</Text>
             </Pressable>
-            <Pressable style={styles.backBtnSmall} onPress={() => safeBack(router, '/(tabs)/billing')}>
+            <Pressable style={styles.backBtnSmall} onPress={() => safeBack(router)}>
               <Text style={styles.backBtnSmallText}>Go Back</Text>
             </Pressable>
           </View>
@@ -207,7 +207,7 @@ export default function PaymentScreen() {
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
-        <Pressable onPress={() => safeBack(router, '/(tabs)/billing')} style={styles.headerBack}>
+        <Pressable onPress={() => safeBack(router)} style={styles.headerBack}>
           <Ionicons name="chevron-back" size={22} color={colors.text} />
         </Pressable>
         <Text style={styles.headerTitle}>Payment</Text>
@@ -333,7 +333,7 @@ export default function PaymentScreen() {
           </View>
         )}
 
-        <Pressable style={styles.cancelBtn} onPress={() => safeBack(router, '/(tabs)/billing')}>
+        <Pressable style={styles.cancelBtn} onPress={() => safeBack(router)}>
           <Text style={styles.cancelText}>{isOutstanding ? 'Cancel' : 'Go Back'}</Text>
         </Pressable>
 

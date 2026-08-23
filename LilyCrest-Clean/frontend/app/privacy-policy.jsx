@@ -12,7 +12,7 @@ export default function PrivacyPolicyScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScreenHeader strong title="Privacy Policy" subtitle="How Lilycrest handles tenant information" onBack={() => safeBack(router, '/(tabs)/profile')} />
+      <ScreenHeader strong title="Privacy Policy" subtitle="How Lilycrest handles tenant information" onBack={() => safeBack(router)} />
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         <Text style={styles.updateDate}>Last updated: January 2024</Text>
         

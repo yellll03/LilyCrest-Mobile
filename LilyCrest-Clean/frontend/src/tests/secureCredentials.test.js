@@ -97,4 +97,22 @@ describe('secure session persistence', () => {
     expect(secureValues.has('session_token')).toBe(false);
     await expect(credentials.getSessionToken()).resolves.toBeNull();
   });
+
+  it('carries only an email and Remember me choice through pending OTP verification', async () => {
+    const credentials = require('../services/secureCredentials');
+    await credentials.savePendingLogin({
+      otpToken: 'otp-session-token',
+      email: ' Tenant@Example.com ',
+      maskedEmail: 'te***@example.com',
+      rememberEmail: true,
+    });
+
+    await expect(credentials.getPendingLogin()).resolves.toEqual({
+      otpToken: 'otp-session-token',
+      email: 'tenant@example.com',
+      maskedEmail: 'te***@example.com',
+      rememberEmail: true,
+    });
+    expect(secureValues.get('lilycrest_pending_login')).not.toMatch(/password|otpCode/i);
+  });
 });

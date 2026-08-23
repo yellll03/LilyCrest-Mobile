@@ -535,7 +535,7 @@ export default function BillingScreen() {
   if (loading) {
     return (
       <SafeAreaView style={styles.container} edges={['top']}>
-        <ScreenHeader title="Billing" subtitle="Statements, balances, and receipts" onBack={() => safeBack(router, '/(tabs)/home')} strong />
+        <ScreenHeader title="Billing" subtitle="Statements, balances, and receipts" onBack={() => safeBack(router)} strong />
         <View style={styles.loadingContainer}>
           <View style={styles.skeleton} />
           <View style={[styles.skeleton, { height: 40 }]} />
@@ -548,7 +548,7 @@ export default function BillingScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScreenHeader title="Billing" subtitle="Statements, balances, and receipts" onBack={() => safeBack(router, '/(tabs)/home')} strong />
+      <ScreenHeader title="Billing" subtitle="Statements, balances, and receipts" onBack={() => safeBack(router)} strong />
 
       <FlatList
         data={filteredBills}

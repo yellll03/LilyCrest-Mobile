@@ -12,7 +12,7 @@ export default function TermsOfServiceScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScreenHeader strong title="Terms of Service" subtitle="Tenant portal terms and responsibilities" onBack={() => safeBack(router, '/(tabs)/profile')} />
+      <ScreenHeader strong title="Terms of Service" subtitle="Tenant portal terms and responsibilities" onBack={() => safeBack(router)} />
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         <Text style={styles.updateDate}>Last updated: January 2024</Text>
         
