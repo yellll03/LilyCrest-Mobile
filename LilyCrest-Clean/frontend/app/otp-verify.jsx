@@ -1,7 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
 import * as Clipboard from 'expo-clipboard';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as LocalAuthentication from 'expo-local-authentication';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import {
@@ -16,14 +14,12 @@ import {
     View,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useAlert } from '../src/context/AlertContext';
 import { useAuth } from '../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
 import { useToast } from '../src/context/ToastContext';
 import { apiService, getApiErrorMessage } from '../src/services/api';
 import {
   clearPendingLogin,
-  enableBiometricSession,
   getPendingLogin,
 } from '../src/services/secureCredentials';
 import { saveRememberedEmail } from '../src/services/rememberedEmail';
@@ -41,7 +37,6 @@ export default function OtpVerifyScreen() {
   const router = useRouter();
   const params = useLocalSearchParams();
   const { verifyLoginOtp } = useAuth();
-  const { showAlert } = useAlert();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const { showToast } = useToast();
@@ -178,45 +173,7 @@ export default function OtpVerifyScreen() {
         console.warn('Remembered email update failed:', preferenceError?.message);
       });
       await clearPendingLogin();
-
-    // Offer biometric if available and not yet enabled
-      const hasHardware = await LocalAuthentication.hasHardwareAsync();
-      const isEnrolled = await LocalAuthentication.isEnrolledAsync();
-      const bioSetting = await AsyncStorage.getItem('biometricLogin');
-
-      if (hasHardware && isEnrolled && bioSetting === 'true') {
-        await enableBiometricSession(savedEmail);
-        resetToHome(router);
-      } else if (hasHardware && isEnrolled && bioSetting !== 'true') {
-        showAlert({
-        title: 'Enable Biometric Login',
-        message: 'Use Biometrics to unlock this valid session on this device. For your security, you will need to log in again when the session expires.',
-        type: 'info',
-        icon: 'finger-print',
-        buttons: [
-          { text: 'Not Now', style: 'cancel', onPress: () => resetToHome(router) },
-          {
-            text: 'Enable',
-            onPress: async () => {
-              try {
-                const bioResult = await LocalAuthentication.authenticateAsync({
-                  promptMessage: 'Confirm your identity to enable biometric login',
-                  cancelLabel: 'Skip',
-                  disableDeviceFallback: Platform.OS === 'ios',
-                });
-                if (bioResult.success) {
-                  await AsyncStorage.setItem('biometricLogin', 'true');
-                  await enableBiometricSession(savedEmail);
-                }
-              } catch (_) {}
-              resetToHome(router);
-            },
-          },
-        ],
-        });
-      } else {
-        resetToHome(router);
-      }
+      resetToHome(router);
     } catch (error) {
       setError(getApiErrorMessage(error, 'Unable to finish verification. Please try again.'));
     } finally {

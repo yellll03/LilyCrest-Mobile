@@ -19,71 +19,16 @@ import { useAuth } from '../context/AuthContext';
 import { useAlert } from '../context/AlertContext';
 import { useTheme, useThemedStyles } from '../context/ThemeContext';
 import { resolveNotificationRoute } from '../services/notifications';
+import {
+  buildNotificationRouteData,
+  formatRelativeNotificationTimestamp,
+  getNotificationCategoryPresentation,
+  getNotificationTimestamp,
+  isNotificationUnread,
+} from '../utils/notificationPresentation';
 
 const SCREEN_HEIGHT = Dimensions.get('window').height;
 const SHEET_MAX_HEIGHT = Math.round(SCREEN_HEIGHT * 0.70);
-
-function getTimestamp(notification = {}) {
-  return notification?.created_at
-    || notification?.createdAt
-    || notification?.publishedAt
-    || notification?.sentAt
-    || notification?.updated_at
-    || notification?.updatedAt
-    || null;
-}
-
-function formatRelativeTimestamp(value) {
-  if (!value) return '';
-  try {
-    const diff = Date.now() - new Date(value).getTime();
-    if (diff < 0 || Number.isNaN(diff)) return '';
-    const mins = Math.floor(diff / 60000);
-    if (mins < 1) return 'Just now';
-    if (mins < 60) return `${mins}m ago`;
-    const hours = Math.floor(mins / 60);
-    if (hours < 24) return `${hours}h ago`;
-    const days = Math.floor(hours / 24);
-    if (days < 7) return `${days}d ago`;
-    return new Date(value).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  } catch (_error) {
-    return '';
-  }
-}
-
-function isNotificationUnread(notification = {}) {
-  return notification?.read !== true;
-}
-
-function getCategoryMeta(notification = {}) {
-  const cat = (notification?.category || '').toLowerCase();
-  const title = (notification?.title || '').toLowerCase();
-  const body = (notification?.body || notification?.content || '').toLowerCase();
-  const text = `${cat} ${title} ${body}`;
-
-  if (cat === 'billing' || text.includes('billing') || text.includes('payment') || text.includes('invoice')) {
-    return { bg: '#EFF6FF', color: '#2563EB', icon: 'card-outline' };
-  }
-  if (cat === 'maintenance' || text.includes('maintenance') || text.includes('repair')) {
-    return { bg: '#FFFBEB', color: '#D97706', icon: 'construct-outline' };
-  }
-  if (cat === 'reservation' || text.includes('reservation') || text.includes('amenity')) {
-    return { bg: '#ECFDF5', color: '#059669', icon: 'calendar-outline' };
-  }
-  if (cat === 'assistant' || text.includes('lily assistant') || text.includes('chatbot')) {
-    return { bg: '#FBF7EA', color: '#B9921F', icon: 'chatbubble-ellipses-outline' };
-  }
-  if (cat === 'security' || text.includes('password') || text.includes('security')) {
-    return { bg: '#FEF2F2', color: '#DC2626', icon: 'shield-checkmark-outline' };
-  }
-  if (cat === 'announcement' || text.includes('announcement') || text.includes('notice')) {
-    return { bg: '#F1F5F9', color: '#2563EB', icon: 'megaphone-outline' };
-  }
-  if (text.includes('reminder') || text.includes('due') || text.includes('overdue')) {
-    return { bg: '#FEF2F2', color: '#DC2626', icon: 'alarm-outline' };
-  }
-  return { bg: '#F1F5F9', color: '#2563EB', icon: 'megaphone-outline' };
-}
 
 export default function AppHeader() {
   const router = useRouter();
@@ -109,8 +54,8 @@ export default function AppHeader() {
     if (!Array.isArray(notifications)) return [];
     return [...notifications]
       .sort((a, b) => {
-        const aTime = getTimestamp(a) ? new Date(getTimestamp(a)).getTime() : 0;
-        const bTime = getTimestamp(b) ? new Date(getTimestamp(b)).getTime() : 0;
+        const aTime = getNotificationTimestamp(a) ? new Date(getNotificationTimestamp(a)).getTime() : 0;
+        const bTime = getNotificationTimestamp(b) ? new Date(getNotificationTimestamp(b)).getTime() : 0;
         return bTime - aTime;
       })
       .slice(0, 8);
@@ -156,24 +101,14 @@ export default function AppHeader() {
 
   const viewAllNotifications = useCallback(() => {
     closeSheet();
-    setTimeout(() => router.push('/(tabs)/announcements'), 270);
+    setTimeout(() => router.push('/notifications'), 270);
   }, [closeSheet, router]);
 
   const handleNotificationPress = useCallback((notification) => {
     if (notification?.notification_id && markNotificationRead) {
       markNotificationRead(notification.notification_id).catch(() => {});
     }
-    const destination = resolveNotificationRoute({
-      ...(notification?.data || {}),
-      type: notification?.type,
-      category: notification?.category,
-      url: notification?.url || notification?.data?.url,
-      billing_id: notification?.billing_id,
-      contract_id: notification?.contract_id,
-      conversation_id: notification?.conversation_id,
-      message_id: notification?.message_id,
-      request_id: notification?.request_id,
-    });
+    const destination = resolveNotificationRoute(buildNotificationRouteData(notification));
     closeSheet();
     if (destination) setTimeout(() => router.push(destination), 270);
   }, [closeSheet, markNotificationRead, router]);
@@ -609,8 +544,8 @@ export default function AppHeader() {
               {previewNotifications.length > 0 ? (
                 previewNotifications.map((notification, index) => {
                   const unread = isNotificationUnread(notification);
-                  const timestamp = getTimestamp(notification);
-                  const { bg, color, icon } = getCategoryMeta(notification);
+                  const timestamp = getNotificationTimestamp(notification);
+                  const { background, foreground, icon } = getNotificationCategoryPresentation(notification, colors);
                   const isLast = index === previewNotifications.length - 1;
 
                   return (
@@ -623,8 +558,8 @@ export default function AppHeader() {
                         activeOpacity={0.7}
                       >
                         {/* Category icon with optional unread dot overlay */}
-                        <View style={[styles.categoryIconWrap, { backgroundColor: bg }]}>
-                          <Ionicons name={icon} size={17} color={color} />
+                        <View style={[styles.categoryIconWrap, { backgroundColor: background }]}>
+                          <Ionicons name={icon} size={17} color={foreground} />
                           {unread && <View style={styles.iconUnreadDot} />}
                         </View>
 
@@ -639,7 +574,7 @@ export default function AppHeader() {
                             </Text>
                             {timestamp ? (
                               <Text style={styles.itemTime}>
-                                {formatRelativeTimestamp(timestamp)}
+                                {formatRelativeNotificationTimestamp(timestamp)}
                               </Text>
                             ) : null}
                           </View>

@@ -90,12 +90,6 @@ module.exports = {
         },
       ],
       'expo-secure-store',
-      [
-        'expo-local-authentication',
-        {
-          faceIDPermission: 'Allow LilyCrest to use Face ID to unlock your authorized session.',
-        },
-      ],
       '@react-native-google-signin/google-signin',
       [
         'expo-build-properties',

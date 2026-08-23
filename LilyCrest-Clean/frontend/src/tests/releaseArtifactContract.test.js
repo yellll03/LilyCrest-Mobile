@@ -34,8 +34,10 @@ describe('standalone release artifact contract', () => {
     expect(config).toContain("buildNumber: '2'");
     expect(config).toContain("googleServicesFile: process.env.GOOGLE_SERVICES_PLIST || './GoogleService-Info.plist'");
     expect(config).toContain("'@react-native-google-signin/google-signin'");
-    expect(config).toContain("'expo-local-authentication'");
-    expect(config).toContain('Allow LilyCrest to use Face ID to unlock your authorized session.');
+    expect(packageJson.dependencies['expo-local-authentication']).toBeUndefined();
+    expect(config).not.toContain("'expo-local-authentication'");
+    expect(config).not.toContain('faceIDPermission');
+    expect(read('android/app/src/main/AndroidManifest.xml')).not.toMatch(/USE_BIOMETRIC|USE_FINGERPRINT/);
     expect(firebase).toContain("Platform.OS === 'android' ? firebaseNativeConfig : firebaseWebConfig");
     expect(eas.build.release.environment).toBe('production');
     expect(eas.build.production.environment).toBe('production');

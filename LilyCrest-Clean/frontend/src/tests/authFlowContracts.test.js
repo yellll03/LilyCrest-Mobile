@@ -40,23 +40,27 @@ describe('auth flow implementation contracts', () => {
     expect(apiSource).toContain('`${MOBILE_API_BASE_URL}/auth/reset-password/status`');
   });
 
-  test('Face ID is a local gate over an existing session and explicit logout remains authoritative', () => {
-    const gate = read('src/components/auth/BiometricSessionGate.jsx');
-    expect(gate).toContain("authStatus !== 'authenticated'");
-    expect(gate).toContain('hasStoredCredentials()');
-    expect(gate).toContain('await logout()');
-    expect(gate).toContain('disableDeviceFallback: true');
-    expect(gate).not.toContain('signInWithEmailAndPassword');
-    expect(gate).not.toContain('signInWithCredential');
-  });
-
-  test('email, OTP, and Google success share iOS biometric enrollment semantics', () => {
+  test('biometric authentication is absent while secure session persistence remains', () => {
     const login = read('app/login.jsx');
     const otp = read('app/otp-verify.jsx');
-    expect(login).toContain('await completeAuthenticatedLogin(normalizedEmail)');
-    expect(login).toMatch(/Platform\.OS === 'ios'[\s\S]*?await completeAuthenticatedLogin\(result\.user\?\.email \|\| ''\)/);
-    expect(login).toContain("disableDeviceFallback: Platform.OS === 'ios'");
-    expect(otp).toContain("disableDeviceFallback: Platform.OS === 'ios'");
+    const settings = read('app/settings.jsx');
+    const layout = read('app/_layout.jsx');
+    const packageJson = JSON.parse(read('package.json'));
+    expect(fs.existsSync(path.join(root, 'src/components/auth/BiometricSessionGate.jsx'))).toBe(false);
+    expect(fs.existsSync(path.join(root, 'src/utils/biometricAccess.js'))).toBe(false);
+    expect(packageJson.dependencies['expo-local-authentication']).toBeUndefined();
+    expect([login, otp, settings, layout].join('\n')).not.toMatch(/biometric|local-authentication|finger-print|face id/i);
+    expect(read('src/services/secureCredentials.js')).toContain('SESSION_CREDENTIALS_KEY');
+  });
+
+  test('email, OTP, and Google success route directly to Home on Android and iOS', () => {
+    const login = read('app/login.jsx');
+    const otp = read('app/otp-verify.jsx');
+    expect(login).toMatch(/saveRememberedEmail[\s\S]*?resetToHome\(router\)/);
+    expect(login).toMatch(/if \(backendSuccess\) \{\s*resetToHome\(router\)/);
+    expect(otp).toMatch(/await clearPendingLogin\(\);\s*resetToHome\(router\)/);
+    expect(login).not.toContain('completeAuthenticatedLogin');
+    expect(otp).not.toContain('authenticateAsync');
   });
 
   test('login preserves the exact entered password', () => {

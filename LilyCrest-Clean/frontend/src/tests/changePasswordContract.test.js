@@ -15,20 +15,10 @@ describe('Change Password reachability and contract', () => {
     const menuItemIndex = source.indexOf("Text style={styles.settingLabel}>Change Password<");
     expect(menuItemIndex).toBeGreaterThan(-1);
 
-    // Not nested inside a conditional render (e.g. `{someFlag && (`) between
-    // the start of the Security section and this menu item — only the
-    // unrelated biometric row above it is conditionally rendered.
     const securitySectionIndex = source.indexOf("Text style={styles.sectionTitle}>Security<");
-    const between = source.slice(securitySectionIndex, menuItemIndex);
-    const biometricGateIndex = between.indexOf('biometricAvailable &&');
-    expect(biometricGateIndex).toBeGreaterThan(-1);
-    // The biometric conditional block closes (its own View) before the
-    // Change Password TouchableOpacity opens, i.e. Change Password sits
-    // outside of it, as a sibling — not nested inside `biometricAvailable &&`.
-    const changePasswordTouchableIndex = between.lastIndexOf('TouchableOpacity');
-    const biometricBlockCloseIndex = between.indexOf(')}', biometricGateIndex);
-    expect(changePasswordTouchableIndex).toBeGreaterThan(biometricBlockCloseIndex);
-
+    expect(securitySectionIndex).toBeGreaterThan(-1);
+    expect(menuItemIndex).toBeGreaterThan(securitySectionIndex);
+    expect(source).not.toMatch(/biometric|finger-print/i);
     expect(source).toContain("router.push('/change-password')");
   });
 
@@ -70,7 +60,7 @@ describe('Change Password reachability and contract', () => {
     expect(source).toContain('submitInFlight.current = false;');
   });
 
-  test('a successful change clears biometric credentials and forces sign-out back to /login', () => {
+  test('a successful change clears pending auth state and forces sign-out back to /login', () => {
     const source = read('app/change-password.jsx');
     expect(source).toContain('await clearCredentials()');
     expect(source).toContain('await logout()');

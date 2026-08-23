@@ -86,6 +86,10 @@ describe('Phase 2 destination ownership guards', () => {
     path.join(process.cwd(), 'src/components/AppHeader.js'),
     'utf8',
   );
+  const notificationPresentationSource = fs.readFileSync(
+    path.join(process.cwd(), 'src/utils/notificationPresentation.js'),
+    'utf8',
+  );
   const indexSource = fs.readFileSync(
     path.join(process.cwd(), 'app/index.jsx'),
     'utf8',
@@ -100,11 +104,11 @@ describe('Phase 2 destination ownership guards', () => {
   );
 
   it('the Home notification sheet resolves and pushes each canonical event destination', () => {
-    expect(appHeaderSource).toMatch(/resolveNotificationRoute\(\{/);
+    expect(appHeaderSource).toContain('resolveNotificationRoute(buildNotificationRouteData(notification))');
     expect(appHeaderSource).toMatch(/if \(destination\) setTimeout/);
     expect(appHeaderSource).toMatch(/router\.push\(destination\)/);
     expect(appHeaderSource).toMatch(/markNotificationRead\(notification\.notification_id\)/);
-    expect(appHeaderSource).toContain('message_id: notification?.message_id');
+    expect(notificationPresentationSource).toContain('message_id: notification?.message_id');
   });
 
   it('opens a chat deep link only after the target appears in the authenticated tenant conversation list', () => {

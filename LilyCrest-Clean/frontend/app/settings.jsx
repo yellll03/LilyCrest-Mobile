@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../src/context/ThemeContext';
-import { useAlert } from '../src/context/AlertContext';
 import { useToast } from '../src/context/ToastContext';
 import { useAuth } from '../src/context/AuthContext';
 import {
@@ -14,53 +13,28 @@ import {
   savePushTokenToServer,
   setPushNotificationsEnabled,
 } from '../src/services/notifications';
-import { clearCredentials, enableBiometricSession } from '../src/services/secureCredentials';
 import { safeBack } from '../src/utils/navigation';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as LocalAuthentication from 'expo-local-authentication';
 import { ScreenHeader } from '../src/components/ui/LilycrestUI';
 
 export default function SettingsScreen() {
   const router = useRouter();
   const { user, authReady, authStatus } = useAuth();
   const { isDarkMode, toggleDarkMode, colors } = useTheme();
-  const { showAlert } = useAlert();
   const { showToast } = useToast();
   const [notifications, setNotifications] = useState(true);
   const [notificationSaving, setNotificationSaving] = useState(false);
-  const [biometrics, setBiometrics] = useState(false);
-  const [biometricAvailable, setBiometricAvailable] = useState(false);
-  const [biometricType, setBiometricType] = useState('Biometric');
 
   useEffect(() => {
     loadSettings();
-    checkBiometricSupport();
   }, []);
 
   const loadSettings = async () => {
     try {
       const notifSetting = await AsyncStorage.getItem('notifications');
-      const bioSetting = await AsyncStorage.getItem('biometricLogin');
       if (notifSetting !== null) setNotifications(notifSetting === 'true');
-      if (bioSetting !== null) setBiometrics(bioSetting === 'true');
     } catch (error) {
       console.error('Error loading settings:', error);
-    }
-  };
-
-  const checkBiometricSupport = async () => {
-    try {
-      const [compatible, enrolled] = await Promise.all([
-        LocalAuthentication.hasHardwareAsync(),
-        LocalAuthentication.isEnrolledAsync(),
-      ]);
-      setBiometricAvailable(compatible && enrolled);
-      
-      if (compatible && enrolled) {
-        setBiometricType('Biometrics');
-      }
-    } catch (error) {
-      console.error('Biometric check error:', error);
     }
   };
 
@@ -121,43 +95,6 @@ export default function SettingsScreen() {
       });
     } finally {
       setNotificationSaving(false);
-    }
-  };
-
-  const handleBiometricToggle = async (value) => {
-    if (value) {
-      // Verify biometric first
-      const result = await LocalAuthentication.authenticateAsync({
-        promptMessage: 'Verify your identity to enable biometric login',
-        cancelLabel: 'Cancel',
-        disableDeviceFallback: Platform.OS === 'ios',
-      });
-      
-      if (result.success) {
-        setBiometrics(true);
-        await AsyncStorage.setItem('biometricLogin', 'true');
-        await enableBiometricSession();
-        showAlert({
-          title: `${biometricType} Login Enabled`,
-          message: `${biometricType} login is enabled for your current session. For your security, please log in again when this session expires.`,
-          type: 'success',
-        });
-      } else {
-        showAlert({
-          title: 'Verification Failed',
-          message: 'Biometric verification was not successful. Please try again.',
-          type: 'error',
-        });
-      }
-    } else {
-      setBiometrics(false);
-      await AsyncStorage.setItem('biometricLogin', 'false');
-      await clearCredentials();
-      showAlert({
-        title: `${biometricType} Disabled`,
-        message: `${biometricType} login has been disabled and stored credentials have been removed.`,
-        type: 'warning',
-      });
     }
   };
 
@@ -222,26 +159,6 @@ export default function SettingsScreen() {
         {/* Security */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Security</Text>
-          
-          {biometricAvailable && (
-            <View style={styles.settingRow}>
-              <View style={styles.settingLeft}>
-                <View style={[styles.iconContainer, { backgroundColor: colors.successBg }]}>
-                  <Ionicons name="finger-print" size={20} color="#059669" />
-                </View>
-                <View>
-                  <Text style={styles.settingLabel}>{biometricType} Login</Text>
-                  <Text style={styles.settingDescription}>{biometrics ? 'Enabled' : 'Use biometric to login'}</Text>
-                </View>
-              </View>
-              <Switch 
-                value={biometrics} 
-                onValueChange={handleBiometricToggle} 
-                trackColor={{ false: colors.border, true: '#059669' }}
-                thumbColor="#FFFFFF" 
-              />
-            </View>
-          )}
           
           <TouchableOpacity style={styles.menuItem} onPress={handleChangePassword}>
             <View style={styles.settingLeft}>
