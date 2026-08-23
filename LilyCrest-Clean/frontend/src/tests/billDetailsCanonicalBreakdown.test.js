@@ -42,7 +42,9 @@ describe('bill-details.jsx release state', () => {
 
 describe('bill-details.jsx breakdown line items', () => {
   test('reads the canonical bill.additional_charges field, not only the legacy bill.items', () => {
-    expect(details).toContain('bill.additional_charges');
+    const breakdown = fs.readFileSync(path.resolve(__dirname, '../utils/billingBreakdown.js'), 'utf8');
+    expect(details).toContain('getBillChargeRows(bill)');
+    expect(breakdown).toContain('bill.additional_charges');
   });
 
   test('does not permanently render a "Breakdown unavailable." placeholder for electricity/water', () => {

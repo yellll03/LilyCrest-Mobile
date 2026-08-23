@@ -2,12 +2,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as WebBrowser from 'expo-web-browser';
-import * as ImagePicker from 'expo-image-picker';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAlert } from '../src/context/AlertContext';
-import { useAuth } from '../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
 import { apiService } from '../src/services/api';
 import {
@@ -18,7 +16,7 @@ import {
 } from '../src/services/billingState';
 import { safeBack } from '../src/utils/navigation';
 import { billingDocumentCacheKey } from '../src/utils/billingDocumentCache';
-import { ensureFirebaseStorageAttachments, IMAGE_UPLOAD_MIME_TYPES, MAX_IMAGE_UPLOAD_BYTES } from '../src/services/firebaseStorageUpload';
+import { getBillChargeRows } from '../src/utils/billingBreakdown';
 import { getBillPaymentDate, getUtilityReleaseSchedule, isBillOutstanding } from '../src/utils/billingStatus';
 import { ScreenHeader } from '../src/components/ui/LilycrestUI';
 
@@ -95,7 +93,6 @@ export default function BillDetailsScreen() {
   const billId = Array.isArray(billIdParam) ? billIdParam[0] : billIdParam;
   const { colors, isDarkMode } = useTheme();
   const { showAlert } = useAlert();
-  const { user } = useAuth();
   const styles = useThemedStyles((c) => createStyles(c, isDarkMode));
 
   const [bill, setBill] = useState(null);
@@ -103,9 +100,7 @@ export default function BillDetailsScreen() {
   const [error, setError] = useState(null);
   const [creatingCheckout, setCreatingCheckout] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [uploadingProof, setUploadingProof] = useState(false);
   const checkoutGuardRef = useRef(false);
-  const proofUploadGuardRef = useRef(false);
 
   const loadBill = useCallback(async ({ showLoader = true } = {}) => {
     if (showLoader) setLoading(true);
@@ -201,47 +196,6 @@ export default function BillDetailsScreen() {
     }
   };
 
-  const handleUploadProof = async () => {
-    if (proofUploadGuardRef.current || uploadingProof || !billId) return;
-    proofUploadGuardRef.current = true;
-    try {
-      if (String(bill?.status || '').toLowerCase() === 'pending_verification') {
-        showAlert({ title: 'Under Review', message: 'Your payment proof is already under review.', type: 'info' });
-        return;
-      }
-      const permission = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      if (!permission.granted) {
-        showAlert({ title: 'Permission Required', message: 'Photo access is required to select payment proof.', type: 'warning' });
-        return;
-      }
-      const selected = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, quality: 0.8 });
-      if (selected.canceled || !selected.assets?.[0]) return;
-      const asset = selected.assets[0];
-      setUploadingProof(true);
-      const [proof] = await ensureFirebaseStorageAttachments([{
-        uri: asset.uri,
-        name: asset.fileName || `payment-proof-${Date.now()}.jpg`,
-        mimeType: asset.mimeType || 'image/jpeg',
-        size: asset.fileSize,
-      }], {
-        allowedMimeTypes: IMAGE_UPLOAD_MIME_TYPES,
-        entityId: String(billId),
-        folder: 'payment-proofs',
-        maxBytes: MAX_IMAGE_UPLOAD_BYTES,
-        tenantId: user?.user_id,
-      });
-      await apiService.submitPaymentProof(String(billId), proof);
-      showAlert({ title: 'Proof Uploaded', message: 'Your payment proof is under review. This bill is not marked paid until verification is complete.', type: 'success' });
-      await loadBill({ showLoader: false });
-      emitBillingRefresh('proof_uploaded');
-    } catch (error) {
-      showAlert({ title: 'Upload Failed', message: getBillingApiMessage(error, 'Unable to upload payment proof. Please try again.'), type: 'error' });
-    } finally {
-      proofUploadGuardRef.current = false;
-      setUploadingProof(false);
-    }
-  };
-
   if (loading) {
     return (
       <View style={styles.center}>
@@ -281,56 +235,7 @@ export default function BillDetailsScreen() {
   const releaseSchedule = getUtilityReleaseSchedule(bill);
 
   const moveInFinancials = bill.move_in_financials || bill.moveInFinancials || null;
-  // Charge items
-  const charges = [];
-  if (moveInFinancials) {
-    charges.push(
-      { label: 'One Month Advance Rent', amount: moveInFinancials.advanceRent, icon: 'home', color: '#1E40AF' },
-      { label: 'Security Deposit', amount: moveInFinancials.securityDeposit, icon: 'shield-checkmark', color: '#2563EB' },
-      { label: 'Reservation Fee Already Paid', amount: -moveInFinancials.reservationFeeAlreadyPaid, icon: 'remove-circle', color: '#065F46' },
-    );
-  } else {
-    if (bill.rent) charges.push({ label: 'Rent', amount: bill.rent, icon: 'home', color: '#1E40AF' });
-    if (bill.electricity) charges.push({ label: 'Electricity', amount: bill.electricity, icon: 'flash', color: '#92400E' });
-    if (bill.water) charges.push({ label: 'Water', amount: bill.water, icon: 'water', color: '#2563EB' });
-    if (bill.penalties) charges.push({ label: 'Penalty', amount: bill.penalties, icon: 'warning', color: '#991B1B' });
-  }
-  // Include extra line items if present. The canonical bridge returns these
-  // as bill.additional_charges: [{ name, amount }] (see mobileBillingBridge.js
-  // toMobileBill()); bill.items is kept as a fallback for any older/legacy
-  // response shape so a genuine adjustment never silently disappears from
-  // the breakdown.
-  if (!moveInFinancials) {
-    const extraItems = Array.isArray(bill.additional_charges) ? bill.additional_charges
-      : Array.isArray(bill.items) ? bill.items
-      : [];
-    extraItems.forEach((item) => {
-      const label = item.name || item.label || item.description || 'Charge';
-      if (charges.find((charge) => charge.label === label)) return;
-      const typeIcons = { rent: 'home', electricity: 'flash', water: 'water', penalty: 'warning' };
-      const typeColors = { rent: '#1E40AF', electricity: '#92400E', water: '#2563EB', penalty: '#991B1B' };
-      const t = (item.type || 'other').toLowerCase();
-      charges.push({
-        label,
-        amount: item.amount || 0,
-        icon: typeIcons[t] || 'receipt',
-        color: typeColors[t] || '#6B7280',
-      });
-    });
-  }
-  // Fallback: if no itemized charges but there's a billing_type, show single charge row
-  if (charges.length === 0 && bill.billing_type && totalAmount > 0) {
-    const typeMap = {
-      rent: { icon: 'home', color: '#1E40AF' },
-      electricity: { icon: 'flash', color: '#92400E' },
-      water: { icon: 'water', color: '#2563EB' },
-      penalty: { icon: 'warning', color: '#991B1B' },
-    };
-    const t = bill.billing_type.toLowerCase();
-    const cfg = typeMap[t] || { icon: 'receipt', color: '#6B7280' };
-    const label = bill.billing_type.charAt(0).toUpperCase() + bill.billing_type.slice(1);
-    charges.push({ label, amount: totalAmount, icon: cfg.icon, color: cfg.color });
-  }
+  const charges = getBillChargeRows(bill);
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -649,15 +554,6 @@ export default function BillDetailsScreen() {
                   </>
                 )}
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.proofBtn, (uploadingProof || statusKey === 'pending_verification') && styles.btnDisabled]}
-                disabled={uploadingProof || statusKey === 'pending_verification'}
-                onPress={handleUploadProof}
-              >
-                {uploadingProof ? <ActivityIndicator color={colors.primary} /> : <Ionicons name="cloud-upload-outline" size={18} color={colors.primary} />}
-                <Text style={styles.proofBtnText}>{statusKey === 'pending_verification' ? 'Payment Proof Under Review' : statusKey === 'rejected' ? 'Retry Payment Proof' : 'Upload Payment Proof'}</Text>
-              </TouchableOpacity>
-              {statusKey === 'rejected' && <Text style={styles.rejectionText}>{bill.rejection_reason || bill.rejectionReason || 'Payment proof was rejected. Please submit a clearer or corrected image.'}</Text>}
               <View style={styles.secureNote}>
                 <Ionicons name="lock-closed" size={11} color={colors.textMuted} />
                 <Text style={styles.secureNoteText}>Secure payment via GCash, Maya, Card, or Online Banking</Text>
@@ -858,9 +754,6 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
     backgroundColor: c.primary, paddingVertical: 14, borderRadius: 8,
   },
   paymongoBtnText: { color: '#ffffff', fontWeight: '700', fontSize: 16 },
-  proofBtn: { minHeight: 48, borderWidth: 1.5, borderColor: c.primary, borderRadius: 12, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8 },
-  proofBtnText: { color: c.primary, fontSize: 14, fontWeight: '700' },
-  rejectionText: { color: '#991B1B', fontSize: 12, lineHeight: 18, textAlign: 'center' },
   secureNote: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5 },
   secureNoteText: { fontSize: 11, color: c.textMuted },
 

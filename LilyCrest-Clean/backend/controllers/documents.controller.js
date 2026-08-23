@@ -164,7 +164,7 @@ function getDocumentPayload(docId, user) {
           '- Online: PayMongo (GCash, Maya, Card) via the app',
         ]},
         { heading: 'Important Notes', lines: [
-          'Always upload proof of payment in the app.',
+          'Use the secure Billing checkout in the app for online payments.',
           'Verification takes 24-48 hours.',
         ]},
         { heading: 'Utilities', lines: ['Water and WiFi included.', 'Electricity billed separately (sub-metered).'] },

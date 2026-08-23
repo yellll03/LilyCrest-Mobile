@@ -348,8 +348,8 @@ export default function BillingScreen() {
         <View style={styles.heroDivider} />
         {allUnderReview ? (
           <View style={styles.heroMessage}>
-            <Text style={styles.heroMessageLead}>Your payment proof has been submitted.</Text>
-            <Text style={styles.heroMessageText}>Waiting for admin verification.</Text>
+            <Text style={styles.heroMessageLead}>Your payment is being verified.</Text>
+            <Text style={styles.heroMessageText}>Waiting for payment confirmation.</Text>
           </View>
         ) : (
           <>
@@ -376,13 +376,10 @@ export default function BillingScreen() {
             )}
             <Pressable
               style={[styles.heroPayBtn, summarySchedule.unreleasedUtility && styles.heroPayBtnAfterMessage]}
-              onPress={() => {
-                const id = getBillId(overdueBill || outstandingBills[0]);
-                if (id) router.push({ pathname: '/bill-details', params: { billId: String(id) } });
-              }}
+              onPress={() => router.push('/outstanding-balance')}
             >
               <Ionicons name="card-outline" size={15} color="#0A1628" />
-              <Text style={styles.heroPayText}>Pay Now</Text>
+              <Text style={styles.heroPayText}>View & Pay {safeCurrency(totalOutstanding)}</Text>
             </Pressable>
           </>
         )}

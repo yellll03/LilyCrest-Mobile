@@ -12,14 +12,22 @@ describe('production mutation guards', () => {
       expect(handler).toContain('if (checkoutGuardRef.current) return');
       expect(handler.indexOf('checkoutGuardRef.current = true')).toBeLessThan(handler.indexOf("await loadBill({ showLoader: false })"));
     }
+
+    const aggregate = read('../../app/outstanding-balance.jsx');
+    const aggregateHandler = aggregate.slice(
+      aggregate.indexOf('const handlePayOutstanding'),
+      aggregate.indexOf('const handlePayOutstanding') + 1_400,
+    );
+    expect(aggregateHandler).toContain('if (checkoutGuardRef.current');
+    expect(aggregateHandler.indexOf('checkoutGuardRef.current = true')).toBeLessThan(
+      aggregateHandler.indexOf('await loadOutstanding'),
+    );
   });
 
-  test('payment-proof, profile, OTP, and support mutations use synchronous guards', () => {
-    const bill = read('../../app/bill-details.jsx');
+  test('profile, OTP, and support mutations use synchronous guards', () => {
     const profile = read('../../app/(tabs)/profile.jsx');
     const otp = read('../../app/otp-verify.jsx');
     const support = read('../screens/LilyAssistantScreen.jsx');
-    expect(bill).toContain('proofUploadGuardRef.current = true');
     expect(profile).toContain('profileMutationGuardRef.current = true');
     expect(otp).toContain('verifyGuardRef.current = true');
     expect(otp).toContain('resendGuardRef.current = true');

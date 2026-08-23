@@ -89,7 +89,7 @@ const HOUSE_RULES = [
       'Grace period: 1 day',
       'Late fee: ₱50.00 per day beginning on the second day after due date',
       'Accepted payments: Bank transfer (BDO/BPI), GCash, Maya',
-      'Always submit proof of payment through the app'
+      'Use the secure Billing checkout in the app for online payments'
     ]
   },
   {
