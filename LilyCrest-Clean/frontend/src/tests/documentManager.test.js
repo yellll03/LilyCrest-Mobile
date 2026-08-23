@@ -20,6 +20,22 @@ describe('documentErrorMessage — HTTP 410 (Gone)', () => {
     );
   });
 
+  test('reads the structured error body before deleting a failed download', () => {
+    const readIndex = source.indexOf('await downloadHttpError(result, uri)');
+    const deleteIndex = source.indexOf('await FileSystem.deleteAsync(uri', readIndex);
+    expect(readIndex).toBeGreaterThan(-1);
+    expect(deleteIndex).toBeGreaterThan(readIndex);
+    expect(source).toContain('JSON.parse(await FileSystem.readAsStringAsync(responseUri))');
+    expect(source).toContain('error.serverCode = payload?.code');
+  });
+
+  test('maps missing final and prepared storage codes to actionable branch-admin guidance', () => {
+    expect(source).toContain("'FINAL_DOCUMENT_STORAGE_MISSING', 'CONTRACT_ARTIFACT_STORAGE_MISSING'");
+    expect(source).toContain('Please contact the branch admin to replace the signed copy.');
+    expect(source).toContain("serverCode === 'PREPARED_DOCUMENT_STORAGE_MISSING'");
+    expect(source).toContain('Please contact the branch admin to regenerate the contract.');
+  });
+
   test('the 410 branch is checked before the generic fallback message', () => {
     const fallbackIndex = source.indexOf("return 'The document could not be loaded. Please try again.'");
     const gone410Index = source.indexOf("'HTTP_410'");

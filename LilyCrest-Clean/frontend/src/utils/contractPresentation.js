@@ -62,11 +62,13 @@ function formatPeso(value, locale) {
 export function preferredContractDocument(contract) {
   const tenantDoc = contract?.tenantDocument;
   if (!tenantDoc?.available) return null;
-  if (!['final_notarized', 'generated_draft'].includes(tenantDoc.type)) return null;
+  if (!['final_notarized', 'final_signed', 'generated_draft'].includes(tenantDoc.type)) return null;
+  const isFinal = tenantDoc.type !== 'generated_draft';
   return {
-    variant: tenantDoc.type === 'final_notarized' ? 'final' : 'prepared',
+    variant: isFinal ? 'final' : 'prepared',
     document: {
       currentVersion: tenantDoc.version,
+      label: tenantDoc.label,
       generatedAt: tenantDoc.generatedAt,
       publishedAt: tenantDoc.publishedAt,
       fileName: tenantDoc.fileName,
@@ -147,7 +149,9 @@ export function buildContractSummary(contract, locale) {
   return {
     status: contractStatusLabel(contract),
     lifecycleState,
-    lifecycleLabel: LIFECYCLE_LABELS[lifecycleState],
+    lifecycleLabel: lifecycleState === 'final'
+      ? (preferred?.document.label || LIFECYCLE_LABELS.final)
+      : LIFECYCLE_LABELS[lifecycleState],
     lifecycleBadgeLabel: LIFECYCLE_BADGE_LABELS[lifecycleState],
     message: LIFECYCLE_MESSAGES[lifecycleState],
     fields: fields.filter((field) => field.value),

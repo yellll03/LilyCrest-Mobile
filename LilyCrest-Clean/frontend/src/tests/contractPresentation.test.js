@@ -41,6 +41,7 @@ describe('controlled contract presentation', () => {
   test('PDF availability is driven entirely by the canonical tenantDocument resolver output', () => {
     expect(buildContractSummary({ tenantDocument: { available: true, type: 'generated_draft', version: 1 } }).canOpenPdf).toBe(true);
     expect(buildContractSummary({ tenantDocument: { available: true, type: 'final_notarized', version: 1 } }).canOpenPdf).toBe(true);
+    expect(buildContractSummary({ tenantDocument: { available: true, type: 'final_signed', version: 1 } }).canOpenPdf).toBe(true);
     expect(buildContractSummary({ tenantDocument: { available: false, type: null } }).canOpenPdf).toBe(false);
     expect(buildContractSummary({ tenantDocument: { available: true, type: 'unknown' } }).canOpenPdf).toBe(false);
   });
@@ -118,6 +119,24 @@ describe('canonical tenantDocument-driven presentation rule', () => {
       tenantDocument: { available: true, type: 'final_notarized', isFinal: true, version: 3, publishedAt: '2026-08-01' },
     };
     expect(contractLifecycleState(contract)).toBe('final');
+  });
+
+  test('legacy final_signed output remains backend-authoritative and opens as the final Contract', () => {
+    const summary = buildContractSummary({
+      id: 'contract-legacy-signed',
+      tenantDocument: {
+        available: true,
+        type: 'final_signed',
+        label: 'Final Contract',
+        isFinal: true,
+        version: 2,
+        publishedAt: '2026-08-18',
+      },
+    });
+    expect(summary.lifecycleState).toBe('final');
+    expect(summary.lifecycleLabel).toBe('Final Contract');
+    expect(summary.documentKind).toBe('contract-final');
+    expect(summary.documentCacheKey).toContain(':final:');
   });
 
   test('tenantDocument draft selects prepared even if it disagrees with the legacy final flag', () => {
