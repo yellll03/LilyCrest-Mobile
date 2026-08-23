@@ -49,9 +49,8 @@ async function fetchUserDocumentPdf({ userId, id, onProgress }) {
   );
   const result = await task.downloadAsync();
   if (!result?.uri || result.status < 200 || result.status >= 300) {
+    const error = await downloadHttpError(result, uri);
     await FileSystem.deleteAsync(uri, { idempotent: true });
-    const error = new Error(`HTTP_${result?.status || 0}`);
-    error.status = result?.status;
     throw error;
   }
 
@@ -63,6 +62,28 @@ async function fetchUserDocumentPdf({ userId, id, onProgress }) {
     await FileSystem.deleteAsync(uri, { idempotent: true });
     throw error;
   }
+}
+
+// expo-file-system writes a non-2xx response body to the destination path.
+// Read the backend's structured error before deleting that failed download so
+// callers can distinguish a physically missing Contract artifact (410) from
+// a transient or generic HTTP failure.
+async function downloadHttpError(result, fallbackUri) {
+  const status = result?.status || 0;
+  let payload = null;
+  const responseUri = result?.uri || fallbackUri;
+  if (responseUri) {
+    try {
+      payload = JSON.parse(await FileSystem.readAsStringAsync(responseUri));
+    } catch (_) {
+      payload = null;
+    }
+  }
+  const error = new Error(`HTTP_${status}`);
+  error.status = status;
+  error.serverCode = payload?.code || payload?.error?.code || null;
+  error.serverMessage = payload?.error?.message || payload?.error || payload?.detail || null;
+  return error;
 }
 
 const safePart = (value) => String(value || 'document').replace(/[^a-zA-Z0-9_-]/g, '_').slice(0, 80);
@@ -229,9 +250,8 @@ export async function fetchPdf({ userId, kind, id, cacheKey, onProgress }) {
   );
   const result = await task.downloadAsync();
   if (!result?.uri || result.status < 200 || result.status >= 300) {
+    const error = await downloadHttpError(result, uri);
     await FileSystem.deleteAsync(uri, { idempotent: true });
-    const error = new Error(`HTTP_${result?.status || 0}`);
-    error.status = result?.status;
     throw error;
   }
   try {
@@ -277,9 +297,16 @@ export async function downloadPdf(uri, title = 'document') {
 
 export function documentErrorMessage(error, hasNetwork = true) {
   const code = String(error?.message || '');
+  const serverCode = String(error?.serverCode || error?.code || '');
   if (!hasNetwork || /Network|timeout|HTTP_0/i.test(code)) return 'Internet connection required to load this document.';
   if (error?.status === 403 || code === 'HTTP_403') return 'You do not have permission to view this document.';
   if (error?.status === 404 || code === 'HTTP_404' || code === 'MISSING_FILE') return 'The requested document could not be found.';
+  if (['FINAL_DOCUMENT_STORAGE_MISSING', 'CONTRACT_ARTIFACT_STORAGE_MISSING'].includes(serverCode)) {
+    return 'The saved contract file is unavailable. Please contact the branch admin to replace the signed copy.';
+  }
+  if (serverCode === 'PREPARED_DOCUMENT_STORAGE_MISSING') {
+    return 'The prepared contract file is unavailable. Please contact the branch admin to regenerate the contract.';
+  }
   if (error?.status === 410 || code === 'HTTP_410') return 'Unable to load document at this time. Please try again later.';
   if (['EMPTY_FILE', 'WRONG_MIME', 'INVALID_PDF'].includes(code)) return 'This file is damaged or in an unsupported format.';
   if (code === 'FILE_TOO_LARGE') return 'This document is too large to open safely on this device.';
