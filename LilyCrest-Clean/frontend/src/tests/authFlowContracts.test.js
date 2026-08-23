@@ -40,7 +40,7 @@ describe('auth flow implementation contracts', () => {
     const source = read('app/login.jsx');
     expect(source).toContain('const normalizedPassword = password;');
     expect(source).toContain('loginWithEmail(normalizedEmail, normalizedPassword)');
-    expect(source).not.toContain('Remember me');
+    expect(source).toContain('Remember me');
     expect(source).not.toMatch(/password\.(trim|replace)\(/);
   });
 
@@ -49,16 +49,19 @@ describe('auth flow implementation contracts', () => {
     expect(read('src/config/firebase.js')).toContain('globalForFirebase.auth');
   });
 
-  test('auth restoration blocks protected content while the pre-login entry owns the text-free loader', () => {
+  test('the native splash owns startup until auth and routing are ready', () => {
     const context = read('src/context/AuthContext.js');
     const layout = read('app/_layout.jsx');
     const index = read('app/index.jsx');
     expect(context).toContain("authStatus === 'initializing'");
-    expect(layout).toContain('(!authReady && !preLoginEntryPath)');
-    expect(layout).not.toContain('Preparing LilyCrest');
-    expect(index).toContain('if (checking)');
-    expect(index).toContain('<ActivityIndicator');
-    expect(index).toContain("authStatus === 'unauthenticated' && !minimumLoadingComplete");
+    expect(context).not.toContain('Preparing LilyCrest');
+    expect(layout).toContain('const startupReady = !isLoading && authReady && !redirectPending;');
+    expect(layout).toContain('if (startupReady && !startupComplete) SplashScreen.hideAsync()');
+    expect(index).toContain("router.replace('/login')");
+    expect(index).toContain('const SLIDES = [');
+    expect(index).not.toContain('ActivityIndicator');
+    expect(index).not.toContain('loadingScreen');
+    expect(index).not.toContain('PRE_LOGIN_LOADING_MIN_MS');
   });
 
   test('expired session clears storage and returns unauthenticated', () => {

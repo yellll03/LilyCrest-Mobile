@@ -28,7 +28,8 @@ import {
   hasStoredCredentials,
   savePendingLogin,
 } from '../src/services/secureCredentials';
-import { resetToHome, safeBack } from '../src/utils/navigation';
+import { loadRememberedEmail, saveRememberedEmail } from '../src/services/rememberedEmail';
+import { resetToHome } from '../src/utils/navigation';
 import { AUTH_MESSAGES, authErrorTypeForUi, normalizeEmail, validateEmail as validateAuthEmail } from '../src/utils/authStability';
 import { validateLoginPassword } from '../src/utils/passwordValidation';
 
@@ -52,6 +53,7 @@ export default function LoginScreen() {
   const { showAlert } = useAlert();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [rememberEmail, setRememberEmail] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [isEmailLoading, setIsEmailLoading] = useState(false);
@@ -92,15 +94,19 @@ export default function LoginScreen() {
     setPassword(nextValue);
   };
 
-  // Load biometric eligibility and an optional email hint. Session
-  // persistence itself is always secure and no longer controlled here.
+  // Remember me is an email-only convenience. Session persistence remains
+  // owned by SecureStore and is deliberately independent of this preference.
   useEffect(() => {
     const init = async () => {
       try {
-        const savedEmail = await AsyncStorage.getItem('last_email');
-        const bioSetting = await AsyncStorage.getItem('biometricLogin');
+        const [remembered, bioSetting] = await Promise.all([
+          loadRememberedEmail(),
+          AsyncStorage.getItem('biometricLogin'),
+        ]);
         const isBioEnabled = bioSetting === 'true';
-        if (savedEmail && validateEmail(savedEmail).valid) setEmail(savedEmail);
+        setEmail(remembered.email);
+        setRememberEmail(remembered.rememberEmail);
+        setPassword('');
 
         const hasHardware = await LocalAuthentication.hasHardwareAsync();
         const isEnrolled = await LocalAuthentication.isEnrolledAsync();
@@ -150,6 +156,7 @@ export default function LoginScreen() {
           otpToken: result.otpToken,
           maskedEmail: result.maskedEmail,
           email: normalizedEmail,
+          rememberEmail,
         });
         router.push({
           pathname: '/otp-verify',
@@ -181,6 +188,9 @@ export default function LoginScreen() {
         setTouched({ email: false, password: false });
         return;
       }
+
+      await saveRememberedEmail({ rememberEmail, email: normalizedEmail })
+        .catch((error) => console.warn('Remembered email update failed:', error?.message));
 
       // Handle biometric credential storage
       if (biometricAvailable) {
@@ -348,11 +358,6 @@ export default function LoginScreen() {
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardView}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
-          {/* Back Button */}
-          <TouchableOpacity style={styles.backButton} onPress={() => safeBack(router, '/')}>
-            <Ionicons name="arrow-back" size={24} color={colors.text} />
-          </TouchableOpacity>
-
           {/* Logo */}
           <View style={styles.logoContainer}>
             <Image
@@ -412,7 +417,7 @@ export default function LoginScreen() {
             </View>
 
             {/* Password Input */}
-            <View style={styles.inputContainer}>
+            <View style={[styles.inputContainer, styles.passwordInputContainer]}>
               <Text style={styles.label}>Password</Text>
               <View style={[styles.inputWrapper, showPasswordFieldError && styles.inputWrapperError, !showPasswordFieldError && touched.password && isPasswordValid && styles.inputWrapperSuccess]}>
                 <Ionicons name="lock-closed-outline" size={20} color={showPasswordFieldError ? '#DC2626' : '#6B7280'} style={styles.inputIcon} />
@@ -437,8 +442,22 @@ export default function LoginScreen() {
               ) : null}
             </View>
 
-            {/* Authentication persists securely by default. */}
+            {/* Email prefill only; authenticated sessions persist securely regardless. */}
             <View style={styles.optionsRow}>
+              <TouchableOpacity
+                style={styles.rememberOption}
+                onPress={() => setRememberEmail((current) => !current)}
+                accessibilityRole="checkbox"
+                accessibilityLabel="Remember me"
+                accessibilityState={{ checked: rememberEmail }}
+              >
+                <Ionicons
+                  name={rememberEmail ? 'checkbox' : 'square-outline'}
+                  size={22}
+                  color={rememberEmail ? colors.primary : colors.textMuted}
+                />
+                <Text style={styles.rememberText}>Remember me</Text>
+              </TouchableOpacity>
               <TouchableOpacity style={styles.forgotPassword} onPress={() => router.push('/forgot-password')}>
                 <Text style={styles.forgotPasswordText}>Forgot password?</Text>
               </TouchableOpacity>
@@ -535,27 +554,13 @@ const createStyles = (c) => StyleSheet.create({
   container: { flex: 1, backgroundColor: c.background },
   keyboardView: { flex: 1 },
   scrollContent: { flexGrow: 1, paddingHorizontal: 24, paddingTop: 16, paddingBottom: 32 },
-  backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    backgroundColor: c.surfaceSecondary,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: c.border,
-    ...Platform.select({
-      ios: { shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4 },
-      android: { elevation: 2 },
-      web: { boxShadow: '0 2px 6px rgba(0,0,0,0.08)' },
-    }),
-  },
   logoContainer: { alignItems: 'center', marginTop: 8, marginBottom: 2 },
   authLogo: { width: 132, height: 102 },
   title: { fontSize: 28, fontWeight: '700', color: c.text, textAlign: 'center', marginBottom: 8 },
   subtitle: { fontSize: 15, color: c.textSecondary, textAlign: 'center', marginBottom: 32 },
   form: { width: '100%' },
   inputContainer: { marginBottom: 20 },
+  passwordInputContainer: { marginBottom: 4 },
   label: { fontSize: 13, fontWeight: '600', color: c.text, marginBottom: 8, textTransform: 'uppercase', letterSpacing: 0.5 },
   inputWrapper: { flexDirection: 'row', alignItems: 'center', borderWidth: 1.5, borderColor: c.border, borderRadius: 12, backgroundColor: c.inputBg, paddingHorizontal: 16 },
   inputWrapperError: { borderColor: c.error, backgroundColor: c.errorBg },
@@ -564,8 +569,10 @@ const createStyles = (c) => StyleSheet.create({
   input: { flex: 1, paddingVertical: 14, fontSize: 15, color: c.text },
   errorContainer: { flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 4 },
   errorText: { fontSize: 12, color: '#DC2626' },
-  optionsRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', marginBottom: 24 },
-  forgotPassword: { alignSelf: 'flex-end' },
+  optionsRow: { minHeight: 44, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20, gap: 12 },
+  rememberOption: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 8, flexShrink: 1 },
+  rememberText: { color: c.text, fontSize: 14, fontWeight: '500' },
+  forgotPassword: { minHeight: 44, justifyContent: 'center', alignItems: 'flex-end', flexShrink: 0 },
   forgotPasswordText: { color: c.primary, fontSize: 14, fontWeight: '600' },
   loginErrorContainer: { flexDirection: 'row', alignItems: 'flex-start', borderWidth: 1, borderRadius: 10, padding: 12, marginBottom: 20, gap: 10 },
   loginErrorText: { flex: 1, fontSize: 13, fontWeight: '500', lineHeight: 18 },

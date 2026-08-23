@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { usePathname, useRouter, useSegments } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Animated, AppState, Platform, Pressable, StatusBar as RNStatusBar, StyleSheet, Text, View } from 'react-native';
+import { Animated, AppState, Platform, Pressable, StatusBar as RNStatusBar, StyleSheet, Text, View } from 'react-native';
 import { auth, getFreshIdToken, subscribeToAuthState } from '../config/firebase';
 import {
   api,
@@ -1095,30 +1095,6 @@ export function AuthProvider({ children }) {
     refreshNotifications,
   ]);
 
-  if (isLoading) {
-    return (
-      <View style={styles.authLoadingContainer}>
-        <ActivityIndicator size="large" color="#0A1628" />
-        <Text style={styles.authLoadingTitle}>Preparing LilyCrest</Text>
-        <Text style={styles.authLoadingText}>Checking your secure session...</Text>
-      </View>
-    );
-  }
-
-  if (authStatus === 'restoring_offline') {
-    return (
-      <View style={styles.authLoadingContainer}>
-        <Text style={styles.authLoadingTitle}>Still restoring your session</Text>
-        <Text style={styles.authLoadingText}>
-          LilyCrest could not reach the server. Your secure session is still saved.
-        </Text>
-        <Pressable style={styles.authRetryButton} onPress={() => checkAuth().catch(() => {})}>
-          <Text style={styles.authRetryButtonText}>Retry connection</Text>
-        </Pressable>
-      </View>
-    );
-  }
-
   return (
     <AuthContext.Provider value={contextValue}>
       <View style={styles.container}>
@@ -1134,6 +1110,17 @@ export function AuthProvider({ children }) {
           </Pressable>
         ) : null}
         {children}
+        {authStatus === 'restoring_offline' ? (
+          <View style={styles.authRestoringOverlay}>
+            <Text style={styles.authLoadingTitle}>Still restoring your session</Text>
+            <Text style={styles.authLoadingText}>
+              LilyCrest could not reach the server. Your secure session is still saved.
+            </Text>
+            <Pressable style={styles.authRetryButton} onPress={() => checkAuth().catch(() => {})}>
+              <Text style={styles.authRetryButtonText}>Retry connection</Text>
+            </Pressable>
+          </View>
+        ) : null}
         {notificationBanner ? (
           <View pointerEvents="box-none" style={styles.bannerOverlay}>
             <Animated.View
@@ -1209,12 +1196,13 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '800',
   },
-  authLoadingContainer: {
-    flex: 1,
+  authRestoringOverlay: {
+    ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 24,
     backgroundColor: '#F8FAFC',
+    zIndex: 2000,
   },
   authLoadingTitle: {
     marginTop: 14,

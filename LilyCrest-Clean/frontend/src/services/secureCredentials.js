@@ -171,7 +171,7 @@ export async function removeSessionToken() {
   ]);
 }
 
-export async function savePendingLogin({ otpToken, email, maskedEmail } = {}) {
+export async function savePendingLogin({ otpToken, email, maskedEmail, rememberEmail = false } = {}) {
   const token = typeof otpToken === 'string' ? otpToken.trim() : '';
   if (!token) return false;
 
@@ -179,6 +179,7 @@ export async function savePendingLogin({ otpToken, email, maskedEmail } = {}) {
     otpToken: token,
     email: typeof email === 'string' ? email.trim().toLowerCase() : '',
     maskedEmail: typeof maskedEmail === 'string' ? maskedEmail : '',
+    rememberEmail: rememberEmail === true,
     createdAt: Date.now(),
   });
 
@@ -209,6 +210,7 @@ export async function getPendingLogin() {
       otpToken,
       email: typeof parsed.email === 'string' ? parsed.email : '',
       maskedEmail: typeof parsed.maskedEmail === 'string' ? parsed.maskedEmail : '',
+      rememberEmail: parsed.rememberEmail === true,
     };
   } catch (_) {
     await clearPendingLogin();
