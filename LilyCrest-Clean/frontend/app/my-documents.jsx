@@ -709,30 +709,32 @@ export default function MyDocumentsScreen() {
                   const sc = statusColor(doc.status);
                   const typeInfo = UPLOAD_TYPES.find(t => t.key === doc.type);
                   return (
-                    <TouchableOpacity key={doc.doc_id} style={styles.uploadedDocCard} onPress={() => handleViewUploadedDoc(doc)} activeOpacity={0.7}>
-                      <View style={[styles.uploadedDocIcon, { backgroundColor: `${typeInfo?.color || '#6B7280'}12` }]}>
-                        <Ionicons name={typeInfo?.icon || 'card'} size={22} color={typeInfo?.color || '#6B7280'} />
-                      </View>
-                      <View style={styles.uploadedDocContent}>
-                        <View style={styles.uploadedDocTitleRow}>
-                          <Text style={styles.uploadedDocTitle} numberOfLines={1}>{doc.label}</Text>
-                          <View style={[styles.statusBadge, { backgroundColor: sc.bg }]}>
-                            <Text style={[styles.statusText, { color: sc.text }]}>{statusLabel(doc.status)}</Text>
-                          </View>
+                    <View key={doc.doc_id} style={styles.uploadedDocCard}>
+                      <TouchableOpacity style={styles.uploadedDocCardMain} onPress={() => handleViewUploadedDoc(doc)} activeOpacity={0.7}>
+                        <View style={[styles.uploadedDocIcon, { backgroundColor: `${typeInfo?.color || '#6B7280'}12` }]}>
+                          <Ionicons name={typeInfo?.icon || 'card'} size={22} color={typeInfo?.color || '#6B7280'} />
                         </View>
-                        <Text style={styles.uploadedDocDate}>
-                          Uploaded {new Date(doc.uploaded_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        </Text>
-                      </View>
+                        <View style={styles.uploadedDocContent}>
+                          <View style={styles.uploadedDocTitleRow}>
+                            <Text style={styles.uploadedDocTitle} numberOfLines={1}>{doc.label}</Text>
+                            <View style={[styles.statusBadge, { backgroundColor: sc.bg }]}>
+                              <Text style={[styles.statusText, { color: sc.text }]}>{statusLabel(doc.status)}</Text>
+                            </View>
+                          </View>
+                          <Text style={styles.uploadedDocDate}>
+                            Uploaded {new Date(doc.uploaded_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
                       <TouchableOpacity
                         style={styles.deleteBtn}
-                        onPress={(e) => { e.stopPropagation(); setDeleteTarget(doc); }}
+                        onPress={() => setDeleteTarget(doc)}
                         disabled={Boolean(deletingDocId)}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       >
                         <Ionicons name="trash-outline" size={16} color="#DC2626" />
                       </TouchableOpacity>
-                    </TouchableOpacity>
+                    </View>
                   );
                 })}
               </View>
@@ -746,30 +748,32 @@ export default function MyDocumentsScreen() {
                   const sc = statusColor(doc.status);
                   const typeInfo = UPLOAD_TYPES.find(t => t.key === doc.type);
                   return (
-                    <TouchableOpacity key={doc.doc_id} style={styles.uploadedDocCard} onPress={() => handleViewUploadedDoc(doc)} activeOpacity={0.7}>
-                      <View style={[styles.uploadedDocIcon, { backgroundColor: `${typeInfo?.color || '#6B7280'}12` }]}>
-                        <Ionicons name={typeInfo?.icon || 'document'} size={22} color={typeInfo?.color || '#6B7280'} />
-                      </View>
-                      <View style={styles.uploadedDocContent}>
-                        <View style={styles.uploadedDocTitleRow}>
-                          <Text style={styles.uploadedDocTitle} numberOfLines={1}>{doc.label}</Text>
-                          <View style={[styles.statusBadge, { backgroundColor: sc.bg }]}>
-                            <Text style={[styles.statusText, { color: sc.text }]}>{statusLabel(doc.status)}</Text>
-                          </View>
+                    <View key={doc.doc_id} style={styles.uploadedDocCard}>
+                      <TouchableOpacity style={styles.uploadedDocCardMain} onPress={() => handleViewUploadedDoc(doc)} activeOpacity={0.7}>
+                        <View style={[styles.uploadedDocIcon, { backgroundColor: `${typeInfo?.color || '#6B7280'}12` }]}>
+                          <Ionicons name={typeInfo?.icon || 'document'} size={22} color={typeInfo?.color || '#6B7280'} />
                         </View>
-                        <Text style={styles.uploadedDocDate}>
-                          Uploaded {new Date(doc.uploaded_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
-                        </Text>
-                      </View>
+                        <View style={styles.uploadedDocContent}>
+                          <View style={styles.uploadedDocTitleRow}>
+                            <Text style={styles.uploadedDocTitle} numberOfLines={1}>{doc.label}</Text>
+                            <View style={[styles.statusBadge, { backgroundColor: sc.bg }]}>
+                              <Text style={[styles.statusText, { color: sc.text }]}>{statusLabel(doc.status)}</Text>
+                            </View>
+                          </View>
+                          <Text style={styles.uploadedDocDate}>
+                            Uploaded {new Date(doc.uploaded_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
                       <TouchableOpacity
                         style={styles.deleteBtn}
-                        onPress={(e) => { e.stopPropagation(); setDeleteTarget(doc); }}
+                        onPress={() => setDeleteTarget(doc)}
                         disabled={Boolean(deletingDocId)}
                         hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                       >
                         <Ionicons name="trash-outline" size={16} color="#DC2626" />
                       </TouchableOpacity>
-                    </TouchableOpacity>
+                    </View>
                   );
                 })}
               </View>
@@ -818,23 +822,25 @@ export default function MyDocumentsScreen() {
               {docs.map(doc => {
                 const sc = statusColor(doc.status);
                 return (
-                  <TouchableOpacity key={doc.id} style={styles.documentCard} onPress={() => handlePreview(doc)} activeOpacity={0.7}>
-                    <View style={[styles.documentIcon, { backgroundColor: `${doc.color}12` }]}>
-                      <Ionicons name={doc.icon} size={24} color={doc.color} />
-                    </View>
-                    <View style={styles.documentContent}>
-                      <View style={styles.docTitleRow}>
-                        <Text style={styles.documentTitle}>{doc.title}</Text>
-                        <View style={[styles.statusBadge, { backgroundColor: sc.bg }]}>
-                          <Text style={[styles.statusText, { color: sc.text }]}>{doc.status}</Text>
-                        </View>
+                  <View key={doc.id} style={styles.documentCard}>
+                    <TouchableOpacity style={styles.documentCardMain} onPress={() => handlePreview(doc)} activeOpacity={0.7}>
+                      <View style={[styles.documentIcon, { backgroundColor: `${doc.color}12` }]}>
+                        <Ionicons name={doc.icon} size={24} color={doc.color} />
                       </View>
-                      <Text style={styles.documentDescription} numberOfLines={1}>{doc.description}</Text>
-                    </View>
+                      <View style={styles.documentContent}>
+                        <View style={styles.docTitleRow}>
+                          <Text style={styles.documentTitle}>{doc.title}</Text>
+                          <View style={[styles.statusBadge, { backgroundColor: sc.bg }]}>
+                            <Text style={[styles.statusText, { color: sc.text }]}>{doc.status}</Text>
+                          </View>
+                        </View>
+                        <Text style={styles.documentDescription} numberOfLines={1}>{doc.description}</Text>
+                      </View>
+                    </TouchableOpacity>
                     <View style={styles.actionButtons}>
                       <TouchableOpacity
                         style={[styles.downloadButton, downloading === doc.id && styles.downloadButtonDisabled]}
-                        onPress={(e) => { e.stopPropagation(); handleDownload(doc); }}
+                        onPress={() => handleDownload(doc)}
                         disabled={downloading === doc.id}
                       >
                         {downloading === doc.id ? (
@@ -844,7 +850,7 @@ export default function MyDocumentsScreen() {
                         )}
                       </TouchableOpacity>
                     </View>
-                  </TouchableOpacity>
+                  </View>
                 );
               })}
             </View>
@@ -1028,6 +1034,7 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   subSection: { marginBottom: 14 },
   subSectionTitle: { fontSize: 12, fontWeight: '700', color: colors.textSecondary, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 8, marginLeft: 4 },
   uploadedDocCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 12, padding: 14, marginBottom: 8, borderWidth: 1, borderColor: colors.border },
+  uploadedDocCardMain: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   uploadedDocIcon: { width: 44, height: 44, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   uploadedDocContent: { flex: 1 },
   uploadedDocTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
@@ -1043,6 +1050,7 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   extensionInfoText: { flex: 1, fontSize: 12, color: colors.infoText, lineHeight: 18 },
   // Policy doc cards
   documentCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surface, borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: colors.border },
+  documentCardMain: { flex: 1, flexDirection: 'row', alignItems: 'center' },
   documentIcon: { width: 48, height: 48, borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginRight: 12 },
   documentContent: { flex: 1 },
   docTitleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
