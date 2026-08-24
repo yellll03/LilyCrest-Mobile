@@ -43,6 +43,20 @@ jest.mock('react-native-gesture-handler/Swipeable', () => {
   return SwipeableMock;
 });
 
+// The package root eagerly registers its native module (TurboModuleRegistry),
+// which isn't present under jest-expo's mocked NativeModules shape above.
+// Screens use gesture-handler's own TouchableOpacity (not react-native's)
+// only for touchables nested inside a Swipeable, so onPress behavior is the
+// same react-native Touchable under test; native gesture negotiation itself
+// is exercised by the Android/iOS build/device QA.
+jest.mock('react-native-gesture-handler', () => {
+  const RN = require('react-native');
+  return {
+    TouchableOpacity: RN.TouchableOpacity,
+    GestureHandlerRootView: RN.View,
+  };
+});
+
 // expo-image's native view manager isn't registered under jest-expo's mocked
 // NativeModules shape above, so requiring it directly throws. Render it as a
 // thin wrapper around RN's own Image instead — good enough for behavioral

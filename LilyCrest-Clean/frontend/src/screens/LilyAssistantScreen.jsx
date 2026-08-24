@@ -2235,6 +2235,7 @@ function createAssistantStyles(c, dark) {
     alignItems: 'center',
     justifyContent: 'space-between',
     zIndex: 20,
+    elevation: 20,
     borderBottomWidth: 3,
     borderBottomColor: '#D4AF37',
   },
@@ -2648,6 +2649,7 @@ function createAssistantStyles(c, dark) {
   attachWrapper: {
     position: 'relative',
     zIndex: 5,
+    elevation: 5,
   },
   attachButton: {
     width: 36,

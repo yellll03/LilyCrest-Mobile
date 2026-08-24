@@ -1278,6 +1278,15 @@ export default function ServicesScreen() {
               </ScrollView>
             </View>
           </View>
+          <AttachmentPickerSheet
+            asOverlay
+            visible={showCreateAttachMenu}
+            onClose={() => setShowCreateAttachMenu(false)}
+            onTakePhoto={() => handleAttach(pickFromCamera)}
+            onChoosePhoto={() => handleAttach(pickFromLibrary)}
+            onChooseDocument={() => handleAttach(pickDocument)}
+            disabled={submitting}
+          />
         </KeyboardAvoidingView>
       </Modal>
 
@@ -1746,76 +1755,67 @@ export default function ServicesScreen() {
               )}
             </View>
           </View>
-        </KeyboardAvoidingView>
-      </Modal>
-
-      <AttachmentPickerSheet
-        visible={showCreateAttachMenu}
-        onClose={() => setShowCreateAttachMenu(false)}
-        onTakePhoto={() => handleAttach(pickFromCamera)}
-        onChoosePhoto={() => handleAttach(pickFromLibrary)}
-        onChooseDocument={() => handleAttach(pickDocument)}
-        disabled={submitting}
-      />
-
-      <AttachmentPickerSheet
-        visible={showReplyAttachMenu}
-        onClose={() => setShowReplyAttachMenu(false)}
-        onTakePhoto={() => handleReplyAttach(pickFromCamera)}
-        onChoosePhoto={() => handleReplyAttach(pickFromLibrary)}
-        onChooseDocument={() => handleReplyAttach(pickDocument)}
-        disabled={sendingReply}
-      />
-
-      <Modal visible={Boolean(previewAttachment)} transparent animationType="fade" onRequestClose={() => { setPreviewAttachment(null); setPreviewAttachmentError(''); }}>
-        <TouchableOpacity style={styles.confirmOverlay} activeOpacity={1} onPress={() => { setPreviewAttachment(null); setPreviewAttachmentError(''); }}>
-          <TouchableOpacity
-            activeOpacity={1}
-            onPress={() => {}}
-            style={{
-              width: '88%',
-              backgroundColor: colors.surface,
-              borderRadius: 12,
-              padding: 16,
-              gap: 12,
-              borderWidth: 1,
-              borderColor: colors.border,
-            }}
-          >
-            <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-              <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text }}>Attachment Preview</Text>
-              <TouchableOpacity onPress={() => { setPreviewAttachment(null); setPreviewAttachmentError(''); }}>
-                <Ionicons name="close" size={22} color={colors.textMuted} />
+          <AttachmentPickerSheet
+            asOverlay
+            visible={showReplyAttachMenu}
+            onClose={() => setShowReplyAttachMenu(false)}
+            onTakePhoto={() => handleReplyAttach(pickFromCamera)}
+            onChoosePhoto={() => handleReplyAttach(pickFromLibrary)}
+            onChooseDocument={() => handleReplyAttach(pickDocument)}
+            disabled={sendingReply}
+          />
+          {previewAttachment ? (
+            <View style={[styles.confirmOverlay, StyleSheet.absoluteFillObject]}>
+              <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={() => { setPreviewAttachment(null); setPreviewAttachmentError(''); }} />
+              <TouchableOpacity
+                activeOpacity={1}
+                onPress={() => {}}
+                style={{
+                  width: '88%',
+                  backgroundColor: colors.surface,
+                  borderRadius: 12,
+                  padding: 16,
+                  gap: 12,
+                  borderWidth: 1,
+                  borderColor: colors.border,
+                }}
+              >
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <Text style={{ fontSize: 16, fontWeight: '700', color: colors.text }}>Attachment Preview</Text>
+                  <TouchableOpacity onPress={() => { setPreviewAttachment(null); setPreviewAttachmentError(''); }}>
+                    <Ionicons name="close" size={22} color={colors.textMuted} />
+                  </TouchableOpacity>
+                </View>
+                {getAttachmentDownloadUrl(previewAttachment) ? (
+                  <Image
+                    source={{ uri: getAttachmentDownloadUrl(previewAttachment) }}
+                    style={{ width: '100%', height: 340, borderRadius: 12, backgroundColor: colors.surfaceSecondary }}
+                    resizeMode="contain"
+                    onError={(event) => {
+                      const message = sanitizeAttachmentErrorMessage(event?.nativeEvent?.error || 'Attachment preview could not be loaded.');
+                      let hostname = '';
+                      try { hostname = new URL(getAttachmentDownloadUrl(previewAttachment)).hostname; } catch (_) { hostname = ''; }
+                      console.warn('[MaintenanceAttachment] image-preview-failure', { name: getAttachmentDisplayName(previewAttachment), mimeType: previewAttachment?.mimeType || previewAttachment?.type || 'image', hostname, errorType: 'ReactNativeImageError', message });
+                      const visibleError = /code=402|HTTP code.*402/i.test(message)
+                        ? 'File storage is unavailable because Firebase billing is disabled. Please contact the administrator.'
+                        : `Image could not be opened: ${message}`;
+                      setPreviewAttachmentError(visibleError);
+                      showBannerMessage('error', visibleError);
+                    }}
+                  />
+                ) : null}
+                {previewAttachmentError ? (
+                  <View style={{ backgroundColor: '#FEF2F2', borderColor: '#DC2626', borderWidth: 1, borderRadius: 10, padding: 10 }}>
+                    <Text style={{ color: '#991B1B', fontSize: 12, lineHeight: 18 }}>{previewAttachmentError}</Text>
+                  </View>
+                ) : null}
+                <Text style={{ fontSize: 13, color: colors.textMuted }}>
+                  {previewAttachment ? getAttachmentDisplayName(previewAttachment) : 'Attachment preview'}
+                </Text>
               </TouchableOpacity>
             </View>
-            {getAttachmentDownloadUrl(previewAttachment) ? (
-              <Image
-                source={{ uri: getAttachmentDownloadUrl(previewAttachment) }}
-                style={{ width: '100%', height: 340, borderRadius: 12, backgroundColor: colors.surfaceSecondary }}
-                resizeMode="contain"
-                onError={(event) => {
-                  const message = sanitizeAttachmentErrorMessage(event?.nativeEvent?.error || 'Attachment preview could not be loaded.');
-                  let hostname = '';
-                  try { hostname = new URL(getAttachmentDownloadUrl(previewAttachment)).hostname; } catch (_) { hostname = ''; }
-                  console.warn('[MaintenanceAttachment] image-preview-failure', { name: getAttachmentDisplayName(previewAttachment), mimeType: previewAttachment?.mimeType || previewAttachment?.type || 'image', hostname, errorType: 'ReactNativeImageError', message });
-                  const visibleError = /code=402|HTTP code.*402/i.test(message)
-                    ? 'File storage is unavailable because Firebase billing is disabled. Please contact the administrator.'
-                    : `Image could not be opened: ${message}`;
-                  setPreviewAttachmentError(visibleError);
-                  showBannerMessage('error', visibleError);
-                }}
-              />
-            ) : null}
-            {previewAttachmentError ? (
-              <View style={{ backgroundColor: '#FEF2F2', borderColor: '#DC2626', borderWidth: 1, borderRadius: 10, padding: 10 }}>
-                <Text style={{ color: '#991B1B', fontSize: 12, lineHeight: 18 }}>{previewAttachmentError}</Text>
-              </View>
-            ) : null}
-            <Text style={{ fontSize: 13, color: colors.textMuted }}>
-              {previewAttachment ? getAttachmentDisplayName(previewAttachment) : 'Attachment preview'}
-            </Text>
-          </TouchableOpacity>
-        </TouchableOpacity>
+          ) : null}
+        </KeyboardAvoidingView>
       </Modal>
 
       {/* Cancel Confirmation */}

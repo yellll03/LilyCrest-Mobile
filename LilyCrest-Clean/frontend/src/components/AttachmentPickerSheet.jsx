@@ -10,6 +10,14 @@ export default function AttachmentPickerSheet({
   onChoosePhoto,
   onChooseDocument,
   disabled = false,
+  // When this sheet opens from a control that already lives inside another
+  // native <Modal> (e.g. a reply composer inside a detail modal), render it
+  // as a plain absolute overlay in that same tree instead of a second native
+  // <Modal> — iOS presents native Modals exclusively (one UIViewController at
+  // a time), so stacking a second one on top of a still-open first one is a
+  // known cause of touches becoming unresponsive on both, even though
+  // Android tolerates stacked window-based modals fine.
+  asOverlay = false,
 }) {
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
@@ -26,6 +34,59 @@ export default function AttachmentPickerSheet({
     { label: 'Choose Document', icon: 'document-text-outline', onPress: onChooseDocument },
   ];
 
+  if (asOverlay && !visible) return null;
+
+  const content = (
+    <View style={[styles.overlay, { backgroundColor: colors.overlay }, asOverlay && StyleSheet.absoluteFillObject]}>
+      <Pressable
+        style={StyleSheet.absoluteFillObject}
+        onPress={onClose}
+        accessibilityRole="button"
+        accessibilityLabel="Close attachment options"
+      />
+      <View
+        style={[
+          styles.sheet,
+          {
+            backgroundColor: colors.surface,
+            borderColor: colors.border,
+            paddingBottom: Math.max(insets.bottom, 12),
+          },
+        ]}
+      >
+        <View style={[styles.handle, { backgroundColor: colors.border }]} />
+        <Text style={[styles.title, { color: colors.heading }]}>Add attachment</Text>
+        {options.map((option) => (
+          <Pressable
+            key={option.label}
+            style={({ pressed }) => [
+              styles.option,
+              { backgroundColor: pressed ? colors.surfaceSecondary : colors.surface },
+            ]}
+            onPress={() => select(option.onPress)}
+            disabled={disabled}
+            accessibilityRole="button"
+            accessibilityLabel={option.label}
+          >
+            <View style={[styles.iconWrap, { backgroundColor: colors.surfaceSecondary }]}>
+              <Ionicons name={option.icon} size={19} color={colors.text} />
+            </View>
+            <Text style={[styles.optionText, { color: colors.text }]}>{option.label}</Text>
+          </Pressable>
+        ))}
+        <Pressable
+          style={[styles.cancel, { borderColor: colors.border }]}
+          onPress={onClose}
+          accessibilityRole="button"
+        >
+          <Text style={[styles.cancelText, { color: colors.textSecondary }]}>Cancel</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+
+  if (asOverlay) return content;
+
   return (
     <Modal
       visible={visible}
@@ -34,52 +95,7 @@ export default function AttachmentPickerSheet({
       statusBarTranslucent
       onRequestClose={onClose}
     >
-      <View style={[styles.overlay, { backgroundColor: colors.overlay }]}>
-        <Pressable
-          style={StyleSheet.absoluteFillObject}
-          onPress={onClose}
-          accessibilityRole="button"
-          accessibilityLabel="Close attachment options"
-        />
-        <View
-          style={[
-            styles.sheet,
-            {
-              backgroundColor: colors.surface,
-              borderColor: colors.border,
-              paddingBottom: Math.max(insets.bottom, 12),
-            },
-          ]}
-        >
-          <View style={[styles.handle, { backgroundColor: colors.border }]} />
-          <Text style={[styles.title, { color: colors.heading }]}>Add attachment</Text>
-          {options.map((option) => (
-            <Pressable
-              key={option.label}
-              style={({ pressed }) => [
-                styles.option,
-                { backgroundColor: pressed ? colors.surfaceSecondary : colors.surface },
-              ]}
-              onPress={() => select(option.onPress)}
-              disabled={disabled}
-              accessibilityRole="button"
-              accessibilityLabel={option.label}
-            >
-              <View style={[styles.iconWrap, { backgroundColor: colors.surfaceSecondary }]}>
-                <Ionicons name={option.icon} size={19} color={colors.text} />
-              </View>
-              <Text style={[styles.optionText, { color: colors.text }]}>{option.label}</Text>
-            </Pressable>
-          ))}
-          <Pressable
-            style={[styles.cancel, { borderColor: colors.border }]}
-            onPress={onClose}
-            accessibilityRole="button"
-          >
-            <Text style={[styles.cancelText, { color: colors.textSecondary }]}>Cancel</Text>
-          </Pressable>
-        </View>
-      </View>
+      {content}
     </Modal>
   );
 }

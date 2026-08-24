@@ -4,6 +4,13 @@ import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, FlatList, Modal, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import Swipeable from 'react-native-gesture-handler/Swipeable';
+// react-native-gesture-handler's own TouchableOpacity (not react-native's) for
+// touchables nested inside Swipeable — Swipeable's PanGestureHandler uses
+// UIKit's gesture-recognizer system on iOS, which doesn't reliably negotiate
+// against react-native's separate touch-responder system, so a plain
+// react-native Touchable inside it can miss taps or conflict with swipe
+// detection on iOS specifically.
+import { TouchableOpacity as GestureTouchableOpacity } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
 import { useToast } from '../../src/context/ToastContext';
@@ -588,7 +595,7 @@ export default function AnnouncementsScreen() {
           if (direction === 'right') removeAnnouncements([announcementId]);
         }}
       >
-      <TouchableOpacity
+      <GestureTouchableOpacity
         style={styles.announcementCard}
         onPress={() => (selectionMode ? toggleSelected(announcementId) : setSelectedAnn(announcement))}
         onLongPress={() => enterSelectionMode(announcementId)}
@@ -607,7 +614,7 @@ export default function AnnouncementsScreen() {
           {/* Icon + title row */}
           <View style={styles.cardHeader}>
             {selectionMode ? (
-              <TouchableOpacity
+              <GestureTouchableOpacity
                 onPress={() => toggleSelected(announcementId)}
                 style={[styles.selectCheckbox, isSelected && styles.selectCheckboxChecked]}
                 accessibilityRole="checkbox"
@@ -615,7 +622,7 @@ export default function AnnouncementsScreen() {
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
               >
                 {isSelected ? <Ionicons name="checkmark" size={14} color="#0A1628" /> : null}
-              </TouchableOpacity>
+              </GestureTouchableOpacity>
             ) : (
               <View style={[styles.priorityIcon, { backgroundColor: `${prioColor}14` }]}>
                 <Ionicons name={getPriorityIcon(announcement.priority)} size={16} color={prioColor} />
@@ -649,13 +656,13 @@ export default function AnnouncementsScreen() {
             {announcement.content}
           </Text>
           {isLong && (
-            <TouchableOpacity
+            <GestureTouchableOpacity
               style={styles.readMoreBtn}
               onPress={() => toggleExpanded(announcementId)}
               hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
             >
               <Text style={styles.readMoreText}>{isExpanded ? 'Show less' : 'Read more'}</Text>
-            </TouchableOpacity>
+            </GestureTouchableOpacity>
           )}
 
           {/* Footer */}
@@ -670,7 +677,7 @@ export default function AnnouncementsScreen() {
             </View>
           </View>
         </View>
-      </TouchableOpacity>
+      </GestureTouchableOpacity>
       </Swipeable>
     );
   }, [colors.textMuted, dismissalInFlight, expandedIds, styles, toggleExpanded, selectionMode, selectedIds, toggleSelected, enterSelectionMode, removeAnnouncements]);
