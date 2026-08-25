@@ -1,9 +1,23 @@
 /* global test, __dirname */
 import fs from 'fs';
 import path from 'path';
-import { DARK_COLORS, LIGHT_COLORS, semanticStatusPalette } from '../theme/tokens';
+import { DARK_COLORS, LIGHT_COLORS, resolveThemeForeground, semanticStatusPalette } from '../theme/tokens';
 
 const read = (relativePath) => fs.readFileSync(path.resolve(__dirname, relativePath), 'utf8');
+
+const relativeLuminance = (hex) => {
+  const channels = hex.match(/[\da-f]{2}/gi).map((value) => parseInt(value, 16) / 255);
+  const linear = channels.map((value) => (
+    value <= 0.04045 ? value / 12.92 : ((value + 0.055) / 1.055) ** 2.4
+  ));
+  return (0.2126 * linear[0]) + (0.7152 * linear[1]) + (0.0722 * linear[2]);
+};
+
+const contrastRatio = (foreground, background) => {
+  const lighter = Math.max(relativeLuminance(foreground), relativeLuminance(background));
+  const darker = Math.min(relativeLuminance(foreground), relativeLuminance(background));
+  return (lighter + 0.05) / (darker + 0.05);
+};
 
 describe('theme-aware dialogs and maintenance conversation', () => {
   test('both themes expose complete semantic foreground, input, modal, icon, and overlay tokens', () => {
@@ -34,6 +48,40 @@ describe('theme-aware dialogs and maintenance conversation', () => {
     expect(semanticStatusPalette(DARK_COLORS, 'warning').background).not.toBe(
       semanticStatusPalette(LIGHT_COLORS, 'warning').background,
     );
+  });
+
+  test('legacy registry colors resolve to complementary dark-surface foregrounds', () => {
+    const foregrounds = [
+      resolveThemeForeground('#0A1628', DARK_COLORS, true),
+      resolveThemeForeground('#B9921F', DARK_COLORS, true),
+      resolveThemeForeground('#991B1B', DARK_COLORS, true),
+      resolveThemeForeground('#DC2626', DARK_COLORS, true),
+    ];
+
+    expect(foregrounds).toEqual([
+      DARK_COLORS.iconPrimary,
+      DARK_COLORS.accent,
+      DARK_COLORS.errorText,
+      DARK_COLORS.errorText,
+    ]);
+    for (const foreground of foregrounds) {
+      expect(contrastRatio(foreground, DARK_COLORS.surface)).toBeGreaterThanOrEqual(4.5);
+      expect(contrastRatio(foreground, DARK_COLORS.background)).toBeGreaterThanOrEqual(4.5);
+    }
+    expect(resolveThemeForeground('#0A1628', LIGHT_COLORS, false)).toBe('#0A1628');
+  });
+
+  test('dark-mode registries and the About wordmark use active theme foregrounds', () => {
+    const sources = [
+      read('../../app/(tabs)/services.jsx'),
+      read('../../app/documents.jsx'),
+      read('../../app/house-rules.jsx'),
+      read('../../app/my-documents.jsx'),
+    ];
+    for (const source of sources) {
+      expect(source).toContain('resolveThemeForeground');
+    }
+    expect(read('../../app/about.jsx')).toContain("theme={isDarkMode ? 'dark' : 'light'}");
   });
 
   test('the shared dialog owns theme surfaces, status colors, custom content, disabled actions, and loading actions', () => {

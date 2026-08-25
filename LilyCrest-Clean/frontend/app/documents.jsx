@@ -6,6 +6,7 @@ import { useRouter } from 'expo-router';
 import { useTheme } from '../src/context/ThemeContext';
 import { safeBack } from '../src/utils/navigation';
 import { ScreenHeader } from '../src/components/ui/LilycrestUI';
+import { resolveThemeForeground } from '../src/theme/tokens';
 
 const documents = [
   { id: 'house_rules', title: 'House Rules', icon: 'home', color: '#0A1628', background: '#FBF7EA', description: 'General dormitory guidelines', category: 'Policy' },
@@ -18,7 +19,7 @@ const documents = [
 
 export default function DocumentsScreen() {
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors, isDarkMode } = useTheme();
   const handlePress = (doc) => router.push(doc.contract
     ? '/contract-viewer'
     : { pathname: '/document-viewer', params: { kind: 'policy', id: doc.id, title: doc.title } });
@@ -42,21 +43,25 @@ export default function DocumentsScreen() {
           <Text style={styles.infoText}>Please read and understand all dormitory rules. Contact the admin if you have questions.</Text>
         </View>
 
-        {documents.map((doc, index) => (
-          <TouchableOpacity key={index} style={styles.documentCard} onPress={() => handlePress(doc)} activeOpacity={0.7}>
-            <View style={[styles.documentIcon, { backgroundColor: doc.background }]}>
-              <Ionicons name={doc.icon} size={22} color={doc.color} />
-            </View>
-            <View style={styles.documentContent}>
-              <Text style={styles.documentTitle}>{doc.title}</Text>
-              <Text style={styles.documentDescription}>{doc.description}</Text>
-            </View>
-            <View style={[styles.categoryTag, { backgroundColor: doc.background }]}>
-              <Text style={[styles.categoryText, { color: doc.color }]}>{doc.category}</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.textMuted} style={{ marginLeft: 8 }} />
-          </TouchableOpacity>
-        ))}
+        {documents.map((doc, index) => {
+          const foregroundColor = resolveThemeForeground(doc.color, colors, isDarkMode);
+          const backgroundColor = isDarkMode ? `${foregroundColor}18` : doc.background;
+          return (
+            <TouchableOpacity key={index} style={styles.documentCard} onPress={() => handlePress(doc)} activeOpacity={0.7}>
+              <View style={[styles.documentIcon, { backgroundColor }]}>
+                <Ionicons name={doc.icon} size={22} color={foregroundColor} />
+              </View>
+              <View style={styles.documentContent}>
+                <Text style={styles.documentTitle}>{doc.title}</Text>
+                <Text style={styles.documentDescription}>{doc.description}</Text>
+              </View>
+              <View style={[styles.categoryTag, { backgroundColor }]}>
+                <Text style={[styles.categoryText, { color: foregroundColor }]}>{doc.category}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} style={{ marginLeft: 8 }} />
+            </TouchableOpacity>
+          );
+        })}
       </ScrollView>
     </SafeAreaView>
   );

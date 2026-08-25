@@ -48,7 +48,7 @@ import {
   MAINTENANCE_GROUPS,
   MAINTENANCE_STATUS_STAGES,
 } from '../../src/utils/maintenanceStatus';
-import { semanticStatusPalette } from '../../src/theme/tokens';
+import { resolveThemeForeground, semanticStatusPalette } from '../../src/theme/tokens';
 
 function safeFormat(dateStr, fmt) {
   try {
@@ -290,7 +290,7 @@ export default function ServicesScreen() {
     ? notificationRequestIdParam[0]
     : notificationRequestIdParam;
   const { user, authReady, authStatus } = useAuth();
-  const { colors } = useTheme();
+  const { colors, isDarkMode } = useTheme();
   const { showToast } = useToast();
   const styles = useThemedStyles((c) => StyleSheet.create({
     container: { flex: 1, backgroundColor: c.background },
@@ -1071,14 +1071,17 @@ export default function ServicesScreen() {
       <View style={styles.quickServicesCard}>
         <Text style={styles.sectionTitle}>Quick Service Request</Text>
         <View style={styles.servicesGrid}>
-          {REQUEST_TYPES.slice(0, 6).map((type) => (
-            <TouchableOpacity key={type.id} style={styles.serviceItem} onPress={() => { setSelectedType(type.id); setShowModal(true); }}>
-              <View style={[styles.serviceIcon, { backgroundColor: `${type.color}15` }]}>
-                <Ionicons name={type.icon} size={24} color={type.color} />
-              </View>
-              <Text style={styles.serviceLabel}>{type.label}</Text>
-            </TouchableOpacity>
-          ))}
+          {REQUEST_TYPES.slice(0, 6).map((type) => {
+            const foregroundColor = resolveThemeForeground(type.color, colors, isDarkMode);
+            return (
+              <TouchableOpacity key={type.id} style={styles.serviceItem} onPress={() => { setSelectedType(type.id); setShowModal(true); }}>
+                <View style={[styles.serviceIcon, { backgroundColor: `${foregroundColor}18` }]}>
+                  <Ionicons name={type.icon} size={24} color={foregroundColor} />
+                </View>
+                <Text style={styles.serviceLabel}>{type.label}</Text>
+              </TouchableOpacity>
+            );
+          })}
         </View>
       </View>
 
@@ -1173,21 +1176,24 @@ export default function ServicesScreen() {
                 {showModal ? renderBanner() : null}
                 <Text style={styles.modalSectionTitle}>Select Service Type</Text>
                 <View style={styles.typeGrid}>
-                  {REQUEST_TYPES.map((type) => (
-                    <TouchableOpacity
-                      key={type.id}
-                      style={[styles.typeItem, selectedType === type.id && styles.typeItemSelected]}
-                      onPress={() => {
-                        setSelectedType(type.id);
-                        setFieldTouched((prev) => ({ ...prev, type: true }));
-                      }}
-                    >
-                      <View style={[styles.typeIcon, { backgroundColor: selectedType === type.id ? type.color : `${type.color}15` }]}>
-                        <Ionicons name={type.icon} size={20} color={selectedType === type.id ? colors.onPrimary : type.color} />
-                      </View>
-                      <Text style={[styles.typeLabel, selectedType === type.id && styles.typeLabelSelected]}>{type.label}</Text>
-                    </TouchableOpacity>
-                  ))}
+                  {REQUEST_TYPES.map((type) => {
+                    const foregroundColor = resolveThemeForeground(type.color, colors, isDarkMode);
+                    return (
+                      <TouchableOpacity
+                        key={type.id}
+                        style={[styles.typeItem, selectedType === type.id && styles.typeItemSelected]}
+                        onPress={() => {
+                          setSelectedType(type.id);
+                          setFieldTouched((prev) => ({ ...prev, type: true }));
+                        }}
+                      >
+                        <View style={[styles.typeIcon, { backgroundColor: selectedType === type.id ? type.color : `${foregroundColor}18` }]}>
+                          <Ionicons name={type.icon} size={20} color={selectedType === type.id ? colors.onPrimary : foregroundColor} />
+                        </View>
+                        <Text style={[styles.typeLabel, selectedType === type.id && styles.typeLabelSelected]}>{type.label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
                 </View>
                 {fieldErrors.type ? <Text style={styles.fieldError}>{fieldErrors.type}</Text> : null}
                 <Text style={styles.modalSectionTitle}>Urgency Level</Text>
@@ -1419,14 +1425,17 @@ export default function ServicesScreen() {
                     <>
                       <Text style={styles.modalSectionTitle}>Service Type</Text>
                       <View style={styles.typeGrid}>
-                        {REQUEST_TYPES.map((type) => (
-                          <TouchableOpacity key={type.id} style={[styles.typeItem, editType === type.id && styles.typeItemSelected]} onPress={() => setEditType(type.id)}>
-                            <View style={[styles.typeIcon, { backgroundColor: editType === type.id ? type.color : `${type.color}15` }]}>
-                              <Ionicons name={type.icon} size={20} color={editType === type.id ? colors.onPrimary : type.color} />
-                            </View>
-                            <Text style={[styles.typeLabel, editType === type.id && styles.typeLabelSelected]}>{type.label}</Text>
-                          </TouchableOpacity>
-                        ))}
+                        {REQUEST_TYPES.map((type) => {
+                          const foregroundColor = resolveThemeForeground(type.color, colors, isDarkMode);
+                          return (
+                            <TouchableOpacity key={type.id} style={[styles.typeItem, editType === type.id && styles.typeItemSelected]} onPress={() => setEditType(type.id)}>
+                              <View style={[styles.typeIcon, { backgroundColor: editType === type.id ? type.color : `${foregroundColor}18` }]}>
+                                <Ionicons name={type.icon} size={20} color={editType === type.id ? colors.onPrimary : foregroundColor} />
+                              </View>
+                              <Text style={[styles.typeLabel, editType === type.id && styles.typeLabelSelected]}>{type.label}</Text>
+                            </TouchableOpacity>
+                          );
+                        })}
                       </View>
                       <Text style={styles.modalSectionTitle}>Urgency Level</Text>
                       <View style={styles.urgencyOptions}>
