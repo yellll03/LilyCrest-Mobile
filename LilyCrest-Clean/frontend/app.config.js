@@ -23,7 +23,14 @@ module.exports = {
     newArchEnabled: true,
     ios: {
       bundleIdentifier: 'com.lilycrest.lilycrestdorm',
-      buildNumber: '22',
+      // Build 22 (commit f32b9471) already finished and was submitted to
+      // TestFlight — confirmed via `eas build:list --platform ios`, which
+      // shows it as a finished store-distribution build tagged "PR50 merged
+      // TestFlight build 22". Reusing 22 would be rejected by App Store
+      // Connect for a duplicate build number; Android's versionCode is
+      // intentionally NOT bumped alongside this — the platforms have
+      // legitimately independent build numbers.
+      buildNumber: '23',
       supportsTablet: true,
       googleServicesFile: process.env.GOOGLE_SERVICES_PLIST || './GoogleService-Info.plist',
       infoPlist: {
