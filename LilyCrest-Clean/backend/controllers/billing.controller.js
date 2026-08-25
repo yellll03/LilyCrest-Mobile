@@ -407,16 +407,23 @@ function normalizeLegacyBill(bill = {}) {
   normalized._id = undefined;
   normalized.statement_version = resolveStatementVersion(normalized.updated_at, normalized.created_at);
   const moveInFinancials = extractMoveInFinancials(normalized);
+  const effectiveStatus = getEffectiveBillStatus(normalized);
   if (moveInFinancials) {
+    // Mirrors applyMoveInFinancials()/mapRealBill(): remainingBalance is the
+    // right headline once paid, except when it computes to 0 (reservation
+    // fee alone covered advance rent + deposit) — fall back to the
+    // pre-credit total so a genuinely paid bill never shows ₱0.00.
+    const headlineAmount = (effectiveStatus === 'paid' && moveInFinancials.remainingBalance === 0)
+      ? moveInFinancials.totalDueBeforeMoveIn
+      : moveInFinancials.remainingBalance;
     normalized.move_in_financials = moveInFinancials;
     normalized.advance_rent = moveInFinancials.advanceRent;
     normalized.security_deposit = moveInFinancials.securityDeposit;
     normalized.reservation_fee_already_paid = moveInFinancials.reservationFeeAlreadyPaid;
-    normalized.total = moveInFinancials.remainingBalance;
-    normalized.amount = moveInFinancials.remainingBalance;
+    normalized.total = headlineAmount;
+    normalized.amount = headlineAmount;
     normalized.remaining_amount = moveInFinancials.remainingBalance;
   }
-  const effectiveStatus = getEffectiveBillStatus(normalized);
 
   normalized.status = effectiveStatus || normalized.status;
   if (effectiveStatus === 'paid') {
@@ -556,14 +563,25 @@ function isMoveInFinancialBill(bill = {}) {
 function applyMoveInFinancials(bill, financials) {
   if (!financials || !isMoveInFinancialBill(bill)) return bill;
   const settled = isPaidBill(bill);
+  // remainingBalance (advanceRent + securityDeposit - reservationFee) is the
+  // right headline for a settled bill in the normal case — it's exactly what
+  // the tenant paid at move-in on top of their earlier reservation fee. It
+  // only misleads when the reservation fee alone fully covered advance rent
+  // + deposit, making remainingBalance compute to 0: a settled bill would
+  // then display "Paid: ₱0.00" even though real money changed hands (via the
+  // reservation fee). Only that degenerate case falls back to the full
+  // pre-credit total so the tenant isn't shown a bill that looks unpaid.
+  const headlineAmount = (settled && financials.remainingBalance === 0)
+    ? financials.totalDueBeforeMoveIn
+    : financials.remainingBalance;
   return {
     ...bill,
     move_in_financials: financials,
     advance_rent: financials.advanceRent,
     security_deposit: financials.securityDeposit,
     reservation_fee_already_paid: financials.reservationFeeAlreadyPaid,
-    amount: financials.remainingBalance,
-    total: financials.remainingBalance,
+    amount: headlineAmount,
+    total: headlineAmount,
     original_total: financials.totalDueBeforeMoveIn,
     remaining_amount: settled ? 0 : financials.remainingBalance,
   };
@@ -975,14 +993,22 @@ function mapRealBill(b, userId) {
   };
   const moveInFinancials = extractMoveInFinancials(b);
   if (!moveInFinancials) return mapped;
+  // Same rule as applyMoveInFinancials(): remainingBalance is the right
+  // settled-bill headline except in the degenerate case where the
+  // reservation fee alone fully covered advance rent + deposit, making it
+  // compute to 0 — fall back to the pre-credit total so a genuinely paid
+  // bill never displays as ₱0.00.
+  const moveInHeadlineAmount = (isSettled && moveInFinancials.remainingBalance === 0)
+    ? moveInFinancials.totalDueBeforeMoveIn
+    : moveInFinancials.remainingBalance;
   return {
     ...mapped,
     move_in_financials: moveInFinancials,
     advance_rent: moveInFinancials.advanceRent,
     security_deposit: moveInFinancials.securityDeposit,
     reservation_fee_already_paid: moveInFinancials.reservationFeeAlreadyPaid,
-    amount: moveInFinancials.remainingBalance,
-    total: moveInFinancials.remainingBalance,
+    amount: moveInHeadlineAmount,
+    total: moveInHeadlineAmount,
     original_total: moveInFinancials.totalDueBeforeMoveIn,
     remaining_amount: isSettled ? 0 : moveInFinancials.remainingBalance,
   };

@@ -171,6 +171,20 @@ export async function getOrCreatePushInstallationId() {
   return installationIdPromise;
 }
 
+// AuthContext mounts two independent effects that can each call this: one
+// unconditionally on app mount (via requestPushPermissionOnFirstLaunch, for
+// a permission prompt before login exists), and one gated on authStatus
+// becoming 'authenticated'. For a returning already-authenticated user both
+// fire within the same startup sequence — often not concurrently (the first
+// usually finishes well before the second, which waits on session hydration)
+// — so a plain in-flight guard isn't enough; a short result cache is needed
+// too. This makes registerForPushNotifications the single authoritative
+// registration lifecycle regardless of how many call sites invoke it during
+// one app launch.
+let pushRegistrationPromise = null;
+let pushRegistrationCache = null; // { requestPermission, result, at }
+const PUSH_REGISTRATION_CACHE_WINDOW_MS = 10000;
+
 export async function registerForPushNotifications({ requestPermission = false } = {}) {
   if (!Notifications) return null;
   initializeNotificationHandler();
@@ -180,6 +194,32 @@ export async function registerForPushNotifications({ requestPermission = false }
     return null;
   }
 
+  if (pushRegistrationPromise) return pushRegistrationPromise;
+
+  if (
+    pushRegistrationCache
+    // A cached `requestPermission: false` result satisfies a later
+    // `requestPermission: false` call, but a call that actually needs to
+    // prompt for permission must never be served a stale non-prompting
+    // result — only reuse the cache when it did at least as much as asked.
+    && (pushRegistrationCache.requestPermission || !requestPermission)
+    && Date.now() - pushRegistrationCache.at < PUSH_REGISTRATION_CACHE_WINDOW_MS
+  ) {
+    return pushRegistrationCache.result;
+  }
+
+  pushRegistrationPromise = registerForPushNotificationsInner({ requestPermission })
+    .then((result) => {
+      pushRegistrationCache = { requestPermission, result, at: Date.now() };
+      return result;
+    })
+    .finally(() => {
+      pushRegistrationPromise = null;
+    });
+  return pushRegistrationPromise;
+}
+
+async function registerForPushNotificationsInner({ requestPermission = false } = {}) {
   try {
     const notificationsEnabled = await arePushNotificationsEnabled();
     if (!notificationsEnabled) {

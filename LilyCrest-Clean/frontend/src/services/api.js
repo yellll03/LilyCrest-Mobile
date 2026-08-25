@@ -7,6 +7,7 @@ import {
   setSessionToken,
 } from './secureCredentials';
 import { emitSessionExpired, emitSessionRecovered } from './sessionEvents';
+import { recordAuthInvalidation } from './authDiagnostics';
 
 const IS_DEV = typeof __DEV__ !== 'undefined' && __DEV__;
 export const SERVER_STARTING_MESSAGE = 'The server is starting. Please try again in a few seconds.';
@@ -287,6 +288,14 @@ api.interceptors.response.use(
         await removeSessionToken();
         await AsyncStorage.removeItem('session_user');
       } catch (_) {}
+      recordAuthInvalidation({
+        backendCode: error?.response?.data?.code || 'ACCOUNT_INACTIVE',
+        httpStatus: error?.response?.status ?? null,
+        endpoint: originalRequest?.url || null,
+        silentRefreshAttempted: false,
+        silentRefreshSucceeded: false,
+        hadStoredCredentials: true,
+      });
       emitSessionExpired(invalidationReason, { expiredToken });
     }
 
@@ -340,6 +349,14 @@ api.interceptors.response.use(
         await removeSessionToken();
         await AsyncStorage.removeItem('session_user');
       } catch (_) {}
+      recordAuthInvalidation({
+        backendCode: error?.response?.data?.code || 'SESSION_EXPIRED',
+        httpStatus: error?.response?.status ?? null,
+        endpoint: originalRequest?.url || null,
+        silentRefreshAttempted: true,
+        silentRefreshSucceeded: false,
+        hadStoredCredentials: hadSessionToken,
+      });
       emitSessionExpired('session_expired', { expiredToken });
     } else if (invalidationReason === 'session_invalid' && !isAuthEndpoint && hadSessionToken) {
       const authHeader = originalRequest?.headers?.Authorization || originalRequest?.headers?.authorization || '';
@@ -348,6 +365,14 @@ api.interceptors.response.use(
         await removeSessionToken();
         await AsyncStorage.removeItem('session_user');
       } catch (_) {}
+      recordAuthInvalidation({
+        backendCode: error?.response?.data?.code || 'SESSION_INVALID',
+        httpStatus: error?.response?.status ?? null,
+        endpoint: originalRequest?.url || null,
+        silentRefreshAttempted: false,
+        silentRefreshSucceeded: false,
+        hadStoredCredentials: hadSessionToken,
+      });
       emitSessionExpired('session_invalid', { expiredToken });
     }
 

@@ -31,7 +31,7 @@ describe('standalone release artifact contract', () => {
     expect(config).toContain("{ name: 'GoogleUtilities', modular_headers: true }");
     expect(config).toContain("{ name: 'RecaptchaInterop', modular_headers: true }");
     expect(config).toContain('ITSAppUsesNonExemptEncryption: false');
-    expect(config).toContain("buildNumber: '22'");
+    expect(config).toContain("buildNumber: '23'");
     expect(config).toContain("googleServicesFile: process.env.GOOGLE_SERVICES_PLIST || './GoogleService-Info.plist'");
     expect(config).toContain("'@react-native-google-signin/google-signin'");
     expect(packageJson.dependencies['expo-local-authentication']).toBeUndefined();
@@ -41,5 +41,27 @@ describe('standalone release artifact contract', () => {
     expect(firebase).toContain("Platform.OS === 'android' ? firebaseNativeConfig : firebaseWebConfig");
     expect(eas.build.release.environment).toBe('production');
     expect(eas.build.production.environment).toBe('production');
+  });
+
+  // Regression: this repo has no committed native ios/ project, so EAS runs
+  // `expo prebuild` for iOS from app.config.js. If GoogleService-Info.plist
+  // isn't materialized on the build worker before that prebuild step, the
+  // @react-native-google-signin/google-signin config plugin can't derive the
+  // REVERSED_CLIENT_ID URL scheme, so the Google OAuth callback silently
+  // never returns control to the app on iOS. See scripts/verify-release-
+  // contract.js for the equivalent build-time check.
+  test('iOS build provenance: buildNumber is a valid TestFlight integer and the plist materialization hook is wired', () => {
+    const config = read('app.config.js');
+    const packageJson = JSON.parse(read('package.json'));
+    const preInstallHook = packageJson.scripts?.['eas-build-pre-install'] || '';
+    const preInstallScript = read('scripts/eas-copy-google-services.js');
+
+    const iosBuildNumber = config.match(/buildNumber:\s*'([^']+)'/)?.[1];
+    expect(iosBuildNumber).toMatch(/^\d+$/);
+    expect(Number(iosBuildNumber)).toBeGreaterThan(0);
+
+    expect(preInstallHook).toContain('eas-copy-google-services.js');
+    expect(preInstallScript).toContain('GOOGLE_SERVICES_JSON');
+    expect(preInstallScript).toContain('GOOGLE_SERVICES_PLIST');
   });
 });

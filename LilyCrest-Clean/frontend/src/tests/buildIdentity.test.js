@@ -40,3 +40,34 @@ describe('Android release identity', () => {
     expect(brandHeader).toContain('accessibilityLabel="LilyCrest diamond logo"');
   });
 });
+
+// Regression: the Profile screen's build-provenance footer (the only place
+// an installed build's identity can be confirmed on-device, since this repo
+// has no committed native ios/ project to inspect) previously always read
+// config.android.versionCode regardless of platform, so an installed iOS
+// build displayed Android's build number instead of its own
+// ios.buildNumber — silently wrong provenance on exactly the platform where
+// there's nothing else to cross-check it against.
+describe('build provenance footer is platform-correct', () => {
+  const profile = fs.readFileSync(path.resolve(__dirname, '../../app/(tabs)/profile.jsx'), 'utf8');
+
+  it('reads ios.buildNumber on iOS and android.versionCode on Android, not one for both', () => {
+    expect(profile).toMatch(/Platform\.OS === 'ios'[\s\S]{0,40}config\.ios\?\.buildNumber/);
+    expect(profile).toMatch(/config\.android\?\.versionCode/);
+  });
+});
+
+// Regression: app.config.js's embedded commit hash used to always be a bare
+// SHA even when the working tree that produced the build had uncommitted
+// changes on top of it — see src/tests/gitBuildIdentity.test.js for the
+// behavioral coverage of the dirty-detection logic itself. This just locks
+// that app.config.js actually wires that shared module in, instead of
+// reverting to an inline (untested) copy of the same logic.
+describe('app.config.js delegates commit resolution to the tested shared module', () => {
+  const config = fs.readFileSync(path.resolve(__dirname, '../../app.config.js'), 'utf8');
+
+  it('imports resolveGitCommit from scripts/gitBuildIdentity', () => {
+    expect(config).toContain("require('./scripts/gitBuildIdentity')");
+    expect(config).not.toContain("execSync('git status --porcelain'");
+  });
+});

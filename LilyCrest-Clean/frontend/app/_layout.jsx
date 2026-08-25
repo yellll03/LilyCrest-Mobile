@@ -57,15 +57,20 @@ function StartupOverlay({ onFinish }) {
         useNativeDriver: true,
       })
     );
-    const exitAnimation = Animated.sequence([
-      Animated.delay(700),
-      Animated.timing(opacity, {
-        toValue: 0,
-        duration: 250,
-        easing: Easing.out(Easing.quad),
-        useNativeDriver: true,
-      }),
-    ]);
+    // This overlay only ever mounts once real readiness (auth restoration +
+    // theme) is already true — see LayoutContent's startupReady gate below,
+    // which renders a blank placeholder (not this component) until then. So
+    // there is nothing left to wait for here: the fade is a brief branded
+    // handoff, not an artificial hold. Previously this also carried a fixed
+    // 700ms Animated.delay before the fade even started, adding a flat
+    // ~950ms floor to every launch regardless of how fast startup actually
+    // was.
+    const exitAnimation = Animated.timing(opacity, {
+      toValue: 0,
+      duration: 220,
+      easing: Easing.out(Easing.quad),
+      useNativeDriver: true,
+    });
 
     spinAnimation.start();
     exitAnimation.start(({ finished }) => {
