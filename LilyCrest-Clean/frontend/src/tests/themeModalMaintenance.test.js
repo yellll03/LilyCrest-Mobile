@@ -84,6 +84,15 @@ describe('theme-aware dialogs and maintenance conversation', () => {
     expect(read('../../app/about.jsx')).toContain("theme={isDarkMode ? 'dark' : 'light'}");
   });
 
+  test('maintenance service-type icons use the system gold in dark mode', () => {
+    const maintenance = read('../../app/(tabs)/services.jsx');
+    expect(maintenance).toMatch(/function getServiceTypeIconColor[\s\S]*?isDarkMode\s*\? colors\.accent/);
+    expect(maintenance.match(/getServiceTypeIconColor\(/g).length).toBeGreaterThanOrEqual(6);
+    expect(maintenance).toContain('isSelected && !isDarkMode ? colors.onPrimary : foregroundColor');
+    expect(maintenance).not.toContain('color={typeInfo.color}');
+    expect(maintenance).not.toContain('color={ti.color}');
+  });
+
   test('the offline session banner is inset below system chrome without adding a second safe-area gap', () => {
     const auth = read('../context/AuthContext.js');
     expect(auth).toContain('useSafeAreaInsets');

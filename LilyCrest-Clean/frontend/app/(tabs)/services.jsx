@@ -219,6 +219,12 @@ const REQUEST_TYPES = [
   { id: 'other', label: 'Other', icon: 'ellipsis-horizontal', color: '#0A1628' },
 ];
 
+function getServiceTypeIconColor(typeColor, colors, isDarkMode) {
+  return isDarkMode
+    ? colors.accent
+    : resolveThemeForeground(typeColor, colors, false);
+}
+
 const URGENCY_LEVELS = [
   { id: 'low', label: 'Low', description: 'Can wait a few days', color: '#059669' },
   { id: 'normal', label: 'Normal', description: 'Within 1-2 days', color: '#D97706' },
@@ -995,6 +1001,7 @@ export default function ServicesScreen() {
 
   const renderRequestItem = useCallback(({ item: request }) => {
     const typeInfo = getTypeInfo(request.request_type);
+    const typeIconColor = getServiceTypeIconColor(typeInfo.color, colors, isDarkMode);
     const statusColor = getStatusColor(request.status);
     const urgencyInfo = URGENCY_LEVELS.find(u => u.id === request.urgency) || URGENCY_LEVELS[1];
     const latestUpdate = request.latestTenantVisibleUpdate || null;
@@ -1005,7 +1012,7 @@ export default function ServicesScreen() {
       <TouchableOpacity style={[styles.requestCard, { borderLeftColor: statusColor.solid }]} onPress={() => openDetail(request)} activeOpacity={0.85}>
         <View style={styles.requestHeader}>
           <View style={[styles.requestIcon, { backgroundColor: colors.accentSubtle }]}>
-            <Ionicons name={typeInfo.icon} size={20} color={typeInfo.color} />
+            <Ionicons name={typeInfo.icon} size={20} color={typeIconColor} />
           </View>
           <View style={styles.requestInfo}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
@@ -1053,7 +1060,7 @@ export default function ServicesScreen() {
         </View>
       </TouchableOpacity>
     );
-  }, [colors, getStatusColor, styles, openDetail]);
+  }, [colors, getStatusColor, isDarkMode, styles, openDetail]);
 
   const requestListHeader = (
     <>
@@ -1072,7 +1079,7 @@ export default function ServicesScreen() {
         <Text style={styles.sectionTitle}>Quick Service Request</Text>
         <View style={styles.servicesGrid}>
           {REQUEST_TYPES.slice(0, 6).map((type) => {
-            const foregroundColor = resolveThemeForeground(type.color, colors, isDarkMode);
+            const foregroundColor = getServiceTypeIconColor(type.color, colors, isDarkMode);
             return (
               <TouchableOpacity key={type.id} style={styles.serviceItem} onPress={() => { setSelectedType(type.id); setShowModal(true); }}>
                 <View style={[styles.serviceIcon, { backgroundColor: `${foregroundColor}18` }]}>
@@ -1177,20 +1184,25 @@ export default function ServicesScreen() {
                 <Text style={styles.modalSectionTitle}>Select Service Type</Text>
                 <View style={styles.typeGrid}>
                   {REQUEST_TYPES.map((type) => {
-                    const foregroundColor = resolveThemeForeground(type.color, colors, isDarkMode);
+                    const foregroundColor = getServiceTypeIconColor(type.color, colors, isDarkMode);
+                    const isSelected = selectedType === type.id;
+                    const iconBackground = isSelected
+                      ? (isDarkMode ? `${foregroundColor}24` : type.color)
+                      : `${foregroundColor}18`;
+                    const iconColor = isSelected && !isDarkMode ? colors.onPrimary : foregroundColor;
                     return (
                       <TouchableOpacity
                         key={type.id}
-                        style={[styles.typeItem, selectedType === type.id && styles.typeItemSelected]}
+                        style={[styles.typeItem, isSelected && styles.typeItemSelected]}
                         onPress={() => {
                           setSelectedType(type.id);
                           setFieldTouched((prev) => ({ ...prev, type: true }));
                         }}
                       >
-                        <View style={[styles.typeIcon, { backgroundColor: selectedType === type.id ? type.color : `${foregroundColor}18` }]}>
-                          <Ionicons name={type.icon} size={20} color={selectedType === type.id ? colors.onPrimary : foregroundColor} />
+                        <View style={[styles.typeIcon, { backgroundColor: iconBackground }]}>
+                          <Ionicons name={type.icon} size={20} color={iconColor} />
                         </View>
-                        <Text style={[styles.typeLabel, selectedType === type.id && styles.typeLabelSelected]}>{type.label}</Text>
+                        <Text style={[styles.typeLabel, isSelected && styles.typeLabelSelected]}>{type.label}</Text>
                       </TouchableOpacity>
                     );
                   })}
@@ -1364,11 +1376,12 @@ export default function ServicesScreen() {
                   {/* Header info */}
                   {(() => {
                     const ti = getTypeInfo(detailRequest.request_type);
+                    const typeIconColor = getServiceTypeIconColor(ti.color, colors, isDarkMode);
                     const sc = getStatusColor(detailRequest.status);
                     return (
                       <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 16 }}>
-                        <View style={[styles.requestIcon, { backgroundColor: `${ti.color}15` }]}>
-                          <Ionicons name={ti.icon} size={24} color={ti.color} />
+                        <View style={[styles.requestIcon, { backgroundColor: `${typeIconColor}18` }]}>
+                          <Ionicons name={ti.icon} size={24} color={typeIconColor} />
                         </View>
                         <View style={{ flex: 1 }}>
                           <Text style={styles.requestType}>{ti.label}</Text>
@@ -1426,13 +1439,18 @@ export default function ServicesScreen() {
                       <Text style={styles.modalSectionTitle}>Service Type</Text>
                       <View style={styles.typeGrid}>
                         {REQUEST_TYPES.map((type) => {
-                          const foregroundColor = resolveThemeForeground(type.color, colors, isDarkMode);
+                          const foregroundColor = getServiceTypeIconColor(type.color, colors, isDarkMode);
+                          const isSelected = editType === type.id;
+                          const iconBackground = isSelected
+                            ? (isDarkMode ? `${foregroundColor}24` : type.color)
+                            : `${foregroundColor}18`;
+                          const iconColor = isSelected && !isDarkMode ? colors.onPrimary : foregroundColor;
                           return (
-                            <TouchableOpacity key={type.id} style={[styles.typeItem, editType === type.id && styles.typeItemSelected]} onPress={() => setEditType(type.id)}>
-                              <View style={[styles.typeIcon, { backgroundColor: editType === type.id ? type.color : `${foregroundColor}18` }]}>
-                                <Ionicons name={type.icon} size={20} color={editType === type.id ? colors.onPrimary : foregroundColor} />
+                            <TouchableOpacity key={type.id} style={[styles.typeItem, isSelected && styles.typeItemSelected]} onPress={() => setEditType(type.id)}>
+                              <View style={[styles.typeIcon, { backgroundColor: iconBackground }]}>
+                                <Ionicons name={type.icon} size={20} color={iconColor} />
                               </View>
-                              <Text style={[styles.typeLabel, editType === type.id && styles.typeLabelSelected]}>{type.label}</Text>
+                              <Text style={[styles.typeLabel, isSelected && styles.typeLabelSelected]}>{type.label}</Text>
                             </TouchableOpacity>
                           );
                         })}
