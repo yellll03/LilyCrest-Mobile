@@ -1588,9 +1588,10 @@ async function downloadBillPdf(req, res) {
     const moveInFinancials = bill.move_in_financials || null;
     if (moveInFinancials) {
       tableRows.push(
-        { label: 'One Month Advance Rent', value: formatMoney(moveInFinancials.advanceRent) },
-        { label: 'Security Deposit', value: formatMoney(moveInFinancials.securityDeposit) },
-        { label: 'Reservation Fee Already Paid', value: `- ${formatMoney(moveInFinancials.reservationFeeAlreadyPaid)}` },
+        { label: '1-Month Advance Rent (Month 1 Rent)', value: formatMoney(moveInFinancials.advanceRent) },
+        { label: '1-Month Security Deposit (Refundable)', value: formatMoney(moveInFinancials.securityDeposit) },
+        { label: 'Total Move-In Requirements', value: formatMoney(moveInFinancials.totalDueBeforeMoveIn) },
+        { label: 'Less: Slot Reservation Fee Credit (Online)', value: `- ${formatMoney(moveInFinancials.reservationFeeAlreadyPaid)}` },
       );
     } else {
       if (bill.rent) tableRows.push({ label: 'Monthly Rent', value: formatMoney(bill.rent) });
@@ -1683,10 +1684,8 @@ async function downloadBillPdf(req, res) {
       infoRows,
       tableRows,
       totalRow: {
-        label: moveInFinancials
-          ? 'REMAINING MOVE-IN BALANCE'
-          : (billIsPaid ? 'TOTAL PAID' : 'TOTAL AMOUNT DUE'),
-        value: formatMoney(bill.total || bill.amount || 0),
+        label: billIsPaid ? 'TOTAL PAID' : 'TOTAL AMOUNT DUE',
+        value: formatMoney(bill.total ?? bill.amount ?? 0),
       },
       breakdownSections,
     });

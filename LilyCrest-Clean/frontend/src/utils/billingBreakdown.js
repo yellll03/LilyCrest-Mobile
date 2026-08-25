@@ -7,7 +7,7 @@ function roundMoney(value) {
   return Number.isFinite(amount) ? Math.round(amount * 100) / 100 : 0;
 }
 
-function charge(label, amount, icon = 'receipt-outline') {
+function charge(label, amount, icon = 'receipt-outline', metadata = {}) {
   const colorByIcon = {
     'home-outline': '#1E40AF',
     'shield-checkmark-outline': '#2563EB',
@@ -17,11 +17,56 @@ function charge(label, amount, icon = 'receipt-outline') {
     'remove-circle-outline': '#065F46',
     'checkmark-circle-outline': '#065F46',
   };
-  return { label, amount: roundMoney(amount), icon, color: colorByIcon[icon] || '#6B7280' };
+  return {
+    label,
+    amount: roundMoney(amount),
+    icon,
+    color: colorByIcon[icon] || '#6B7280',
+    ...metadata,
+  };
 }
 
 function getBillId(bill) {
   return bill?.billing_id || bill?.id || bill?._id || bill?.billingId || bill?.billId || bill?.reference_id || null;
+}
+
+function getMoveInBillingSummary(bill) {
+  const moveIn = bill?.move_in_financials || bill?.moveInFinancials || null;
+  if (!moveIn) return null;
+
+  const advanceRent = roundMoney(moveIn.advanceRent);
+  const securityDeposit = roundMoney(moveIn.securityDeposit);
+  const reservationFeeCredit = roundMoney(moveIn.reservationFeeAlreadyPaid);
+  const calculatedRequirementsTotal = roundMoney(advanceRent + securityDeposit);
+  const hasSuppliedRequirementsTotal = moveIn.totalDueBeforeMoveIn !== null
+    && moveIn.totalDueBeforeMoveIn !== undefined
+    && String(moveIn.totalDueBeforeMoveIn).trim() !== '';
+  const suppliedRequirementsTotal = Number(moveIn.totalDueBeforeMoveIn);
+  const totalMoveInRequirements = hasSuppliedRequirementsTotal && Number.isFinite(suppliedRequirementsTotal)
+    ? roundMoney(suppliedRequirementsTotal)
+    : calculatedRequirementsTotal;
+
+  return {
+    financials: moveIn,
+    requirementRows: [
+      charge('1-Month Advance Rent', advanceRent, 'home-outline', {
+        detail: 'Month 1 Rent',
+        kind: 'move_in_requirement',
+      }),
+      charge('1-Month Security Deposit', securityDeposit, 'shield-checkmark-outline', {
+        detail: 'Refundable',
+        kind: 'move_in_requirement',
+      }),
+    ],
+    reservationCreditRow: reservationFeeCredit === 0 ? null : charge(
+      'Less: Slot Reservation Fee Credit',
+      -reservationFeeCredit,
+      'remove-circle-outline',
+      { detail: 'Online', kind: 'move_in_credit' },
+    ),
+    totalMoveInRequirements,
+    remainingBalance: roundMoney(totalMoveInRequirements - reservationFeeCredit),
+  };
 }
 
 function getBillChargeRows(bill) {
@@ -31,13 +76,9 @@ function getBillChargeRows(bill) {
   const rows = [];
 
   if (moveIn) {
-    rows.push(
-      charge('One Month Advance Rent', moveIn.advanceRent, 'home-outline'),
-      charge('Security Deposit', moveIn.securityDeposit, 'shield-checkmark-outline'),
-    );
-    if (roundMoney(moveIn.reservationFeeAlreadyPaid) !== 0) {
-      rows.push(charge('Reservation Fee Already Paid', -Number(moveIn.reservationFeeAlreadyPaid), 'remove-circle-outline'));
-    }
+    const moveInSummary = getMoveInBillingSummary(bill);
+    rows.push(...moveInSummary.requirementRows);
+    if (moveInSummary.reservationCreditRow) rows.push(moveInSummary.reservationCreditRow);
   } else {
     if (roundMoney(bill.rent) !== 0) rows.push(charge('Rent', bill.rent, 'home-outline'));
     if (roundMoney(bill.electricity) !== 0) rows.push(charge('Electricity', bill.electricity, 'flash-outline'));
@@ -118,4 +159,4 @@ function getOutstandingBreakdown(bills = []) {
   };
 }
 
-export { getBillChargeRows, getBillId, getOutstandingBreakdown, roundMoney };
+export { getBillChargeRows, getBillId, getMoveInBillingSummary, getOutstandingBreakdown, roundMoney };

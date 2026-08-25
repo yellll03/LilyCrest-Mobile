@@ -1,10 +1,39 @@
 /* global test */
 const {
   getBillChargeRows,
+  getMoveInBillingSummary,
   getOutstandingBreakdown,
 } = require('../utils/billingBreakdown');
 
 describe('outstanding balance aggregation', () => {
+  test('shows the gross move-in requirements, reservation credit, and final amount due', () => {
+    const bill = {
+      status: 'unpaid',
+      remaining_amount: 26800,
+      move_in_financials: {
+        advanceRent: 14400,
+        securityDeposit: 14400,
+        reservationFeeAlreadyPaid: 2000,
+        totalDueBeforeMoveIn: 28800,
+        remainingBalance: 26800,
+      },
+    };
+
+    const summary = getMoveInBillingSummary(bill);
+    const rows = getBillChargeRows(bill);
+
+    expect(summary.totalMoveInRequirements).toBe(28800);
+    expect(summary.reservationCreditRow).toEqual(expect.objectContaining({
+      label: 'Less: Slot Reservation Fee Credit',
+      amount: -2000,
+    }));
+    expect(rows).toEqual(expect.arrayContaining([
+      expect.objectContaining({ label: '1-Month Advance Rent', amount: 14400 }),
+      expect.objectContaining({ label: '1-Month Security Deposit', amount: 14400 }),
+    ]));
+    expect(rows.reduce((sum, row) => sum + row.amount, 0)).toBe(26800);
+  });
+
   test('combines every unpaid bill and preserves the dashboard/payment invariant', () => {
     const result = getOutstandingBreakdown([
       { _id: '1', status: 'unpaid', remaining_amount: 3000, rent: 3000 },

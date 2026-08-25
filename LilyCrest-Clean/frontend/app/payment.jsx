@@ -15,6 +15,7 @@ import {
   isBillingUnavailableMessage,
 } from '../src/services/billingState';
 import { isBillOutstanding } from '../src/utils/billingStatus';
+import { getBillChargeRows, getMoveInBillingSummary } from '../src/utils/billingBreakdown';
 import { safeBack } from '../src/utils/navigation';
 
 function safeCurrency(amount) {
@@ -187,22 +188,14 @@ export default function PaymentScreen() {
   }
 
   const isOutstanding = isBillOutstanding(bill);
-  const totalAmount = bill.total || bill.amount || 0;
+  const totalAmount = bill.total ?? bill.amount ?? 0;
   const moveInFinancials = bill.move_in_financials || bill.moveInFinancials || null;
-
-  const charges = [];
-  if (moveInFinancials) {
-    charges.push(
-      { label: 'One Month Advance Rent', amount: moveInFinancials.advanceRent, icon: 'home', color: '#1E40AF' },
-      { label: 'Security Deposit', amount: moveInFinancials.securityDeposit, icon: 'shield-checkmark', color: '#2563EB' },
-      { label: 'Reservation Fee Already Paid', amount: -moveInFinancials.reservationFeeAlreadyPaid, icon: 'remove-circle', color: '#065F46' },
-    );
-  } else {
-    if (bill.rent) charges.push({ label: 'Rent', amount: bill.rent, icon: 'home', color: '#1E40AF' });
-    if (bill.electricity) charges.push({ label: 'Electricity', amount: bill.electricity, icon: 'flash', color: '#92400E' });
-    if (bill.water) charges.push({ label: 'Water', amount: bill.water, icon: 'water', color: '#2563EB' });
-    if (bill.penalties) charges.push({ label: 'Penalties', amount: bill.penalties, icon: 'warning', color: '#991B1B' });
-  }
+  const moveInSummary = getMoveInBillingSummary(bill);
+  const charges = getBillChargeRows(bill);
+  const moveInAdjustments = moveInSummary
+    ? charges.filter((charge) => charge.kind !== 'move_in_requirement'
+      && (isOutstanding || charge.kind === 'move_in_credit'))
+    : [];
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -240,21 +233,49 @@ export default function PaymentScreen() {
 
           {charges.length > 0 ? (
             <View style={styles.chargesList}>
-              {charges.map((charge, idx) => (
+              {(moveInSummary ? moveInSummary.requirementRows : charges).map((charge, idx) => (
                 <View key={idx} style={styles.chargeRow}>
                   <View style={styles.chargeLeft}>
                     <Ionicons name={charge.icon} size={14} color={charge.color} />
-                    <Text style={styles.chargeLabel}>{charge.label}</Text>
+                    <Text style={styles.chargeLabel}>
+                      {charge.label}
+                      {charge.detail ? <Text style={styles.chargeDetail}> ({charge.detail})</Text> : null}
+                    </Text>
                   </View>
                   <Text style={styles.chargeAmount}>{safeCurrency(charge.amount)}</Text>
                 </View>
               ))}
+              {moveInSummary ? (
+                <>
+                  <View style={styles.moveInSubtotalDivider} />
+                  <View style={styles.moveInSubtotalRow}>
+                    <Text style={styles.moveInSubtotalLabel}>Total Move-In Requirements</Text>
+                    <Text style={styles.moveInSubtotalAmount}>{safeCurrency(moveInSummary.totalMoveInRequirements)}</Text>
+                  </View>
+                  {moveInAdjustments.map((charge, idx) => (
+                    <View key={`adjustment-${idx}`} style={styles.chargeRow}>
+                      <View style={styles.chargeLeft}>
+                        <Ionicons name={charge.icon} size={14} color={charge.color} />
+                        <Text style={[styles.chargeLabel, charge.amount < 0 && styles.creditLabel]}>
+                          {charge.label}
+                          {charge.detail ? <Text style={styles.chargeDetail}> ({charge.detail})</Text> : null}
+                        </Text>
+                      </View>
+                      <Text style={[styles.chargeAmount, charge.amount < 0 && styles.creditAmount]}>
+                        {safeCurrency(charge.amount)}
+                      </Text>
+                    </View>
+                  ))}
+                </>
+              ) : null}
               <View style={styles.chargeTotalDivider} />
             </View>
           ) : null}
 
           <View style={styles.summaryDetail}>
-            <Text style={styles.summaryLabel}>{moveInFinancials ? 'Remaining Balance' : 'Total Amount Due'}</Text>
+            <Text style={styles.summaryLabel}>
+              {moveInFinancials ? (isOutstanding ? 'Total Amount Due' : 'Total Paid') : 'Total Amount Due'}
+            </Text>
             <Text style={styles.summaryAmount}>{safeCurrency(totalAmount)}</Text>
           </View>
           <View style={styles.summaryDetail}>
@@ -371,9 +392,16 @@ const createStyles = (c) => StyleSheet.create({
 
   chargesList: { marginBottom: 8 },
   chargeRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
-  chargeLeft: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  chargeLabel: { fontSize: 13, color: 'rgba(255,255,255,0.7)', fontWeight: '600' },
+  chargeLeft: { flex: 1, flexShrink: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  chargeLabel: { flexShrink: 1, fontSize: 13, color: 'rgba(255,255,255,0.7)', fontWeight: '600' },
+  chargeDetail: { fontSize: 11, color: 'rgba(255,255,255,0.5)', fontWeight: '500' },
   chargeAmount: { fontSize: 13, color: '#ffffff', fontWeight: '700' },
+  moveInSubtotalDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.15)', marginTop: 3 },
+  moveInSubtotalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6, gap: 8 },
+  moveInSubtotalLabel: { flex: 1, fontSize: 13, color: '#ffffff', fontWeight: '800' },
+  moveInSubtotalAmount: { fontSize: 13, color: '#ffffff', fontWeight: '800' },
+  creditLabel: { color: '#86EFAC' },
+  creditAmount: { color: '#86EFAC' },
   chargeTotalDivider: { height: 1, backgroundColor: 'rgba(255,255,255,0.15)', marginTop: 4, marginBottom: 8 },
 
   paymentSection: { gap: 14 },

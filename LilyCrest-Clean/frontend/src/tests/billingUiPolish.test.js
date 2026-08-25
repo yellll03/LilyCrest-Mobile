@@ -36,7 +36,7 @@ describe('tenant billing UI polish', () => {
   test('keeps itemized charges in Bill Details only', () => {
     const details = fs.readFileSync(path.resolve(__dirname, '../../app/bill-details.jsx'), 'utf8');
     expect(details).toContain('Billing Summary');
-    expect(details).toContain('charges.map');
+    expect(details).toContain('getBillChargeRows(bill)');
     expect(source).not.toContain('charges.map');
   });
 
@@ -61,14 +61,16 @@ describe('tenant billing UI polish', () => {
     const breakdown = fs.readFileSync(path.resolve(__dirname, '../utils/billingBreakdown.js'), 'utf8');
     const payment = fs.readFileSync(path.resolve(__dirname, '../../app/payment.jsx'), 'utf8');
     expect(details).toContain('getBillChargeRows(bill)');
-    for (const screen of [breakdown, payment]) {
-      expect(screen).toContain('move_in_financials');
-      expect(screen).toContain('One Month Advance Rent');
-      expect(screen).toContain('Security Deposit');
-      expect(screen).toContain('Reservation Fee Already Paid');
+    expect(breakdown).toContain('move_in_financials');
+    expect(breakdown).toContain('1-Month Advance Rent');
+    expect(breakdown).toContain('1-Month Security Deposit');
+    expect(breakdown).toContain('Less: Slot Reservation Fee Credit');
+    for (const screen of [details, payment]) {
+      expect(screen).toContain('getMoveInBillingSummary');
+      expect(screen).toContain('Total Move-In Requirements');
     }
-    expect(details).toContain("'REMAINING BALANCE'");
-    expect(payment).toContain("'Remaining Balance'");
+    expect(details).toContain("'TOTAL AMOUNT DUE'");
+    expect(payment).toContain("'Total Amount Due'");
   });
 
   // Regression: a settled move-in bill previously always labeled its total
@@ -77,7 +79,7 @@ describe('tenant billing UI polish', () => {
   // once the bill is no longer outstanding.
   test('a settled move-in bill is labeled "TOTAL PAID", not "REMAINING BALANCE"', () => {
     const details = fs.readFileSync(path.resolve(__dirname, '../../app/bill-details.jsx'), 'utf8');
-    expect(details).toContain("moveInFinancials ? (isOutstanding ? 'REMAINING BALANCE' : 'TOTAL PAID') : 'TOTAL AMOUNT'");
+    expect(details).toContain("moveInFinancials ? (isOutstanding ? 'TOTAL AMOUNT DUE' : 'TOTAL PAID') : 'TOTAL AMOUNT'");
   });
 });
 
