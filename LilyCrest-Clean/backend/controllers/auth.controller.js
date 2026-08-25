@@ -97,8 +97,11 @@ async function createSession(db, userId) {
   );
   const securityVersion = Number(owner?.securityVersion ?? owner?.security_version ?? 0);
 
-  // Remove old sessions for this user (single-session model)
-  await db.collection('user_sessions').deleteMany({ user_id: userId });
+  // Multi-session model: a new login must not revoke sessions already active
+  // on other devices/installs. Expired rows are cleaned up lazily here so the
+  // collection doesn't grow unbounded, but only ones that have actually
+  // expired — never every session belonging to this user.
+  await db.collection('user_sessions').deleteMany({ user_id: userId, expires_at: { $lte: new Date() } });
   await db.collection('user_sessions').insertOne({
     user_id: userId,
     session_token: token,
@@ -994,7 +997,13 @@ async function refreshSession(req, res) {
 async function logout(req, res) {
   try {
     const db = getDb();
-    await db.collection('user_sessions').deleteMany({ user_id: req.user.user_id });
+    // Multi-session model: logging out on one device must not revoke
+    // sessions active on other devices for the same account.
+    if (req.session?._id) {
+      await db.collection('user_sessions').deleteOne({ _id: req.session._id });
+    } else {
+      await db.collection('user_sessions').deleteOne({ session_token: req.authToken });
+    }
     res.clearCookie('session_token', {
       httpOnly: true,
       secure: isProduction,
