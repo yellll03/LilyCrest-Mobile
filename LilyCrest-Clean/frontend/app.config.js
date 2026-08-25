@@ -1,19 +1,11 @@
-const { execSync } = require('child_process');
+const { resolveGitCommit } = require('./scripts/gitBuildIdentity');
 
 const GOOGLE_MAPS_API_KEY = process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY || '';
 
-// EAS build workers set these; a local `expo start`/`eas build` also has git
-// available, so fall back to reading the checked-out commit directly. Only
-// used for the Profile screen's build-info footer (frontend/app/(tabs)/profile.jsx)
-// so a given APK can be traced back to the exact commit + moment it was built.
-function resolveGitCommit() {
-  if (process.env.EAS_BUILD_GIT_COMMIT_HASH) return process.env.EAS_BUILD_GIT_COMMIT_HASH.slice(0, 9);
-  try {
-    return execSync('git rev-parse --short HEAD', { cwd: process.cwd() }).toString().trim();
-  } catch (_error) {
-    return 'unknown';
-  }
-}
+// Only used for the Profile screen's build-info footer
+// (frontend/app/(tabs)/profile.jsx) so a given APK can be traced back to the
+// exact commit + moment it was built — see scripts/gitBuildIdentity.js for
+// the dirty-working-tree detection this wraps.
 
 module.exports = {
   expo: {

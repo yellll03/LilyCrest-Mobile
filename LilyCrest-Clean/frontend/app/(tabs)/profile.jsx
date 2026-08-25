@@ -19,7 +19,15 @@ import StyledModal from '../../src/components/StyledModal';
 const BUILD_INFO = (() => {
   const config = Constants.expoConfig || {};
   const version = config.version || '0.0.0';
-  const buildNumber = config.android?.versionCode ?? '?';
+  // This previously always read config.android.versionCode, so an installed
+  // iOS build's Profile screen displayed Android's version code instead of
+  // its own ios.buildNumber — silently wrong build provenance on the one
+  // platform (iOS) where there's no native project to physically inspect,
+  // making this in-app label the only way to confirm what's actually
+  // installed.
+  const buildNumber = Platform.OS === 'ios'
+    ? (config.ios?.buildNumber ?? '?')
+    : (config.android?.versionCode ?? '?');
   const commit = config.extra?.gitCommit || 'unknown';
   const buildTime = config.extra?.buildTime;
   const builtLabel = buildTime && !Number.isNaN(new Date(buildTime).getTime())

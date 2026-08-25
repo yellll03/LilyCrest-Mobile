@@ -1,5 +1,6 @@
 const fs = require('fs');
 const path = require('path');
+const { isLocalWorkingTreeDirty } = require('./gitBuildIdentity');
 
 const root = path.resolve(__dirname, '..');
 const eas = JSON.parse(fs.readFileSync(path.join(root, 'eas.json'), 'utf8'));
@@ -47,6 +48,15 @@ if (!preInstallHook.includes('eas-copy-google-services.js')) {
 const preInstallScript = fs.readFileSync(path.join(root, 'scripts', 'eas-copy-google-services.js'), 'utf8');
 if (!preInstallScript.includes('GOOGLE_SERVICES_PLIST')) {
   failures.push('scripts/eas-copy-google-services.js must materialize GoogleService-Info.plist from GOOGLE_SERVICES_PLIST for iOS builds');
+}
+
+// Opt-in only: a plain `verify:release-contract` run must stay usable at any
+// point during normal development, when the tree is routinely dirty. Pass
+// --require-clean (the actual release/QA-artifact build procedure does)
+// to additionally assert the tree matches HEAD exactly — the same standard
+// the embedded build-provenance commit needs to be trustworthy.
+if (process.argv.includes('--require-clean') && isLocalWorkingTreeDirty(root)) {
+  failures.push('working tree is not clean (--require-clean was requested) — commit or stash before building a release artifact');
 }
 
 if (failures.length) {
