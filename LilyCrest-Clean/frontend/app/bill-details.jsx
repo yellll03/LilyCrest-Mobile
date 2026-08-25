@@ -16,7 +16,7 @@ import {
 } from '../src/services/billingState';
 import { safeBack } from '../src/utils/navigation';
 import { billingDocumentCacheKey } from '../src/utils/billingDocumentCache';
-import { getBillChargeRows } from '../src/utils/billingBreakdown';
+import { getBillChargeRows, getMoveInBillingSummary } from '../src/utils/billingBreakdown';
 import { getBillPaymentDate, getUtilityReleaseSchedule, isBillOutstanding } from '../src/utils/billingStatus';
 import { ScreenHeader } from '../src/components/ui/LilycrestUI';
 
@@ -228,14 +228,19 @@ export default function BillDetailsScreen() {
   const statusKey = (bill.status || 'pending').toLowerCase();
   const statusCfg = STATUS_CONFIG[statusKey] || STATUS_CONFIG.unpaid;
   const isOutstanding = isBillOutstanding(bill);
-  const totalAmount = bill.total || bill.amount || 0;
+  const totalAmount = bill.total ?? bill.amount ?? 0;
   // Single source of truth for release/due state — matches Billing History
   // and Home so the same bill never shows a contradictory release state
   // depending on which screen rendered it (see billingStatus.js).
   const releaseSchedule = getUtilityReleaseSchedule(bill);
 
   const moveInFinancials = bill.move_in_financials || bill.moveInFinancials || null;
+  const moveInSummary = getMoveInBillingSummary(bill);
   const charges = getBillChargeRows(bill);
+  const moveInAdjustments = moveInSummary
+    ? charges.filter((charge) => charge.kind !== 'move_in_requirement'
+      && (isOutstanding || charge.kind === 'move_in_credit'))
+    : [];
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
@@ -293,20 +298,47 @@ export default function BillDetailsScreen() {
 
           {charges.length > 0 ? (
             <>
-              {charges.map((charge, idx) => (
+              {(moveInSummary ? moveInSummary.requirementRows : charges).map((charge, idx) => (
                 <View key={idx} style={styles.summaryRow}>
                   <View style={styles.summaryLeft}>
                     <View style={[styles.summaryDot, { backgroundColor: charge.color }]} />
                     <Ionicons name={charge.icon} size={14} color={charge.color} />
-                    <Text style={styles.summaryLabel}>{charge.label}</Text>
+                    <Text style={styles.summaryLabel}>
+                      {charge.label}
+                      {charge.detail ? <Text style={styles.summaryDetail}> ({charge.detail})</Text> : null}
+                    </Text>
                   </View>
                   <Text style={styles.summaryValue}>{safeCurrency(charge.amount)}</Text>
                 </View>
               ))}
+              {moveInSummary ? (
+                <>
+                  <View style={styles.subtotalDivider} />
+                  <View style={styles.subtotalRow}>
+                    <Text style={styles.subtotalLabel}>Total Move-In Requirements</Text>
+                    <Text style={styles.subtotalValue}>{safeCurrency(moveInSummary.totalMoveInRequirements)}</Text>
+                  </View>
+                  {moveInAdjustments.map((charge, idx) => (
+                    <View key={`adjustment-${idx}`} style={styles.summaryRow}>
+                      <View style={styles.summaryLeft}>
+                        <View style={[styles.summaryDot, { backgroundColor: charge.color }]} />
+                        <Ionicons name={charge.icon} size={14} color={charge.color} />
+                        <Text style={[styles.summaryLabel, charge.amount < 0 && styles.creditLabel]}>
+                          {charge.label}
+                          {charge.detail ? <Text style={styles.summaryDetail}> ({charge.detail})</Text> : null}
+                        </Text>
+                      </View>
+                      <Text style={[styles.summaryValue, charge.amount < 0 && styles.creditValue]}>
+                        {safeCurrency(charge.amount)}
+                      </Text>
+                    </View>
+                  ))}
+                </>
+              ) : null}
               <View style={styles.totalDivider} />
               <View style={styles.totalRow}>
                 <Text style={styles.totalLabel}>
-                  {moveInFinancials ? (isOutstanding ? 'REMAINING BALANCE' : 'TOTAL PAID') : 'TOTAL AMOUNT'}
+                  {moveInFinancials ? (isOutstanding ? 'TOTAL AMOUNT DUE' : 'TOTAL PAID') : 'TOTAL AMOUNT'}
                 </Text>
                 <Text style={styles.totalValue}>{safeCurrency(totalAmount)}</Text>
               </View>
@@ -655,7 +687,14 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
   summaryLeft: { flex: 1, flexShrink: 1, flexDirection: 'row', alignItems: 'center', gap: 8 },
   summaryDot: { width: 4, height: 4, borderRadius: 2 },
   summaryLabel: { flexShrink: 1, fontSize: 14, color: c.textSecondary, fontWeight: '600' },
+  summaryDetail: { fontSize: 12, color: c.textMuted, fontWeight: '500' },
   summaryValue: { flexShrink: 0, fontSize: 14, fontWeight: '700', color: c.text },
+  subtotalDivider: { height: 1, backgroundColor: c.border, marginTop: 4 },
+  subtotalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 5, gap: 8 },
+  subtotalLabel: { flex: 1, fontSize: 13, color: c.text, fontWeight: '800' },
+  subtotalValue: { fontSize: 14, color: c.text, fontWeight: '800' },
+  creditLabel: { color: c.success || '#047857' },
+  creditValue: { color: c.success || '#047857' },
   totalDivider: { height: 1.5, backgroundColor: c.border, marginVertical: 6 },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 4 },
   totalLabel: { fontSize: 14, fontWeight: '800', color: c.text },
