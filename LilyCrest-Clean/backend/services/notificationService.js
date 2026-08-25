@@ -30,6 +30,13 @@ function buildNotificationDocument(userId, payload = {}) {
       ? payload.createdAt
       : new Date();
   const priority = normalizePriority(payload.priority);
+  // Applicant and tenant share the same user_id — a notification created
+  // while someone was an applicant stays attached to that account after
+  // approval. Nothing reads this yet, but stamping the account's role at
+  // creation time here means future lifecycle-aware routing/UX (Phase 12/13
+  // of the mobile audit) has real data to work from instead of needing a
+  // best-effort backfill later.
+  const roleAtCreation = normalizeString(payload.role_at_creation || payload.roleAtCreation || '');
   const body = normalizeString(payload.body || payload.content || payload.message);
   const sourceLabel = normalizeString(payload.source_label || payload.author_name || payload.authorName || 'LilyCrest System');
   const data = sanitizePayload(payload.data);
@@ -58,6 +65,7 @@ function buildNotificationDocument(userId, payload = {}) {
     message_id: normalizeString(payload.message_id || data.message_id || data.messageId || ''),
     session_id: normalizeString(payload.session_id || data.session_id || ''),
     reservation_id: normalizeString(payload.reservation_id || data.reservation_id || ''),
+    ...(roleAtCreation ? { role_at_creation: roleAtCreation } : {}),
     read: payload.read === true,
     created_at: now,
     updated_at: now,
@@ -89,6 +97,7 @@ function sanitizeStoredNotification(doc = {}) {
     message_id: normalizeString(doc.message_id || doc.data?.message_id || doc.data?.messageId || ''),
     session_id: normalizeString(doc.session_id || doc.data?.session_id || ''),
     reservation_id: normalizeString(doc.reservation_id || doc.data?.reservation_id || ''),
+    role_at_creation: normalizeString(doc.role_at_creation || ''),
     dedup_key: normalizeString(doc.event_key || ''),
   };
 }
@@ -98,7 +107,26 @@ async function saveNotificationForUser(userId, payload = {}, options = {}) {
   if (!normalizedUserId) return null;
 
   const db = options.db || getDb();
-  const doc = buildNotificationDocument(normalizedUserId, payload);
+
+  // Best-effort: stamp the account's current role unless a caller already
+  // supplied one explicitly. A lookup failure must never block the
+  // notification itself from being saved.
+  let resolvedPayload = payload;
+  if (!normalizeString(payload.role_at_creation || payload.roleAtCreation || '')) {
+    try {
+      const owner = await db.collection('users').findOne(
+        { user_id: normalizedUserId },
+        { projection: { role: 1 } },
+      );
+      if (owner?.role) {
+        resolvedPayload = { ...payload, role_at_creation: owner.role };
+      }
+    } catch (_) {
+      // Keep resolvedPayload as-is — the field is simply omitted.
+    }
+  }
+
+  const doc = buildNotificationDocument(normalizedUserId, resolvedPayload);
 
   if (doc.event_key) {
     await db.collection('notifications').updateOne(
@@ -130,6 +158,7 @@ async function saveNotificationForUser(userId, payload = {}, options = {}) {
           user_id: doc.user_id,
           type: doc.type,
           event_key: doc.event_key,
+          ...(doc.role_at_creation ? { role_at_creation: doc.role_at_creation } : {}),
           read: false,
           created_at: doc.created_at,
         },
@@ -190,4 +219,7 @@ module.exports = {
   saveNotificationForUser,
   saveNotificationForUsers,
   saveNotificationForAllTenants,
+  // Exported only for direct unit testing of the role_at_creation stamp
+  // (see tests/notificationRoleAtCreation.test.js).
+  buildNotificationDocument,
 };
