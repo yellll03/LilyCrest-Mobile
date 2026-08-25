@@ -12,7 +12,7 @@ import { ScreenHeader } from '../src/components/ui/LilycrestUI';
 
 export default function AboutScreen() {
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors, isDarkMode } = useTheme();
   const { user } = useAuth();
   const styles = useThemedStyles(createStyles);
 
@@ -22,7 +22,7 @@ export default function AboutScreen() {
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
         <View style={styles.logoSection}>
-          <BrandHeader compact theme="light" showTagline={false} />
+          <BrandHeader compact theme={isDarkMode ? 'dark' : 'light'} showTagline={false} />
           <Text style={styles.version}>Version {Constants.expoConfig?.version || 'Unknown'}</Text>
         </View>
 

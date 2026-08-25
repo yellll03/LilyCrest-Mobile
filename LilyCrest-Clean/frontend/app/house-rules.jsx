@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 import { useTheme } from '../src/context/ThemeContext';
+import { resolveThemeForeground } from '../src/theme/tokens';
 import { safeBack } from '../src/utils/navigation';
 import { ScreenHeader } from '../src/components/ui/LilycrestUI';
 
@@ -109,7 +110,7 @@ const HOUSE_RULES = [
 
 export default function HouseRulesScreen() {
   const router = useRouter();
-  const { colors } = useTheme();
+  const { colors, isDarkMode } = useTheme();
 
   const styles = createStyles(colors);
 
@@ -126,24 +127,27 @@ export default function HouseRulesScreen() {
           </View>
         </View>
 
-        {HOUSE_RULES.map((section, index) => (
-          <View key={index} style={styles.ruleSection}>
-            <View style={styles.ruleSectionHeader}>
-              <View style={[styles.ruleIcon, { backgroundColor: `${section.color}20` }]}>
-                <Ionicons name={section.icon} size={24} color={section.color} />
-              </View>
-              <Text style={styles.ruleSectionTitle}>{section.title}</Text>
-            </View>
-            <View style={styles.rulesList}>
-              {section.rules.map((rule, ruleIndex) => (
-                <View key={ruleIndex} style={styles.ruleItem}>
-                  <View style={styles.bulletPoint} />
-                  <Text style={styles.ruleText}>{rule}</Text>
+        {HOUSE_RULES.map((section, index) => {
+          const foregroundColor = resolveThemeForeground(section.color, colors, isDarkMode);
+          return (
+            <View key={index} style={styles.ruleSection}>
+              <View style={styles.ruleSectionHeader}>
+                <View style={[styles.ruleIcon, { backgroundColor: `${foregroundColor}20` }]}>
+                  <Ionicons name={section.icon} size={24} color={foregroundColor} />
                 </View>
-              ))}
+                <Text style={styles.ruleSectionTitle}>{section.title}</Text>
+              </View>
+              <View style={styles.rulesList}>
+                {section.rules.map((rule, ruleIndex) => (
+                  <View key={ruleIndex} style={styles.ruleItem}>
+                    <View style={styles.bulletPoint} />
+                    <Text style={styles.ruleText}>{rule}</Text>
+                  </View>
+                ))}
+              </View>
             </View>
-          </View>
-        ))}
+          );
+        })}
 
         <View style={styles.warningCard}>
           <Ionicons name="warning" size={24} color="#DC2626" />

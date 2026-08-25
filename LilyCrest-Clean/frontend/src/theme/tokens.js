@@ -147,3 +147,21 @@ export function semanticStatusPalette(colors, tone = 'neutral') {
   };
   return palettes[tone] || palettes.neutral;
 }
+
+// Some screen registries intentionally keep canonical light-theme brand and
+// status literals as data. Resolve those literals only when they are used as
+// foregrounds so they remain readable against dark surfaces without changing
+// selected-control or branded-background semantics.
+export function resolveThemeForeground(color, colors, isDarkMode = false) {
+  if (!isDarkMode) return color;
+
+  const normalized = String(color || '').toUpperCase();
+  if (normalized === BRAND.primary.toUpperCase()) return colors.iconPrimary;
+  if (normalized === BRAND.accentHover.toUpperCase()) return colors.accent;
+  if (
+    normalized === STATUS.danger.solid.toUpperCase()
+    || normalized === STATUS.danger.text.toUpperCase()
+  ) return colors.errorText;
+
+  return color;
+}

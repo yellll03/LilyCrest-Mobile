@@ -23,6 +23,7 @@ import { useTenantContract } from '../src/hooks/useTenantContract';
 import { buildContractSummary } from '../src/utils/contractPresentation';
 import { ScreenHeader } from '../src/components/ui/LilycrestUI';
 import StyledModal from '../src/components/StyledModal';
+import { resolveThemeForeground } from '../src/theme/tokens';
 
 // ── Document types for upload picker ──
 const UPLOAD_TYPES = [
@@ -644,10 +645,11 @@ export default function MyDocumentsScreen() {
                     {reservationIdDocs.map(doc => {
                       const sc = statusColor(doc.status);
                       const typeInfo = UPLOAD_TYPES.find(t => t.key === doc.type);
+                      const typeColor = resolveThemeForeground(typeInfo?.color || '#6B7280', colors, isDarkMode);
                       return (
                         <TouchableOpacity key={doc.doc_id} style={styles.uploadedDocCard} onPress={() => handleViewUploadedDoc(doc)} activeOpacity={0.7}>
-                          <View style={[styles.uploadedDocIcon, { backgroundColor: `${typeInfo?.color || '#6B7280'}12` }]}>
-                            <Ionicons name={typeInfo?.icon || 'card'} size={22} color={typeInfo?.color || '#6B7280'} />
+                          <View style={[styles.uploadedDocIcon, { backgroundColor: `${typeColor}18` }]}>
+                            <Ionicons name={typeInfo?.icon || 'card'} size={22} color={typeColor} />
                           </View>
                           <View style={styles.uploadedDocContent}>
                             <View style={styles.uploadedDocTitleRow}>
@@ -674,10 +676,11 @@ export default function MyDocumentsScreen() {
                     {reservationOtherDocs.map(doc => {
                       const sc = statusColor(doc.status);
                       const typeInfo = UPLOAD_TYPES.find(t => t.key === doc.type);
+                      const typeColor = resolveThemeForeground(typeInfo?.color || '#6B7280', colors, isDarkMode);
                       return (
                         <TouchableOpacity key={doc.doc_id} style={styles.uploadedDocCard} onPress={() => handleViewUploadedDoc(doc)} activeOpacity={0.7}>
-                          <View style={[styles.uploadedDocIcon, { backgroundColor: `${typeInfo?.color || '#6B7280'}12` }]}>
-                            <Ionicons name={typeInfo?.icon || 'document'} size={22} color={typeInfo?.color || '#6B7280'} />
+                          <View style={[styles.uploadedDocIcon, { backgroundColor: `${typeColor}18` }]}>
+                            <Ionicons name={typeInfo?.icon || 'document'} size={22} color={typeColor} />
                           </View>
                           <View style={styles.uploadedDocContent}>
                             <View style={styles.uploadedDocTitleRow}>
@@ -708,11 +711,12 @@ export default function MyDocumentsScreen() {
                 {idDocs.map(doc => {
                   const sc = statusColor(doc.status);
                   const typeInfo = UPLOAD_TYPES.find(t => t.key === doc.type);
+                  const typeColor = resolveThemeForeground(typeInfo?.color || '#6B7280', colors, isDarkMode);
                   return (
                     <View key={doc.doc_id} style={styles.uploadedDocCard}>
                       <TouchableOpacity style={styles.uploadedDocCardMain} onPress={() => handleViewUploadedDoc(doc)} activeOpacity={0.7}>
-                        <View style={[styles.uploadedDocIcon, { backgroundColor: `${typeInfo?.color || '#6B7280'}12` }]}>
-                          <Ionicons name={typeInfo?.icon || 'card'} size={22} color={typeInfo?.color || '#6B7280'} />
+                        <View style={[styles.uploadedDocIcon, { backgroundColor: `${typeColor}18` }]}>
+                          <Ionicons name={typeInfo?.icon || 'card'} size={22} color={typeColor} />
                         </View>
                         <View style={styles.uploadedDocContent}>
                           <View style={styles.uploadedDocTitleRow}>
@@ -747,11 +751,12 @@ export default function MyDocumentsScreen() {
                 {otherDocs.map(doc => {
                   const sc = statusColor(doc.status);
                   const typeInfo = UPLOAD_TYPES.find(t => t.key === doc.type);
+                  const typeColor = resolveThemeForeground(typeInfo?.color || '#6B7280', colors, isDarkMode);
                   return (
                     <View key={doc.doc_id} style={styles.uploadedDocCard}>
                       <TouchableOpacity style={styles.uploadedDocCardMain} onPress={() => handleViewUploadedDoc(doc)} activeOpacity={0.7}>
-                        <View style={[styles.uploadedDocIcon, { backgroundColor: `${typeInfo?.color || '#6B7280'}12` }]}>
-                          <Ionicons name={typeInfo?.icon || 'document'} size={22} color={typeInfo?.color || '#6B7280'} />
+                        <View style={[styles.uploadedDocIcon, { backgroundColor: `${typeColor}18` }]}>
+                          <Ionicons name={typeInfo?.icon || 'document'} size={22} color={typeColor} />
                         </View>
                         <View style={styles.uploadedDocContent}>
                           <View style={styles.uploadedDocTitleRow}>
@@ -809,11 +814,12 @@ export default function MyDocumentsScreen() {
         {visibleCategories.filter(c => c.key !== 'Personal').map(cat => {
           const docs = groupedPolicies[cat.key];
           if (!docs?.length) return null;
+          const categoryColor = resolveThemeForeground(cat.color, colors, isDarkMode);
           return (
             <View key={cat.key} style={styles.categoryGroup}>
               <View style={styles.categoryHeader}>
-                <View style={[styles.categoryIcon, { backgroundColor: `${cat.color}15` }]}>
-                  <Ionicons name={cat.icon} size={16} color={cat.color} />
+                <View style={[styles.categoryIcon, { backgroundColor: `${categoryColor}18` }]}>
+                  <Ionicons name={cat.icon} size={16} color={categoryColor} />
                 </View>
                 <Text style={styles.categoryTitle}>{cat.label}</Text>
                 <View style={styles.countBadge}><Text style={styles.countText}>{docs.length}</Text></View>
@@ -821,11 +827,12 @@ export default function MyDocumentsScreen() {
 
               {docs.map(doc => {
                 const sc = statusColor(doc.status);
+                const documentColor = resolveThemeForeground(doc.color, colors, isDarkMode);
                 return (
                   <View key={doc.id} style={styles.documentCard}>
                     <TouchableOpacity style={styles.documentCardMain} onPress={() => handlePreview(doc)} activeOpacity={0.7}>
-                      <View style={[styles.documentIcon, { backgroundColor: `${doc.color}12` }]}>
-                        <Ionicons name={doc.icon} size={24} color={doc.color} />
+                      <View style={[styles.documentIcon, { backgroundColor: `${documentColor}18` }]}>
+                        <Ionicons name={doc.icon} size={24} color={documentColor} />
                       </View>
                       <View style={styles.documentContent}>
                         <View style={styles.docTitleRow}>
@@ -872,15 +879,18 @@ export default function MyDocumentsScreen() {
             <Text style={styles.pickerTitle}>Select Document Type</Text>
             <Text style={styles.pickerSubtitle}>Choose the type of document you&apos;re uploading</Text>
             <ScrollView style={styles.pickerList} showsVerticalScrollIndicator={false}>
-              {UPLOAD_TYPES.map(type => (
-                <TouchableOpacity key={type.key} style={styles.pickerItem} onPress={() => handleUpload(type)} activeOpacity={0.7}>
-                  <View style={[styles.pickerItemIcon, { backgroundColor: `${type.color}15` }]}>
-                    <Ionicons name={type.icon} size={20} color={type.color} />
-                  </View>
-                  <Text style={styles.pickerItemLabel}>{type.label}</Text>
-                  <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-                </TouchableOpacity>
-              ))}
+              {UPLOAD_TYPES.map(type => {
+                const typeColor = resolveThemeForeground(type.color, colors, isDarkMode);
+                return (
+                  <TouchableOpacity key={type.key} style={styles.pickerItem} onPress={() => handleUpload(type)} activeOpacity={0.7}>
+                    <View style={[styles.pickerItemIcon, { backgroundColor: `${typeColor}18` }]}>
+                      <Ionicons name={type.icon} size={20} color={typeColor} />
+                    </View>
+                    <Text style={styles.pickerItemLabel}>{type.label}</Text>
+                    <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                  </TouchableOpacity>
+                );
+              })}
             </ScrollView>
             <TouchableOpacity style={styles.pickerCancel} onPress={() => setShowUploadPicker(false)}>
               <Text style={styles.pickerCancelText}>Cancel</Text>
@@ -972,10 +982,12 @@ export default function MyDocumentsScreen() {
           </View>
 
           <ScrollView style={styles.previewScroll} contentContainerStyle={styles.previewScrollContent}>
-            {previewDoc?.header && (
-              <View style={[styles.previewBanner, { backgroundColor: `${previewDoc.color || '#2563EB'}10` }]}>
-                <View style={[styles.previewBannerIcon, { backgroundColor: `${previewDoc.color || '#2563EB'}20` }]}>
-                  <Ionicons name={previewDoc.icon || 'document-text'} size={28} color={previewDoc.color || '#2563EB'} />
+            {previewDoc?.header && (() => {
+              const previewColor = resolveThemeForeground(previewDoc.color || '#2563EB', colors, isDarkMode);
+              return (
+              <View style={[styles.previewBanner, { backgroundColor: `${previewColor}10` }]}>
+                <View style={[styles.previewBannerIcon, { backgroundColor: `${previewColor}20` }]}>
+                  <Ionicons name={previewDoc.icon || 'document-text'} size={28} color={previewColor} />
                 </View>
                 <Text style={[styles.previewBannerTitle, { color: colors.text }]}>{previewDoc.header}</Text>
                 {previewDoc.subtitle ? <Text style={[styles.previewBannerSub, { color: colors.textSecondary }]}>{previewDoc.subtitle}</Text> : null}
@@ -986,7 +998,8 @@ export default function MyDocumentsScreen() {
                   </View>
                 ) : null}
               </View>
-            )}
+              );
+            })()}
 
             <View style={styles.previewBody}>
               {previewDoc?.sections?.map((section, i) => (
