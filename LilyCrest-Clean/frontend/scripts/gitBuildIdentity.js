@@ -13,9 +13,15 @@ const { execSync } = require('child_process');
 // of it. `git status --porcelain` already respects .gitignore, so build
 // output/.expo/Gradle caches never trip this — only tracked modifications
 // and untracked *source* files do.
+//
+// This repo's actual git root is one level up from `cwd` (frontend/), and a
+// sibling directory there can independently be dirty (e.g. another checked-
+// out worktree) without that having any bearing on what this app build
+// actually bundles. `-- .` scopes the status check to cwd's own subtree so
+// unrelated sibling state can never falsely mark this build dirty.
 function isLocalWorkingTreeDirty(cwd = process.cwd(), run = execSync) {
   try {
-    const output = run('git status --porcelain', { cwd }).toString();
+    const output = run('git status --porcelain -- .', { cwd }).toString();
     return output.trim().length > 0;
   } catch (_error) {
     // If git status can't even run, we can't vouch for cleanliness either —
