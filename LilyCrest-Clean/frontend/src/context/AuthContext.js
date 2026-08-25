@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { usePathname, useRouter, useSegments } from 'expo-router';
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Animated, AppState, Platform, Pressable, StatusBar as RNStatusBar, StyleSheet, Text, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { auth, getFreshIdToken, subscribeToAuthState } from '../config/firebase';
 import {
   api,
@@ -151,6 +152,7 @@ function preserveKnownBranch(prevUser, nextUser) {
 }
 
 export function AuthProvider({ children }) {
+  const safeAreaInsets = useSafeAreaInsets();
   const [user, setUser] = useState(null);
   const [authStatus, setAuthStatus] = useState('initializing');
   const [sessionState, setSessionState] = useState('restoring');
@@ -1151,18 +1153,20 @@ export function AuthProvider({ children }) {
   return (
     <AuthContext.Provider value={contextValue}>
       <View style={styles.container}>
+        <View style={[styles.content, sessionState === 'retryable' && styles.contentWithOfflineBanner]}>
+          {children}
+        </View>
         {sessionState === 'retryable' ? (
           <Pressable
             accessibilityRole="button"
             accessibilityLabel="Retry LilyCrest connection"
-            style={styles.sessionOfflineBanner}
+            style={[styles.sessionOfflineBanner, { top: safeAreaInsets.top }]}
             onPress={() => checkAuth().catch(() => {})}
           >
             <Text style={styles.sessionOfflineText}>Offline — showing saved account data</Text>
             <Text style={styles.sessionOfflineAction}>Retry</Text>
           </Pressable>
         ) : null}
-        {children}
         {authStatus === 'restoring_offline' ? (
           <View style={styles.authRestoringOverlay}>
             <Text style={styles.authLoadingTitle}>Still restoring your session</Text>
@@ -1227,7 +1231,18 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
+  content: {
+    flex: 1,
+  },
+  contentWithOfflineBanner: {
+    paddingTop: 44,
+  },
   sessionOfflineBanner: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    zIndex: 1100,
+    elevation: 9,
     minHeight: 44,
     paddingHorizontal: 16,
     flexDirection: 'row',

@@ -84,6 +84,14 @@ describe('theme-aware dialogs and maintenance conversation', () => {
     expect(read('../../app/about.jsx')).toContain("theme={isDarkMode ? 'dark' : 'light'}");
   });
 
+  test('the offline session banner is inset below system chrome without adding a second safe-area gap', () => {
+    const auth = read('../context/AuthContext.js');
+    expect(auth).toContain('useSafeAreaInsets');
+    expect(auth).toContain('style={[styles.sessionOfflineBanner, { top: safeAreaInsets.top }]}');
+    expect(auth).toContain("sessionState === 'retryable' && styles.contentWithOfflineBanner");
+    expect(auth).toContain("position: 'absolute'");
+  });
+
   test('the shared dialog owns theme surfaces, status colors, custom content, disabled actions, and loading actions', () => {
     const modal = read('../components/StyledModal.js');
     expect(modal).toContain('backgroundColor: colors.modalBackground');
