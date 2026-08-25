@@ -70,6 +70,15 @@ describe('tenant billing UI polish', () => {
     expect(details).toContain("'REMAINING BALANCE'");
     expect(payment).toContain("'Remaining Balance'");
   });
+
+  // Regression: a settled move-in bill previously always labeled its total
+  // "REMAINING BALANCE" even once paid, which read as contradictory next to
+  // a "Paid" status badge and a non-zero amount. It must say "TOTAL PAID"
+  // once the bill is no longer outstanding.
+  test('a settled move-in bill is labeled "TOTAL PAID", not "REMAINING BALANCE"', () => {
+    const details = fs.readFileSync(path.resolve(__dirname, '../../app/bill-details.jsx'), 'utf8');
+    expect(details).toContain("moveInFinancials ? (isOutstanding ? 'REMAINING BALANCE' : 'TOTAL PAID') : 'TOTAL AMOUNT'");
+  });
 });
 
 test('utility deadline is independent from a later rent-cycle date', () => {

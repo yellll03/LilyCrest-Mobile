@@ -125,6 +125,70 @@ test('billing serializers use the same remaining move-in balance', () => {
   assert.deepEqual(real.move_in_financials, expected);
 });
 
+test('settled move-in bill never displays ₱0 when the reservation fee fully covered advance rent + deposit', () => {
+  const fullyCreditedFinancials = calculateMoveInFinancials({
+    advanceRent: 3600,
+    securityDeposit: 3600,
+    reservationFeeAlreadyPaid: 7200,
+  });
+  assert.equal(fullyCreditedFinancials.remainingBalance, 0);
+
+  const settledBill = applyMoveInFinancials({
+    billing_id: 'move-in-settled',
+    description: 'Advance Rent and Security Deposit',
+    status: 'paid',
+    total: 7200,
+  }, fullyCreditedFinancials);
+  assert.equal(settledBill.total, 7200);
+  assert.equal(settledBill.amount, 7200);
+  assert.equal(settledBill.remaining_amount, 0);
+
+  const settledReal = mapRealBill({
+    _id: { toString: () => 'move-in-settled-real' },
+    status: 'paid',
+    advanceRent: 3600,
+    securityDeposit: 3600,
+    reservationFeeAlreadyPaid: 7200,
+    totalAmount: 7200,
+  }, 'tenant-1');
+  assert.equal(settledReal.total, 7200);
+  assert.equal(settledReal.amount, 7200);
+  assert.equal(settledReal.remaining_amount, 0);
+
+  const settledLegacy = normalizeLegacyBill({
+    billing_id: 'move-in-settled-legacy',
+    status: 'paid',
+    advance_rent: 3600,
+    security_deposit: 3600,
+    reservation_fee: 7200,
+    total: 7200,
+  });
+  assert.equal(settledLegacy.total, 7200);
+  assert.equal(settledLegacy.amount, 7200);
+  assert.equal(settledLegacy.remaining_amount, 0);
+});
+
+test('settled move-in bill with a genuine remaining balance still shows what was actually paid, not the pre-credit total', () => {
+  const partialCreditFinancials = calculateMoveInFinancials({
+    advanceRent: 6300,
+    securityDeposit: 6300,
+    reservationFeeAlreadyPaid: 2000,
+  });
+  assert.equal(partialCreditFinancials.remainingBalance, 10600);
+  assert.equal(partialCreditFinancials.totalDueBeforeMoveIn, 12600);
+
+  const settledBill = applyMoveInFinancials({
+    billing_id: 'move-in-partial-settled',
+    description: 'Advance Rent and Security Deposit',
+    status: 'paid',
+    total: 6300,
+  }, partialCreditFinancials);
+  // Must show the ₱10,600 actually collected at move-in, not the ₱12,600
+  // pre-credit total and not ₱0.
+  assert.equal(settledBill.total, 10600);
+  assert.equal(settledBill.amount, 10600);
+});
+
 test('approved reservation financials only enrich explicit move-in bills', () => {
   assert.equal(isMoveInFinancialBill({ description: 'Move-in Charges' }), true);
   assert.equal(isMoveInFinancialBill({ description: 'August 2026 Billing Statement' }), false);

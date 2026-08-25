@@ -305,7 +305,9 @@ export default function BillDetailsScreen() {
               ))}
               <View style={styles.totalDivider} />
               <View style={styles.totalRow}>
-                <Text style={styles.totalLabel}>{moveInFinancials ? 'REMAINING BALANCE' : 'TOTAL AMOUNT'}</Text>
+                <Text style={styles.totalLabel}>
+                  {moveInFinancials ? (isOutstanding ? 'REMAINING BALANCE' : 'TOTAL PAID') : 'TOTAL AMOUNT'}
+                </Text>
                 <Text style={styles.totalValue}>{safeCurrency(totalAmount)}</Text>
               </View>
             </>
