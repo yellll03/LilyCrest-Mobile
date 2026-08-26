@@ -190,8 +190,13 @@ export default function ChangePasswordScreen() {
                 onBlur={() => setTouched((prev) => ({ ...prev, current: true }))}
                 secureTextEntry={!showCurrentPassword}
               />
-              <TouchableOpacity onPress={() => setShowCurrentPassword(!showCurrentPassword)}>
-                <Ionicons name={showCurrentPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.textMuted} />
+              <TouchableOpacity
+                onPress={() => setShowCurrentPassword(!showCurrentPassword)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityRole="button"
+                accessibilityLabel={showCurrentPassword ? 'Hide password' : 'Show password'}
+              >
+                <Ionicons name={showCurrentPassword ? 'eye-outline' : 'eye-off-outline'} size={20} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
             {errors.current && <Text style={styles.errorText}>{errors.current}</Text>}
@@ -212,8 +217,13 @@ export default function ChangePasswordScreen() {
                 secureTextEntry={!showNewPassword}
                 maxLength={NEW_PASSWORD_MAX_LENGTH}
               />
-              <TouchableOpacity onPress={() => setShowNewPassword(!showNewPassword)}>
-                <Ionicons name={showNewPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.textMuted} />
+              <TouchableOpacity
+                onPress={() => setShowNewPassword(!showNewPassword)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityRole="button"
+                accessibilityLabel={showNewPassword ? 'Hide password' : 'Show password'}
+              >
+                <Ionicons name={showNewPassword ? 'eye-outline' : 'eye-off-outline'} size={20} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
             {errors.new && <Text style={styles.errorText}>{errors.new}</Text>}
@@ -258,8 +268,13 @@ export default function ChangePasswordScreen() {
                 secureTextEntry={!showConfirmPassword}
                 maxLength={NEW_PASSWORD_MAX_LENGTH}
               />
-              <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
-                <Ionicons name={showConfirmPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.textMuted} />
+              <TouchableOpacity
+                onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                accessibilityRole="button"
+                accessibilityLabel={showConfirmPassword ? 'Hide password' : 'Show password'}
+              >
+                <Ionicons name={showConfirmPassword ? 'eye-outline' : 'eye-off-outline'} size={20} color={colors.textMuted} />
               </TouchableOpacity>
             </View>
             {errors.confirm && <Text style={styles.errorText}>{errors.confirm}</Text>}

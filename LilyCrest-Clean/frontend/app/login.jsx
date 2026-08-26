@@ -322,8 +322,13 @@ export default function LoginScreen() {
                   onBlur={() => setTouched(prev => ({ ...prev, password: true }))} 
                   secureTextEntry={!showPassword} 
                 />
-                <TouchableOpacity onPress={() => setShowPassword(!showPassword)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                  <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={colors.iconSecondary} />
+                <TouchableOpacity
+                  onPress={() => setShowPassword(!showPassword)}
+                  hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  accessibilityRole="button"
+                  accessibilityLabel={showPassword ? 'Hide password' : 'Show password'}
+                >
+                  <Ionicons name={showPassword ? 'eye-outline' : 'eye-off-outline'} size={20} color={colors.iconSecondary} />
                 </TouchableOpacity>
               </View>
               {touched.password && errors.password && !loginError ? (
