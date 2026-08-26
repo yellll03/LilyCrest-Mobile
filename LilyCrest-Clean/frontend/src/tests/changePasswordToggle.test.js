@@ -1,15 +1,16 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import ChangePasswordScreen from '../../app/change-password';
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ replace: jest.fn(), back: jest.fn(), canGoBack: () => false }),
 }));
 
-jest.mock('../../src/context/AuthContext', () => ({
+jest.mock('../context/AuthContext', () => ({
   useAuth: () => ({ logout: jest.fn() }),
 }));
 
-jest.mock('../../src/context/ThemeContext', () => {
+jest.mock('../context/ThemeContext', () => {
   const colors = {
     background: '#fff', text: '#000', textSecondary: '#333', textMuted: '#999',
     border: '#ccc', inputBg: '#fff', accentSubtle: '#eef', accentLight: '#ccf', primary: '#123',
@@ -17,23 +18,21 @@ jest.mock('../../src/context/ThemeContext', () => {
   return { useTheme: () => ({ colors }) };
 });
 
-jest.mock('../../src/context/AlertContext', () => ({
+jest.mock('../context/AlertContext', () => ({
   useAlert: () => ({ showAlert: jest.fn() }),
 }));
 
-jest.mock('../../src/services/api', () => ({
+jest.mock('../services/api', () => ({
   apiService: { changePassword: jest.fn() },
 }));
 
-jest.mock('../../src/services/secureCredentials', () => ({
+jest.mock('../services/secureCredentials', () => ({
   clearCredentials: jest.fn(),
 }));
 
-jest.mock('../../src/utils/navigation', () => ({
+jest.mock('../utils/navigation', () => ({
   safeBack: jest.fn(),
 }));
-
-import ChangePasswordScreen from '../change-password';
 
 const FIELDS = [
   { placeholder: 'Enter current password', show: 'Show password', hide: 'Hide password' },

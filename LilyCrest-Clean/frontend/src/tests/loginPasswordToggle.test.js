@@ -1,19 +1,20 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
+import LoginScreen from '../../app/login';
 
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
 }));
 
-jest.mock('../../src/config/googleSignIn', () => ({
+jest.mock('../config/googleSignIn', () => ({
   useGoogleSignIn: () => ({ signInWithGoogle: jest.fn() }),
 }));
 
-jest.mock('../../src/context/AuthContext', () => ({
+jest.mock('../context/AuthContext', () => ({
   useAuth: () => ({ loginWithEmail: jest.fn(), signInWithGoogle: jest.fn(), isLoading: false }),
 }));
 
-jest.mock('../../src/context/ThemeContext', () => {
+jest.mock('../context/ThemeContext', () => {
   const colors = {
     background: '#fff', text: '#000', textSecondary: '#333', textMuted: '#999',
     border: '#ccc', inputBg: '#fff', error: '#f00', errorBg: '#fee', success: '#0a0',
@@ -26,20 +27,18 @@ jest.mock('../../src/context/ThemeContext', () => {
   };
 });
 
-jest.mock('../../src/services/secureCredentials', () => ({
+jest.mock('../services/secureCredentials', () => ({
   savePendingLogin: jest.fn(),
 }));
 
-jest.mock('../../src/services/rememberedEmail', () => ({
+jest.mock('../services/rememberedEmail', () => ({
   loadRememberedEmail: jest.fn().mockResolvedValue({ email: '', rememberEmail: false }),
   saveRememberedEmail: jest.fn(),
 }));
 
-jest.mock('../../src/utils/navigation', () => ({
+jest.mock('../utils/navigation', () => ({
   resetToHome: jest.fn(),
 }));
-
-import LoginScreen from '../login';
 
 describe('Login screen — password visibility toggle', () => {
   it('starts hidden, shows the closed eye, and is labeled "Show password"', () => {
