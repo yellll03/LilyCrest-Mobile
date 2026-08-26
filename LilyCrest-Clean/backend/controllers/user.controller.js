@@ -997,6 +997,9 @@ function normalizePushTokenEntry(entry) {
   return {
     token,
     provider: typeof entry.provider === 'string' ? entry.provider.trim().toLowerCase() : null,
+    device_id: typeof entry.device_id === 'string'
+      ? entry.device_id.trim()
+      : (typeof entry.deviceId === 'string' ? entry.deviceId.trim() : null),
     platform: typeof entry.platform === 'string'
       ? entry.platform.trim().toLowerCase()
       : (typeof entry.device_platform === 'string' ? entry.device_platform.trim().toLowerCase() : null),
@@ -1009,7 +1012,13 @@ function normalizePushTokenEntry(entry) {
 // save-token endpoint and the recently-expired-session teardown endpoint
 // (see sessionTeardown in auth.controller.js) so there is exactly one place
 // that decides how a device's push-token association is stored per user.
-async function persistPushTokenForUser(db, userId, { rawPushToken = '', notificationsEnabled = true, provider = null, devicePlatform = null } = {}) {
+async function persistPushTokenForUser(db, userId, {
+  rawPushToken = '',
+  notificationsEnabled = true,
+  provider = null,
+  devicePlatform = null,
+  deviceId = null,
+} = {}) {
   const now = new Date();
 
   const user = await db.collection('users').findOne(
@@ -1041,12 +1050,16 @@ async function persistPushTokenForUser(db, userId, { rawPushToken = '', notifica
 
   const filteredEntries = existingEntries
     .filter(Boolean)
-    .filter((entry) => entry.token !== rawPushToken);
+    .filter((entry) => entry.token !== rawPushToken)
+    // A stable installation id lets a rotated token replace the stale token
+    // for this one app installation without deleting tokens for other devices.
+    .filter((entry) => !deviceId || entry.device_id !== deviceId);
 
   if (rawPushToken) {
     filteredEntries.unshift({
       token: rawPushToken,
       provider,
+      device_id: deviceId,
       platform: devicePlatform,
       enabled: notificationsEnabled,
       updated_at: now,
@@ -1085,6 +1098,8 @@ async function savePushToken(req, res) {
     const notificationsEnabled = req.body?.notifications_enabled !== false;
     const provider = typeof req.body?.provider === 'string' ? req.body.provider.trim().toLowerCase() : null;
     const devicePlatform = typeof req.body?.device_platform === 'string' ? req.body.device_platform.trim().toLowerCase() : null;
+    const rawDeviceId = typeof req.body?.device_id === 'string' ? req.body.device_id.trim() : '';
+    const deviceId = /^[A-Za-z0-9._:-]{1,180}$/.test(rawDeviceId) ? rawDeviceId : null;
     const db = getDb();
 
     if (!rawPushToken && notificationsEnabled) {
@@ -1092,7 +1107,7 @@ async function savePushToken(req, res) {
     }
 
     const { tokenSaved } = await persistPushTokenForUser(db, req.user.user_id, {
-      rawPushToken, notificationsEnabled, provider, devicePlatform,
+      rawPushToken, notificationsEnabled, provider, devicePlatform, deviceId,
     });
 
     res.json({

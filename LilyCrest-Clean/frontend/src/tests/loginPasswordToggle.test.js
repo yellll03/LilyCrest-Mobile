@@ -2,6 +2,8 @@ import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import LoginScreen from '../../app/login';
 
+const mockLoginWithEmail = jest.fn();
+
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
 }));
@@ -11,7 +13,7 @@ jest.mock('../config/googleSignIn', () => ({
 }));
 
 jest.mock('../context/AuthContext', () => ({
-  useAuth: () => ({ loginWithEmail: jest.fn(), signInWithGoogle: jest.fn(), isLoading: false }),
+  useAuth: () => ({ loginWithEmail: mockLoginWithEmail, signInWithGoogle: jest.fn(), isLoading: false }),
 }));
 
 jest.mock('../context/ThemeContext', () => {
@@ -41,6 +43,20 @@ jest.mock('../utils/navigation', () => ({
 }));
 
 describe('Login screen — password visibility toggle', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('shows a visible password-required error on submit and makes no login request', () => {
+    render(<LoginScreen />);
+    fireEvent.changeText(screen.getByPlaceholderText('Enter your email'), 'tenant@example.com');
+
+    fireEvent.press(screen.getByLabelText('Sign In'));
+
+    expect(screen.getByText('Password is required')).toBeTruthy();
+    expect(mockLoginWithEmail).not.toHaveBeenCalled();
+  });
+
   it('starts hidden, shows the closed eye, and is labeled "Show password"', () => {
     render(<LoginScreen />);
     const passwordInput = screen.getByPlaceholderText('Enter your password');

@@ -103,7 +103,7 @@ describe('notification sync — single source of truth (regression)', () => {
     jest.clearAllMocks();
     latest = null;
     mockGet.mockImplementation((url) => {
-      if (url === '/users/me') return Promise.resolve({ data: { user_id: 'tenant-a', name: 'Tenant A', email: 'a@example.com' } });
+      if (url === '/users/me') return Promise.resolve({ data: { user_id: 'tenant-a', name: 'Tenant A', email: 'a@example.com', role: 'tenant' } });
       if (url === '/notifications') return Promise.resolve({ data: NOTIFICATIONS_FIXTURE });
       return Promise.resolve({ data: {} });
     });
@@ -124,7 +124,7 @@ describe('notification sync — single source of truth (regression)', () => {
       { notification_id: 'maintenance-1', type: 'maintenance_update', read: false },
     ];
     mockGet.mockImplementation((url) => {
-      if (url === '/users/me') return Promise.resolve({ data: { user_id: 'tenant-a', name: 'Tenant A', email: 'a@example.com' } });
+      if (url === '/users/me') return Promise.resolve({ data: { user_id: 'tenant-a', name: 'Tenant A', email: 'a@example.com', role: 'tenant' } });
       if (url === '/notifications') return Promise.resolve({ data: phase2Events });
       return Promise.resolve({ data: {} });
     });
@@ -193,7 +193,7 @@ describe('notification sync — single source of truth (regression)', () => {
 
   it('clearNotificationUnread is a no-op when nothing is unread (no needless backend call)', async () => {
     mockGet.mockImplementation((url) => {
-      if (url === '/users/me') return Promise.resolve({ data: { user_id: 'tenant-a', name: 'Tenant A', email: 'a@example.com' } });
+      if (url === '/users/me') return Promise.resolve({ data: { user_id: 'tenant-a', name: 'Tenant A', email: 'a@example.com', role: 'tenant' } });
       if (url === '/notifications') return Promise.resolve({ data: [{ notification_id: 'n-read', read: true, created_at: '2026-08-01T00:00:00.000Z' }] });
       return Promise.resolve({ data: {} });
     });
@@ -209,7 +209,7 @@ describe('notification sync — single source of truth (regression)', () => {
 
   it('zero notifications renders a clean zero count, not a negative or NaN', async () => {
     mockGet.mockImplementation((url) => {
-      if (url === '/users/me') return Promise.resolve({ data: { user_id: 'tenant-a', name: 'Tenant A', email: 'a@example.com' } });
+      if (url === '/users/me') return Promise.resolve({ data: { user_id: 'tenant-a', name: 'Tenant A', email: 'a@example.com', role: 'tenant' } });
       if (url === '/notifications') return Promise.resolve({ data: [] });
       return Promise.resolve({ data: {} });
     });

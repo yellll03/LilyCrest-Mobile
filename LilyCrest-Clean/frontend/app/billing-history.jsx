@@ -9,7 +9,7 @@ import { useAuth } from '../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
 import { apiService, getApiErrorMessage } from '../src/services/api';
 import { subscribeBillingRefresh } from '../src/services/billingState';
-import { getBillOwedAmount, getBillPaymentDate, getBillStatus, getUtilityReleaseSchedule, isBillOutstanding } from '../src/utils/billingStatus';
+import { getBillOwedAmount, getBillPaymentDate, getBillPaymentMethodLabel, getBillPaymentReference, getBillRemainingAmount, getBillStatus, getUtilityReleaseSchedule, isBillOutstanding } from '../src/utils/billingStatus';
 import { safeBack } from '../src/utils/navigation';
 import { billingDocumentCacheKey } from '../src/utils/billingDocumentCache';
 import { BILLING_SCREEN_STATES, normalizeLatestBillingResponse, resolveBillingScreenState } from '../src/utils/billingScreenState';
@@ -447,6 +447,27 @@ export default function BillingScreen() {
         {/* Amount */}
         <Text style={styles.billAmount}>{safeCurrency(bill.total || bill.amount)}</Text>
 
+        {paid ? (
+          <View style={styles.transactionDetails} accessibilityLabel="Payment transaction details">
+            <View style={styles.transactionRow}>
+              <Text style={styles.transactionLabel}>Payment date</Text>
+              <Text style={styles.transactionValue}>{safeDate(getBillPaymentDate(bill))}</Text>
+            </View>
+            <View style={styles.transactionRow}>
+              <Text style={styles.transactionLabel}>Payment method</Text>
+              <Text style={styles.transactionValue}>{getBillPaymentMethodLabel(bill) || 'Not available'}</Text>
+            </View>
+            <View style={styles.transactionRow}>
+              <Text style={styles.transactionLabel}>Reference</Text>
+              <Text style={styles.transactionValue} numberOfLines={1}>{getBillPaymentReference(bill) || 'Not available'}</Text>
+            </View>
+            <View style={styles.transactionRow}>
+              <Text style={styles.transactionLabel}>Remaining balance</Text>
+              <Text style={styles.transactionValue}>{safeCurrency(getBillRemainingAmount(bill))}</Text>
+            </View>
+          </View>
+        ) : null}
+
         {/* Actions */}
         <View style={styles.billActions}>
           <Pressable
@@ -757,6 +778,10 @@ function createStyles(c, isDarkMode) {
     btnDisabled: { opacity: 0.5 },
     paidMeta: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto' },
     paidMetaText: { fontSize: 12, color: '#065F46', fontWeight: '600' },
+    transactionDetails: { backgroundColor: c.surfaceSecondary, borderRadius: 10, borderWidth: 1, borderColor: c.border, padding: 10, gap: 7, marginBottom: 12 },
+    transactionRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+    transactionLabel: { color: c.textMuted, fontSize: 12, flexShrink: 0 },
+    transactionValue: { color: c.text, fontSize: 12, fontWeight: '600', textAlign: 'right', flex: 1 },
 
     // Error
     errorBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, padding: 12, borderRadius: 12, backgroundColor: c.surface, borderWidth: 1, borderColor: '#DC2626' },

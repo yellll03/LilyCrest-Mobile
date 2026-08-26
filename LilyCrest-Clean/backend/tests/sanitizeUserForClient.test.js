@@ -67,6 +67,7 @@ test('sanitizeUserForClient is safe to call after normalizeUser', () => {
   const safe = sanitizeUserForClient(normalized);
   assert.equal(safe.password_hash, undefined);
   assert.equal(safe.name, 'Tenant Example');
+  assert.deepEqual(safe.accountStatus, { code: 'active', label: 'Active Tenant' });
 });
 
 test('sanitizeUserForClient handles null/undefined input', () => {

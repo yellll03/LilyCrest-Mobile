@@ -68,6 +68,23 @@ test('a fully settled bill reports remaining_amount 0 and the full original tota
   assert.equal(mapped.total, 14088);
 });
 
+test('paid history DTO carries canonical payment date, method label, reference, and zero balance', () => {
+  const mapped = mapRealBill(baseRealBill({
+    status: 'paid',
+    remainingAmount: 975,
+    paymentDate: new Date('2026-08-15T13:03:36.257Z'),
+    paymentMethod: 'paymongo',
+    paymentChannel: 'gcash',
+    paymongoReference: 'PM-REFERENCE-123',
+  }), 'user123');
+
+  assert.equal(mapped.status, 'paid');
+  assert.equal(mapped.remaining_amount, 0, 'paid state is authoritative over stale remainingAmount');
+  assert.equal(mapped.payment_date.toISOString(), '2026-08-15T13:03:36.257Z');
+  assert.equal(mapped.payment_method_label, 'GCash');
+  assert.equal(mapped.payment_reference, 'PM-REFERENCE-123');
+});
+
 test('Dashboard and Billing History are structurally guaranteed to agree because both delegate to the same fetchUserBills()/mapRealBill() pipeline', () => {
   // Source-level proof (matches this repo's existing convention for
   // single-source-of-truth claims, e.g. billingUiPolish.test.js): dashboard

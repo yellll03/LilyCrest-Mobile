@@ -14,6 +14,7 @@ export const AUTH_MESSAGES = Object.freeze({
   otpDeliveryUnavailable: 'Unable to send verification code right now. Please try again.',
   unexpected: 'Something went wrong. Please try again.',
   forgotSuccess: 'If an account exists for this email, a password reset link has been sent.',
+  resetNotAvailable: "We couldn't start a tenant password reset for this email. Check the address or contact the admin office.",
   wrongCurrentPassword: 'Your current password is incorrect.',
   passwordChangeUnexpected: 'Failed to change password. Please try again.',
 });
@@ -45,6 +46,11 @@ export function classifyAuthError(error) {
   const status = error?.response?.status;
   const code = String(error?.code || '').toLowerCase();
   const message = String(error?.message || '');
+  const responseCode = String(error?.response?.data?.code || '').toUpperCase();
+
+  if (responseCode === 'TENANT_RESET_NOT_AVAILABLE') {
+    return { type: 'access', status: status || 422, message: AUTH_MESSAGES.resetNotAvailable };
+  }
 
   if (status === 401 || ['auth/invalid-credential', 'auth/wrong-password', 'auth/user-not-found'].includes(code)) {
     return { type: 'credentials', status: status || 401, message: AUTH_MESSAGES.invalidCredentials };
@@ -57,7 +63,6 @@ export function classifyAuthError(error) {
   if (status === 429 || code === 'auth/too-many-requests') {
     return { type: 'rate-limit', status: status || 429, message: AUTH_MESSAGES.tooManyRequests };
   }
-  const responseCode = String(error?.response?.data?.code || '').toUpperCase();
   if (status === 503 && ['OTP_DELIVERY_UNAVAILABLE', 'OTP_EMAIL_SEND_FAILED'].includes(responseCode)) {
     return { type: 'otp-delivery', status, message: AUTH_MESSAGES.otpDeliveryUnavailable };
   }

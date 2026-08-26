@@ -90,11 +90,11 @@ test('chatbot.routes.js: admin live-chat routes stay adminMiddleware-gated', () 
 
 // ── tenantMiddleware behavior itself (admin/superadmin rejected, tenant allowed) ──
 
-test('tenantMiddleware rejects admin and superadmin, allows a plain tenant role', () => {
+test('tenantMiddleware fails closed for every non-tenant role', () => {
   delete require.cache[require.resolve('../middleware/auth')];
   const { tenantMiddleware } = require('../middleware/auth');
 
-  for (const role of ['admin', 'superadmin', 'ADMIN', 'SuperAdmin']) {
+  for (const role of ['admin', 'superadmin', 'ADMIN', 'SuperAdmin', 'applicant', 'staff', '', undefined]) {
     const res = response();
     let nextCalled = false;
     tenantMiddleware({ user: { role } }, res, () => { nextCalled = true; });
@@ -102,7 +102,7 @@ test('tenantMiddleware rejects admin and superadmin, allows a plain tenant role'
     assert.equal(nextCalled, false);
   }
 
-  for (const role of ['resident', 'tenant', '', undefined]) {
+  for (const role of ['resident', 'tenant']) {
     const res = response();
     let nextCalled = false;
     tenantMiddleware({ user: { role } }, res, () => { nextCalled = true; });

@@ -146,6 +146,7 @@ export function getConfirmedSessionInvalidation(error) {
   const status = error?.response?.status;
   const code = String(error?.response?.data?.code || '').trim().toUpperCase();
   if (status === 403 && code === 'ACCOUNT_INACTIVE') return 'account_inactive';
+  if (status === 403 && code === 'TENANT_ACCESS_REQUIRED') return 'tenant_access_required';
   if (status === 401 && code === 'SESSION_EXPIRED') return 'session_expired';
   if (status === 401 && CONFIRMED_INVALIDATION_CODES.has(code)) return 'session_invalid';
   return null;
@@ -273,15 +274,11 @@ api.interceptors.response.use(
     const originalRequest = error.config;
     const invalidationReason = getConfirmedSessionInvalidation(error);
 
-    // A deactivated account gets a 403 (not 401) from authMiddleware, which
-    // already deleted every session for this user server-side — there is
-    // nothing to refresh. Route it through the same clean-logout path as an
-    // expired session instead of leaving authStatus stuck "authenticated"
-    // until some later request happens to hit the now-deleted session and
-    // 401s. Distinguished by a stable machine-readable code (not the English
-    // detail string) so an unrelated 403 (e.g. hitting an admin-only route)
-    // is never misread as account deactivation.
-    if (invalidationReason === 'account_inactive') {
+    // Account deactivation and loss of tenant eligibility are authoritative
+    // 403 invalidations, not transient authorization failures. Route both
+    // through the clean local-logout path. Stable machine-readable codes keep
+    // unrelated 403s (for example an admin-only route) from being misread.
+    if (invalidationReason === 'account_inactive' || invalidationReason === 'tenant_access_required') {
       const authHeader = originalRequest?.headers?.Authorization || originalRequest?.headers?.authorization || '';
       const expiredToken = typeof authHeader === 'string' ? authHeader.replace(/^Bearer\s+/i, '').trim() : '';
       try {

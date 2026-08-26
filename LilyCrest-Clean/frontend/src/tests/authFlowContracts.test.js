@@ -6,11 +6,12 @@ const root = path.resolve(__dirname, '../..');
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'utf8');
 
 describe('auth flow implementation contracts', () => {
-  test('forgot password has repeated-submission protection', () => {
+  test('forgot password has repeated-submission protection without hiding submit-time validation', () => {
     const source = read('app/forgot-password.jsx');
     expect(source).toContain('if (requestInFlight.current) return;');
     expect(source).toContain('requestInFlight.current = true;');
-    expect(source).toContain('disabled={isLoading || !isEmailValid}');
+    expect(source).toContain('disabled={isLoading}');
+    expect(source).not.toContain('disabled={isLoading || !isEmailValid}');
   });
 
   // Forgot-password must go through this backend's own reset-token flow

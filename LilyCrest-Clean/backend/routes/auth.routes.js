@@ -3,7 +3,7 @@ const rateLimit = require('express-rate-limit');
 const router = express.Router();
 const authController = require('../controllers/auth.controller');
 const canonicalPasswordResetController = require('../controllers/canonicalPasswordReset.controller');
-const { authMiddleware, authMiddlewareRecentSession, adminMiddleware, tenantPasswordMiddleware } = require('../middleware/auth');
+const { authMiddleware, authMiddlewareRecentSession, adminMiddleware, tenantMiddleware, tenantPasswordMiddleware } = require('../middleware/auth');
 
 const authLimiter = rateLimit({
 	windowMs: 15 * 60 * 1000,
@@ -18,7 +18,7 @@ router.post('/register', authLimiter, authController.register);
 router.post('/login', authLimiter, authController.login);
 router.post('/login/verify-otp', authLimiter, authController.verifyOtp);
 router.post('/login/resend-otp', authLimiter, authController.resendOtp);
-router.get('/me', authMiddleware, authController.getMe);
+router.get('/me', authMiddleware, tenantMiddleware, authController.getMe);
 router.get('/admin-session', authMiddleware, adminMiddleware, authController.getAdminBrowserSession);
 router.post('/session/refresh', authLimiter, authController.refreshSession);
 router.post('/logout', authMiddleware, authController.logout);

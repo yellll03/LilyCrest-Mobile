@@ -1,18 +1,11 @@
 const { getDb } = require('../config/database');
 const { normalizeUser } = require('../utils/normalizeUser');
-const { isTenantMobileRole } = require('../utils/tenantEligibility');
+const { isAccountActive, isTenantMobileRole } = require('../utils/tenantEligibility');
 const {
   clearAdminBrowserCookies,
   extractRequestCredential,
   verifyAdminBrowserCsrf,
 } = require('../utils/adminBrowserSession');
-
-function isAccountActive(user = {}) {
-  if (user.deleted_at || user.deletedAt || user.is_deleted === true || user.isDeleted === true) return false;
-  if (user.is_active === false || user.isActive === false || user.disabled === true || user.is_disabled === true) return false;
-  const status = String(user.status || user.account_status || '').trim().toLowerCase();
-  return !['inactive', 'disabled', 'deleted', 'suspended', 'blocked', 'terminated', 'pending', 'pending_approval'].includes(status);
-}
 
 const AUTH_ERROR_CODES = Object.freeze({
   TOKEN_MISSING: 'AUTH_TOKEN_MISSING',
@@ -21,6 +14,7 @@ const AUTH_ERROR_CODES = Object.freeze({
   SESSION_REVOKED: 'SESSION_REVOKED',
   ACCOUNT_NOT_FOUND: 'AUTH_ACCOUNT_NOT_FOUND',
   ACCOUNT_INACTIVE: 'ACCOUNT_INACTIVE',
+  TENANT_ACCESS_REQUIRED: 'TENANT_ACCESS_REQUIRED',
   SERVICE_UNAVAILABLE: 'AUTH_SERVICE_UNAVAILABLE',
   ADMIN_COOKIE_FORBIDDEN: 'ADMIN_COOKIE_FORBIDDEN',
   CSRF_INVALID: 'CSRF_INVALID',
@@ -212,19 +206,17 @@ function adminMiddleware(req, res, next) {
   return next();
 }
 
-// The mobile app is tenant-only: it must never let an authenticated admin
-// account reach tenant-scoped data/actions just because they hold a valid
-// session. /auth/login and /auth/google intentionally still authenticate
-// admin accounts (the web admin panel shares that same endpoint), so the
-// tenant-only guarantee has to be enforced here, on every tenant-facing
-// route, rather than at login time. Mirrors the role check auth.controller.js
-// already uses to keep admins out of the tenant *login* path (role: {$nin:
-// ['admin','superadmin']}) — this applies the same rule to every subsequent
-// tenant request, not just the initial login.
+// The mobile app is tenant-only. Fail closed to the canonical tenant/resident
+// roles on every tenant route; merely being a non-admin (for example an
+// applicant, staff member, or owner) is not tenant registration.
 function tenantMiddleware(req, res, next) {
-  const role = (req.user?.role || '').toLowerCase();
-  if (role === 'admin' || role === 'superadmin') {
-    return res.status(403).json({ detail: 'This account cannot access the tenant app. Please use the admin panel.' });
+  if (!isTenantMobileRole(req.user?.role)) {
+    return authenticationError(
+      res,
+      403,
+      AUTH_ERROR_CODES.TENANT_ACCESS_REQUIRED,
+      'Access denied. This account is not registered as an active tenant.',
+    );
   }
   return next();
 }
@@ -234,7 +226,12 @@ function tenantMiddleware(req, res, next) {
 // credential. Applicant/admin/owner/staff identities fail closed.
 function tenantPasswordMiddleware(req, res, next) {
   if (!isTenantMobileRole(req.user?.role)) {
-    return res.status(403).json({ detail: 'Tenant access is required.' });
+    return authenticationError(
+      res,
+      403,
+      AUTH_ERROR_CODES.TENANT_ACCESS_REQUIRED,
+      'Tenant access is required.',
+    );
   }
   return next();
 }

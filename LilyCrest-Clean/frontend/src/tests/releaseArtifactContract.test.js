@@ -43,6 +43,12 @@ describe('standalone release artifact contract', () => {
     expect(eas.build.production.environment).toBe('production');
   });
 
+  test('iOS release prebuild requests production APNs entitlement and background remote notifications', () => {
+    const config = read('app.config.js');
+    expect(config).toMatch(/'expo-notifications',[\s\S]*?mode:\s*'production'/);
+    expect(config).toMatch(/'expo-notifications',[\s\S]*?enableBackgroundRemoteNotifications:\s*true/);
+  });
+
   // Regression: this repo has no committed native ios/ project, so EAS runs
   // `expo prebuild` for iOS from app.config.js. If GoogleService-Info.plist
   // isn't materialized on the build worker before that prebuild step, the

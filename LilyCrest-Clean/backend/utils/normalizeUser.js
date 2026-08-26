@@ -1,3 +1,5 @@
+const { tenantAccountStatus } = require('./tenantEligibility');
+
 function firstNonEmptyString(...values) {
   for (const value of values) {
     if (typeof value !== 'string') continue;
@@ -60,6 +62,8 @@ function normalizeUser(doc) {
     user.username = user.email.split('@')[0];
   }
 
+  user.accountStatus = tenantAccountStatus(user);
+
   return user;
 }
 
@@ -96,6 +100,7 @@ const CLIENT_VISIBLE_USER_FIELDS = [
   'survey',
   'serverTime',
   'role',
+  'accountStatus',
 ];
 
 function sanitizeUserForClient(user) {

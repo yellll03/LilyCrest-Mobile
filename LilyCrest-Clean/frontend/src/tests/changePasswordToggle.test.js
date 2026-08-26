@@ -2,6 +2,8 @@ import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import ChangePasswordScreen from '../../app/change-password';
 
+const mockChangePassword = jest.fn();
+
 jest.mock('expo-router', () => ({
   useRouter: () => ({ replace: jest.fn(), back: jest.fn(), canGoBack: () => false }),
 }));
@@ -23,7 +25,7 @@ jest.mock('../context/AlertContext', () => ({
 }));
 
 jest.mock('../services/api', () => ({
-  apiService: { changePassword: jest.fn() },
+  apiService: { changePassword: mockChangePassword },
 }));
 
 jest.mock('../services/secureCredentials', () => ({
@@ -41,6 +43,33 @@ const FIELDS = [
 ];
 
 describe('Change Password screen — password visibility toggles', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('shows all three required-field messages on submit and makes no request', () => {
+    render(<ChangePasswordScreen />);
+
+    fireEvent.press(screen.getByLabelText('Update Password'));
+
+    expect(screen.getByText('Current password is required')).toBeTruthy();
+    expect(screen.getByText('New password is required')).toBeTruthy();
+    expect(screen.getByText('Please confirm your new password')).toBeTruthy();
+    expect(mockChangePassword).not.toHaveBeenCalled();
+  });
+
+  it('shows a visible mismatch error and makes no request', () => {
+    render(<ChangePasswordScreen />);
+    fireEvent.changeText(screen.getByPlaceholderText('Enter current password'), 'CurrentStrong1!');
+    fireEvent.changeText(screen.getByPlaceholderText('Enter new password'), 'NewStrong1!');
+    fireEvent.changeText(screen.getByPlaceholderText('Confirm new password'), 'DifferentStrong1!');
+
+    fireEvent.press(screen.getByLabelText('Update Password'));
+
+    expect(screen.getByText('Passwords do not match')).toBeTruthy();
+    expect(mockChangePassword).not.toHaveBeenCalled();
+  });
+
   it('all three fields start hidden with the closed eye / "Show password" label', () => {
     render(<ChangePasswordScreen />);
     for (const { placeholder } of FIELDS) {

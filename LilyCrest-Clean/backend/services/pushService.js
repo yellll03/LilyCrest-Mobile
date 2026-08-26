@@ -674,4 +674,9 @@ module.exports = {
   notifyPrivateAnnouncement,
   notifySupportReply,
   notifyReservationUpdate,
+  __test: {
+    extractUserPushTokens,
+    sanitizeDataPayload,
+    sendMulticast,
+  },
 };

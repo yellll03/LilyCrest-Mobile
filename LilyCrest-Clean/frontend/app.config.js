@@ -85,6 +85,9 @@ module.exports = {
         {
           defaultChannel: 'default',
           enableBackgroundRemoteNotifications: true,
+          // TestFlight/App Store builds must carry the production APNs
+          // entitlement. The plugin defaults to development when omitted.
+          mode: 'production',
         },
       ],
       'expo-secure-store',

@@ -84,7 +84,11 @@ jest.mock('../services/api', () => ({
     patch: jest.fn().mockResolvedValue({ data: {} }),
   },
   getApiErrorMessage: (error, fallback) => fallback,
-  getConfirmedSessionInvalidation: (error) => error?.response?.data?.code === 'SESSION_REVOKED' ? 'session_invalid' : null,
+  getConfirmedSessionInvalidation: (error) => {
+    if (error?.response?.data?.code === 'SESSION_REVOKED') return 'session_invalid';
+    if (error?.response?.data?.code === 'TENANT_ACCESS_REQUIRED') return 'tenant_access_required';
+    return null;
+  },
   teardownExpiredSession: jest.fn().mockResolvedValue(true),
 }));
 
@@ -114,7 +118,7 @@ describe('AuthContext branch persistence across profile refreshes (regression)',
     await AsyncStorage.clear();
     mockSessionToken = 'valid-session-token';
     mockUsersMeError = null;
-    mockUsersMeResponse = { data: { user_id: 'tenant-a', name: 'Tenant A', branch: GOOD_BRANCH } };
+    mockUsersMeResponse = { data: { user_id: 'tenant-a', role: 'tenant', name: 'Tenant A', branch: GOOD_BRANCH } };
   });
 
   it('cold-start outage with a secure token shows retryable restore instead of Login', async () => {
@@ -138,6 +142,7 @@ describe('AuthContext branch persistence across profile refreshes (regression)',
     }));
     mockUsersMeResponse = { data: {
       user_id: 'tenant-a',
+      role: 'tenant',
       name: 'Canonical Backend Name',
       picture: 'https://example.test/canonical.jpg',
       branch: GOOD_BRANCH,
@@ -153,14 +158,14 @@ describe('AuthContext branch persistence across profile refreshes (regression)',
 
   it('updateUser replaces stale cached fields when given a complete canonical profile response', async () => {
     mockUsersMeResponse = { data: {
-      user_id: 'tenant-a', name: 'Old Canonical Name', picture: 'https://example.test/old.jpg', branch: GOOD_BRANCH,
+      user_id: 'tenant-a', role: 'tenant', name: 'Old Canonical Name', picture: 'https://example.test/old.jpg', branch: GOOD_BRANCH,
     } };
     let latest;
     renderAuth((state) => { latest = state; });
     await waitFor(() => expect(latest.authStatus).toBe('authenticated'));
 
     act(() => {
-      latest.updateUser({ user_id: 'tenant-a', name: 'Fresh Canonical Name', branch: GOOD_BRANCH });
+      latest.updateUser({ user_id: 'tenant-a', role: 'tenant', name: 'Fresh Canonical Name', branch: GOOD_BRANCH });
     });
     await waitFor(() => expect(latest.user.name).toBe('Fresh Canonical Name'));
     expect(latest.user.picture).toBeUndefined();
@@ -168,7 +173,7 @@ describe('AuthContext branch persistence across profile refreshes (regression)',
 
   it('logout clears local session state and a new provider/login hydrates the saved backend profile again', async () => {
     const savedProfile = {
-      user_id: 'tenant-a', name: 'Saved Backend Name', phone: '+639171234567',
+      user_id: 'tenant-a', role: 'tenant', name: 'Saved Backend Name', phone: '+639171234567',
       picture: 'https://example.test/saved.jpg', branch: GOOD_BRANCH,
     };
     mockUsersMeResponse = { data: savedProfile };
@@ -202,7 +207,7 @@ describe('AuthContext branch persistence across profile refreshes (regression)',
     // the same shape buildTenantProfile emits when it silently swallows a
     // BRANCH_ASSIGNMENT_MISSING/INCOMPLETE/INACTIVE error.
     act(() => {
-      latest.updateUser({ user_id: 'tenant-a', name: 'Tenant A', branch: null });
+      latest.updateUser({ user_id: 'tenant-a', role: 'tenant', name: 'Tenant A', branch: null });
     });
 
     await waitFor(() => expect(latest.user?.branch?.branchName).toBe('Guadalupe'));
@@ -215,7 +220,7 @@ describe('AuthContext branch persistence across profile refreshes (regression)',
 
     const NEW_BRANCH = { ...GOOD_BRANCH, branchName: 'Gil Puyat', branchCode: 'gil-puyat' };
     act(() => {
-      latest.updateUser({ user_id: 'tenant-a', name: 'Tenant A', branch: NEW_BRANCH });
+      latest.updateUser({ user_id: 'tenant-a', role: 'tenant', name: 'Tenant A', branch: NEW_BRANCH });
     });
 
     await waitFor(() => expect(latest.user?.branch?.branchName).toBe('Gil Puyat'));
@@ -227,7 +232,7 @@ describe('AuthContext branch persistence across profile refreshes (regression)',
     await waitFor(() => expect(latest.authStatus).toBe('authenticated'));
     expect(latest.user?.branch?.branchName).toBe('Guadalupe');
 
-    mockUsersMeResponse = { data: { user_id: 'tenant-a', name: 'Tenant A', branch: null } };
+    mockUsersMeResponse = { data: { user_id: 'tenant-a', role: 'tenant', name: 'Tenant A', branch: null } };
     await act(async () => {
       await latest.checkAuth();
     });
@@ -298,6 +303,22 @@ describe('AuthContext branch persistence across profile refreshes (regression)',
     await waitFor(() => expect(latest.authStatus).toBe('authenticated'));
 
     mockUsersMeError = { response: { status: 401, data: { code: 'SESSION_REVOKED', retryable: false } } };
+    await act(async () => {
+      await latest.checkAuth();
+    });
+
+    expect(latest.authStatus).toBe('unauthenticated');
+    expect(latest.user).toBeNull();
+    expect(clearCredentials).toHaveBeenCalled();
+  });
+
+  it('checkAuth() cannot restore a cached applicant after the authoritative profile rejects tenant access', async () => {
+    const { clearCredentials } = require('../services/secureCredentials');
+    let latest;
+    renderAuth((state) => { latest = state; });
+    await waitFor(() => expect(latest.authStatus).toBe('authenticated'));
+
+    mockUsersMeError = { response: { status: 403, data: { code: 'TENANT_ACCESS_REQUIRED' } } };
     await act(async () => {
       await latest.checkAuth();
     });

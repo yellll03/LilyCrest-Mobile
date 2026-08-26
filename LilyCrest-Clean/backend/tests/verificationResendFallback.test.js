@@ -37,11 +37,18 @@ function hash(value) {
   return crypto.createHash('sha256').update(String(value || '')).digest('hex');
 }
 
-function fakeDb(otpDoc) {
+function fakeDb(otpDoc, userOverrides = {}) {
   const state = { doc: { ...otpDoc } };
   return {
     _state: state,
     collection(name) {
+      if (name === 'users') {
+        return {
+          findOne: async (query) => (query.user_id === state.doc.user_id
+            ? { user_id: state.doc.user_id, role: 'tenant', is_active: true, status: 'active', ...userOverrides }
+            : null),
+        };
+      }
       if (name !== 'otp_store') {
         return { insertOne: async () => ({}), findOne: async () => null };
       }
@@ -51,6 +58,11 @@ function fakeDb(otpDoc) {
           if (query.otp_token_hash !== state.doc.otp_token_hash) return { modifiedCount: 0 };
           Object.assign(state.doc, update.$set);
           return { modifiedCount: 1 };
+        },
+        deleteOne: async (query) => {
+          if (query.otp_token_hash !== state.doc.otp_token_hash) return { deletedCount: 0 };
+          state.doc = null;
+          return { deletedCount: 1 };
         },
       };
     },
@@ -248,4 +260,28 @@ test('resendOtp never logs the raw OTP code or transport secrets, only a user_id
   const resendOtpBody = source.slice(source.indexOf('async function resendOtp'), source.indexOf('// ─── GOOGLE SIGN-IN'));
   assert.doesNotMatch(resendOtpBody, /console\.(log|warn|error)\([^)]*newCode/);
   assert.match(resendOtpBody, /console\.log\(`\[ResendOtp\] New OTP sent for user_id=\$\{record\.user_id\}`\)/);
+});
+
+test('resend revalidates tenant role and rejects an applicant even with a valid OTP token', async () => {
+  const { rawToken, doc } = validOtpDoc();
+  const db = fakeDb(doc, { role: 'applicant' });
+  const { resendOtp } = freshAuthController(db);
+  const res = fakeResponse();
+
+  await resendOtp({ body: { otp_token: rawToken } }, res);
+
+  assert.equal(res.statusCode, 403);
+  assert.equal(res.body.code, 'TENANT_ACCESS_REQUIRED');
+});
+
+test('resend revalidates active status and rejects a tenant deactivated after password verification', async () => {
+  const { rawToken, doc } = validOtpDoc();
+  const db = fakeDb(doc, { is_active: false, status: 'inactive' });
+  const { resendOtp } = freshAuthController(db);
+  const res = fakeResponse();
+
+  await resendOtp({ body: { otp_token: rawToken } }, res);
+
+  assert.equal(res.statusCode, 403);
+  assert.equal(res.body.code, 'ACCOUNT_INACTIVE');
 });

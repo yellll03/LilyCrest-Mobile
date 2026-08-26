@@ -13,7 +13,7 @@ router.post('/reset', authMiddleware, tenantMiddleware, chatbotController.resetS
 // Compatibility-only legacy paths fail closed with 410 and direct upgraded
 // clients to /api/chat. They intentionally never read or mutate legacy data.
 router.get('/live-status/:sessionId', authMiddleware, tenantMiddleware, chatbotController.getLiveStatus);
-router.post('/close-live-chat', authMiddleware, chatbotController.closeLiveChat);
+router.post('/close-live-chat', authMiddleware, tenantMiddleware, chatbotController.closeLiveChat);
 router.get('/history', authMiddleware, tenantMiddleware, chatbotController.getChatHistory);
 
 // Admin routes — adminMiddleware enforces admin/superadmin role

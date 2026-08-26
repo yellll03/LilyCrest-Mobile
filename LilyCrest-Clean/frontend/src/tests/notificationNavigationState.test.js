@@ -73,7 +73,7 @@ jest.mock('../services/api', () => ({
   api: {
     get: jest.fn((url) => {
       if (url === '/users/me') {
-        return Promise.resolve({ data: { user_id: 'tenant-1', email: 'tenant@example.com' } });
+        return Promise.resolve({ data: { user_id: 'tenant-1', email: 'tenant@example.com', role: 'tenant' } });
       }
       if (url === '/notifications') return Promise.resolve({ data: [] });
       return Promise.resolve({ data: {} });

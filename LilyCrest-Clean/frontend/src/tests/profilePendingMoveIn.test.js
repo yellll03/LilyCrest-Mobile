@@ -4,6 +4,8 @@
 // actually populates or returns (see backend/utils/normalizeUser.js
 // CLIENT_VISIBLE_USER_FIELDS). Every tenant therefore saw "Pending Move-in"
 // forever, even after an admin completed the real move-in / activation.
+// The replacement renders only the backend-serialized accountStatus contract,
+// never guessed client fields such as tenantStatus/moveInDate.
 // There is no reliable authoritative "moved in" signal wired end-to-end yet,
 // so the lifecycle badge was removed entirely rather than guessed at — a
 // valid tenant account now just shows the normal Profile with no lifecycle
@@ -47,6 +49,7 @@ jest.mock('../context/ThemeContext', () => ({
     colors: {
       background: '#fff', text: '#000', textSecondary: '#666', textMuted: '#999',
       surface: '#f5f5f5', border: '#ddd', accent: '#204B7E', card: '#fff', danger: '#b91c1c',
+      success: '#059669', successBg: '#ecfdf5', successText: '#065f46',
     },
   }),
 }));
@@ -105,5 +108,19 @@ describe('Profile — Pending Move-in badge removed (regression)', () => {
 
     expect(queryByText(/pending move-in/i)).toBeNull();
     expect(queryByText(/active tenant/i)).toBeNull();
+  });
+
+  test('renders Active Tenant only from the authoritative serialized accountStatus field', async () => {
+    mockCurrentUser = {
+      user_id: 'tenant-a',
+      role: 'tenant',
+      accountStatus: { code: 'active', label: 'Active Tenant' },
+    };
+    const { getByText, getByLabelText } = render(<ProfileScreen />);
+
+    await waitFor(() => expect(mockGetProfile).toHaveBeenCalled());
+
+    expect(getByText('Active Tenant')).toBeTruthy();
+    expect(getByLabelText('Account status: Active Tenant')).toBeTruthy();
   });
 });

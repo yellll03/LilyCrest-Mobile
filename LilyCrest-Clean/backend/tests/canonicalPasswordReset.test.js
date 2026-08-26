@@ -6,11 +6,11 @@ const axios = require('axios');
 const database = require('../config/database');
 const controller = require('../controllers/canonicalPasswordReset.controller');
 
-function dbForRole(role = 'tenant') {
+function dbForRole(role = 'tenant', overrides = {}) {
   return {
     collection(name) {
       assert.equal(name, 'users');
-      return { findOne: async () => ({ user_id: 'tenant-1', email: 'tenant@example.com', role }) };
+      return { findOne: async () => ({ user_id: 'tenant-1', email: 'tenant@example.com', role, is_active: true, status: 'active', ...overrides }) };
     },
   };
 }
@@ -46,7 +46,7 @@ test('standalone mobile forgot-password proxies to the canonical Firebase reset 
   }
 });
 
-test('proxy failure remains enumeration-safe and does not expose provider details', async () => {
+test('canonical provider failure is reported truthfully without exposing provider details', async () => {
   const originalPost = axios.post;
   const originalGetDb = database.getDb;
   const originalError = console.error;
@@ -56,7 +56,9 @@ test('proxy failure remains enumeration-safe and does not expose provider detail
   try {
     const res = response();
     await controller.requestPasswordReset({ body: { email: 'tenant@example.com' } }, res);
-    assert.deepEqual(res.body, { message: controller.GENERIC_RESPONSE });
+    assert.equal(res.statusCode, 503);
+    assert.equal(res.body.code, 'PASSWORD_RESET_UNAVAILABLE');
+    assert.match(res.body.detail, /temporarily unavailable/i);
     assert.doesNotMatch(JSON.stringify(res.body), /provider|ECONNRESET/i);
   } finally {
     axios.post = originalPost;
@@ -80,7 +82,7 @@ test('malformed email is rejected locally without calling the canonical service'
 });
 
 for (const role of ['applicant', 'admin', 'superadmin', 'branch_admin', 'owner', 'staff']) {
-  test(`${role} receives the generic response without reaching the canonical reset API`, async () => {
+  test(`${role} receives the safe tenant-reset rejection without reaching the canonical reset API`, async () => {
     const originalPost = axios.post;
     const originalGetDb = database.getDb;
     let called = false;
@@ -89,7 +91,9 @@ for (const role of ['applicant', 'admin', 'superadmin', 'branch_admin', 'owner',
     try {
       const res = response();
       await controller.requestPasswordReset({ body: { email: 'tenant@example.com', role: 'tenant' } }, res);
-      assert.deepEqual(res.body, { message: controller.GENERIC_RESPONSE });
+      assert.equal(res.statusCode, 422);
+      assert.equal(res.body.code, 'TENANT_RESET_NOT_AVAILABLE');
+      assert.equal(res.body.detail, controller.RESET_NOT_AVAILABLE);
       assert.equal(called, false);
     } finally {
       axios.post = originalPost;
@@ -98,7 +102,7 @@ for (const role of ['applicant', 'admin', 'superadmin', 'branch_admin', 'owner',
   });
 }
 
-test('unknown email remains enumeration-safe and does not reach the canonical reset API', async () => {
+test('unknown email receives a safe deliberate rejection and does not reach the canonical reset API', async () => {
   const originalPost = axios.post;
   const originalGetDb = database.getDb;
   let called = false;
@@ -107,7 +111,27 @@ test('unknown email remains enumeration-safe and does not reach the canonical re
   try {
     const res = response();
     await controller.requestPasswordReset({ body: { email: 'unknown@example.com', role: 'tenant' } }, res);
-    assert.deepEqual(res.body, { message: controller.GENERIC_RESPONSE });
+    assert.equal(res.statusCode, 422);
+    assert.equal(res.body.code, 'TENANT_RESET_NOT_AVAILABLE');
+    assert.equal(res.body.detail, controller.RESET_NOT_AVAILABLE);
+    assert.equal(called, false);
+  } finally {
+    axios.post = originalPost;
+    database.getDb = originalGetDb;
+  }
+});
+
+test('inactive tenant cannot enter the reset flow', async () => {
+  const originalPost = axios.post;
+  const originalGetDb = database.getDb;
+  let called = false;
+  axios.post = async () => { called = true; };
+  database.getDb = () => dbForRole('tenant', { is_active: false, status: 'inactive' });
+  try {
+    const res = response();
+    await controller.requestPasswordReset({ body: { email: 'tenant@example.com' } }, res);
+    assert.equal(res.statusCode, 422);
+    assert.equal(res.body.code, 'TENANT_RESET_NOT_AVAILABLE');
     assert.equal(called, false);
   } finally {
     axios.post = originalPost;

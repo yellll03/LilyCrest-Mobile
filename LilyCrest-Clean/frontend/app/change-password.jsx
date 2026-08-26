@@ -39,8 +39,6 @@ export default function ChangePasswordScreen() {
   const isPasswordValid = validateStrongPassword(newPassword, { requiredMessage: 'New password is required' }).valid;
   const isSameAsCurrent = Boolean(currentPassword) && currentPassword === newPassword;
   const doPasswordsMatch = Boolean(confirmPassword) && newPassword === confirmPassword;
-  const canSubmit = Boolean(currentPassword) && Boolean(confirmPassword) && isPasswordValid && doPasswordsMatch && !isSameAsCurrent;
-
   const validateCurrentPassword = (password) => {
     if (!password) return 'Current password is required';
     return '';
@@ -287,9 +285,11 @@ export default function ChangePasswordScreen() {
           </View>
 
           <TouchableOpacity 
-            style={[styles.updateButton, (!canSubmit || isLoading) && styles.updateButtonDisabled]} 
+            style={[styles.updateButton, isLoading && styles.updateButtonDisabled]}
             onPress={handleChangePassword}
-            disabled={isLoading || !canSubmit}
+            disabled={isLoading}
+            accessibilityRole="button"
+            accessibilityLabel="Update Password"
           >
             {isLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.updateButtonText}>Update Password</Text>}
           </TouchableOpacity>
