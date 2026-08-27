@@ -48,11 +48,20 @@ const CONTRACT_REFRESH_EVENT_TYPES = new Set([
 // the primary mechanism; this is only a bounded fallback for the wait window.
 export const SMART_POLL_INTERVAL_MS = 20_000;
 
-// The only contract states that are still "in flight" from the tenant's point
-// of view — a document is expected but not yet final. Every other state is
-// either terminal/stable (final), empty (no contract), or a
-// loading/error/blocking condition that must not be polled over.
-const POLLABLE_LIFECYCLE_STATES = new Set(['preparing', 'draft']);
+// Once the document is already "final", it is normally stable — but an admin
+// can replace the notarized scan in place (Final v1 -> Final v2), and the
+// canonical `contract_replaced` push that would invalidate it is best-effort:
+// it can be delayed, coalesced, or dropped by the OS, and the tenant may
+// never leave/background the screen to hit a focus/foreground refresh. A slow
+// focused-and-foregrounded revalidation closes that gap without behaving like
+// an always-on poller. Much lower frequency than the in-flight cadence above.
+export const FINAL_REVALIDATE_INTERVAL_MS = 90_000;
+
+// Document lifecycle states this hook will re-read /contracts/current for while
+// the Contract screen stays open. "preparing"/"draft" are the fast in-flight
+// wait; "final" is the slow in-place-replacement guard.
+const POLLABLE_LIFECYCLE_STATES = new Set(['preparing', 'draft', 'final']);
+const IN_FLIGHT_LIFECYCLE_STATES = new Set(['preparing', 'draft']);
 const NON_POLLABLE_CONTRACT_STATES = new Set([
   'LOADING',
   'ERROR',
@@ -62,16 +71,26 @@ const NON_POLLABLE_CONTRACT_STATES = new Set([
 ]);
 
 /**
- * Whether the Contract screen should be polling right now, given the current
- * contract object and the hook's `state`. True only when a contract exists,
- * the hook is not in a loading/error/blocking/empty state, and the resolved
- * document lifecycle is still "preparing" or "draft" (i.e. a final is expected
- * but has not been published yet).
+ * Whether the Contract screen should be re-reading /contracts/current on an
+ * interval right now. True when a contract exists, the hook is not in a
+ * loading/error/blocking/empty state, and the resolved document lifecycle is
+ * "preparing", "draft" (a final is still expected) or "final" (guarding against
+ * an in-place Final replacement whose notification never arrived).
  */
 export function shouldPollFor(contract, state) {
   if (!contract) return false;
   if (NON_POLLABLE_CONTRACT_STATES.has(state)) return false;
   return POLLABLE_LIFECYCLE_STATES.has(contractLifecycleState(contract));
+}
+
+/**
+ * The interval to use for the current lifecycle: the fast in-flight cadence
+ * while waiting for a first final, the slow revalidation cadence once final.
+ */
+export function pollIntervalFor(contract) {
+  return IN_FLIGHT_LIFECYCLE_STATES.has(contractLifecycleState(contract))
+    ? SMART_POLL_INTERVAL_MS
+    : FINAL_REVALIDATE_INTERVAL_MS;
 }
 
 export function useTenantContract() {
@@ -183,15 +202,18 @@ export function useTenantContract() {
     if (CONTRACT_REFRESH_EVENT_TYPES.has(type)) load();
   }), [load]);
 
-  // Smart polling while the tenant waits on the Contract screen for a
-  // preparing/draft document to become final. One interval only. It is armed
-  // solely when the screen is focused, the app is in the foreground, and
-  // shouldPollFor() says the current contract/state is still in flight; it is
-  // torn down on blur, backgrounding, unmount, and as soon as the contract
-  // reaches a final / empty / error / blocking state. Every tick calls the
-  // same canonical load(), so requestSequence stale-response protection and
-  // all the error handling above apply unchanged.
+  // Contract-screen revalidation. One interval only, armed solely when the
+  // screen is focused, the app is in the foreground, and shouldPollFor() is
+  // true. Torn down on blur, backgrounding, unmount, and as soon as the
+  // contract reaches an empty / error / blocking state. Cadence depends on
+  // lifecycle: SMART_POLL_INTERVAL_MS while a first final is still in flight
+  // (preparing/draft), FINAL_REVALIDATE_INTERVAL_MS once final — the slow
+  // pass only exists to catch an in-place Final v1 -> Final v2 replacement
+  // whose canonical `contract_replaced` push was delayed or dropped. Every
+  // tick calls the same canonical load(), so requestSequence stale-response
+  // protection and all the error handling above apply unchanged.
   const pollActive = isFocused && isForeground && shouldPollFor(contract, state);
+  const pollInterval = pollIntervalFor(contract);
   useEffect(() => {
     if (!pollActive) {
       setIsPolling(false);
@@ -201,12 +223,12 @@ export function useTenantContract() {
     const interval = setInterval(() => {
       // Re-check at fire time — focus/AppState can change between renders.
       if (isForegroundRef.current && isFocusedRef.current) load();
-    }, SMART_POLL_INTERVAL_MS);
+    }, pollInterval);
     return () => {
       clearInterval(interval);
       setIsPolling(false);
     };
-  }, [pollActive, load]);
+  }, [pollActive, pollInterval, load]);
 
   const reload = useCallback(() => load(), [load]);
   const refresh = useCallback(() => load({ isManualRefresh: true }), [load]);
