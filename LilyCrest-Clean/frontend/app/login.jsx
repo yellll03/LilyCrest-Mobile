@@ -363,9 +363,11 @@ export default function LoginScreen() {
 
             {/* Sign In Button */}
             <TouchableOpacity 
-              style={[styles.signInButton, (!isEmailValid || !isPasswordValid || isEmailLoading) && styles.signInButtonDisabled]} 
+              style={[styles.signInButton, (isLoading || isEmailLoading) && styles.signInButtonDisabled]}
               onPress={handleLogin} 
-              disabled={isLoading || isEmailLoading || !isEmailValid || !isPasswordValid}
+              disabled={isLoading || isEmailLoading}
+              accessibilityRole="button"
+              accessibilityLabel="Sign In"
             >
               {isEmailLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.signInButtonText}>Sign In</Text>}
             </TouchableOpacity>

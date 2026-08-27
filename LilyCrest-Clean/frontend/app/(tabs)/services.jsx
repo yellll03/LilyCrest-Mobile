@@ -41,6 +41,7 @@ import {
 import { pickDocument, pickFromCamera, pickFromLibrary } from '../../src/utils/attachmentPicker';
 import { createLatestRequestGate, runLatestRequest } from '../../src/utils/latestRequest';
 import { classifyMaintenanceAttachment, getValidMaintenanceAttachmentUrl } from '../../src/utils/maintenanceAttachmentViewer';
+import { getCreateRequestDescriptionError, getMaintenanceAttachmentErrorMessage, shouldConfirmCreateRequestClose } from '../../src/utils/maintenanceForm';
 import {
   getMaintenanceAllowedActions,
   getMaintenanceStatusGroup,
@@ -459,20 +460,11 @@ export default function ServicesScreen() {
   const userId = user?.user_id || user?.id || null;
   const isDirty = useMemo(() => Boolean(selectedType) || description.trim().length > 0 || attachments.length > 0, [attachments.length, description, selectedType]);
   const createFormErrors = useMemo(() => {
-    const trimmedLength = description.trim().length;
-    let descriptionError = '';
-    if (trimmedLength < MIN_DESCRIPTION_LENGTH) {
-      descriptionError = `Please describe your concern (min ${MIN_DESCRIPTION_LENGTH} characters)`;
-    } else if (trimmedLength > MAX_DESCRIPTION_LENGTH) {
-      descriptionError = `Description must be ${MAX_DESCRIPTION_LENGTH} characters or fewer`;
-    }
     return {
       type: selectedType ? '' : 'Please select a service type',
-      description: descriptionError,
+      description: getCreateRequestDescriptionError(description),
     };
   }, [description, selectedType]);
-  const isCreateFormValid = !createFormErrors.type && !createFormErrors.description;
-
   const showBannerMessage = useCallback((type, text, { withToast = true } = {}) => {
     setBanner({ type, text });
 
@@ -546,8 +538,17 @@ export default function ServicesScreen() {
   }, [detailRequest?.request_id, requests]);
 
   const confirmCloseModal = () => {
-    if (!isDirty && !hasAttemptedSubmit) { setShowModal(false); return; }
+    if (!shouldConfirmCreateRequestClose({ isDirty, hasAttemptedSubmit })) {
+      setShowModal(false);
+      return;
+    }
+    setShowModal(false);
     setShowDiscardConfirm(true);
+  };
+
+  const keepEditing = () => {
+    setShowDiscardConfirm(false);
+    setShowModal(true);
   };
 
   const fetchRequests = useCallback(async () => {
@@ -649,10 +650,7 @@ export default function ServicesScreen() {
       fetchRequests();
     } catch (error) {
       setAttachmentUploadStatus(attachments.length ? 'Upload failed, please retry' : '');
-      const message = error?.message === 'Upload failed, please retry'
-        ? 'Upload failed, please retry'
-        : error?.response?.data?.detail || 'Failed to submit request. Please try again.';
-      showBannerMessage('error', message);
+      showBannerMessage('error', getMaintenanceAttachmentErrorMessage(error));
     } finally {
       setSubmitting(false);
     }
@@ -688,7 +686,7 @@ export default function ServicesScreen() {
       }
       const maxBytes = INQUIRY_ATTACHMENT_MAX_BYTES;
       if (file.size && file.size > maxBytes) {
-        showBannerMessage('error', `Attachment exceeds ${Math.round(maxBytes / (1024 * 1024))} MB limit.`);
+        showBannerMessage('error', 'File must be 5 MB or smaller.');
         return;
       }
       setAttachmentUploadStatus('');
@@ -865,7 +863,7 @@ export default function ServicesScreen() {
       }
       const maxBytes = INQUIRY_ATTACHMENT_MAX_BYTES;
       if (file.size && file.size > maxBytes) {
-        showBannerMessage('error', `Attachment exceeds ${Math.round(maxBytes / (1024 * 1024))} MB limit.`);
+        showBannerMessage('error', 'File must be 5 MB or smaller.');
         return;
       }
       setReplyAttachments((prev) => {
@@ -1069,7 +1067,7 @@ export default function ServicesScreen() {
       <TouchableOpacity style={styles.submitCard} onPress={() => setShowModal(true)}>
         <View style={styles.submitIcon}><Ionicons name="add-circle" size={32} color={colors.interactive} /></View>
         <View style={styles.submitContent}>
-          <Text style={styles.submitTitle}>Submit New Inquiry</Text>
+          <Text style={styles.submitTitle}>Submit Service Request</Text>
           <Text style={styles.submitDescription}>Report issues, request maintenance, or send concerns</Text>
         </View>
         <Ionicons name="chevron-forward" size={24} color={colors.textMuted} />
@@ -1145,7 +1143,7 @@ export default function ServicesScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <View style={styles.header}>
         <View>
-          <Text style={styles.headerTitle}>Services & Inquiries</Text>
+          <Text style={styles.headerTitle}>Service Requests</Text>
         </View>
         <TouchableOpacity
           style={styles.refreshIndicator}
@@ -1176,8 +1174,15 @@ export default function ServicesScreen() {
           <View style={styles.modalOverlay}>
             <View style={styles.modalContent}>
               <View style={styles.modalHeader}>
-                <Text style={styles.modalTitle}>Submit Inquiry</Text>
-                <TouchableOpacity onPress={confirmCloseModal}><Ionicons name="close" size={24} color={colors.textMuted} /></TouchableOpacity>
+                <Text style={styles.modalTitle}>Submit Service Request</Text>
+                <TouchableOpacity
+                  style={{ width: 44, height: 44, alignItems: 'center', justifyContent: 'center', marginRight: -10 }}
+                  onPress={confirmCloseModal}
+                  accessibilityRole="button"
+                  accessibilityLabel="Close Submit Service Request"
+                >
+                  <Ionicons name="close" size={24} color={colors.textMuted} />
+                </TouchableOpacity>
               </View>
               <ScrollView showsVerticalScrollIndicator={false}>
                 {showModal ? renderBanner() : null}
@@ -1252,7 +1257,7 @@ export default function ServicesScreen() {
                   disabled={submitting || attachments.length >= MAX_MAINTENANCE_ATTACHMENTS}
                   accessibilityRole="button"
                   accessibilityLabel={attachments.length >= MAX_MAINTENANCE_ATTACHMENTS ? 'Attachment limit reached' : 'Add attachment'}
-                  accessibilityHint="Choose a photo or document to include with this maintenance inquiry"
+                  accessibilityHint="Choose a photo or document to include with this service request"
                 >
                   <View style={styles.attachmentActionIcon}>
                     <Ionicons name="attach" size={21} color={colors.interactive} />
@@ -1287,11 +1292,13 @@ export default function ServicesScreen() {
                   </View>
                 )}
                 <TouchableOpacity
-                  style={[styles.submitButton, (submitting || !isCreateFormValid) && styles.submitButtonDisabled]}
+                  style={[styles.submitButton, submitting && styles.submitButtonDisabled]}
                   onPress={handleSubmit}
-                  disabled={submitting || !isCreateFormValid}
+                  disabled={submitting}
+                  accessibilityRole="button"
+                  accessibilityLabel="Submit Service Request"
                 >
-                  {submitting ? <ActivityIndicator color={colors.onPrimary} /> : <><Ionicons name="send" size={20} color={colors.onPrimary} /><Text style={styles.submitButtonText}>Submit Request</Text></>}
+                  {submitting ? <ActivityIndicator color={colors.onPrimary} /> : <><Ionicons name="send" size={20} color={colors.onPrimary} /><Text style={styles.submitButtonText}>Submit Service Request</Text></>}
                 </TouchableOpacity>
               </ScrollView>
             </View>
@@ -1310,12 +1317,12 @@ export default function ServicesScreen() {
 
       <StyledModal
         visible={showDiscardConfirm}
-        onClose={() => setShowDiscardConfirm(false)}
-        title="Discard this inquiry?"
+        onClose={keepEditing}
+        title="Discard this service request?"
         message="Your current selections and description will be lost. This cannot be undone."
         type="warning"
         buttons={[
-          { text: 'Keep Editing', style: 'cancel', onPress: () => setShowDiscardConfirm(false) },
+          { text: 'Keep Editing', style: 'cancel', onPress: keepEditing },
           { text: 'Discard', style: 'destructive', onPress: discardAndClose },
         ]}
       />
@@ -1746,9 +1753,15 @@ export default function ServicesScreen() {
                               </TouchableOpacity>
                             )}
                             {detailAllowedActions.has(MAINTENANCE_ACTIONS.CANCEL) && (
-                              <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#FEF2F2', borderRadius: 12, paddingVertical: 14 }} onPress={() => setShowCancelConfirm(true)}>
-                                <Ionicons name="close-circle-outline" size={20} color="#DC2626" />
-                                <Text style={{ color: '#DC2626', fontWeight: '700', fontSize: 15 }}>Cancel Request</Text>
+                              <TouchableOpacity
+                                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.errorBg, borderRadius: 12, paddingVertical: 14 }}
+                                onPress={() => setShowCancelConfirm(true)}
+                                accessibilityRole="button"
+                                accessibilityLabel="Cancel maintenance request"
+                                accessibilityHint="Opens a confirmation before cancelling this Stage 1 request"
+                              >
+                                <Ionicons name="close-circle-outline" size={20} color={colors.errorText} />
+                                <Text style={{ color: colors.errorText, fontWeight: '700', fontSize: 15 }}>Cancel Request</Text>
                               </TouchableOpacity>
                             )}
                           </>

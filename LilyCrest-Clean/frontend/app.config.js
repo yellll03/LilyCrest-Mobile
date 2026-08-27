@@ -23,13 +23,13 @@ module.exports = {
     newArchEnabled: true,
     ios: {
       bundleIdentifier: 'com.lilycrest.lilycrestdorm',
-      // Build 23 (commit d1d13c7e) already finished as a store-distribution
-      // build — confirmed via `eas build:list --platform ios`. Reusing 23
+      // Build 24 (commit f6e47c13) already finished as a store-distribution
+      // build — confirmed via `eas build:list --platform ios`. Reusing 24
       // would be rejected by App Store
       // Connect for a duplicate build number; Android's versionCode is
       // intentionally NOT bumped alongside this — the platforms have
       // legitimately independent build numbers.
-      buildNumber: '24',
+      buildNumber: '25',
       supportsTablet: true,
       googleServicesFile: process.env.GOOGLE_SERVICES_PLIST || './GoogleService-Info.plist',
       infoPlist: {
@@ -85,6 +85,9 @@ module.exports = {
         {
           defaultChannel: 'default',
           enableBackgroundRemoteNotifications: true,
+          // TestFlight/App Store builds must carry the production APNs
+          // entitlement. The plugin defaults to development when omitted.
+          mode: 'production',
         },
       ],
       'expo-secure-store',

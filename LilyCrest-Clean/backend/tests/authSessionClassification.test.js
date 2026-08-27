@@ -219,3 +219,33 @@ test('a refresh Mongo failure is retryable and leaves the local invalidation dec
   assert.equal(res.body.code, 'AUTH_SERVICE_UNAVAILABLE');
   assert.equal(res.body.retryable, true);
 });
+
+test('a refresh credential cannot restore an applicant/non-tenant session', async () => {
+  const refreshToken = 'refresh_applicant_value';
+  const stored = {
+    _id: 'applicant-session',
+    user_id: 'applicant-a',
+    refresh_token_hash: hashAuthSecret(refreshToken),
+    refresh_expires_at: new Date(Date.now() + 60000),
+  };
+  let deletedFor = null;
+  currentDb = {
+    collection(name) {
+      if (name === 'users') {
+        return { async findOne() { return { user_id: 'applicant-a', role: 'applicant', status: 'active', is_active: true }; } };
+      }
+      return {
+        async findOne() { return stored; },
+        async deleteOne() { return { deletedCount: 1 }; },
+        async deleteMany(filter) { deletedFor = filter.user_id; return { deletedCount: 1 }; },
+      };
+    },
+  };
+
+  const res = response();
+  await refreshSession({ body: { refresh_token: refreshToken } }, res);
+
+  assert.equal(res.statusCode, 403);
+  assert.equal(res.body.code, 'TENANT_ACCESS_REQUIRED');
+  assert.equal(deletedFor, 'applicant-a');
+});

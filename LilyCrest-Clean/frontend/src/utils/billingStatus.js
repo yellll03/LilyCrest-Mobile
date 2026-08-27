@@ -36,6 +36,44 @@ function getBillPaymentDate(bill) {
   return bill?.payment_date || bill?.paymentDate || bill?.paidAt || bill?.paid_at || null;
 }
 
+const PAYMENT_CHANNEL_LABELS = Object.freeze({
+  gcash: 'GCash',
+  card: 'Card',
+  grab_pay: 'GrabPay',
+  paymaya: 'Maya',
+  billease: 'BillEase',
+  dob: 'Online Banking',
+  dob_ubp: 'Online Banking',
+});
+
+function getBillPaymentMethodLabel(bill) {
+  const serialized = String(bill?.payment_method_label || bill?.paymentMethodLabel || '').trim();
+  if (serialized) return serialized;
+  const channel = String(bill?.payment_channel || bill?.paymentChannel || '').trim().toLowerCase();
+  if (PAYMENT_CHANNEL_LABELS[channel]) return PAYMENT_CHANNEL_LABELS[channel];
+  const method = String(bill?.payment_method || bill?.paymentMethod || '').trim();
+  if (!method) return '';
+  return method.toLowerCase() === 'paymongo' ? 'Online Payment' : method;
+}
+
+function getBillPaymentReference(bill) {
+  return bill?.payment_reference
+    || bill?.paymongo_reference
+    || bill?.paymongoReference
+    || bill?.reference_no
+    || bill?.reference
+    || bill?.transaction_id
+    || bill?.transactionId
+    || bill?.txn_id
+    || null;
+}
+
+function getBillRemainingAmount(bill) {
+  if (isPaidBillStatus(bill)) return 0;
+  const value = Number(bill?.remaining_amount ?? bill?.remainingAmount);
+  return Number.isFinite(value) ? Math.max(0, value) : null;
+}
+
 // bill.created_at/createdAt is when the database record was written, not
 // when the bill was released/sent to the tenant (see canonical
 // mobileBillingBridge.js toMobileBill(): release_date is the immutable
@@ -97,6 +135,9 @@ export {
   isPaidBillStatus,
   getBillOwedAmount,
   getBillPaymentDate,
+  getBillPaymentMethodLabel,
+  getBillPaymentReference,
+  getBillRemainingAmount,
   getBillReleaseDate,
   getUtilityReleaseSchedule,
 };

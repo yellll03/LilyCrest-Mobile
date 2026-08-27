@@ -251,6 +251,18 @@ function getBillPaymentDate(bill = {}) {
     || null;
 }
 
+function getBillPaymentReference(bill = {}) {
+  return bill.payment_reference
+    || bill.paymongo_reference
+    || bill.paymongoReference
+    || bill.reference_no
+    || bill.reference
+    || bill.transaction_id
+    || bill.transactionId
+    || bill.txn_id
+    || null;
+}
+
 function hasTrueFlag(value) {
   if (value === true || value === 1) return true;
   if (typeof value === 'string') {
@@ -426,6 +438,11 @@ function normalizeLegacyBill(bill = {}) {
   }
 
   normalized.status = effectiveStatus || normalized.status;
+  normalized.payment_method_label = billPaymentMethodLabel(
+    normalized.payment_method || normalized.paymentMethod,
+    normalized.payment_channel || normalized.paymentChannel,
+  ) || null;
+  normalized.payment_reference = getBillPaymentReference(normalized);
   if (effectiveStatus === 'paid') {
     if (normalized.remaining_amount !== undefined) {
       normalized.remaining_amount = 0;
@@ -964,8 +981,10 @@ function mapRealBill(b, userId) {
     remaining_amount: isSettled ? 0 : b.remainingAmount,
     payment_method: b.paymentMethod,
     payment_channel: b.paymentChannel || null,
+    payment_method_label: billPaymentMethodLabel(b.paymentMethod, b.paymentChannel) || null,
     payment_date: paymentDate,
     paymongo_reference: b.paymongoReference,
+    payment_reference: getBillPaymentReference(b),
     paymongo_checkout_id: b.paymongoSessionId,
     paymongo_payment_id: b.paymongoPaymentId,
     proof_status: b.paymentProof?.status,

@@ -11,7 +11,7 @@ import { safeBack } from '../src/utils/navigation';
 
 const validateEmail = (value) => {
   const normalized = normalizeEmail(value);
-  if (!normalized) return { valid: false, error: 'Please enter your registered email.' };
+  if (!normalized) return { valid: false, error: 'Email is required.' };
   if (!validateAuthEmail(normalized).valid) return { valid: false, error: AUTH_MESSAGES.invalidEmail };
   return { valid: true, error: '' };
 };
@@ -118,9 +118,11 @@ export default function ForgotPasswordScreen() {
                 ) : null}
               </View>
               <TouchableOpacity
-                style={[styles.resetButton, (!isEmailValid || isLoading) && styles.resetButtonDisabled]}
+                style={[styles.resetButton, isLoading && styles.resetButtonDisabled]}
                 onPress={handleResetPassword}
-                disabled={isLoading || !isEmailValid}
+                disabled={isLoading}
+                accessibilityRole="button"
+                accessibilityLabel="Send Reset Link"
               >
                 {isLoading ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.resetButtonText}>Send Reset Link</Text>}
               </TouchableOpacity>

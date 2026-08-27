@@ -428,6 +428,16 @@ export default function ProfileScreen() {
           <Text style={styles.userName}>{user?.name || 'User'}</Text>
           {user?.username ? <Text style={styles.userHandle}>@{user.username}</Text> : null}
           <Text style={styles.userEmail}>{user?.email || ''}</Text>
+          {user?.accountStatus?.label ? (
+            <View
+              style={styles.accountStatusBadge}
+              accessibilityRole="text"
+              accessibilityLabel={`Account status: ${user.accountStatus.label}`}
+            >
+              <Ionicons name="checkmark-circle" size={15} color={colors.success} />
+              <Text style={styles.accountStatusText}>{user.accountStatus.label}</Text>
+            </View>
+          ) : null}
         </View>
 
         {isEditing ? (
@@ -809,6 +819,8 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
   userName: { fontSize: 20, fontWeight: '700', color: colors.text, marginBottom: 3 },
   userHandle: { fontSize: 14, color: colors.textSecondary, marginBottom: 4, fontWeight: '600' },
   userEmail: { fontSize: 13, color: colors.textSecondary, marginBottom: 14 },
+  accountStatusBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.successBg, borderColor: colors.success, borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
+  accountStatusText: { color: colors.successText, fontSize: 12, fontWeight: '700' },
 
   menuContainer: { gap: 4 },
   menuGroupWrapper: { marginHorizontal: 20, marginBottom: 8 },

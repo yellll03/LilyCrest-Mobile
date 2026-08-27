@@ -63,7 +63,7 @@ jest.mock('../services/api', () => ({
   api: {
     get: jest.fn((url) => {
       if (url === '/users/me') {
-        return Promise.resolve({ data: { user_id: 'tenant-a', name: 'Tenant A', email: 'a@example.com' } });
+        return Promise.resolve({ data: { user_id: 'tenant-a', name: 'Tenant A', email: 'a@example.com', role: 'tenant' } });
       }
       if (url === '/notifications') {
         return Promise.resolve({ data: FIXTURE_NOTIFICATIONS });
@@ -193,7 +193,7 @@ describe('AuthContext notification dismiss/clear', () => {
     const { api } = require('../services/api');
     api.get.mockImplementation((url) => (url === '/notifications'
       ? Promise.resolve({ data: [] })
-      : Promise.resolve({ data: { user_id: 'tenant-a' } })));
+      : Promise.resolve({ data: { user_id: 'tenant-a', role: 'tenant' } })));
     let latest;
     renderAuth((state) => { latest = state; });
     await waitFor(() => expect(latest.notifications).toHaveLength(0));

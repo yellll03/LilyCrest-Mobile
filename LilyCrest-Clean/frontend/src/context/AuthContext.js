@@ -92,7 +92,10 @@ async function loadAuthoritativeTenantProfile(fallbackUser) {
   try {
     const response = await api.get('/users/me');
     return response?.data || { ...fallbackUser, branch: null };
-  } catch (_) {
+  } catch (error) {
+    if (getConfirmedSessionInvalidation(error) || error?.response?.status === 403) {
+      throw error;
+    }
     return { ...fallbackUser, branch: null };
   }
 }
@@ -105,17 +108,15 @@ function isAuthUserShape(value) {
   return isPlainObject(value) && typeof value.user_id === 'string' && value.user_id.trim().length > 0;
 }
 
-// This app is tenant-only. /auth/login and /auth/google intentionally still
-// authenticate admin accounts (the web admin panel shares those endpoints),
-// so a valid session alone doesn't mean "this is a tenant" — every place this
-// app marks itself authenticated must also reject admin/superadmin roles,
-// mirroring backend/middleware/auth.js's tenantMiddleware.
+// This app is tenant-only. A valid session alone does not prove tenant
+// registration; every authentication path must fail closed to the canonical
+// tenant/resident roles used by the backend gate.
 function isTenantRole(role) {
   const normalized = String(role || '').trim().toLowerCase();
-  return normalized !== 'admin' && normalized !== 'superadmin';
+  return normalized === 'tenant' || normalized === 'resident';
 }
 
-const NOT_A_TENANT_MESSAGE = 'This account cannot access the tenant app. Please use the admin panel.';
+const NOT_A_TENANT_MESSAGE = 'This account is not registered as an active tenant.';
 
 function isSessionPayloadShape(value) {
   return isPlainObject(value)
@@ -459,6 +460,10 @@ export function AuthProvider({ children }) {
         type: 'warning',
         title: 'Account deactivated',
         message: 'Your account is no longer active. Please contact the administrator.',
+      } : reason === 'tenant_access_required' ? {
+        type: 'warning',
+        title: 'Tenant access unavailable',
+        message: 'This account is not registered as an active tenant. Please contact the administrator.',
       } : {
         type: 'warning',
         title: 'Session expired',
@@ -793,7 +798,13 @@ export function AuthProvider({ children }) {
         return { success: false, status, error: AUTH_MESSAGES.invalidCredentials, attemptsRemaining };
       }
       if (status === 403) {
-        return { success: false, status, error: 'Access denied. Please contact the admin office.' };
+        await clearPersistedSession();
+        await clearCredentials().catch(() => {});
+        return {
+          success: false,
+          status,
+          error: error.response?.data?.detail || 'Access denied. Please contact the admin office.',
+        };
       }
       return {
         success: false,
@@ -839,6 +850,10 @@ export function AuthProvider({ children }) {
       const status = error.response?.status;
       const detail = error.response?.data?.detail;
       const attemptsRemaining = error.response?.data?.attempts_remaining;
+      if (status === 403) {
+        await clearPersistedSession();
+        await clearCredentials().catch(() => {});
+      }
       return { success: false, status, error: detail || getApiErrorMessage(error, 'Invalid code. Please try again.'), attemptsRemaining };
     }
   }, [dismissPendingNotificationForFreshSignIn]);
@@ -963,6 +978,8 @@ export function AuthProvider({ children }) {
       }
 
       if (status === 403) {
+        await clearPersistedSession();
+        await clearCredentials().catch(() => {});
         return {
           success: false,
           status,

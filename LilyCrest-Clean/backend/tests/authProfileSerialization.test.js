@@ -82,6 +82,7 @@ test('getCleanUser (googleSignIn/register/verifyOtp\'s shared serialization step
   const clean = await getCleanUser(currentDb, 'user_abc123');
   assert.equal(clean.user_id, 'user_abc123');
   assert.equal(clean.email, 'tenant@example.com');
+  assert.deepEqual(clean.accountStatus, { code: 'active', label: 'Active Tenant' });
   assert.equal(clean.branch?.branchName, 'LilyCrest Residences – Guadalupe');
   assert.equal(clean.password_hash, undefined);
   assert.equal(clean.firebase_uid, undefined);
@@ -95,6 +96,7 @@ test('GET /auth/me (getMe) does not throw and returns a sanitized profile from r
   assert.equal(res.statusCode, 200);
   assert.equal(res.body.user_id, 'user_abc123');
   assert.equal(res.body.name, 'Tenant Example');
+  assert.deepEqual(res.body.accountStatus, { code: 'active', label: 'Active Tenant' });
   assert.equal(res.body.password_hash, undefined);
   assert.equal(res.body.firebase_uid, undefined);
 });

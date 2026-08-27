@@ -143,7 +143,7 @@ async function findTenantByEmail(db, email) {
       { email: emailRegex(email) },
       { google_email: emailRegex(email) },
     ],
-    role: { $nin: ['admin', 'superadmin'] },
+    role: { $in: ['tenant', 'resident'] },
   });
 }
 
@@ -430,11 +430,12 @@ async function login(req, res) {
   // Step 2b: Find MongoDB tenant by exact email (NOT google_email — that's for Google sign-in only)
   const tenant = await db.collection('users').findOne({
     email: emailRegex(emailRaw),
-    role: { $nin: ['admin', 'superadmin'] },
+    role: { $in: ['tenant', 'resident'] },
   });
   if (!tenant) {
     logAttempt(db, emailRaw, false, 'not_tenant', req);
     return res.status(403).json({
+      code: 'TENANT_ACCESS_REQUIRED',
       detail: 'Access denied. Your account is not registered as a verified tenant. Please contact the admin office.',
     });
   }
@@ -446,7 +447,10 @@ async function login(req, res) {
 
   if (!isAccountActive(tenant)) {
     logAttempt(db, emailRaw, false, 'inactive', req);
-    return res.status(403).json({ detail: 'Access denied. Your tenant account is inactive. Please contact admin.' });
+    return res.status(403).json({
+      code: 'ACCOUNT_INACTIVE',
+      detail: 'Access denied. Your tenant account is inactive. Please contact admin.',
+    });
   }
 
   console.log(`[Login] Tenant found: user_id=${tenant.user_id} email=${tenant.email} name=${tenant.name}`);
@@ -563,6 +567,28 @@ async function verifyOtp(req, res) {
     return res.status(400).json({ detail, attempts_remaining: remaining });
   }
 
+  // Eligibility may change after the password was accepted but before the
+  // tenant submits the OTP. Re-check the authoritative account immediately
+  // before consuming the one-time credential or minting a session.
+  const tenant = await db.collection('users').findOne({ user_id: record.user_id });
+  if (!tenant || !isTenantMobileRole(tenant.role)) {
+    await db.collection('otp_store').deleteOne({ otp_token_hash: tokenHash }).catch(() => {});
+    return res.status(403).json({
+      code: 'TENANT_ACCESS_REQUIRED',
+      detail: 'Access denied. This account is not registered as an active tenant.',
+    });
+  }
+  if (!isAccountActive(tenant)) {
+    await Promise.all([
+      db.collection('otp_store').deleteOne({ otp_token_hash: tokenHash }).catch(() => {}),
+      db.collection('user_sessions').deleteMany({ user_id: record.user_id }).catch(() => {}),
+    ]);
+    return res.status(403).json({
+      code: 'ACCOUNT_INACTIVE',
+      detail: 'Access denied. Your tenant account is inactive. Please contact admin.',
+    });
+  }
+
   // Valid — delete OTP and create session
   const consumed = await db.collection('otp_store').deleteOne({
     otp_token_hash: tokenHash,
@@ -599,6 +625,22 @@ async function resendOtp(req, res) {
   const expiry = parseDateSafe(record?.expires_at);
   if (!record || !expiry || new Date() > expiry) {
     return res.status(400).json({ code: 'OTP_SESSION_EXPIRED', detail: 'Session expired. Please log in again.' });
+  }
+
+  const tenant = await db.collection('users').findOne({ user_id: record.user_id });
+  if (!tenant || !isTenantMobileRole(tenant.role)) {
+    await db.collection('otp_store').deleteOne({ otp_token_hash: tokenHash }).catch(() => {});
+    return res.status(403).json({
+      code: 'TENANT_ACCESS_REQUIRED',
+      detail: 'Access denied. This account is not registered as an active tenant.',
+    });
+  }
+  if (!isAccountActive(tenant)) {
+    await db.collection('otp_store').deleteOne({ otp_token_hash: tokenHash }).catch(() => {});
+    return res.status(403).json({
+      code: 'ACCOUNT_INACTIVE',
+      detail: 'Access denied. Your tenant account is inactive. Please contact admin.',
+    });
   }
 
   const newCode = generateOtpCode();
@@ -647,7 +689,7 @@ async function googleSignIn(req, res) {
     // 1. Exact email match (most reliable)
     let tenant = await db.collection('users').findOne({
       email: emailRegex(email),
-      role: { $nin: ['admin', 'superadmin'] },
+      role: { $in: ['tenant', 'resident'] },
     });
     if (tenant) {
       console.log(`[GoogleSignIn] Found by email: ${tenant.user_id} (${tenant.email})`);
@@ -657,7 +699,7 @@ async function googleSignIn(req, res) {
     if (!tenant) {
       tenant = await db.collection('users').findOne({
         google_email: emailRegex(email),
-        role: { $nin: ['admin', 'superadmin'] },
+        role: { $in: ['tenant', 'resident'] },
       });
       if (tenant) console.log(`[GoogleSignIn] Found by google_email: ${tenant.user_id} (${tenant.email})`);
     }
@@ -666,7 +708,7 @@ async function googleSignIn(req, res) {
     if (!tenant) {
       tenant = await db.collection('users').findOne({
         firebase_uid: fbUid,
-        role: { $nin: ['admin', 'superadmin'] },
+        role: { $in: ['tenant', 'resident'] },
       });
       if (tenant) console.log(`[GoogleSignIn] Found by firebase_uid: ${tenant.user_id} (${tenant.email})`);
     }
@@ -937,6 +979,15 @@ async function refreshSession(req, res) {
       return res.status(403).json({
         code: 'ACCOUNT_INACTIVE',
         detail: 'Access denied. Your account is inactive. Please contact admin.',
+        retryable: false,
+      });
+    }
+
+    if (!isTenantMobileRole(user.role)) {
+      await db.collection('user_sessions').deleteMany({ user_id: session.user_id }).catch(() => {});
+      return res.status(403).json({
+        code: 'TENANT_ACCESS_REQUIRED',
+        detail: 'Access denied. This account is not registered as an active tenant.',
         retryable: false,
       });
     }

@@ -36,6 +36,18 @@ if (!iosBuildNumber || !/^\d+$/.test(iosBuildNumber) || Number(iosBuildNumber) <
   failures.push(`ios.buildNumber must be a positive integer string, got ${JSON.stringify(iosBuildNumber)}`);
 }
 
+// This project generates its native iOS project during EAS prebuild. Keep the
+// notifications plugin pinned to the production APNs entitlement for every
+// TestFlight/App Store artifact, and retain background remote-notification
+// support for data-bearing payloads.
+const notificationsPlugin = appConfig.match(/'expo-notifications',[\s\S]*?\},\s*\]/)?.[0] || '';
+if (!/mode:\s*'production'/.test(notificationsPlugin)) {
+  failures.push("expo-notifications must set mode: 'production' for iOS release builds");
+}
+if (!/enableBackgroundRemoteNotifications:\s*true/.test(notificationsPlugin)) {
+  failures.push('expo-notifications must enable background remote notifications');
+}
+
 // This project has no committed ios/ project, so GoogleService-Info.plist
 // must be materialized on the EAS build worker before `expo prebuild` runs
 // (see scripts/eas-copy-google-services.js) or iOS Google Sign-In's OAuth

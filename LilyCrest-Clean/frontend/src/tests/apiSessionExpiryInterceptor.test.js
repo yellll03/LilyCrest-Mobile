@@ -222,6 +222,20 @@ describe('api.js confirmed-session-invalidation interceptor', () => {
     expect(emitSessionExpired).not.toHaveBeenCalled();
   });
 
+  it('TENANT_ACCESS_REQUIRED clears a restored non-tenant session', async () => {
+    await rejectedHandler(makeError({
+      status: 403,
+      code: 'TENANT_ACCESS_REQUIRED',
+      url: '/users/me',
+      headers: { Authorization: 'Bearer applicant-session' },
+    })).catch(() => {});
+
+    expect(removeSessionToken).toHaveBeenCalledTimes(1);
+    expect(emitSessionExpired).toHaveBeenCalledWith('tenant_access_required', {
+      expiredToken: 'applicant-session',
+    });
+  });
+
   it('a terminal 401 without a request bearer does not mutate local auth state', async () => {
     await rejectedHandler(makeError({
       status: 401,

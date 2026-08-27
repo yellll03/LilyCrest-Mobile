@@ -355,12 +355,21 @@ export function subscribeToPushTokenChanges(onTokenChanged) {
 
   try {
     const subscription = Notifications.addPushTokenListener(async (tokenData) => {
-      const token = typeof tokenData?.data === 'string' ? tokenData.data.trim() : '';
+      // Expo reports a native APNs token through this listener on iOS, while
+      // LilyCrest's backend sends iOS notifications through Expo Push. Re-mint
+      // the corresponding Expo token after APNs rotation instead of replacing
+      // the usable Expo token with an unsupported raw APNs token.
+      const token = Platform.OS === 'ios'
+        ? await acquirePushToken()
+        : (typeof tokenData?.data === 'string' ? tokenData.data.trim() : '');
       if (!token) return;
 
       await AsyncStorage.setItem(PUSH_TOKEN_KEY, token).catch(() => {});
       if (onTokenChanged) {
-        onTokenChanged(token, tokenData);
+        onTokenChanged(token, {
+          ...tokenData,
+          type: normalizePushProvider(token, Platform.OS),
+        });
       }
     });
 

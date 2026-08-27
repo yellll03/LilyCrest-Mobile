@@ -31,7 +31,7 @@ describe('standalone release artifact contract', () => {
     expect(config).toContain("{ name: 'GoogleUtilities', modular_headers: true }");
     expect(config).toContain("{ name: 'RecaptchaInterop', modular_headers: true }");
     expect(config).toContain('ITSAppUsesNonExemptEncryption: false');
-    expect(config).toContain("buildNumber: '24'");
+    expect(config).toContain("buildNumber: '25'");
     expect(config).toContain("googleServicesFile: process.env.GOOGLE_SERVICES_PLIST || './GoogleService-Info.plist'");
     expect(config).toContain("'@react-native-google-signin/google-signin'");
     expect(packageJson.dependencies['expo-local-authentication']).toBeUndefined();
@@ -41,6 +41,12 @@ describe('standalone release artifact contract', () => {
     expect(firebase).toContain("Platform.OS === 'android' ? firebaseNativeConfig : firebaseWebConfig");
     expect(eas.build.release.environment).toBe('production');
     expect(eas.build.production.environment).toBe('production');
+  });
+
+  test('iOS release prebuild requests production APNs entitlement and background remote notifications', () => {
+    const config = read('app.config.js');
+    expect(config).toMatch(/'expo-notifications',[\s\S]*?mode:\s*'production'/);
+    expect(config).toMatch(/'expo-notifications',[\s\S]*?enableBackgroundRemoteNotifications:\s*true/);
   });
 
   // Regression: this repo has no committed native ios/ project, so EAS runs

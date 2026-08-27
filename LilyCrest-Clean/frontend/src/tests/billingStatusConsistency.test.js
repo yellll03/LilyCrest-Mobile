@@ -2,6 +2,10 @@
 const fs = require('fs');
 const path = require('path');
 const {
+  getBillPaymentDate,
+  getBillPaymentMethodLabel,
+  getBillPaymentReference,
+  getBillRemainingAmount,
   isPaidBillStatus,
   getUtilityReleaseSchedule,
 } = require('../utils/billingStatus');
@@ -61,6 +65,23 @@ describe('billing-history.jsx and bill-details.jsx use the shared billingStatus 
     expect(details).toContain("from '../src/utils/billingStatus'");
     expect(history).not.toContain('function getDisplaySchedule');
     expect(details).not.toContain('function isBillOutstanding');
+  });
+
+  test('paid transaction metadata and remaining-balance invariant render from canonical helpers', () => {
+    const paid = {
+      status: 'paid',
+      remaining_amount: 999,
+      payment_date: '2026-08-15T13:03:36.257Z',
+      payment_channel: 'gcash',
+      payment_reference: 'PM-REFERENCE-123',
+    };
+    expect(getBillPaymentDate(paid)).toBe('2026-08-15T13:03:36.257Z');
+    expect(getBillPaymentMethodLabel(paid)).toBe('GCash');
+    expect(getBillPaymentReference(paid)).toBe('PM-REFERENCE-123');
+    expect(getBillRemainingAmount(paid)).toBe(0);
+    for (const label of ['Payment date', 'Payment method', 'Reference', 'Remaining balance']) {
+      expect(history).toContain(`>${label}<`);
+    }
   });
 
   test('payment.jsx (the post-failure "Try Again" screen) imports isBillOutstanding from the shared util instead of a local copy', () => {

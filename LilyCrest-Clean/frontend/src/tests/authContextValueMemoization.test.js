@@ -62,7 +62,7 @@ jest.mock('../services/secureCredentials', () => ({
 jest.mock('../services/api', () => ({
   api: {
     get: jest.fn((url) => {
-      if (url === '/users/me') return Promise.resolve({ data: { user_id: 'tenant-a', name: 'Tenant A' } });
+      if (url === '/users/me') return Promise.resolve({ data: { user_id: 'tenant-a', name: 'Tenant A', role: 'tenant' } });
       if (url === '/notifications') return Promise.resolve({ data: [] });
       return Promise.resolve({ data: {} });
     }),
