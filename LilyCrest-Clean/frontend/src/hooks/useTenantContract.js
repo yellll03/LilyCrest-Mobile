@@ -19,8 +19,30 @@ import { subscribeCanonicalNotifications } from '../services/canonicalEvents';
 // document-selection resolver output, the same field its Web tenant page
 // reads. See contractPresentation.js's preferredContractDocument() for the
 // selection logic; do not re-derive document priority here.
+// Canonical lifecycle events that must invalidate the current-Contract view.
+// Receiving any of these (whether the tenant taps the notification or not) is
+// enough to trigger a refetch — Mobile never guesses the new state, it
+// re-reads /contracts/current and lets the backend resolver decide. Renewal
+// activation, move-out/termination and transfer all change which Contract (if
+// any) is current, so a stale predecessor/terminal Contract must not linger.
+const CONTRACT_REFRESH_EVENT_TYPES = new Set([
+  'contract_document_ready',
+  'contract_replaced',
+  'contract_finalized',
+  'renewal_effective',
+  'move_out',
+  'stay_terminal',
+  'termination_complete',
+  'transfer_complete',
+  // A settled payment can make a Contract newly eligible for automatic
+  // generation. Re-read /contracts/current; never assume a Contract exists
+  // yet (the loading/preparing state covers the async-generation window).
+  'payment_completed',
+]);
+
 export function useTenantContract() {
   const [contract, setContract] = useState(null);
+  const [upcoming, setUpcoming] = useState(null);
   const [state, setState] = useState('LOADING');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -40,8 +62,15 @@ export function useTenantContract() {
       // older one finishing late (e.g. focus refresh racing pull-to-refresh).
       if (requestId !== requestSequence.current) return;
       const nextContract = response.data?.contract || null;
+      // The backend exposes a not-yet-effective renewal/transfer successor
+      // separately as `upcoming` — it is NOT the current Contract and must
+      // never be merged into it. Mobile only presents it as a distinct
+      // "upcoming" card; the current-Contract resolver stays authoritative
+      // over when it becomes current.
+      const nextUpcoming = response.data?.upcoming || null;
       hasLoadedOnce.current = true;
       setContract(nextContract);
+      setUpcoming(nextUpcoming);
       setState(response.data?.state || (nextContract ? 'CONTRACT_AVAILABLE' : 'NO_PUBLISHED_CONTRACT'));
     } catch (err) {
       if (requestId !== requestSequence.current) return;
@@ -52,6 +81,7 @@ export function useTenantContract() {
         // contract/document presentation visible.
         hasLoadedOnce.current = false;
         setContract(null);
+        setUpcoming(null);
         setState('ERROR');
         setError('Please sign in again to view your lease contract.');
       } else if (multipleCanonicalContracts) {
@@ -62,6 +92,7 @@ export function useTenantContract() {
         // folding it into the generic error/stale copy.
         hasLoadedOnce.current = false;
         setContract(null);
+        setUpcoming(null);
         setState('MULTIPLE_CONTRACTS');
         setError("We found multiple active contract records associated with your account. Please contact Lilycrest support so the records can be reviewed.");
       } else if (hasLoadedOnce.current) {
@@ -97,11 +128,14 @@ export function useTenantContract() {
   }, [load]);
 
   useEffect(() => subscribeCanonicalNotifications((notification) => {
-    if (notification?.data?.type === 'contract_document_ready') load();
+    const type = String(notification?.data?.type || notification?.type || '').toLowerCase();
+    if (CONTRACT_REFRESH_EVENT_TYPES.has(type)) load();
   }), [load]);
 
   const reload = useCallback(() => load(), [load]);
   const refresh = useCallback(() => load({ isManualRefresh: true }), [load]);
 
-  return { contract, state, loading, refreshing, error, reload, refresh };
+  return { contract, upcoming, state, loading, refreshing, error, reload, refresh };
 }
+
+export { CONTRACT_REFRESH_EVENT_TYPES };

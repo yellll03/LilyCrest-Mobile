@@ -44,3 +44,22 @@ describe('documentErrorMessage — HTTP 410 (Gone)', () => {
     expect(gone410Index).toBeLessThan(fallbackIndex);
   });
 });
+
+describe('contract-signed document kind + targeted cache invalidation (Phase 3)', () => {
+  test('documentUrl builds a versioned signed URL from (id, version)', () => {
+    expect(source).toContain("kind === 'contract-signed'");
+    expect(source).toMatch(/\/contracts\/\$\{encodeURIComponent\(id\)\}\/documents\/signed\/\$\{encodeURIComponent\(extra\)\}/);
+  });
+
+  test('invalidateContractDocumentCache deletes only this contract\'s cached PDFs, never the whole store', () => {
+    const fnIndex = source.indexOf('export async function invalidateContractDocumentCache');
+    expect(fnIndex).toBeGreaterThan(-1);
+    const body = source.slice(fnIndex, fnIndex + 900);
+    // scoped to the user's dir + this contract id
+    expect(body).toContain('safePart(contractId)');
+    expect(body).toMatch(/contract-\(prepared\|final\|signed\)_/);
+    // uses per-file deleteAsync, not a recursive ROOT wipe
+    expect(body).toContain('FileSystem.deleteAsync(`${dir}${entry}`');
+    expect(body).not.toContain('deleteAsync(ROOT');
+  });
+});

@@ -283,3 +283,79 @@ describe('version-aware document cache key', () => {
     expect(first.documentCacheKey).toBe(second.documentCacheKey);
   });
 });
+
+describe('authoritative displayLifecycle preference (Phase 2)', () => {
+  test('buildContractSummary surfaces displayLifecycle key/label when present', () => {
+    const summary = buildContractSummary({
+      id: 'c1',
+      displayStatus: 'Active Contract',
+      displayLifecycle: { key: 'active', label: 'Active' },
+      tenantDocument: { available: true, type: 'final_notarized', isFinal: true, version: 2, publishedAt: '2026-08-10' },
+    });
+    expect(summary.displayLifecycleKey).toBe('active');
+    expect(summary.displayLifecycleLabel).toBe('Active');
+    // badge prefers the authoritative label over the local document-stage word
+    expect(summary.lifecycleBadgeLabel).toBe('Active');
+    // status headline is still the backend displayStatus verbatim
+    expect(summary.status).toBe('Active Contract');
+  });
+
+  test('a future published lifecycle (published_future) is carried through, not flattened to "final"', () => {
+    const summary = buildContractSummary({
+      id: 'c2',
+      displayStatus: 'Active Contract',
+      displayLifecycle: { key: 'published_future', label: 'Published — Lease Not Yet Started' },
+      tenantDocument: { available: true, type: 'final_notarized', isFinal: true, version: 1, publishedAt: '2026-09-01' },
+    });
+    expect(summary.displayLifecycleKey).toBe('published_future');
+    expect(summary.displayLifecycleLabel).toBe('Published — Lease Not Yet Started');
+  });
+
+  test('missing displayLifecycle falls back to the local document-stage badge (older payload)', () => {
+    const summary = buildContractSummary({
+      id: 'c3',
+      displayStatus: 'Contract Available',
+      tenantDocument: { available: true, type: 'generated_draft', isFinal: false, version: 1, generatedAt: '2026-08-01' },
+    });
+    expect(summary.displayLifecycleKey).toBeNull();
+    expect(summary.lifecycleBadgeLabel).toBe('Draft Ready');
+  });
+});
+
+describe('in-place final replacement busts the document cache key (Phase 2)', () => {
+  test('same publishedAt + new version => different cache key', () => {
+    const v1 = buildContractSummary({
+      id: 'c1',
+      tenantDocument: { available: true, type: 'final_notarized', isFinal: true, version: 4, publishedAt: '2026-08-10T00:00:00.000Z' },
+    });
+    const v2 = buildContractSummary({
+      id: 'c1',
+      tenantDocument: { available: true, type: 'final_notarized', isFinal: true, version: 5, publishedAt: '2026-08-10T00:00:00.000Z' },
+    });
+    expect(v1.documentCacheKey).not.toBe(v2.documentCacheKey);
+  });
+
+  test('same publishedAt + same version but new fileHash => different cache key', () => {
+    const before = buildContractSummary({
+      id: 'c1',
+      tenantDocument: { available: true, type: 'final_notarized', isFinal: true, version: 4, publishedAt: '2026-08-10T00:00:00.000Z', fileHash: 'sha256-aaa' },
+    });
+    const afterReplace = buildContractSummary({
+      id: 'c1',
+      tenantDocument: { available: true, type: 'final_notarized', isFinal: true, version: 4, publishedAt: '2026-08-10T00:00:00.000Z', fileHash: 'sha256-bbb' },
+    });
+    expect(before.documentCacheKey).not.toBe(afterReplace.documentCacheKey);
+  });
+
+  test('final_signed vs final_notarized at the same version never collide', () => {
+    const signed = buildContractSummary({
+      id: 'c1',
+      tenantDocument: { available: true, type: 'final_signed', isFinal: true, version: 2, publishedAt: '2026-08-10T00:00:00.000Z' },
+    });
+    const notarized = buildContractSummary({
+      id: 'c1',
+      tenantDocument: { available: true, type: 'final_notarized', isFinal: true, version: 2, publishedAt: '2026-08-10T00:00:00.000Z' },
+    });
+    expect(signed.documentCacheKey).not.toBe(notarized.documentCacheKey);
+  });
+});

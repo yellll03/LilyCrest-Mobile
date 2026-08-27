@@ -22,7 +22,7 @@ const KIND_LABELS = { pdf: 'PDF', jpg: 'JPEG', png: 'PNG' };
 export default function DocumentViewer() {
   const router = useRouter();
   const pdfRef = useRef(null);
-  const { kind = 'policy', id, title = 'Document', cacheKey } = useLocalSearchParams();
+  const { kind = 'policy', id, title = 'Document', cacheKey, version } = useLocalSearchParams();
   const { user } = useAuth();
   const { colors } = useTheme();
   const [uri, setUri] = useState(null);
@@ -50,7 +50,7 @@ export default function DocumentViewer() {
         setFileSize((await getPdfMetadata(cached.uri)).size);
       }
       else {
-        const result = await fetchPdf({ userId, kind, id, cacheKey, onProgress: setProgress });
+        const result = await fetchPdf({ userId, kind, id, cacheKey, extra: version, onProgress: setProgress });
         setUri(result.uri);
         setExtension(result.extension || 'pdf');
         setFileSize(result.size || 0);
@@ -61,7 +61,7 @@ export default function DocumentViewer() {
     } finally {
       setLoading(false);
     }
-  }, [id, kind, userId, cacheKey]);
+  }, [id, kind, userId, cacheKey, version]);
 
   useEffect(() => { load(); }, [load]);
   const go = (next) => { const value = Math.max(1, Math.min(pages, next)); pdfRef.current?.setPage(value); };

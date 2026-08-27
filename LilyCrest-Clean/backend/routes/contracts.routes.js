@@ -50,7 +50,7 @@ function forwardAuthHeader(req) {
 // writing to an Express response, so non-HTTP callers (e.g. the chatbot,
 // which needs the tenant's own canonical contract to answer questions) can
 // reuse the exact same upstream bridge logic instead of re-implementing it.
-async function fetchContractJson(authorization, upstreamPath) {
+async function fetchContractJson(authorization, upstreamPath, { method = 'get', body = undefined } = {}) {
   const upstreamBase = resolveContractUpstreamBase();
   if (!upstreamBase) {
     console.error('[Contracts bridge] CONTRACT_UPSTREAM_URL is not configured');
@@ -58,11 +58,23 @@ async function fetchContractJson(authorization, upstreamPath) {
   }
 
   try {
-    const upstream = await axios.get(`${upstreamBase}${upstreamPath}`, {
-      headers: { Authorization: authorization },
-      timeout: 15000,
-      validateStatus: () => true,
-    });
+    // GET stays on axios.get so the existing bridge tests (which monkey-patch
+    // axios.get) keep covering the read paths unchanged; writes go through
+    // axios.request with the same fail-open/normalize semantics.
+    const upstream = method === 'get'
+      ? await axios.get(`${upstreamBase}${upstreamPath}`, {
+        headers: { Authorization: authorization },
+        timeout: 15000,
+        validateStatus: () => true,
+      })
+      : await axios.request({
+        method,
+        url: `${upstreamBase}${upstreamPath}`,
+        headers: { Authorization: authorization },
+        data: body ?? {},
+        timeout: 15000,
+        validateStatus: () => true,
+      });
     if (upstream.status >= 400) {
       // Capstone-Website's mobile-tenant routes (mobileTenantAuth, the
       // contract lookup itself) return a flat { detail } body, but errors
@@ -164,12 +176,15 @@ async function fetchContractDocumentForRequest(req, contractId, kind) {
   });
 }
 
-async function proxyJson(req, res, upstreamPath) {
+async function proxyJson(req, res, upstreamPath, { method = 'get' } = {}) {
   const authorization = forwardAuthHeader(req);
   if (!authorization) {
     return res.status(401).json({ detail: 'Not authenticated' });
   }
-  const result = await fetchContractJson(authorization, upstreamPath);
+  const result = await fetchContractJson(authorization, upstreamPath, {
+    method,
+    body: method !== 'get' ? (req.body ?? {}) : undefined,
+  });
   if (!result.ok) {
     return res.status(result.status).json({ detail: result.detail });
   }
@@ -237,6 +252,27 @@ router.use(authMiddleware, tenantMiddleware);
 
 router.get('/current', (req, res) => proxyJson(req, res, '/api/m/contracts/current'));
 
+// Acknowledgement is a pure pass-through: Capstone-Website's
+// contractAcknowledgementService is the sole authority for whether a tenant
+// has acknowledged the current document version and whether a replacement
+// requires a fresh acknowledgement. This bridge only forwards the caller's
+// bearer token and relays the upstream body/status verbatim — it never
+// records or interprets acknowledgement state locally. Acknowledgement is not
+// a signature; the semantics live entirely upstream.
+router.get('/:contractId/acknowledgement', (req, res) => {
+  if (!CONTRACT_ID_PATTERN.test(req.params.contractId)) {
+    return res.status(404).json({ detail: 'Contract not found.', code: 'CONTRACT_NOT_FOUND' });
+  }
+  return proxyJson(req, res, `/api/m/contracts/${req.params.contractId}/acknowledgement`);
+});
+
+router.post('/:contractId/acknowledge', (req, res) => {
+  if (!CONTRACT_ID_PATTERN.test(req.params.contractId)) {
+    return res.status(404).json({ detail: 'Contract not found.', code: 'CONTRACT_NOT_FOUND' });
+  }
+  return proxyJson(req, res, `/api/m/contracts/${req.params.contractId}/acknowledge`, { method: 'post' });
+});
+
 router.get('/:contractId/documents/prepared', (req, res) => {
   if (!CONTRACT_ID_PATTERN.test(req.params.contractId)) {
     return res.status(404).json({ detail: 'Prepared Contract is not available' });
@@ -251,11 +287,30 @@ router.get('/:contractId/documents/final', (req, res) => {
   return proxyStream(req, res, `/api/m/contracts/${req.params.contractId}/documents/final`);
 });
 
+// Versioned signed-document history. Capstone-Website's mobileContractRoutes.js
+// exposes each non-superseded signed upload at
+// /contracts/:id/documents/signed/:version and validates that the requested
+// version is the tenant's current authoritative signed document before
+// streaming it. Mobile needs this so a final scan replaced in place (new
+// bytes, possibly same publish timestamp) resolves to a genuinely different
+// URL. Same streaming-proxy behavior as prepared/final.
+router.get('/:contractId/documents/signed/:version', (req, res) => {
+  if (!CONTRACT_ID_PATTERN.test(req.params.contractId)) {
+    return res.status(404).json({ detail: 'Signed Contract is not available' });
+  }
+  const version = Number(req.params.version);
+  if (!Number.isSafeInteger(version) || version < 1) {
+    return res.status(404).json({ detail: 'Signed Contract is not available' });
+  }
+  return proxyStream(req, res, `/api/m/contracts/${req.params.contractId}/documents/signed/${version}`);
+});
+
 router.__test = {
   resolveContractUpstreamBase,
   forwardAuthHeader,
   proxyJson,
   proxyStream,
+  fetchContractJson,
   CONTRACT_ID_PATTERN,
 };
 

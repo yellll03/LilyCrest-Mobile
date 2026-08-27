@@ -377,3 +377,48 @@ test('an ObjectId belonging to another tenant, pasted into the chat message, nev
     }
   });
 });
+
+// ── Regression: reservation rows must never define lease/Contract status ──
+// After a move-out or renewal the tenant's reservation row can still carry a
+// stale `leaseStatus`/`contractStatus`. resolveTenantAccountContext must not
+// read those — the authoritative current-Contract fetch owns lease lifecycle.
+
+test('resolveTenantAccountContext never derives leaseStatus from a reservation row', async () => {
+  const { chatbotController, restore } = stubGeminiService();
+  try {
+    const reservationWithStaleContractStatus = {
+      userId: 'aaaaaaaaaaaaaaaaaaaaaaaa',
+      status: 'moveOut',
+      leaseStatus: 'active',
+      contractStatus: 'active',
+      roomNumber: '204',
+      selectedBed: { position: 'upper' },
+      branch: 'guadalupe',
+    };
+    const db = {
+      collection(name) {
+        if (name === 'reservations') {
+          return {
+            findOne: async () => reservationWithStaleContractStatus,
+          };
+        }
+        // branchLocation.service + any other lookups: degrade gracefully
+        return {
+          findOne: async () => null,
+          find() { return { sort() { return this; }, limit() { return this; }, toArray: async () => [] }; },
+          countDocuments: async () => 0,
+        };
+      },
+    };
+
+    await withFakeDb(db, async () => {
+      const ctx = await chatbotController.__test.resolveTenantAccountContext(db, TENANT_A);
+      assert.equal(ctx.leaseStatus, '', 'leaseStatus must stay empty — reservation rows are not the lease authority');
+      // occupancyStatus may still carry the reservation stage, but only as a
+      // reservation-stage hint, never as the lease lifecycle answer.
+      assert.equal(ctx.occupancyStatus, 'moveOut');
+    });
+  } finally {
+    restore();
+  }
+});

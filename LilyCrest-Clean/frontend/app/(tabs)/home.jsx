@@ -5,6 +5,7 @@ import { Image } from 'expo-image';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
     Animated,
+    AppState,
     Keyboard,
     Linking,
     Platform,
@@ -26,6 +27,9 @@ import { useAuth } from '../../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
 import { apiService, getApiErrorMessage } from '../../src/services/api';
 import { subscribeBillingRefresh } from '../../src/services/billingState';
+import { subscribeCanonicalNotifications } from '../../src/services/canonicalEvents';
+import { useTenantContract } from '../../src/hooks/useTenantContract';
+import { buildContractEndSummary } from '../../src/utils/contractPresentation';
 import { resolveNotificationRoute } from '../../src/services/notifications';
 import { getBillingInsightPanel } from '../../src/utils/billingInsights';
 import { buildNotificationRouteData } from '../../src/utils/notificationPresentation';
@@ -100,6 +104,14 @@ export default function HomeScreen() {
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const router = useRouter();
+
+  // Authoritative lease/Contract state. Home must NOT decide "active" or
+  // "expired" from an assignment date comparison — it reports what the
+  // backend's current-Contract resolver says (displayStatus /
+  // displayLifecycle), or shows nothing lease-related when there is no
+  // current Contract. useTenantContract already refetches on the canonical
+  // lifecycle events and on foreground.
+  const { contract: tenantContract, state: tenantContractState } = useTenantContract();
 
   const [dashboardData, setDashboardData] = useState(null);
   const [billingHistory, setBillingHistory] = useState([]);
@@ -382,6 +394,14 @@ export default function HomeScreen() {
     return dashboardData?.assignment || null;
   }, [dashboardData]);
 
+  // Authoritative lease-end presentation for the "Contract End" tile — the
+  // backend's displayLifecycle/displayStatus/daysRemaining, never a local
+  // Date.now() verdict against an assignment date.
+  const contractEndSummary = useMemo(
+    () => buildContractEndSummary(tenantContract, tenantContractState),
+    [tenantContract, tenantContractState],
+  );
+
   // ── Quick-action items for search ──
   const quickActionSearch = useMemo(() => [
     { category: 'Quick Actions', title: 'Pay Bills', subtitle: 'View and pay outstanding bills', route: '/(tabs)/billing', icon: 'card' },
@@ -570,6 +590,42 @@ export default function HomeScreen() {
     return subscribeBillingRefresh(() => {
       fetchDashboard();
     });
+  }, [authReady, fetchDashboard, userId]);
+
+  // Canonical lifecycle events change the tenant's authoritative Stay/room —
+  // refetch the dashboard so the room card and tenancy dates converge with
+  // the Contract screen without waiting for the 60s focused poll or a manual
+  // pull-to-refresh. Receiving the event is enough; the tenant need not tap it.
+  useEffect(() => {
+    if (!authReady || !userId) return undefined;
+    return subscribeCanonicalNotifications((notification) => {
+      const type = String(notification?.data?.type || notification?.type || '').toLowerCase();
+      if ([
+        'move_out',
+        'stay_terminal',
+        'termination_complete',
+        'renewal_effective',
+        'transfer_complete',
+      ].includes(type)) {
+        fetchDashboard(true);
+      }
+    });
+  }, [authReady, fetchDashboard, userId]);
+
+  // Foreground refresh: an admin may have completed a move-out / transfer /
+  // renewal while the app was backgrounded. On return to the foreground,
+  // refetch rather than trusting the last snapshot. The `force` flag +
+  // activeDashboardRequestRef guard in fetchDashboard already dedupes a
+  // refetch that overlaps an in-flight one.
+  useEffect(() => {
+    if (!authReady || !userId) return undefined;
+    let previous = AppState.currentState;
+    const subscription = AppState.addEventListener('change', (nextState) => {
+      const returningToForeground = /inactive|background/.test(previous) && nextState === 'active';
+      previous = nextState;
+      if (returningToForeground) fetchDashboard();
+    });
+    return () => subscription.remove();
   }, [authReady, fetchDashboard, userId]);
 
   useFocusEffect(
@@ -904,30 +960,17 @@ export default function HomeScreen() {
             <TouchableOpacity
               style={styles.dateItem}
               onPress={() => {
-                const moveOut = getAssignmentContractEndDate(tenancyAssignment);
-                if (!moveOut || moveOut === 'Not assigned') {
-                  setModalData({ visible: true, title: 'Contract End', message: 'No contract end date assigned yet.', type: 'info' });
-                  return;
-                }
-                const endDate = new Date(moveOut);
-                const now = new Date();
-                const diffMs = endDate - now;
-                const daysLeft = Math.floor(diffMs / 86400000);
-                let message = '';
-                if (daysLeft < 0) {
-                  message = `${safeFormatDate(moveOut, 'MMMM dd, yyyy')}\n\nYour contract expired ${Math.abs(daysLeft)} days ago.\nPlease contact the admin about renewal.`;
-                } else if (daysLeft === 0) {
-                  message = `${safeFormatDate(moveOut, 'MMMM dd, yyyy')}\n\nYour contract ends today!\nPlease arrange move-out or renewal with the admin.`;
-                } else if (daysLeft <= 30) {
-                  message = `${safeFormatDate(moveOut, 'MMMM dd, yyyy')}\n\nOnly ${daysLeft} days remaining!\nConsider renewing your contract soon.`;
-                } else if (daysLeft <= 90) {
-                  message = `${safeFormatDate(moveOut, 'MMMM dd, yyyy')}\n\n${daysLeft} days remaining.\nYour contract will end in about ${Math.floor(daysLeft / 30)} months.`;
-                } else {
-                  const months = Math.floor(daysLeft / 30);
-                  message = `${safeFormatDate(moveOut, 'MMMM dd, yyyy')}\n\n${daysLeft} days remaining (${months} months).\nYour tenancy is in good standing.`;
-                }
-                const modalType = daysLeft < 0 ? 'error' : daysLeft <= 30 ? 'warning' : 'success';
-                setModalData({ visible: true, title: 'Contract End', message, type: modalType });
+                const endDateText = tenantContract?.leaseEndDate
+                  ? safeFormatDate(tenantContract.leaseEndDate, 'MMMM dd, yyyy')
+                  : getAssignmentContractEndDate(tenancyAssignment)
+                    ? safeFormatDate(getAssignmentContractEndDate(tenancyAssignment), 'MMMM dd, yyyy')
+                    : null;
+                // Status wording is the backend's, never a local date verdict.
+                const status = contractEndSummary.detail;
+                const message = endDateText
+                  ? `${endDateText}${status ? `\n\n${status}` : ''}`
+                  : (status || 'No current lease contract on record.');
+                setModalData({ visible: true, title: 'Contract End', message, type: contractEndSummary.modalType });
               }}
             >
               <View style={[styles.dateItemIcon, { backgroundColor: '#FEF2F2' }]}>
@@ -935,21 +978,14 @@ export default function HomeScreen() {
               </View>
               <View style={{ flex: 1 }}>
                 <Text style={styles.dateLabel}>Contract End</Text>
-                <Text style={styles.dateValue}>{safeFormatDate(getAssignmentContractEndDate(tenancyAssignment))}</Text>
-                {(() => {
-                  const moveOut = getAssignmentContractEndDate(tenancyAssignment);
-                  if (!moveOut) return null;
-                  try {
-                    const daysLeft = Math.floor((new Date(moveOut).getTime() - Date.now()) / 86400000);
-                    if (isNaN(daysLeft)) return null;
-                    let color = '#059669';
-                    let text = `${daysLeft}d left`;
-                    if (daysLeft < 0) { color = '#991B1B'; text = `Expired ${Math.abs(daysLeft)}d ago`; }
-                    else if (daysLeft <= 30) { color = '#DC2626'; text = `${daysLeft}d left`; }
-                    else if (daysLeft <= 90) { color = '#D4AF37'; text = `${daysLeft}d left`; }
-                    return <Text style={[styles.dateMeta, { color }]}>{text}</Text>;
-                  } catch (_e) { return null; }
-                })()}
+                <Text style={styles.dateValue}>
+                  {tenantContract?.leaseEndDate
+                    ? safeFormatDate(tenantContract.leaseEndDate)
+                    : safeFormatDate(getAssignmentContractEndDate(tenancyAssignment))}
+                </Text>
+                {contractEndSummary.meta ? (
+                  <Text style={[styles.dateMeta, { color: contractEndSummary.metaColor }]}>{contractEndSummary.meta}</Text>
+                ) : null}
               </View>
             </TouchableOpacity>
           </View>

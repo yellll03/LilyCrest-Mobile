@@ -16,12 +16,18 @@ const CACHE_BUILD_KEY = 'tenant_document_cache_build';
 const MAX_CACHE_BYTES = 150 * 1024 * 1024;
 const MAX_CACHE_AGE_MS = 90 * 24 * 60 * 60 * 1000;
 
-export const documentUrl = (kind, id) => {
+export const documentUrl = (kind, id, extra) => {
   if (kind === 'bill') return `${MOBILE_API_BASE_URL}/billing/${encodeURIComponent(id)}/pdf`;
   if (kind === 'bill-receipt') return `${MOBILE_API_BASE_URL}/billing/${encodeURIComponent(id)}/receipt`;
   if (kind === 'policy') return `${MOBILE_API_BASE_URL}/documents/${encodeURIComponent(id)}`;
   if (kind === 'contract-prepared') return `${MOBILE_API_BASE_URL}/contracts/${encodeURIComponent(id)}/documents/prepared`;
   if (kind === 'contract-final') return `${MOBILE_API_BASE_URL}/contracts/${encodeURIComponent(id)}/documents/final`;
+  // Versioned signed history. `extra` is the version number; a signed document
+  // is only reachable this way while it is the tenant's current authoritative
+  // signed copy (the backend 404s a superseded version).
+  if (kind === 'contract-signed' && extra != null) {
+    return `${MOBILE_API_BASE_URL}/contracts/${encodeURIComponent(id)}/documents/signed/${encodeURIComponent(extra)}`;
+  }
   return null;
 };
 
@@ -101,6 +107,24 @@ async function ensureParent(uri) {
 
 export async function clearDocumentCache() {
   await FileSystem.deleteAsync(ROOT, { idempotent: true });
+}
+
+// Targeted invalidation for a single contract's cached PDFs (both variants,
+// all versions). Used when a canonical event says this contract's document
+// changed — e.g. an admin replaced the final scan in place — so the next open
+// re-downloads authoritative bytes instead of trusting a version/hash-keyed
+// file that might, in a pathological in-place replacement, still match.
+// Never wipes unrelated documents; a no-op when nothing is cached.
+export async function invalidateContractDocumentCache(userId, contractId) {
+  if (!contractId) return;
+  const dir = `${ROOT}${safePart(userId)}/`;
+  const entries = await FileSystem.readDirectoryAsync(dir).catch(() => []);
+  const wanted = safePart(contractId);
+  await Promise.all(
+    entries
+      .filter((entry) => /^contract-(prepared|final|signed)_/.test(entry) && entry.includes(wanted))
+      .map((entry) => FileSystem.deleteAsync(`${dir}${entry}`, { idempotent: true }).catch(() => {})),
+  );
 }
 
 // Cached PDFs live in app storage and survive an over-the-top APK update
@@ -230,10 +254,10 @@ export async function getCachedPdf(userId, kind, id, cacheKey) {
   }
 }
 
-export async function fetchPdf({ userId, kind, id, cacheKey, onProgress }) {
+export async function fetchPdf({ userId, kind, id, cacheKey, extra, onProgress }) {
   if (kind === 'user') return fetchUserDocumentPdf({ userId, id, onProgress });
 
-  let url = documentUrl(kind, id);
+  let url = documentUrl(kind, id, extra);
   let useAuthorization = true;
   if (!url) throw new Error('INVALID_ID');
   const token = await getSessionToken();

@@ -473,7 +473,16 @@ async function resolveTenantAccountContext(db, user = {}) {
     branchResolutionError: null,
     roomNumber: '',
     roomBed: '',
+    // `occupancyStatus` reflects the reservation/occupancy stage and is fine
+    // for genuine reservation-stage questions (application status, pre-contract
+    // payment stage). It is NOT the Contract/lease lifecycle authority.
     occupancyStatus: '',
+    // `leaseStatus` is intentionally NOT populated from the reservation here.
+    // The authoritative current-Contract fetch (fetchTenantContractContext via
+    // the Capstone bridge) is the sole source for lease/Contract lifecycle and
+    // its displayStatus. A reservation-derived leaseStatus/contractStatus could
+    // contradict it (e.g. a stale reservation row after a move-out or renewal),
+    // so we no longer read it. Kept as an empty field for shape stability.
     leaseStatus: '',
   };
   try {
@@ -497,7 +506,9 @@ async function resolveTenantAccountContext(db, user = {}) {
 
     if (reservation) {
       context.occupancyStatus = firstNonEmptyString(reservation.status, reservation.occupancyStatus);
-      context.leaseStatus = firstNonEmptyString(reservation.leaseStatus, reservation.contractStatus);
+      // Deliberately not sourcing lease/Contract status from the reservation —
+      // see the context initializer comment above. The authoritative Contract
+      // fetch owns lease lifecycle.
       context.roomNumber = firstNonEmptyString(reservation.roomNumber, reservation.roomName, reservation.room?.roomNumber);
       context.roomBed = firstNonEmptyString(
         reservation.selectedBed?.position,
@@ -802,8 +813,10 @@ function buildProfileResponse(user = {}, accountContext = {}) {
     ? ` Room: ${accountContext.roomNumber}${accountContext.roomBed ? `, bed ${accountContext.roomBed}` : ''}.`
     : '';
   const branchText = accountContext.branch ? ` Branch: ${accountContext.branch}.` : '';
-  const leaseText = accountContext.leaseStatus || accountContext.occupancyStatus
-    ? ` Status: ${formatStatusLabel(accountContext.leaseStatus || accountContext.occupancyStatus)}.`
+  // Authoritative Contract status first; fall back to the reservation/occupancy
+  // stage only when no Contract status is known (pre-contract tenant).
+  const leaseText = accountContext.contractDisplayStatus || accountContext.occupancyStatus
+    ? ` Status: ${formatStatusLabel(accountContext.contractDisplayStatus || accountContext.occupancyStatus)}.`
     : '';
   return {
     message: `Your account is registered under ${name} (${email}).${branchText}${roomText}${leaseText}`,
@@ -1166,6 +1179,7 @@ async function sendMessage(req, res) {
     // bridge the mobile Contract screen uses) into tenantAccount so downstream
     // consumers (buildContractResponse, buildDocumentsResponse, context lines)
     // need no further changes — they just read tenantAccount.contract* as before.
+    tenantAccount.contractDisplayStatus = canonicalContract.displayStatus || '';
     tenantAccount.contractStart = canonicalContract.contractStart || '';
     tenantAccount.contractEnd = canonicalContract.contractEnd || '';
     tenantAccount.leaseType = canonicalContract.leaseType || '';
@@ -1185,8 +1199,15 @@ async function sendMessage(req, res) {
     if (tenantAccount.roomNumber || tenantAccount.roomBed) {
       contextLines.push(`Room/bed: ${tenantAccount.roomNumber || 'unknown room'}${tenantAccount.roomBed ? `, bed ${tenantAccount.roomBed}` : ''}`);
     }
-    if (tenantAccount.occupancyStatus || tenantAccount.leaseStatus) {
-      contextLines.push(`Lease/occupancy status: ${formatStatusLabel(tenantAccount.leaseStatus || tenantAccount.occupancyStatus)}`);
+    // Authoritative Contract/lease status comes only from the canonical
+    // Contract fetch. `occupancyStatus` (reservation/occupancy stage) is
+    // reported separately and only as a reservation-stage hint, never as the
+    // lease lifecycle answer.
+    if (tenantAccount.contractDisplayStatus) {
+      contextLines.push(`Contract/lease status (authoritative): ${tenantAccount.contractDisplayStatus}`);
+    }
+    if (tenantAccount.occupancyStatus) {
+      contextLines.push(`Reservation/occupancy stage (not the lease lifecycle): ${formatStatusLabel(tenantAccount.occupancyStatus)}`);
     }
     if (tenantAccount.contractStart) contextLines.push(`Contract start: ${tenantAccount.contractStart}`);
     if (tenantAccount.contractEnd) contextLines.push(`Contract end: ${tenantAccount.contractEnd}`);
@@ -1705,6 +1726,7 @@ module.exports = {
     summarizeBillForContext,
     buildBillingResponse,
     resolveCanonicalContractContext,
+    resolveTenantAccountContext,
     classifyContractUnavailability,
     contractUnavailabilityResponse,
     fetchMaintenanceRequestsForUser,
