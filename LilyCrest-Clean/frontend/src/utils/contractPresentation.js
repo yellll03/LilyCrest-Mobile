@@ -168,6 +168,56 @@ function contractDocumentCacheKey(contract, preferred) {
   return `${contract?.id || 'current'}:${preferred.variant}:${typeTag}${identity}`;
 }
 
+// Home's "Contract End" tile presentation. It must NOT decide "active" or
+// "expired" from a date comparison — that lifecycle verdict belongs to the
+// backend. This maps the authoritative fields the backend already sends
+// (displayLifecycle / displayStatus, plus daysRemaining as a factual count)
+// into a short label, a modal detail line, and a chip colour.
+//
+// `contract` is the current Contract from /contracts/current (or null).
+// `contractState` is useTenantContract's `state`.
+export function buildContractEndSummary(contract, contractState) {
+  if (!contract) {
+    // No current Contract. Never render an "expired N days ago" verdict from a
+    // stale assignment date — just say there is nothing current.
+    const noneKnown = contractState === 'NO_PUBLISHED_CONTRACT' || contractState === 'CONTRACT_AVAILABLE';
+    return {
+      meta: null,
+      metaColor: '#6B7280',
+      detail: noneKnown ? 'No current lease contract on record.' : null,
+      modalType: 'info',
+    };
+  }
+
+  const lifecycleKey = contract.displayLifecycle?.key || null;
+  const lifecycleLabel = contract.displayLifecycle?.label || null;
+  const statusLabel = contract.displayStatus || lifecycleLabel || null;
+  const days = Number.isFinite(Number(contract.daysRemaining)) ? Number(contract.daysRemaining) : null;
+
+  // Chip: a factual remaining-days count from the backend's own daysRemaining,
+  // not a locally derived expiry decision. Colour follows the backend's
+  // lifecycle key where it has an opinion.
+  let meta = null;
+  let metaColor = '#059669';
+  if (lifecycleKey === 'expired') { meta = 'Ended'; metaColor = '#991B1B'; }
+  else if (lifecycleKey === 'expiring_soon') { meta = days != null ? `${days}d left` : 'Ending soon'; metaColor = '#DC2626'; }
+  else if (lifecycleKey === 'published_future') { meta = 'Not started'; metaColor = '#6B7280'; }
+  else if (days != null && days >= 0) { meta = `${days}d left`; metaColor = days <= 90 ? '#D4AF37' : '#059669'; }
+
+  const modalType = lifecycleKey === 'expired' || lifecycleKey === 'terminated'
+    ? 'error'
+    : lifecycleKey === 'expiring_soon'
+      ? 'warning'
+      : 'success';
+
+  return {
+    meta,
+    metaColor,
+    detail: statusLabel,
+    modalType,
+  };
+}
+
 export function buildContractSummary(contract, locale) {
   if (!contract) return null;
   const room = String(contract.roomNumber || '').trim();

@@ -6,6 +6,23 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../src/context/ThemeContext';
 import { apiService } from '../src/services/api';
 import { emitBillingRefresh } from '../src/services/billingState';
+import { publishCanonicalNotification } from '../src/services/canonicalEvents';
+
+// A settled payment can make a Contract newly eligible for automatic
+// generation on the backend. Nudge the Contract screen to re-read
+// /contracts/current so an auto-generated draft appears without an app
+// restart. Mobile never calls a "generate Contract" endpoint and never
+// assumes the Contract exists instantly — the normal loading/preparing state
+// covers the window while the backend finishes, and a later
+// contract_document_ready push is an additional refresh signal.
+function nudgeContractRefreshAfterPayment() {
+  publishCanonicalNotification({
+    type: 'payment_completed',
+    data: { type: 'payment_completed' },
+    title: 'Payment received',
+    body: 'Your payment has been confirmed.',
+  });
+}
 
 // Backend now returns a normalized status enum (paymongo.controller.js
 // normalizeCheckoutStatusForClient) instead of leaving the client to
@@ -71,6 +88,7 @@ export default function PaymentSuccessScreen() {
         setIsVerifying(false);
         timer = setTimeout(() => {
           emitBillingRefresh('payment_success');
+          nudgeContractRefreshAfterPayment();
           router.replace('/(tabs)/billing');
         }, 5000);
         return;
@@ -91,6 +109,7 @@ export default function PaymentSuccessScreen() {
             setVerifyMessage('Payment confirmed. Redirecting to billing...');
             setIsVerifying(false);
             emitBillingRefresh('payment_success');
+            nudgeContractRefreshAfterPayment();
             timer = setTimeout(() => {
               if (!cancelled) {
                 router.replace('/(tabs)/billing');

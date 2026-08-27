@@ -288,6 +288,19 @@ describe('useTenantContract refresh/error lifecycle against the real canonical r
 
     await waitFor(() => expect(apiService.getCurrentContract).toHaveBeenCalledTimes(2));
   });
+
+  test('payment_completed re-reads /contracts/current so an auto-generated draft can appear', async () => {
+    apiService.getCurrentContract
+      .mockResolvedValueOnce({ data: { contract: null, upcoming: null, state: 'NO_PUBLISHED_CONTRACT' } })
+      .mockResolvedValueOnce(draftResponse());
+    const { result } = renderHook(() => useTenantContract());
+    await waitFor(() => expect(result.current.contract).toBeNull());
+
+    act(() => publishCanonicalNotification({ type: 'payment_completed', data: { type: 'payment_completed' } }));
+
+    await waitFor(() => expect(result.current.contract?.tenantDocument.type).toBe('generated_draft'));
+    expect(apiService.getCurrentContract).toHaveBeenCalledTimes(2);
+  });
 });
 
 // Full-pipeline regression: a canonical API-shaped response (including

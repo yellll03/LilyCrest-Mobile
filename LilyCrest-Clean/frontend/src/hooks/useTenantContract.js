@@ -34,6 +34,10 @@ const CONTRACT_REFRESH_EVENT_TYPES = new Set([
   'stay_terminal',
   'termination_complete',
   'transfer_complete',
+  // A settled payment can make a Contract newly eligible for automatic
+  // generation. Re-read /contracts/current; never assume a Contract exists
+  // yet (the loading/preparing state covers the async-generation window).
+  'payment_completed',
 ]);
 
 export function useTenantContract() {
