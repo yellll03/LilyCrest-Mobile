@@ -22,6 +22,6 @@ describe('version-aware contract PDF cache path', () => {
   test('getCachedPdf and fetchPdf forward cacheKey through to cachedDocumentPath', () => {
     expect(source).toMatch(/getCachedPdf\(userId, kind, id, cacheKey\)/);
     expect(source).toContain('cachedDocumentPath(userId, kind, id, cacheKey)');
-    expect(source).toMatch(/fetchPdf\(\{ userId, kind, id, cacheKey, onProgress \}\)/);
+    expect(source).toMatch(/fetchPdf\(\{ userId, kind, id, cacheKey, extra, onProgress \}\)/);
   });
 });

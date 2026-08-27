@@ -5,6 +5,7 @@ import { ActivityIndicator, RefreshControl, ScrollView, StyleSheet, Text, Toucha
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../src/context/ThemeContext';
 import { useTenantContract } from '../src/hooks/useTenantContract';
+import { useContractAcknowledgement } from '../src/hooks/useContractAcknowledgement';
 import { buildContractSummary } from '../src/utils/contractPresentation';
 import { safeBack } from '../src/utils/navigation';
 import { apiService } from '../src/services/api';
@@ -56,6 +57,8 @@ export default function ContractViewer() {
   );
   const summary = buildContractSummary(requestedContractMismatch ? null : contract);
   const upcomingSummary = upcoming ? buildContractSummary(upcoming) : null;
+  const activeContractId = requestedContractMismatch ? null : contract?.id || null;
+  const acknowledgement = useContractAcknowledgement(activeContractId);
   const essentialFields = summary?.fields.filter((field) => ESSENTIAL_FIELD_KEYS.includes(field.key)) || [];
   const moreFields = summary?.fields.filter((field) => !ESSENTIAL_FIELD_KEYS.includes(field.key)) || [];
   // STALE: a refresh after a prior successful load failed transiently — the
@@ -175,6 +178,40 @@ export default function ContractViewer() {
               ) : <Text style={[styles.documentPending, { color: colors.textSecondary }]}>The current PDF is not available yet. Pull down to refresh.</Text>}
             </DocumentActionCard>
 
+            {summary.canOpenPdf && acknowledgement.status ? (
+              <SurfaceCard style={styles.card}>
+                <SectionHeader
+                  icon="checkmark-circle-outline"
+                  title="Document Acknowledgement"
+                  trailing={acknowledgement.isAcknowledged
+                    ? <StatusBadge status="final" label="Acknowledged" tone="success" />
+                    : <StatusBadge status="draft" label="Action needed" tone="warning" />}
+                />
+                {acknowledgement.isAcknowledged ? (
+                  <Text style={[styles.ackNote, { color: colors.textSecondary }]}>
+                    You have acknowledged this version of your contract document. This is an
+                    acknowledgement of receipt and review — it is not a signature.
+                  </Text>
+                ) : (
+                  <>
+                    <Text style={[styles.ackNote, { color: colors.textSecondary }]}>
+                      Please review the document above and acknowledge that you have received and
+                      read it. This is an acknowledgement only — it is not a signature.
+                    </Text>
+                    {acknowledgement.error ? (
+                      <Text style={[styles.supportError, { color: colors.errorText }]}>{acknowledgement.error}</Text>
+                    ) : null}
+                    <ActionButton
+                      label={acknowledgement.submitting ? 'Recording…' : 'Review and acknowledge'}
+                      icon="checkmark-done-outline"
+                      onPress={acknowledgement.acknowledge}
+                      disabled={acknowledgement.submitting}
+                    />
+                  </>
+                )}
+              </SurfaceCard>
+            ) : null}
+
             {upcomingSummary ? (
               <SurfaceCard style={styles.card}>
                 <SectionHeader
@@ -239,6 +276,7 @@ const styles = StyleSheet.create({
   finalizing: { paddingTop: 14, borderTopWidth: StyleSheet.hairlineWidth, fontSize: 13, lineHeight: 19 },
   moreDetails: { marginTop: 4, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth },
   upcomingNote: { fontSize: 12, lineHeight: 17, marginBottom: 4 },
+  ackNote: { fontSize: 12, lineHeight: 17, marginBottom: 6 },
   documentPending: { fontSize: 13, lineHeight: 19, marginTop: 12 },
   supportCard: { gap: 12, marginTop: 16 },
   supportError: { fontSize: 12, lineHeight: 17 },

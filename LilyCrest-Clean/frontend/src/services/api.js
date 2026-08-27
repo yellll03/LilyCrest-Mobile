@@ -424,6 +424,21 @@ export const apiService = {
   // Web admin manages, served via its mobileContractRoutes.js bridge at /api/m)
   getCurrentContract: () => api.get('/contracts/current'),
 
+  // Contract acknowledgement. Backend (Capstone via the /api/m bridge) is the
+  // sole authority for whether the tenant has acknowledged the current
+  // document version and whether a replacement requires a fresh one. Mobile
+  // never stores acknowledgement as authoritative local state, and this is
+  // acknowledgement — not a signature.
+  getContractAcknowledgement: (contractId) =>
+    api.get(`/contracts/${encodeURIComponent(contractId)}/acknowledgement`),
+  acknowledgeContract: (contractId) =>
+    api.post(`/contracts/${encodeURIComponent(contractId)}/acknowledge`),
+
+  // Versioned signed-document history. Used so an in-place final-scan
+  // replacement resolves to a genuinely different URL.
+  contractSignedDocumentUrl: (contractId, version) =>
+    `${MOBILE_API_BASE_URL}/contracts/${encodeURIComponent(contractId)}/documents/signed/${encodeURIComponent(version)}`,
+
   // Maintenance
   getMyMaintenance: (status) => api.get('/maintenance/me', { params: { status } }),
   getMaintenance: (requestId) => api.get(`/maintenance/${requestId}`),
