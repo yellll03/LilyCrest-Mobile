@@ -30,6 +30,7 @@ import { subscribeBillingRefresh } from '../../src/services/billingState';
 import { subscribeCanonicalNotifications } from '../../src/services/canonicalEvents';
 import { useTenantContract } from '../../src/hooks/useTenantContract';
 import { buildContractEndSummary } from '../../src/utils/contractPresentation';
+import { resolveAccountStatus } from '../../src/utils/accountStatus';
 import { resolveNotificationRoute } from '../../src/services/notifications';
 import { getBillingInsightPanel } from '../../src/utils/billingInsights';
 import { buildNotificationRouteData } from '../../src/utils/notificationPresentation';
@@ -100,7 +101,7 @@ export default function HomeScreen() {
   // aware list the header badge reads — so a dismissed/cleared item can never
   // still surface in this screen's own quick-search results (see
   // AuthContext.dismissNotification/clearNotifications).
-  const { user, authReady, isLoading: authLoading, notifications: authNotifications } = useAuth();
+  const { user, authReady, authStatus, isLoading: authLoading, notifications: authNotifications } = useAuth();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
   const router = useRouter();
@@ -393,6 +394,15 @@ export default function HomeScreen() {
   const tenancyAssignment = useMemo(() => {
     return dashboardData?.assignment || null;
   }, [dashboardData]);
+
+  // Shared tenant account-status resolver (same one Profile uses). Home only
+  // needs it to confirm this is a valid tenant session before labelling the
+  // Tenancy card — the room "assigned vs. not" sub-state below stays keyed on
+  // `tenancyAssignment`, which is a distinct signal from account status.
+  const accountStatus = useMemo(
+    () => resolveAccountStatus(user, { isAuthenticated: authStatus === 'authenticated' }),
+    [user, authStatus],
+  );
 
   // Authoritative lease-end presentation for the "Contract End" tile — the
   // backend's displayLifecycle/displayStatus/daysRemaining, never a local
@@ -811,16 +821,20 @@ export default function HomeScreen() {
         <View style={styles.card}>
           <View style={styles.cardHeader}>
             <Text style={styles.sectionTitle}>Your Room</Text>
-            {tenancyAssignment ? (
-              <View style={styles.activeBadge}>
-                <View style={styles.activeDot} />
-                <Text style={styles.activeText}>Active Tenant</Text>
-              </View>
-            ) : (
-              <View style={[styles.activeBadge, { backgroundColor: '#FFFBEB' }]}>
-                <Text style={[styles.activeText, { color: '#D97706' }]}>No Room Assigned</Text>
-              </View>
-            )}
+            {accountStatus ? (
+              tenancyAssignment ? (
+                <View style={styles.activeBadge}>
+                  <View style={styles.activeDot} />
+                  <Text style={styles.activeText}>
+                    {accountStatus.code === 'active' ? 'Active Tenant' : accountStatus.label}
+                  </Text>
+                </View>
+              ) : (
+                <View style={[styles.activeBadge, { backgroundColor: '#FFFBEB' }]}>
+                  <Text style={[styles.activeText, { color: '#D97706' }]}>No Room Assigned</Text>
+                </View>
+              )
+            ) : null}
           </View>
 
           <View style={styles.tenancyContent}>
