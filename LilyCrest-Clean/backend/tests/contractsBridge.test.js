@@ -408,3 +408,33 @@ test('proxyStream relays an upstream 404 for a non-current signed version as JSO
     assert.equal(res.jsonBody.detail, 'Signed Contract is not available');
   });
 });
+
+// --- Route registration parity with the mobile API client (Phase 1) ------
+// The mobile app (frontend/src/services/api.js) now calls acknowledgement and
+// signed-version document paths through the /api/m/contracts bridge. Those
+// must be registered here or every acknowledgement/history call 404s.
+test('contracts.routes registers the acknowledgement + signed-version paths the mobile client calls', () => {
+  const fs = require('node:fs');
+  const path = require('node:path');
+  const router = require('../routes/contracts.routes');
+
+  const registered = new Set();
+  for (const layer of router.stack || []) {
+    if (!layer.route) continue;
+    for (const method of Object.keys(layer.route.methods)) {
+      registered.add(`${method.toUpperCase()} ${layer.route.path}`);
+    }
+  }
+
+  assert.ok(registered.has('GET /:contractId/acknowledgement'), 'GET acknowledgement must be registered');
+  assert.ok(registered.has('POST /:contractId/acknowledge'), 'POST acknowledge must be registered');
+  assert.ok(registered.has('GET /:contractId/documents/signed/:version'), 'GET signed/:version must be registered');
+
+  // And the mobile client actually references those shapes.
+  const apiSource = fs.readFileSync(
+    path.resolve(__dirname, '../../frontend/src/services/api.js'), 'utf8',
+  );
+  assert.match(apiSource, /\/contracts\/\$\{encodeURIComponent\(contractId\)\}\/acknowledgement/);
+  assert.match(apiSource, /\/contracts\/\$\{encodeURIComponent\(contractId\)\}\/acknowledge/);
+  assert.match(apiSource, /\/contracts\/\$\{encodeURIComponent\(contractId\)\}\/documents\/signed\//);
+});
