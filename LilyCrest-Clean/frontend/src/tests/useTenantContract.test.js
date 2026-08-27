@@ -211,6 +211,83 @@ describe('useTenantContract refresh/error lifecycle against the real canonical r
     expect(result.current.contract).toBeNull();
     expect(result.current.state).toBe('MULTIPLE_CONTRACTS');
   });
+
+  test('exposes upcoming separately from contract and never merges it in', async () => {
+    apiService.getCurrentContract.mockResolvedValueOnce({
+      data: {
+        contract: {
+          id: 'predecessor',
+          status: 'active',
+          tenantDocument: { available: true, type: 'final_notarized', isFinal: true, version: 1, publishedAt: '2026-01-10' },
+        },
+        upcoming: {
+          id: 'successor',
+          status: 'published',
+          leaseStartDate: '2027-01-01',
+          tenantDocument: { available: false, type: null },
+        },
+        state: 'CONTRACT_AVAILABLE',
+      },
+    });
+    const { result } = renderHook(() => useTenantContract());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    expect(result.current.contract.id).toBe('predecessor');
+    expect(result.current.upcoming.id).toBe('successor');
+    // The current contract is untouched by the upcoming successor.
+    expect(result.current.contract.status).toBe('active');
+  });
+
+  test('renewal_effective refetches; backend-selected successor becomes current and upcoming clears', async () => {
+    apiService.getCurrentContract
+      .mockResolvedValueOnce({
+        data: {
+          contract: { id: 'predecessor', status: 'expiring_soon', tenantDocument: { available: true, type: 'final_notarized', isFinal: true, version: 1, publishedAt: '2026-01-10' } },
+          upcoming: { id: 'successor', status: 'published', leaseStartDate: '2027-01-01', tenantDocument: { available: false, type: null } },
+          state: 'CONTRACT_AVAILABLE',
+        },
+      })
+      .mockResolvedValueOnce({
+        data: {
+          contract: { id: 'successor', status: 'active', tenantDocument: { available: true, type: 'final_notarized', isFinal: true, version: 1, publishedAt: '2027-01-01' } },
+          upcoming: null,
+          state: 'CONTRACT_AVAILABLE',
+        },
+      });
+    const { result } = renderHook(() => useTenantContract());
+    await waitFor(() => expect(result.current.upcoming?.id).toBe('successor'));
+
+    act(() => publishCanonicalNotification({ type: 'renewal_effective', data: { type: 'renewal_effective', contract_id: 'successor' } }));
+
+    await waitFor(() => expect(result.current.contract?.id).toBe('successor'));
+    expect(result.current.upcoming).toBeNull();
+    expect(apiService.getCurrentContract).toHaveBeenCalledTimes(2);
+  });
+
+  test('move_out event refetches and a subsequent contract:null clears the previously current contract', async () => {
+    apiService.getCurrentContract
+      .mockResolvedValueOnce(finalResponse())
+      .mockResolvedValueOnce({ data: { contract: null, upcoming: null, state: 'NO_PUBLISHED_CONTRACT' } });
+    const { result } = renderHook(() => useTenantContract());
+    await waitFor(() => expect(result.current.contract?.id).toBe('507f1f77bcf86cd799439011'));
+
+    act(() => publishCanonicalNotification({ type: 'move_out', data: { type: 'move_out' } }));
+
+    await waitFor(() => expect(result.current.contract).toBeNull());
+    expect(result.current.state).toBe('NO_PUBLISHED_CONTRACT');
+  });
+
+  test('transfer_complete event triggers a refetch', async () => {
+    apiService.getCurrentContract
+      .mockResolvedValueOnce(finalResponse())
+      .mockResolvedValueOnce(finalResponse());
+    const { result } = renderHook(() => useTenantContract());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    act(() => publishCanonicalNotification({ type: 'transfer_complete', data: { type: 'transfer_complete' } }));
+
+    await waitFor(() => expect(apiService.getCurrentContract).toHaveBeenCalledTimes(2));
+  });
 });
 
 // Full-pipeline regression: a canonical API-shaped response (including

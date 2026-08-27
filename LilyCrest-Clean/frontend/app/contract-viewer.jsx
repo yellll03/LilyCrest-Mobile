@@ -26,6 +26,17 @@ import {
 // instead of always-visible rows.
 const ESSENTIAL_FIELD_KEYS = ['number', 'branch', 'room', 'period'];
 
+// The document card's small status chip. It describes the DOCUMENT's
+// readiness, not the Contract lifecycle status headline (that is
+// summary.status, straight from the backend's displayStatus). "Processing" is
+// only ever shown for a genuine backend-derived preparing state — no final and
+// no draft PDF yet — never as a cosmetic cover for stale data.
+function documentCardStatus(summary) {
+  if (summary.lifecycleState === 'final') return 'Verified';
+  if (summary.lifecycleState === 'draft') return 'Ready for Signing';
+  return 'Processing';
+}
+
 export default function ContractViewer() {
   const router = useRouter();
   const { contractId: requestedContractIdParam } = useLocalSearchParams();
@@ -37,13 +48,14 @@ export default function ContractViewer() {
   const [showMoreDetails, setShowMoreDetails] = useState(false);
   const [startingSupport, setStartingSupport] = useState(false);
   const [supportError, setSupportError] = useState('');
-  const { contract, state, loading, refreshing, error, reload, refresh } = useTenantContract();
+  const { contract, upcoming, state, loading, refreshing, error, reload, refresh } = useTenantContract();
   const requestedContractMismatch = Boolean(
     requestedContractId
     && contract?.id
     && String(requestedContractId) !== String(contract.id),
   );
   const summary = buildContractSummary(requestedContractMismatch ? null : contract);
+  const upcomingSummary = upcoming ? buildContractSummary(upcoming) : null;
   const essentialFields = summary?.fields.filter((field) => ESSENTIAL_FIELD_KEYS.includes(field.key)) || [];
   const moreFields = summary?.fields.filter((field) => !ESSENTIAL_FIELD_KEYS.includes(field.key)) || [];
   // STALE: a refresh after a prior successful load failed transiently — the
@@ -144,7 +156,7 @@ export default function ContractViewer() {
             <DocumentActionCard
               title="Current Document"
               subtitle={summary.lifecycleLabel}
-              status={summary.lifecycleState === 'final' ? 'Verified' : summary.lifecycleState === 'draft' ? 'Under Review' : 'Processing'}
+              status={documentCardStatus(summary)}
             >
               {summary.canOpenPdf ? (
                 <ActionButton
@@ -162,6 +174,25 @@ export default function ContractViewer() {
                 />
               ) : <Text style={[styles.documentPending, { color: colors.textSecondary }]}>The current PDF is not available yet. Pull down to refresh.</Text>}
             </DocumentActionCard>
+
+            {upcomingSummary ? (
+              <SurfaceCard style={styles.card}>
+                <SectionHeader
+                  icon="calendar-outline"
+                  title="Upcoming Renewal"
+                  trailing={<StatusBadge status="preparing" label="Upcoming" tone="info" />}
+                />
+                <Text style={[styles.upcomingNote, { color: colors.textSecondary }]}>
+                  This is not your current contract yet. Your current contract above stays in effect
+                  until Lilycrest activates the renewal.
+                </Text>
+                {upcomingSummary.fields
+                  .filter((field) => ['number', 'room', 'period'].includes(field.key))
+                  .map((field, index, arr) => (
+                    <DataRow key={field.key} label={field.label} value={field.value} last={index === arr.length - 1} />
+                  ))}
+              </SurfaceCard>
+            ) : null}
 
             <SurfaceCard style={styles.supportCard}>
               {supportError ? <Text style={[styles.supportError, { color: colors.errorText }]}>{supportError}</Text> : null}
@@ -207,6 +238,7 @@ const styles = StyleSheet.create({
   label: { fontSize: 12, fontWeight: '600' },
   finalizing: { paddingTop: 14, borderTopWidth: StyleSheet.hairlineWidth, fontSize: 13, lineHeight: 19 },
   moreDetails: { marginTop: 4, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth },
+  upcomingNote: { fontSize: 12, lineHeight: 17, marginBottom: 4 },
   documentPending: { fontSize: 13, lineHeight: 19, marginTop: 12 },
   supportCard: { gap: 12, marginTop: 16 },
   supportError: { fontSize: 12, lineHeight: 17 },
