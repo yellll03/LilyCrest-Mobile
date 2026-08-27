@@ -85,6 +85,73 @@ function deriveAssignmentContractEnd(record) {
   return null;
 }
 
+// The single authoritative definition of "the tenant currently has a lease in
+// effect" — mirrors Capstone-Website's tenantContractSelectionService.js
+// CURRENT_STAY_STATUSES. `expired_occupancy_continuing` is deliberately NOT
+// here: it means the lease term lapsed and the tenant is still physically
+// present pending an admin decision — not a normal current tenancy — and
+// Capstone's own current-Stay resolver excludes it too. Terminal statuses
+// (completed/terminated/renewed) are never current.
+const CURRENT_STAY_STATUSES = ['active', 'ending_soon'];
+
+// Resolve the tenant's authoritative current Stay from the shared `stays`
+// collection (written by Capstone-Website's Stay lifecycle — move-in, renewal
+// activation, transfer, move-out, termination). This is the source of truth
+// for the tenant's current room/bed and lease dates. Returns null when the
+// tenant has no in-effect Stay (moved out, terminated, or a legacy tenancy
+// that predates the Stay model — the caller then falls back to the legacy
+// occupancy/reservation reconstruction, which is scoped to non-terminal rows).
+async function resolveCurrentStayAssignment(db, mongoId, userId) {
+  if (!mongoId) return { assignment: null, room: null };
+
+  const stay = await db.collection('stays').findOne(
+    { tenantId: mongoId, status: { $in: CURRENT_STAY_STATUSES } },
+    { sort: { leaseStartDate: -1 } },
+  );
+  if (!stay) return { assignment: null, room: null };
+
+  const roomOid = typeof stay.roomId === 'string' ? new ObjectId(stay.roomId) : stay.roomId;
+  const roomDoc = roomOid ? await db.collection('rooms').findOne({ _id: roomOid }) : null;
+  const bed = roomDoc?.beds?.find((b) => b.id === stay.bedId);
+
+  const leaseEnd = normalizeDateCandidate(stay.leaseEndDate);
+  const assignment = {
+    assignment_id: stay._id?.toString(),
+    user_id: userId,
+    room_id: stay.roomId?.toString(),
+    status: 'active',
+    stay_status: stay.status,
+    move_in_date: normalizeDateCandidate(stay.leaseStartDate),
+    // The Stay's own lease window is an authoritative approved date range, so
+    // (unlike the legacy reservation/occupancy fallback) it is safe to surface
+    // as the contract/move-out end here.
+    move_out_date: leaseEnd,
+    contract_end_date: leaseEnd,
+    bed_id: stay.bedId || null,
+    branch: formatBranchName(stay.branch),
+    source: 'stay',
+  };
+
+  const room = roomDoc
+    ? {
+        room_id: roomDoc._id?.toString(),
+        room_number: formatRoomNumber(roomDoc.roomNumber),
+        room_type: formatRoomType(roomDoc.type),
+        bed_type: formatBedLabel(bed),
+        floor: roomDoc.floor,
+        capacity: roomDoc.capacity,
+        price: roomDoc.monthlyPrice ?? stay.monthlyRent,
+        amenities: roomDoc.amenities || [],
+        policies: roomDoc.policies || [],
+        description: roomDoc.description || '',
+        images: roomDoc.images || [],
+        name: roomDoc.name,
+      }
+    : null;
+
+  return { assignment, room };
+}
+
 // Get dashboard data
 async function getDashboard(req, res) {
   try {
@@ -93,11 +160,21 @@ async function getDashboard(req, res) {
     const db = getDb();
 
     // ── Room Assignment ──────────────────────────────────────────────────────
-    // Try multiple sources: roomoccupancyhistories → bedhistories → reservations
+    // Authoritative source first: the tenant's current Stay (Capstone-Website's
+    // Stay lifecycle). Only when there is no in-effect Stay do we fall back to
+    // the legacy occupancy/reservation reconstruction below — and that fallback
+    // is now scoped to non-terminal rows so a completed/terminated tenancy can
+    // never be resurrected as "active".
     let assignment = null;
     let room = null;
 
-    if (mongoId) {
+    const authoritative = await resolveCurrentStayAssignment(db, mongoId, userId);
+    if (authoritative.assignment) {
+      assignment = authoritative.assignment;
+      room = authoritative.room;
+    }
+
+    if (!assignment && mongoId) {
       // Source 1: roomoccupancyhistories (legacy)
       const occupancy = await db.collection('roomoccupancyhistories').findOne(
         { tenantId: mongoId, stayStatus: 'active' },
@@ -187,9 +264,14 @@ async function getDashboard(req, res) {
         }
       }
 
-      // Source 3: reservations (web admin reservation flow — status moveIn/active)
+      // Source 3: reservations (web admin reservation flow). Only non-terminal
+      // statuses — a `completed` reservation is a past tenancy and must never
+      // reconstruct an "active" assignment. (`moveOut`/`terminated`/`cancelled`
+      // were never in this set; `completed` is removed here.) This path is only
+      // reached at all when there is no current Stay, so it now serves genuine
+      // pre-Stay legacy tenancies rather than shadowing the authoritative Stay.
       const reservation = await db.collection('reservations').findOne(
-        { userId: mongoId, status: { $in: ['moveIn', 'active', 'completed', 'confirmed', 'paid'] } },
+        { userId: mongoId, status: { $in: ['moveIn', 'active', 'confirmed', 'paid'] } },
         { sort: { createdAt: -1 } }
       );
 
@@ -277,4 +359,8 @@ async function getDashboard(req, res) {
 
 module.exports = {
   getDashboard,
+  // Exported for targeted regression tests: the authoritative current-Stay
+  // resolver and the status set that defines "lease currently in effect".
+  resolveCurrentStayAssignment,
+  CURRENT_STAY_STATUSES,
 };

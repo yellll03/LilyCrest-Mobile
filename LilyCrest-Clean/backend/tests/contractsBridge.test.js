@@ -16,6 +16,16 @@ const axios = require('axios');
 const { __test } = require('../routes/contracts.routes');
 const { proxyJson, proxyStream, forwardAuthHeader, resolveContractUpstreamBase, CONTRACT_ID_PATTERN } = __test;
 
+async function withMockedAxiosRequest(impl, fn) {
+  const original = axios.request;
+  axios.request = impl;
+  try {
+    await fn();
+  } finally {
+    axios.request = original;
+  }
+}
+
 // All tests below except the two "not configured" cases exercise proxy
 // behavior against a configured upstream; those two save/restore this value
 // around their own overrides.
@@ -268,5 +278,133 @@ test('proxyStream appends ?download=1 only when the client explicitly requested 
     await proxyStream({ headers: { authorization: 'Bearer t' }, query: { download: '1' } }, res, '/api/m/contracts/c1/documents/final');
     await new Promise((resolve) => res.on('finish', resolve));
     assert.match(capturedUrl, /\?download=1$/);
+  });
+});
+
+// --- Acknowledgement pass-through (Phase 1) -------------------------------
+
+test('proxyJson relays an acknowledgement GET body/status verbatim from upstream', async () => {
+  let capturedUrl;
+  await withMockedAxiosGet(async (url, config) => {
+    capturedUrl = url;
+    assert.equal(config.headers.Authorization, 'Bearer tenant-1');
+    return { status: 200, data: { acknowledged: false, requiresAcknowledgement: true, documentVersion: 2 } };
+  }, async () => {
+    const res = fakeJsonRes();
+    await proxyJson({ headers: { authorization: 'Bearer tenant-1' } }, res, '/api/m/contracts/507f1f77bcf86cd799439011/acknowledgement');
+    assert.equal(capturedUrl, 'https://api.lilycrest.space/api/m/contracts/507f1f77bcf86cd799439011/acknowledgement');
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.acknowledged, false);
+    assert.equal(res.body.requiresAcknowledgement, true);
+    assert.equal(res.body.documentVersion, 2);
+  });
+});
+
+test('proxyJson forwards an acknowledgement POST via axios.request, preserving auth header and relaying upstream body', async () => {
+  let captured;
+  await withMockedAxiosRequest(async (config) => {
+    captured = config;
+    return { status: 200, data: { acknowledged: true, acknowledgedAt: '2026-08-27T00:00:00.000Z', documentVersion: 2 } };
+  }, async () => {
+    const res = fakeJsonRes();
+    await proxyJson(
+      { headers: { authorization: 'Bearer tenant-2' }, body: {} },
+      res,
+      '/api/m/contracts/507f1f77bcf86cd799439011/acknowledge',
+      { method: 'post' },
+    );
+    assert.equal(captured.method, 'post');
+    assert.equal(captured.url, 'https://api.lilycrest.space/api/m/contracts/507f1f77bcf86cd799439011/acknowledge');
+    assert.equal(captured.headers.Authorization, 'Bearer tenant-2');
+    assert.equal(res.statusCode, 200);
+    assert.equal(res.body.acknowledged, true);
+    assert.equal(res.body.documentVersion, 2);
+  });
+});
+
+test('proxyJson relays an upstream 409 re-acknowledge-required conflict verbatim', async () => {
+  await withMockedAxiosRequest(async () => ({
+    status: 409,
+    data: { detail: 'A newer document version requires acknowledgement.', code: 'REACK_REQUIRED' },
+  }), async () => {
+    const res = fakeJsonRes();
+    await proxyJson(
+      { headers: { authorization: 'Bearer t' }, body: {} },
+      res,
+      '/api/m/contracts/507f1f77bcf86cd799439011/acknowledge',
+      { method: 'post' },
+    );
+    assert.equal(res.statusCode, 409);
+    assert.equal(res.body.detail, 'A newer document version requires acknowledgement.');
+  });
+});
+
+test('proxyJson fails closed with 502 for an acknowledgement POST when CONTRACT_UPSTREAM_URL is unset', async () => {
+  const originalUpstream = process.env.CONTRACT_UPSTREAM_URL;
+  delete process.env.CONTRACT_UPSTREAM_URL;
+  let called = false;
+  try {
+    await withMockedAxiosRequest(async () => { called = true; return { status: 200, data: {} }; }, async () => {
+      const res = fakeJsonRes();
+      await proxyJson(
+        { headers: { authorization: 'Bearer t' }, body: {} },
+        res,
+        '/api/m/contracts/507f1f77bcf86cd799439011/acknowledge',
+        { method: 'post' },
+      );
+      assert.equal(res.statusCode, 502);
+      assert.equal(called, false);
+    });
+  } finally {
+    if (originalUpstream === undefined) delete process.env.CONTRACT_UPSTREAM_URL;
+    else process.env.CONTRACT_UPSTREAM_URL = originalUpstream;
+  }
+});
+
+// --- Signed-version document pass-through (Phase 1) ---------------------
+
+test('proxyStream forwards a versioned signed document with content headers preserved', async () => {
+  let capturedUrl;
+  await withMockedAxiosGet(async (url) => {
+    capturedUrl = url;
+    return {
+      status: 200,
+      headers: {
+        'content-type': 'application/pdf',
+        'content-disposition': 'inline; filename="signed-v2.pdf"',
+        'cache-control': 'private, no-store',
+      },
+      data: Readable.from([Buffer.from('%PDF-signed-v2')]),
+    };
+  }, async () => {
+    const res = fakeStreamRes();
+    await proxyStream(
+      { headers: { authorization: 'Bearer t' }, query: {} },
+      res,
+      '/api/m/contracts/507f1f77bcf86cd799439011/documents/signed/2',
+    );
+    await new Promise((resolve) => res.on('finish', resolve));
+    assert.match(capturedUrl, /\/documents\/signed\/2$/);
+    assert.equal(res.statusCode, 200);
+    assert.equal(res._headers['content-type'], 'application/pdf');
+    assert.equal(res._headers['content-disposition'], 'inline; filename="signed-v2.pdf"');
+    assert.equal(res._body(), '%PDF-signed-v2');
+  });
+});
+
+test('proxyStream relays an upstream 404 for a non-current signed version as JSON', async () => {
+  await withMockedAxiosGet(async () => ({
+    status: 404,
+    headers: {},
+    data: Readable.from([Buffer.from(JSON.stringify({ detail: 'Signed Contract is not available' }))]),
+  }), async () => {
+    const res = fakeStreamRes();
+    await proxyStream(
+      { headers: { authorization: 'Bearer t' }, query: {} },
+      res,
+      '/api/m/contracts/507f1f77bcf86cd799439011/documents/signed/9',
+    );
+    assert.equal(res.statusCode, 404);
+    assert.equal(res.jsonBody.detail, 'Signed Contract is not available');
   });
 });
