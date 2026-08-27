@@ -1,4 +1,4 @@
-/* global describe, test, expect */
+/* global test */
 const { resolveAccountStatus, isTenantRole } = require('../utils/accountStatus');
 
 // resolveAccountStatus is the single source of truth for the tenant account

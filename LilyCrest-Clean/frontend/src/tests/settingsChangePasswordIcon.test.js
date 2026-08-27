@@ -1,4 +1,4 @@
-/* global describe, test, expect */
+/* global test, __dirname */
 const fs = require('fs');
 const path = require('path');
 

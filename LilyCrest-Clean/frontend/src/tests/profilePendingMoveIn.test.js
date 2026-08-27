@@ -1,4 +1,4 @@
-/* global describe, test, expect, beforeEach, jest */
+/* global test */
 // Regression history: the mobile Profile screen once derived a
 // "Pending Move-in" / "Active Tenant" badge from `user.tenantStatus` — a
 // field the backend never populates — so every tenant saw "Pending Move-in"
