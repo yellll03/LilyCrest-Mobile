@@ -165,6 +165,30 @@ describe('useTenantContract refresh/error lifecycle against the real canonical r
     expect(result.current.error).toBeTruthy();
   });
 
+  test('after a 500-induced STALE, a later successful contract:null clears the stale contract immediately', async () => {
+    apiService.getCurrentContract.mockResolvedValueOnce(draftResponse());
+    const { result } = renderHook(() => useTenantContract());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+
+    apiService.getCurrentContract.mockRejectedValueOnce({ response: { status: 500 } });
+    await act(async () => result.current.reload());
+    expect(result.current.state).toBe('STALE');
+    expect(result.current.contract).not.toBeNull();
+
+    apiService.getCurrentContract.mockResolvedValueOnce({ data: { contract: null, upcoming: null, state: 'NO_PUBLISHED_CONTRACT' } });
+    await act(async () => result.current.reload());
+    expect(result.current.contract).toBeNull();
+    expect(result.current.state).toBe('NO_PUBLISHED_CONTRACT');
+  });
+
+  test('a 500 with no prior successful load is ERROR, not STALE', async () => {
+    apiService.getCurrentContract.mockRejectedValueOnce({ response: { status: 500 } });
+    const { result } = renderHook(() => useTenantContract());
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.contract).toBeNull();
+    expect(result.current.state).toBe('ERROR');
+  });
+
   test('HTTP 401 immediately clears previously displayed private contract data', async () => {
     apiService.getCurrentContract.mockResolvedValueOnce(draftResponse());
     const { result } = renderHook(() => useTenantContract());
