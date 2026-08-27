@@ -63,7 +63,41 @@ describe('Forgot Password validation', () => {
     expect(await screen.findByText('Check Your Email')).toBeTruthy();
   });
 
-  it('does not advance for an unregistered tenant and shows the safe product error', async () => {
+  it('shows a neutral, non-committal toast on success (no "Reset Link Sent" overclaim)', async () => {
+    mockForgotPassword.mockResolvedValue({ data: { message: AUTH_MESSAGES.forgotSuccess } });
+    render(<ForgotPasswordScreen />);
+    fireEvent.changeText(screen.getByPlaceholderText('Enter your email'), 'tenant@example.com');
+    fireEvent.press(screen.getByLabelText('Send Reset Link'));
+
+    await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'info',
+      title: 'Check Your Email',
+      message: AUTH_MESSAGES.forgotSuccess,
+    })));
+    // Never the old overclaiming success toast.
+    expect(mockShowToast).not.toHaveBeenCalledWith(expect.objectContaining({ title: 'Reset Link Sent' }));
+    expect(mockShowToast).not.toHaveBeenCalledWith(expect.objectContaining({ type: 'success' }));
+  });
+
+  it('advances for an unknown email too — the enumeration-safe backend returns the same generic success', async () => {
+    // The deployed canonical backend answers a registered and an unknown email
+    // identically (generic 200), so the app must present the same neutral
+    // "Check Your Email" result and never reveal that the address is unknown.
+    mockForgotPassword.mockResolvedValue({ data: { message: AUTH_MESSAGES.forgotSuccess } });
+    render(<ForgotPasswordScreen />);
+    fireEvent.changeText(screen.getByPlaceholderText('Enter your email'), 'unknown@example.com');
+    fireEvent.press(screen.getByLabelText('Send Reset Link'));
+
+    expect(await screen.findByText('Check Your Email')).toBeTruthy();
+    expect(mockShowToast).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'info',
+      title: 'Check Your Email',
+    }));
+  });
+
+  it('defensive: if a legacy 422 TENANT_RESET_NOT_AVAILABLE is ever returned, it does not advance', async () => {
+    // The deployed backend no longer emits this, but older/self-hosted
+    // deployments might; the client keeps handling it safely.
     mockForgotPassword.mockRejectedValue({
       response: { status: 422, data: { code: 'TENANT_RESET_NOT_AVAILABLE' } },
     });

@@ -2,7 +2,7 @@
 
 const assert = require('node:assert/strict');
 const test = require('node:test');
-const { isAccountActive, isTenantMobileRole, normalizeRole, tenantAccountStatus } = require('../utils/tenantEligibility');
+const { isAccountActive, isTenantMobileRole, isTenantResetEligible, normalizeRole, tenantAccountStatus } = require('../utils/tenantEligibility');
 const fs = require('node:fs');
 const path = require('node:path');
 
@@ -31,6 +31,32 @@ test('authoritative tenant account status uses server-owned role and activation 
   });
   assert.equal(tenantAccountStatus({ role: 'applicant', status: 'active' }), null);
   assert.equal(isAccountActive({ status: 'suspended' }), false);
+});
+
+test('isTenantResetEligible: only an active tenant/resident may be forwarded a reset', () => {
+  assert.equal(isTenantResetEligible({ role: 'tenant', is_active: true, status: 'active' }), true);
+  assert.equal(isTenantResetEligible({ role: 'resident', status: 'active' }), true);
+  // wrong role
+  assert.equal(isTenantResetEligible({ role: 'applicant', status: 'active' }), false);
+  assert.equal(isTenantResetEligible({ role: 'admin', is_active: true }), false);
+  // right role, not active
+  assert.equal(isTenantResetEligible({ role: 'tenant', is_active: false }), false);
+  assert.equal(isTenantResetEligible({ role: 'tenant', status: 'suspended' }), false);
+  assert.equal(isTenantResetEligible({ role: 'tenant', status: 'pending' }), false);
+  // missing user
+  assert.equal(isTenantResetEligible(null), false);
+  assert.equal(isTenantResetEligible(undefined), false);
+});
+
+test('isTenantResetEligible: the auth provider does not affect eligibility', () => {
+  assert.equal(
+    isTenantResetEligible({ role: 'tenant', status: 'active', provider: 'google', google_email: 't@gmail.com' }),
+    true,
+  );
+  assert.equal(
+    isTenantResetEligible({ role: 'admin', status: 'active', provider: 'google' }),
+    false,
+  );
 });
 
 test('tenantMiddleware returns a stable 403 code for a non-tenant session', () => {

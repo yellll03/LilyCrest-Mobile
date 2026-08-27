@@ -19,6 +19,16 @@ function isAccountActive(user = {}) {
   return !['inactive', 'disabled', 'deleted', 'suspended', 'blocked', 'terminated', 'pending', 'pending_approval'].includes(status);
 }
 
+// A user may be sent a tenant password reset only when they are a real
+// tenant/resident AND their account is active. Missing user => not eligible.
+// This is the single check the mobile forgot-password proxy uses to decide
+// whether to forward to the canonical upstream — the response to the caller
+// is identical either way (enumeration-safe).
+function isTenantResetEligible(user) {
+  if (!user || typeof user !== 'object') return false;
+  return isTenantMobileRole(user.role) && isAccountActive(user);
+}
+
 function tenantAccountStatus(user = {}) {
   if (!isTenantMobileRole(user.role)) return null;
   if (isAccountActive(user)) return { code: 'active', label: 'Active Tenant' };
@@ -31,6 +41,7 @@ module.exports = {
   TENANT_MOBILE_ROLES,
   isAccountActive,
   isTenantMobileRole,
+  isTenantResetEligible,
   normalizeRole,
   tenantAccountStatus,
 };
