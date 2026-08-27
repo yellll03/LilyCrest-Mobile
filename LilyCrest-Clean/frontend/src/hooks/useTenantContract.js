@@ -3,6 +3,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { apiService } from '../services/api';
 import { subscribeCanonicalNotifications } from '../services/canonicalEvents';
+import { contractLifecycleState } from '../utils/contractPresentation';
 
 // Single source of truth for "my lease contract" across the app. Fetches the
 // tenant's canonical Contract record from the Web admin's authoritative
@@ -40,6 +41,39 @@ const CONTRACT_REFRESH_EVENT_TYPES = new Set([
   'payment_completed',
 ]);
 
+// While the tenant is sitting on the Contract screen waiting for a document
+// to move from "preparing"/"draft" to a published final, poll /contracts/current
+// on this cadence so the transition appears without a manual pull-to-refresh.
+// The existing focus / foreground / canonical-notification refreshes remain
+// the primary mechanism; this is only a bounded fallback for the wait window.
+export const SMART_POLL_INTERVAL_MS = 20_000;
+
+// The only contract states that are still "in flight" from the tenant's point
+// of view — a document is expected but not yet final. Every other state is
+// either terminal/stable (final), empty (no contract), or a
+// loading/error/blocking condition that must not be polled over.
+const POLLABLE_LIFECYCLE_STATES = new Set(['preparing', 'draft']);
+const NON_POLLABLE_CONTRACT_STATES = new Set([
+  'LOADING',
+  'ERROR',
+  'STALE',
+  'MULTIPLE_CONTRACTS',
+  'NO_PUBLISHED_CONTRACT',
+]);
+
+/**
+ * Whether the Contract screen should be polling right now, given the current
+ * contract object and the hook's `state`. True only when a contract exists,
+ * the hook is not in a loading/error/blocking/empty state, and the resolved
+ * document lifecycle is still "preparing" or "draft" (i.e. a final is expected
+ * but has not been published yet).
+ */
+export function shouldPollFor(contract, state) {
+  if (!contract) return false;
+  if (NON_POLLABLE_CONTRACT_STATES.has(state)) return false;
+  return POLLABLE_LIFECYCLE_STATES.has(contractLifecycleState(contract));
+}
+
 export function useTenantContract() {
   const [contract, setContract] = useState(null);
   const [upcoming, setUpcoming] = useState(null);
@@ -47,9 +81,17 @@ export function useTenantContract() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [isPolling, setIsPolling] = useState(false);
+  // Focus and foreground are kept as state (not just refs) because the poll
+  // interval must be armed/torn down in response to them — a bare ref change
+  // would not re-run the effect below.
+  const [isFocused, setIsFocused] = useState(false);
+  const [isForeground, setIsForeground] = useState(AppState.currentState === 'active');
   const requestSequence = useRef(0);
   const appState = useRef(AppState.currentState);
   const hasLoadedOnce = useRef(false);
+  const isFocusedRef = useRef(false);
+  const isForegroundRef = useRef(AppState.currentState === 'active');
 
   const load = useCallback(async ({ isManualRefresh = false } = {}) => {
     const requestId = ++requestSequence.current;
@@ -115,13 +157,22 @@ export function useTenantContract() {
   }, []);
 
   useFocusEffect(useCallback(() => {
+    isFocusedRef.current = true;
+    setIsFocused(true);
     load();
+    return () => {
+      isFocusedRef.current = false;
+      setIsFocused(false);
+    };
   }, [load]));
 
   useEffect(() => {
     const subscription = AppState.addEventListener('change', (nextState) => {
       const returningToForeground = /inactive|background/.test(appState.current) && nextState === 'active';
       appState.current = nextState;
+      const foreground = nextState === 'active';
+      isForegroundRef.current = foreground;
+      setIsForeground(foreground);
       if (returningToForeground) load();
     });
     return () => subscription.remove();
@@ -132,10 +183,35 @@ export function useTenantContract() {
     if (CONTRACT_REFRESH_EVENT_TYPES.has(type)) load();
   }), [load]);
 
+  // Smart polling while the tenant waits on the Contract screen for a
+  // preparing/draft document to become final. One interval only. It is armed
+  // solely when the screen is focused, the app is in the foreground, and
+  // shouldPollFor() says the current contract/state is still in flight; it is
+  // torn down on blur, backgrounding, unmount, and as soon as the contract
+  // reaches a final / empty / error / blocking state. Every tick calls the
+  // same canonical load(), so requestSequence stale-response protection and
+  // all the error handling above apply unchanged.
+  const pollActive = isFocused && isForeground && shouldPollFor(contract, state);
+  useEffect(() => {
+    if (!pollActive) {
+      setIsPolling(false);
+      return undefined;
+    }
+    setIsPolling(true);
+    const interval = setInterval(() => {
+      // Re-check at fire time — focus/AppState can change between renders.
+      if (isForegroundRef.current && isFocusedRef.current) load();
+    }, SMART_POLL_INTERVAL_MS);
+    return () => {
+      clearInterval(interval);
+      setIsPolling(false);
+    };
+  }, [pollActive, load]);
+
   const reload = useCallback(() => load(), [load]);
   const refresh = useCallback(() => load({ isManualRefresh: true }), [load]);
 
-  return { contract, upcoming, state, loading, refreshing, error, reload, refresh };
+  return { contract, upcoming, state, loading, refreshing, error, isPolling, reload, refresh };
 }
 
 export { CONTRACT_REFRESH_EVENT_TYPES };

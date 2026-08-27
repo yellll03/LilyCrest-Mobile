@@ -1,7 +1,7 @@
 /* global test */
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { apiService } from '../services/api';
-import { useTenantContract } from '../hooks/useTenantContract';
+import { useTenantContract, shouldPollFor, SMART_POLL_INTERVAL_MS } from '../hooks/useTenantContract';
 import { buildContractSummary } from '../utils/contractPresentation';
 import { publishCanonicalNotification, resetCanonicalEventDedupeForTests } from '../services/canonicalEvents';
 
@@ -55,6 +55,22 @@ function finalResponse() {
         id: '507f1f77bcf86cd799439011',
         status: 'active',
         tenantDocument: { available: true, type: 'final_notarized', isFinal: true, version: 1, publishedAt: '2026-08-10' },
+      },
+      state: 'CONTRACT_AVAILABLE',
+    },
+  };
+}
+
+// A contract that exists but whose document is still being prepared — no
+// draft PDF and no final yet. contractLifecycleState() resolves this to
+// 'preparing'.
+function preparingResponse() {
+  return {
+    data: {
+      contract: {
+        id: '507f1f77bcf86cd799439011',
+        status: 'reservation_approved',
+        tenantDocument: { available: false, type: null },
       },
       state: 'CONTRACT_AVAILABLE',
     },
@@ -324,6 +340,147 @@ describe('useTenantContract refresh/error lifecycle against the real canonical r
 
     await waitFor(() => expect(result.current.contract?.tenantDocument.type).toBe('generated_draft'));
     expect(apiService.getCurrentContract).toHaveBeenCalledTimes(2);
+  });
+});
+
+// Smart polling: while the tenant waits on the Contract screen for a
+// preparing/draft document to become final, the hook polls the canonical
+// GET /contracts/current every SMART_POLL_INTERVAL_MS. Focus / foreground /
+// notification / pull-to-refresh behaviour above is unchanged; these tests
+// only cover the added interval.
+describe('useTenantContract — smart polling while a document is in flight', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockAppStateListeners.clear();
+    resetCanonicalEventDedupeForTests();
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.runOnlyPendingTimers();
+    jest.useRealTimers();
+  });
+
+  test('a preparing contract starts polling and a later poll surfaces the Draft', async () => {
+    apiService.getCurrentContract
+      .mockResolvedValueOnce(preparingResponse())
+      .mockResolvedValueOnce(draftResponse());
+    const { result } = renderHook(() => useTenantContract());
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.isPolling).toBe(true);
+    expect(apiService.getCurrentContract).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      jest.advanceTimersByTime(SMART_POLL_INTERVAL_MS);
+    });
+
+    await waitFor(() => expect(result.current.contract?.tenantDocument.type).toBe('generated_draft'));
+    expect(apiService.getCurrentContract).toHaveBeenCalledTimes(2);
+  });
+
+  test('a draft contract keeps polling while it waits for the final', async () => {
+    apiService.getCurrentContract
+      .mockResolvedValueOnce(draftResponse())
+      .mockResolvedValueOnce(draftResponse())
+      .mockResolvedValueOnce(finalResponse());
+    const { result } = renderHook(() => useTenantContract());
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.isPolling).toBe(true);
+
+    await act(async () => { jest.advanceTimersByTime(SMART_POLL_INTERVAL_MS); });
+    expect(apiService.getCurrentContract).toHaveBeenCalledTimes(2);
+    expect(result.current.isPolling).toBe(true);
+
+    await act(async () => { jest.advanceTimersByTime(SMART_POLL_INTERVAL_MS); });
+    await waitFor(() => expect(result.current.contract?.tenantDocument.type).toBe('final_notarized'));
+  });
+
+  test('polling stops once the contract reaches final', async () => {
+    apiService.getCurrentContract
+      .mockResolvedValueOnce(draftResponse())
+      .mockResolvedValueOnce(finalResponse());
+    const { result } = renderHook(() => useTenantContract());
+
+    await waitFor(() => expect(result.current.isPolling).toBe(true));
+
+    await act(async () => { jest.advanceTimersByTime(SMART_POLL_INTERVAL_MS); });
+    await waitFor(() => expect(result.current.contract?.tenantDocument.type).toBe('final_notarized'));
+
+    await waitFor(() => expect(result.current.isPolling).toBe(false));
+    const callsAtFinal = apiService.getCurrentContract.mock.calls.length;
+    await act(async () => { jest.advanceTimersByTime(SMART_POLL_INTERVAL_MS * 3); });
+    expect(apiService.getCurrentContract).toHaveBeenCalledTimes(callsAtFinal);
+  });
+
+  test('NO_PUBLISHED_CONTRACT never polls', async () => {
+    apiService.getCurrentContract.mockResolvedValue({ data: { contract: null, state: 'NO_PUBLISHED_CONTRACT' } });
+    const { result } = renderHook(() => useTenantContract());
+
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.isPolling).toBe(false);
+
+    await act(async () => { jest.advanceTimersByTime(SMART_POLL_INTERVAL_MS * 5); });
+    expect(apiService.getCurrentContract).toHaveBeenCalledTimes(1);
+  });
+
+  test('an error state does not poll', async () => {
+    apiService.getCurrentContract.mockRejectedValueOnce({ response: { status: 500 } });
+    const { result } = renderHook(() => useTenantContract());
+
+    await waitFor(() => expect(result.current.state).toBe('ERROR'));
+    expect(result.current.isPolling).toBe(false);
+
+    await act(async () => { jest.advanceTimersByTime(SMART_POLL_INTERVAL_MS * 5); });
+    expect(apiService.getCurrentContract).toHaveBeenCalledTimes(1);
+  });
+
+  test('backgrounding the app stops polling; returning to foreground resumes it', async () => {
+    apiService.getCurrentContract.mockResolvedValue(preparingResponse());
+    const { result } = renderHook(() => useTenantContract());
+
+    await waitFor(() => expect(result.current.isPolling).toBe(true));
+
+    act(() => emitAppState('background'));
+    await waitFor(() => expect(result.current.isPolling).toBe(false));
+
+    const callsWhileBackgrounded = apiService.getCurrentContract.mock.calls.length;
+    await act(async () => { jest.advanceTimersByTime(SMART_POLL_INTERVAL_MS * 3); });
+    expect(apiService.getCurrentContract).toHaveBeenCalledTimes(callsWhileBackgrounded);
+
+    act(() => emitAppState('active')); // foreground also triggers one immediate load()
+    await waitFor(() => expect(result.current.isPolling).toBe(true));
+  });
+
+  test('unmounting clears the interval (no polling after unmount)', async () => {
+    apiService.getCurrentContract.mockResolvedValue(preparingResponse());
+    const { result, unmount } = renderHook(() => useTenantContract());
+
+    await waitFor(() => expect(result.current.isPolling).toBe(true));
+    const callsBeforeUnmount = apiService.getCurrentContract.mock.calls.length;
+
+    unmount();
+    await act(async () => { jest.advanceTimersByTime(SMART_POLL_INTERVAL_MS * 5); });
+    expect(apiService.getCurrentContract).toHaveBeenCalledTimes(callsBeforeUnmount);
+  });
+});
+
+describe('shouldPollFor', () => {
+  test('polls only for preparing / draft with a live contract and a non-blocking state', () => {
+    const preparing = preparingResponse().data.contract;
+    const draft = draftResponse().data.contract;
+    const final = finalResponse().data.contract;
+
+    expect(shouldPollFor(preparing, 'CONTRACT_AVAILABLE')).toBe(true);
+    expect(shouldPollFor(draft, 'CONTRACT_AVAILABLE')).toBe(true);
+
+    expect(shouldPollFor(final, 'CONTRACT_AVAILABLE')).toBe(false);
+    expect(shouldPollFor(null, 'NO_PUBLISHED_CONTRACT')).toBe(false);
+    expect(shouldPollFor(draft, 'LOADING')).toBe(false);
+    expect(shouldPollFor(draft, 'ERROR')).toBe(false);
+    expect(shouldPollFor(draft, 'STALE')).toBe(false);
+    expect(shouldPollFor(draft, 'MULTIPLE_CONTRACTS')).toBe(false);
   });
 });
 
