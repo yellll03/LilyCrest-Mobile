@@ -194,27 +194,88 @@ test('the eligible-tenant response is byte-identical to the unknown-email respon
   }
 });
 
-test('a canonical upstream outage for an eligible tenant is reported truthfully without leaking provider detail', async () => {
+test('a canonical upstream outage for an eligible tenant does NOT change the externally visible response', async () => {
   const originalPost = axios.post;
   const originalGetDb = database.getDb;
   const originalError = console.error;
+  const logged = [];
   axios.post = async () => { throw Object.assign(new Error('private provider detail'), { code: 'ECONNRESET' }); };
-  console.error = () => {};
+  console.error = (...args) => { logged.push(args.join(' ')); };
   database.getDb = () => dbForRole('tenant');
   try {
     await withEnv({ CANONICAL_API_URL: 'https://api.lilycrest.space', BACKEND_URL: 'https://mobile-proxy.example.com' }, async () => {
       const res = response();
       await controller.requestPasswordReset({ body: { email: 'tenant@example.com' } }, res);
-      assert.equal(res.statusCode, 503);
-      assert.equal(res.body.code, 'PASSWORD_RESET_UNAVAILABLE');
-      assert.match(res.body.detail, /temporarily unavailable/i);
-      assert.doesNotMatch(JSON.stringify(res.body), /provider|ECONNRESET/i);
+      // Wait a tick for the fire-and-forget .catch() to run.
+      await new Promise((r) => setImmediate(r));
+      assert.equal(res.statusCode, 200);
+      assert.deepEqual(res.body, { message: controller.GENERIC_RESPONSE });
+      // The failure is observable only server-side, and never leaks detail.
+      assert.ok(logged.some((line) => /Upstream forward failed/.test(line)));
+      assert.doesNotMatch(logged.join('\n'), /private provider detail/);
     });
   } finally {
     axios.post = originalPost;
     database.getDb = originalGetDb;
     console.error = originalError;
   }
+});
+
+test('ENUMERATION ORACLE GUARD: during an upstream outage, an eligible tenant and an unknown email get an identical externally visible response', async () => {
+  const originalPost = axios.post;
+  const originalGetDb = database.getDb;
+  const originalError = console.error;
+  // Simulate a full canonical outage: every forward attempt fails.
+  axios.post = async () => { throw Object.assign(new Error('canonical down'), { code: 'ECONNREFUSED' }); };
+  console.error = () => {};
+  try {
+    await withEnv({ CANONICAL_API_URL: 'https://api.lilycrest.space', BACKEND_URL: 'https://mobile-proxy.example.com' }, async () => {
+      database.getDb = () => dbForRole('tenant');
+      const eligibleRes = response();
+      await controller.requestPasswordReset({ body: { email: 'tenant@example.com' } }, eligibleRes);
+
+      database.getDb = () => dbForUser(null);
+      const unknownRes = response();
+      await controller.requestPasswordReset({ body: { email: 'nobody@example.com' } }, unknownRes);
+
+      await new Promise((r) => setImmediate(r));
+
+      // Status, body, and shape must be indistinguishable — no existence oracle.
+      assert.equal(eligibleRes.statusCode, unknownRes.statusCode);
+      assert.equal(eligibleRes.statusCode, 200);
+      assert.deepEqual(eligibleRes.body, unknownRes.body);
+      assert.deepEqual(eligibleRes.body, { message: controller.GENERIC_RESPONSE });
+    });
+  } finally {
+    axios.post = originalPost;
+    database.getDb = originalGetDb;
+    console.error = originalError;
+  }
+});
+
+test('the forward is fire-and-forget: the 200 is returned before the upstream call settles', async () => {
+  const originalPost = axios.post;
+  const originalGetDb = database.getDb;
+  let resolveUpstream;
+  let settledBeforeResponse = null;
+  // Never resolves during the handler call — if the handler awaited it, the
+  // test would hang / the response would not be set yet.
+  axios.post = () => new Promise((resolve) => { resolveUpstream = resolve; });
+  database.getDb = () => dbForRole('tenant');
+  try {
+    await withEnv({ CANONICAL_API_URL: 'https://api.lilycrest.space', BACKEND_URL: 'https://mobile-proxy.example.com' }, async () => {
+      const res = response();
+      await controller.requestPasswordReset({ body: { email: 'tenant@example.com' } }, res);
+      settledBeforeResponse = res.body;
+      assert.equal(res.statusCode, 200);
+      assert.deepEqual(res.body, { message: controller.GENERIC_RESPONSE });
+    });
+  } finally {
+    if (resolveUpstream) resolveUpstream({ status: 200 });
+    axios.post = originalPost;
+    database.getDb = originalGetDb;
+  }
+  assert.deepEqual(settledBeforeResponse, { message: controller.GENERIC_RESPONSE });
 });
 
 test('resolveCanonicalApiUrl: self-recursion guard — no forward when CANONICAL_API_URL equals BACKEND_URL', async () => {

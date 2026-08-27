@@ -4,10 +4,15 @@ const axios = require('axios');
 const database = require('../config/database');
 const { isTenantResetEligible } = require('../utils/tenantEligibility');
 
-// Enumeration-safe: a registered/eligible email and an unknown/ineligible one
-// get exactly this response and status. The only non-200 outcomes are a
-// locally-malformed request (400) and a genuine upstream outage (503) — neither
-// of which reveals whether the account exists or what role it has.
+// Enumeration-safe: for any syntactically valid email — registered eligible
+// tenant, unknown, ineligible, or non-tenant — the externally visible response
+// is exactly this 200 body. The ONLY non-200 outcome is a locally-malformed /
+// blank request (400), which depends on the submitted string alone and reveals
+// nothing about any account. An upstream (canonical backend) failure is never
+// surfaced to the caller — doing so would let an attacker who can induce or
+// wait out an outage distinguish an eligible tenant (forward attempted -> 503)
+// from an unknown email (no forward -> 200). Upstream failures are observable
+// only through server-side logs/metrics.
 const GENERIC_RESPONSE = 'If an account exists for this email, a password reset link has been sent.';
 // Retained for older mobile clients that still branch on this code. The
 // deployed backend no longer emits it (doing so would leak tenant eligibility),
@@ -40,11 +45,15 @@ function resolveCanonicalApiUrl() {
  * backend. It creates no credential and stores no reset token; the canonical
  * Capstone backend owns Firebase action-code generation and branded delivery.
  *
- * Contract:
- *   - malformed / missing email            -> 400 (no DB, no upstream)
- *   - eligible tenant (role + active)      -> forward to canonical upstream, 200 generic
- *   - unknown / ineligible / non-tenant    -> NO upstream call, 200 generic (identical)
- *   - upstream unreachable for an eligible -> 503 (outage, not enumeration)
+ * Contract (externally visible):
+ *   - malformed / missing email                     -> 400 (no DB, no upstream)
+ *   - any syntactically valid email                 -> 200 generic, identical
+ * Internally:
+ *   - eligible tenant (role + active)               -> forward to canonical upstream
+ *   - unknown / ineligible / non-tenant             -> NO upstream call
+ *   - upstream failure for an eligible tenant       -> logged only, response unchanged
+ *   - the forward is fire-and-forget: the 200 is sent immediately either way,
+ *     so response timing does not distinguish eligible from unknown.
  */
 async function requestPasswordReset(req, res) {
   const email = typeof req.body?.email === 'string' ? req.body.email.trim().toLowerCase() : '';
@@ -73,32 +82,21 @@ async function requestPasswordReset(req, res) {
     return res.json({ message: GENERIC_RESPONSE });
   }
 
-  if (!eligible) {
-    // Unknown email, wrong role, or inactive account: identical generic 200,
-    // and crucially no upstream reset is triggered for a non-tenant.
-    return res.json({ message: GENERIC_RESPONSE });
+  const canonicalApiUrl = eligible ? resolveCanonicalApiUrl() : null;
+  if (eligible && canonicalApiUrl) {
+    // Fire-and-forget: forward the reset for an eligible tenant, but never let
+    // the outcome (success, timeout, 5xx, DNS failure) change the response the
+    // caller sees or how long it takes. An upstream problem is a server-side
+    // observability concern, not a client signal — surfacing it here would make
+    // "eligible tenant" distinguishable from "unknown email" during an outage.
+    axios
+      .post(`${canonicalApiUrl}/api/m/auth/forgot-password`, { email }, { timeout: 15000 })
+      .catch((error) => {
+        console.error('[canonical-password-reset-proxy] Upstream forward failed:', error?.code || error?.message);
+      });
   }
 
-  const canonicalApiUrl = resolveCanonicalApiUrl();
-  if (!canonicalApiUrl) {
-    // Nothing to forward to (unset, or would recurse into ourselves). The
-    // eligible tenant still gets the generic response.
-    return res.json({ message: GENERIC_RESPONSE });
-  }
-
-  try {
-    // The canonical server performs its own authoritative tenant check too;
-    // the standalone database result is defense in depth, never the final
-    // authority for mobile reset eligibility.
-    await axios.post(`${canonicalApiUrl}/api/m/auth/forgot-password`, { email }, { timeout: 15000 });
-  } catch (error) {
-    console.error('[canonical-password-reset-proxy] Upstream request failed:', error?.code || error?.message);
-    return res.status(503).json({
-      code: 'PASSWORD_RESET_UNAVAILABLE',
-      detail: 'Password reset is temporarily unavailable. Please try again later.',
-    });
-  }
-
+  // Identical 200 for eligible / unknown / ineligible / non-tenant, sent now.
   return res.json({ message: GENERIC_RESPONSE });
 }
 
