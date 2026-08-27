@@ -112,3 +112,31 @@ test('contract-viewer acknowledgement copy never uses signature terminology', ()
   // And it does say "acknowledge".
   expect(/acknowledge/i.test(region)).toBe(true);
 });
+
+// Layout regression: the Document Acknowledgement card uses its own dedicated
+// style (with marginTop 12 / marginBottom 28) so it is visually separated from
+// the Current Document card above and the Renewal / support content below —
+// not the shared `card` spacing.
+test('contract-viewer acknowledgement card has its own dedicated spacing style', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(path.join(__dirname, '..', '..', 'app', 'contract-viewer.jsx'), 'utf8');
+  // The acknowledgement SurfaceCard is styled with acknowledgementCard, not card.
+  expect(/title="Document Acknowledgement"/.test(src)).toBe(true);
+  const ackRegion = src.slice(src.indexOf('acknowledgement.status ?'), src.indexOf('acknowledgement.status ?') + 200);
+  expect(/style=\{styles\.acknowledgementCard\}/.test(ackRegion)).toBe(true);
+  expect(/acknowledgementCard:\s*\{[^}]*marginTop:\s*12[^}]*marginBottom:\s*28/.test(src)).toBe(true);
+});
+
+// Removal regression: the collapsible "Document Information" block was removed
+// from the Contract Viewer (its content duplicated the PDF one tap away).
+test('contract-viewer no longer renders a "Document Information" block', () => {
+  const fs = require('fs');
+  const path = require('path');
+  const src = fs.readFileSync(path.join(__dirname, '..', '..', 'app', 'contract-viewer.jsx'), 'utf8');
+  expect(src.includes('Document Information')).toBe(false);
+  expect(src.includes('showDocumentInfo')).toBe(false);
+  expect(/summary\.documentInfo/.test(src)).toBe(false);
+  // The "Lease & Payment Details" collapsible (a different section) stays.
+  expect(src.includes('Lease &amp; Payment Details')).toBe(true);
+});

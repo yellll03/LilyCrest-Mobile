@@ -45,7 +45,6 @@ export default function ContractViewer() {
     ? requestedContractIdParam[0]
     : requestedContractIdParam;
   const { colors } = useTheme();
-  const [showDocumentInfo, setShowDocumentInfo] = useState(false);
   const [showMoreDetails, setShowMoreDetails] = useState(false);
   const [startingSupport, setStartingSupport] = useState(false);
   const [supportError, setSupportError] = useState('');
@@ -179,7 +178,7 @@ export default function ContractViewer() {
             </DocumentActionCard>
 
             {summary.canOpenPdf && acknowledgement.status ? (
-              <SurfaceCard style={styles.card}>
+              <SurfaceCard style={styles.acknowledgementCard}>
                 <SectionHeader
                   icon="checkmark-circle-outline"
                   title="Document Acknowledgement"
@@ -241,21 +240,6 @@ export default function ContractViewer() {
                 variant="secondary"
               />
             </SurfaceCard>
-
-            {summary.documentInfo.length ? (
-              <View style={[styles.documentInfo, { borderColor: colors.border }]}>
-                <TouchableOpacity style={styles.documentInfoToggle} onPress={() => setShowDocumentInfo((value) => !value)}>
-                  <Text style={[styles.documentInfoTitle, { color: colors.text }]}>Document Information</Text>
-                  <Ionicons name={showDocumentInfo ? 'chevron-up' : 'chevron-down'} size={18} color={colors.textSecondary} />
-                </TouchableOpacity>
-                {showDocumentInfo ? summary.documentInfo.map((field) => (
-                  <View key={field.label} style={styles.infoRow}>
-                    <Text style={[styles.label, { color: colors.textSecondary }]}>{field.label}</Text>
-                    <Text style={[styles.infoValue, { color: colors.text }]}>{field.value}</Text>
-                  </View>
-                )) : null}
-              </View>
-            ) : null}
           </>
         )}
       </ScrollView>
@@ -268,11 +252,14 @@ const styles = StyleSheet.create({
   content: { padding: 18, paddingBottom: 42 },
   empty: { alignItems: 'center', paddingTop: 100, gap: 16 },
   card: { gap: 10, marginBottom: 16 },
+  // The acknowledgement card gets its own vertical rhythm so it reads as a
+  // distinct call-to-action, set apart from the Current Document card above
+  // and the Renewal / support content below.
+  acknowledgementCard: { gap: 10, marginTop: 12, marginBottom: 28 },
   lifecycleStatus: { fontSize: 16, lineHeight: 22, fontWeight: '700' },
   staleWarning: { flexDirection: 'row', alignItems: 'center', gap: 10, borderWidth: 1, borderRadius: 12, padding: 12, marginBottom: 14 },
   staleWarningText: { flex: 1, fontSize: 12, lineHeight: 17 },
   staleWarningRetry: { fontSize: 13, fontWeight: '700' },
-  label: { fontSize: 12, fontWeight: '600' },
   finalizing: { paddingTop: 14, borderTopWidth: StyleSheet.hairlineWidth, fontSize: 13, lineHeight: 19 },
   moreDetails: { marginTop: 4, paddingTop: 10, borderTopWidth: StyleSheet.hairlineWidth },
   upcomingNote: { fontSize: 12, lineHeight: 17, marginBottom: 4 },
@@ -280,9 +267,8 @@ const styles = StyleSheet.create({
   documentPending: { fontSize: 13, lineHeight: 19, marginTop: 12 },
   supportCard: { gap: 12, marginTop: 16 },
   supportError: { fontSize: 12, lineHeight: 17 },
-  documentInfo: { marginTop: 18, borderWidth: 1, borderRadius: 12, padding: 14 },
+  // Still used by the "Lease & Payment Details" collapsible inside the
+  // Contract Status card.
   documentInfoToggle: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   documentInfoTitle: { fontSize: 14, fontWeight: '700' },
-  infoRow: { marginTop: 12, gap: 3 },
-  infoValue: { fontSize: 14, fontWeight: '600' },
 });
