@@ -1,3 +1,4 @@
+const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
 
@@ -45,11 +46,18 @@ function main() {
   run(process.execPath, [path.join('scripts', 'verify-release-contract.js'), '--require-clean']);
   run(process.execPath, [path.join('scripts', 'verify-qa-runtime.js')]);
 
-  // Recreate the app bundle so changed EXPO_PUBLIC_* inputs can never reuse a
-  // stale Metro artifact. Dependency-module caches are intentionally kept;
-  // cleaning them is unnecessary and is fragile on Windows when lint holds a
-  // generated dependency jar open.
-  const gradleArgs = [':app:clean', 'assembleIsolatedQaRelease', '-PlilycrestQaBuild=true'];
+  // Recreate only the generated app module so changed EXPO_PUBLIC_* inputs can
+  // never reuse a stale Metro artifact. Gradle's clean tasks traverse native
+  // dependency caches and can fail on Windows when lint/CMake holds one open.
+  const androidAppDir = path.resolve(root, 'android', 'app');
+  const generatedBuildDir = path.resolve(androidAppDir, 'build');
+  const relativeBuildDir = path.relative(androidAppDir, generatedBuildDir);
+  if (relativeBuildDir !== 'build' || generatedBuildDir === androidAppDir) {
+    throw new Error('Refusing to clean an unexpected QA build path.');
+  }
+  fs.rmSync(generatedBuildDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 });
+
+  const gradleArgs = ['assembleIsolatedQaRelease', '-PlilycrestQaBuild=true'];
   if (process.platform === 'win32') {
     run(process.env.ComSpec || 'cmd.exe', ['/d', '/s', '/c', 'gradlew.bat', ...gradleArgs], {
       cwd: path.join(root, 'android'),
