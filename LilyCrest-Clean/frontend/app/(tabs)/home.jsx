@@ -830,8 +830,8 @@ export default function HomeScreen() {
                   </Text>
                 </View>
               ) : (
-                <View style={[styles.activeBadge, { backgroundColor: '#FFFBEB' }]}>
-                  <Text style={[styles.activeText, { color: '#D97706' }]}>No Room Assigned</Text>
+                <View style={[styles.activeBadge, { backgroundColor: colors.warningBg }]}>
+                  <Text style={[styles.activeText, { color: colors.warningText }]}>No Room Assigned</Text>
                 </View>
               )
             ) : null}

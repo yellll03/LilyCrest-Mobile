@@ -580,8 +580,8 @@ export default function BillingScreen() {
           <RefreshControl
             refreshing={refreshing}
             onRefresh={handleRefresh}
-            colors={['#0A1628']}
-            tintColor="#0A1628"
+            colors={[colors.interactive]}
+            tintColor={colors.interactive}
           />
         }
         ListEmptyComponent={
