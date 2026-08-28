@@ -119,7 +119,8 @@ describe('theme-aware dialogs and maintenance conversation', () => {
     expect(profile).not.toMatch(/<Modal visible=\{logoutModalVisible\}|<Modal visible=\{discardModalVisible\}/);
     expect(profile.match(/<StyledModal/g)).toHaveLength(2);
     expect(maintenance).not.toMatch(/<Modal visible=\{showDiscardConfirm\}|<Modal visible=\{showCancelConfirm\}|<Modal visible=\{showReopenModal\}/);
-    expect(maintenance.match(/<StyledModal/g)).toHaveLength(3);
+    expect(maintenance.match(/<StyledModal/g)).toHaveLength(4);
+    expect(maintenance).toContain('visible={showRatingModal}');
   });
 
   test('other active LilyCrest-owned confirmations use the shared alert provider', () => {
