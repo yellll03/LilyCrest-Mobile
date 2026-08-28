@@ -34,6 +34,11 @@ jest.mock('expo-document-picker', () => ({
   getDocumentAsync: jest.fn(),
 }));
 
+jest.mock('expo-image-manipulator', () => ({
+  manipulateAsync: jest.fn(),
+  SaveFormat: { JPEG: 'jpeg', PNG: 'png', WEBP: 'webp' },
+}));
+
 // Swipeable's behavior is covered by hook/source contracts in unit tests;
 // native gesture dispatch itself is exercised by the Android build/device QA.
 jest.mock('react-native-gesture-handler/Swipeable', () => {

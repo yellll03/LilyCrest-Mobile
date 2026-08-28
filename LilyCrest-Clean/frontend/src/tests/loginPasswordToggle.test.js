@@ -79,6 +79,22 @@ describe('Login screen — password visibility toggle', () => {
     expect(screen.queryByLabelText('Show password')).toBeNull();
   });
 
+  it.each([' Leading1!', 'Trailing1! ', 'Middle Space1!', 'Pasted\tValue1!'])(
+    'blocks whitespace edit %p, preserves the visible value, and keeps the toggle working',
+    (attemptedValue) => {
+      render(<LoginScreen />);
+      const passwordInput = screen.getByPlaceholderText('Enter your password');
+      fireEvent.changeText(passwordInput, 'Valid1!');
+      fireEvent.changeText(passwordInput, attemptedValue);
+
+      expect(screen.getByPlaceholderText('Enter your password').props.value).toBe('Valid1!');
+      expect(screen.getByText('Password must not contain whitespace.')).toBeTruthy();
+      fireEvent.press(screen.getByLabelText('Show password'));
+      expect(screen.getByPlaceholderText('Enter your password').props.secureTextEntry).toBe(false);
+      expect(screen.getByPlaceholderText('Enter your password').props.value).toBe('Valid1!');
+    },
+  );
+
   it('hides the password again and returns to the closed eye / "Show password" on a second tap', () => {
     render(<LoginScreen />);
     const passwordInput = screen.getByPlaceholderText('Enter your password');

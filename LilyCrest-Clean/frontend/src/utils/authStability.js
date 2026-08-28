@@ -2,6 +2,9 @@ export const AUTH_MESSAGES = Object.freeze({
   emptyFields: 'Please enter your email and password.',
   invalidEmail: 'Please enter a valid email address.',
   invalidCredentials: 'Incorrect email or password.',
+  tenantNotRegistered: 'This account is not registered as an active tenant.',
+  tenantInactive: 'This tenant account is inactive. Please contact the admin office.',
+  passwordWhitespace: 'Password must not contain whitespace.',
   offline: 'No internet connection. Please check your network and try again.',
   timeout: 'The request took too long. Please try again.',
   backendUnavailable: 'Unable to connect to the server. Please try again later.',
@@ -39,6 +42,9 @@ export function validateLoginInput(email, password) {
   }
   const emailResult = validateEmail(email);
   if (!emailResult.valid) return emailResult;
+  if (/\s/.test(password)) {
+    return { valid: false, email: emailResult.email, message: AUTH_MESSAGES.passwordWhitespace };
+  }
   return { valid: true, email: emailResult.email, password, message: '' };
 }
 
@@ -48,6 +54,18 @@ export function classifyAuthError(error) {
   const message = String(error?.message || '');
   const responseCode = String(error?.response?.data?.code || '').toUpperCase();
 
+  if (responseCode === 'INVALID_CREDENTIALS') {
+    return { type: 'credentials', status: status || 401, message: AUTH_MESSAGES.invalidCredentials };
+  }
+  if (['TENANT_NOT_REGISTERED', 'TENANT_ACCESS_REQUIRED'].includes(responseCode)) {
+    return { type: 'access', status: status || 403, message: AUTH_MESSAGES.tenantNotRegistered };
+  }
+  if (['TENANT_INACTIVE', 'ACCOUNT_INACTIVE'].includes(responseCode)) {
+    return { type: 'inactive', status: status || 403, message: AUTH_MESSAGES.tenantInactive };
+  }
+  if (responseCode === 'PASSWORD_WHITESPACE_NOT_ALLOWED') {
+    return { type: 'validation', status: status || 400, message: AUTH_MESSAGES.passwordWhitespace };
+  }
   if (responseCode === 'TENANT_RESET_NOT_AVAILABLE') {
     return { type: 'access', status: status || 422, message: AUTH_MESSAGES.resetNotAvailable };
   }
@@ -139,7 +157,7 @@ export function createRequestLock() {
 
 export function authErrorTypeForUi(type) {
   if (type === 'credentials' || type === 'validation') return 'credentials';
-  if (type === 'access' || type === 'disabled' || type === 'profile') return 'access';
+  if (type === 'access' || type === 'inactive' || type === 'disabled' || type === 'profile') return 'access';
   if (type === 'rate-limit') return 'ratelimit';
   if (type === 'offline' || type === 'timeout' || type === 'server' || type === 'otp-delivery') return 'network';
   return 'unexpected';

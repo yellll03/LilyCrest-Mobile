@@ -24,6 +24,14 @@ export function getMaintenanceAttachmentErrorMessage(error) {
   return error?.response?.data?.detail || 'Failed to submit request. Please try again.';
 }
 
+export function getMaintenanceAttachmentSelectionError(file, { maxBytes, supported } = {}) {
+  if (!supported) return 'Please select an image, PDF, document, text, or CSV file.';
+  if (file?.size && Number.isFinite(maxBytes) && file.size > maxBytes) {
+    return 'File must be 5 MB or smaller.';
+  }
+  return '';
+}
+
 export function shouldConfirmCreateRequestClose({ isDirty = false, hasAttemptedSubmit = false } = {}) {
   return Boolean(isDirty || hasAttemptedSubmit);
 }

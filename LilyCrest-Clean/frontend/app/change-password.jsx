@@ -33,6 +33,7 @@ export default function ChangePasswordScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [errors, setErrors] = useState({});
   const [touched, setTouched] = useState({ current: false, new: false, confirm: false });
+  const [blockedWhitespace, setBlockedWhitespace] = useState({ current: false, new: false, confirm: false });
   const submitInFlight = useRef(false);
 
   const passwordChecks = useMemo(() => getStrongPasswordChecks(newPassword), [newPassword]);
@@ -41,6 +42,7 @@ export default function ChangePasswordScreen() {
   const doPasswordsMatch = Boolean(confirmPassword) && newPassword === confirmPassword;
   const validateCurrentPassword = (password) => {
     if (!password) return 'Current password is required';
+    if (/\s/.test(password)) return PASSWORD_WHITESPACE_MESSAGE;
     return '';
   };
 
@@ -48,25 +50,27 @@ export default function ChangePasswordScreen() {
     const nextErrors = {};
 
     if (touched.current) {
-      nextErrors.current = validateCurrentPassword(currentPassword);
+      nextErrors.current = blockedWhitespace.current ? PASSWORD_WHITESPACE_MESSAGE : validateCurrentPassword(currentPassword);
     }
 
     if (touched.new) {
-      if (!newPassword) nextErrors.new = 'New password is required';
+      if (blockedWhitespace.new) nextErrors.new = PASSWORD_WHITESPACE_MESSAGE;
+      else if (!newPassword) nextErrors.new = 'New password is required';
       else if (!isPasswordValid) nextErrors.new = validateStrongPassword(newPassword, { requiredMessage: 'New password is required' }).error;
       else if (isSameAsCurrent) nextErrors.new = 'Your new password must be different from your current password.';
       else nextErrors.new = '';
     }
 
     if (touched.confirm) {
-      if (!confirmPassword) nextErrors.confirm = 'Please confirm your new password';
+      if (blockedWhitespace.confirm) nextErrors.confirm = PASSWORD_WHITESPACE_MESSAGE;
+      else if (!confirmPassword) nextErrors.confirm = 'Please confirm your new password';
       else if (/\s/.test(confirmPassword)) nextErrors.confirm = PASSWORD_WHITESPACE_MESSAGE;
       else if (!doPasswordsMatch) nextErrors.confirm = 'Passwords do not match';
       else nextErrors.confirm = '';
     }
 
     setErrors((prev) => ({ ...prev, ...nextErrors }));
-  }, [confirmPassword, currentPassword, doPasswordsMatch, isPasswordValid, isSameAsCurrent, newPassword, touched]);
+  }, [blockedWhitespace, confirmPassword, currentPassword, doPasswordsMatch, isPasswordValid, isSameAsCurrent, newPassword, touched]);
 
   const handleChangePassword = async () => {
     if (submitInFlight.current) return;
@@ -142,19 +146,18 @@ export default function ChangePasswordScreen() {
   };
 
   const handlePasswordFieldChange = (field, value) => {
-    if (field === 'current') {
-      setCurrentPassword(value);
-      return;
-    }
     const currentValue = field === 'current' ? currentPassword : field === 'new' ? newPassword : confirmPassword;
     const { value: nextValue, blocked } = blockPasswordWhitespaceInput(value, currentValue);
 
     if (blocked) {
+      setBlockedWhitespace((prev) => ({ ...prev, [field]: true }));
       setTouched((prev) => ({ ...prev, [field]: true }));
       setErrors((prev) => ({ ...prev, [field]: PASSWORD_WHITESPACE_MESSAGE }));
       return;
     }
 
+    setBlockedWhitespace((prev) => ({ ...prev, [field]: false }));
+    if (field === 'current') setCurrentPassword(nextValue);
     if (field === 'new') setNewPassword(nextValue);
     if (field === 'confirm') setConfirmPassword(nextValue);
   };
@@ -189,6 +192,8 @@ export default function ChangePasswordScreen() {
                 onChangeText={(value) => handlePasswordFieldChange('current', value)}
                 onBlur={() => setTouched((prev) => ({ ...prev, current: true }))}
                 secureTextEntry={!showCurrentPassword}
+                autoCapitalize="none"
+                autoCorrect={false}
               />
               <TouchableOpacity
                 onPress={() => setShowCurrentPassword(!showCurrentPassword)}
@@ -216,6 +221,8 @@ export default function ChangePasswordScreen() {
                 onBlur={() => setTouched((prev) => ({ ...prev, new: true }))}
                 secureTextEntry={!showNewPassword}
                 maxLength={NEW_PASSWORD_MAX_LENGTH}
+                autoCapitalize="none"
+                autoCorrect={false}
               />
               <TouchableOpacity
                 onPress={() => setShowNewPassword(!showNewPassword)}
@@ -267,6 +274,8 @@ export default function ChangePasswordScreen() {
                 onBlur={() => setTouched((prev) => ({ ...prev, confirm: true }))}
                 secureTextEntry={!showConfirmPassword}
                 maxLength={NEW_PASSWORD_MAX_LENGTH}
+                autoCapitalize="none"
+                autoCorrect={false}
               />
               <TouchableOpacity
                 onPress={() => setShowConfirmPassword(!showConfirmPassword)}

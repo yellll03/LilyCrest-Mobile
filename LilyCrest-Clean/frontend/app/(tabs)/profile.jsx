@@ -15,6 +15,7 @@ import { resolveAccountStatus } from '../../src/utils/accountStatus';
 import { SURVEY_FEEDBACK_ENABLED } from '../../src/config/features';
 import { API_BASE_URL } from '../../src/config/api';
 import { persistCanonicalProfileImage } from '../../src/services/profileImage';
+import ProfilePhotoCropModal from '../../src/components/ProfilePhotoCropModal';
 import StyledModal from '../../src/components/StyledModal';
 
 const BUILD_INFO = (() => {
@@ -102,6 +103,9 @@ export default function ProfileScreen() {
   const [profileBanner, setProfileBanner] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [activeSurvey, setActiveSurvey] = useState(null);
+  const [photoCropAsset, setPhotoCropAsset] = useState(null);
+  const [photoCropError, setPhotoCropError] = useState('');
+  const [photoCropSaving, setPhotoCropSaving] = useState(false);
   const userId = user?.user_id || null;
 
   useEffect(() => {
@@ -272,17 +276,42 @@ export default function ProfileScreen() {
         showAlert({ title: 'Permission Required', message: 'Please allow access to your photo library to change your profile picture.', type: 'warning' });
         return;
       }
-      const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ImagePicker.MediaTypeOptions.Images, allowsEditing: true, aspect: [1, 1], quality: 0.5 });
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: false,
+        quality: 1,
+      });
       if (result.canceled || !result.assets?.[0]) return;
-      setIsLoading(true);
-      const profile = await persistCanonicalProfileImage(result.assets[0], userId);
-      updateUser(profile);
-      setProfileBanner({ type: 'success', text: 'Profile picture updated.' });
+      setPhotoCropError('');
+      setPhotoCropAsset(result.assets[0]);
     } catch (error) {
       setProfileBanner({ type: 'error', text: error?.response?.data?.errors?.picture || getApiErrorMessage(error, 'Failed to update profile picture.') });
     } finally {
       profileMutationGuardRef.current = false;
-      setIsLoading(false);
+    }
+  };
+
+  const cancelPhotoCrop = () => {
+    if (photoCropSaving) return;
+    setPhotoCropAsset(null);
+    setPhotoCropError('');
+  };
+
+  const saveCroppedPhoto = async (croppedAsset) => {
+    if (profileMutationGuardRef.current || photoCropSaving) return;
+    profileMutationGuardRef.current = true;
+    setPhotoCropSaving(true);
+    setPhotoCropError('');
+    try {
+      const profile = await persistCanonicalProfileImage(croppedAsset, userId);
+      updateUser(profile);
+      setPhotoCropAsset(null);
+      setProfileBanner({ type: 'success', text: 'Profile picture updated.' });
+    } catch (error) {
+      setPhotoCropError(error?.response?.data?.errors?.picture || getApiErrorMessage(error, 'Failed to update profile picture.'));
+    } finally {
+      profileMutationGuardRef.current = false;
+      setPhotoCropSaving(false);
     }
   };
 
@@ -702,6 +731,15 @@ export default function ProfileScreen() {
           { text: 'Cancel', style: 'cancel', onPress: () => setLogoutModalVisible(false) },
           { text: 'Sign Out', style: 'destructive', onPress: confirmLogout, loading: isLoggingOut },
         ]}
+      />
+
+      <ProfilePhotoCropModal
+        asset={photoCropAsset}
+        error={photoCropError}
+        onCancel={cancelPhotoCrop}
+        onSave={saveCroppedPhoto}
+        saving={photoCropSaving}
+        visible={Boolean(photoCropAsset)}
       />
 
       <StyledModal

@@ -23,7 +23,11 @@ import { savePendingLogin } from '../src/services/secureCredentials';
 import { loadRememberedEmail, saveRememberedEmail } from '../src/services/rememberedEmail';
 import { resetToHome } from '../src/utils/navigation';
 import { AUTH_MESSAGES, authErrorTypeForUi, normalizeEmail, validateEmail as validateAuthEmail } from '../src/utils/authStability';
-import { validateLoginPassword } from '../src/utils/passwordValidation';
+import {
+  blockPasswordWhitespaceInput,
+  PASSWORD_WHITESPACE_MESSAGE,
+  validateLoginPassword,
+} from '../src/utils/passwordValidation';
 
 /* cspell:words creds prefs lilycrest wordmark */
 
@@ -46,6 +50,7 @@ export default function LoginScreen() {
   const [password, setPassword] = useState('');
   const [rememberEmail, setRememberEmail] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const [passwordWhitespaceBlocked, setPasswordWhitespaceBlocked] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [isEmailLoading, setIsEmailLoading] = useState(false);
   const [errors, setErrors] = useState({ email: '', password: '' });
@@ -65,18 +70,27 @@ export default function LoginScreen() {
 
   useEffect(() => {
     if (touched.password) {
-      const passwordValidation = validateLoginPassword(password);
+      const passwordValidation = passwordWhitespaceBlocked
+        ? { error: PASSWORD_WHITESPACE_MESSAGE }
+        : validateLoginPassword(password);
       setErrors(prev => ({ ...prev, password: passwordValidation.error }));
     }
-  }, [password, touched.password]);
+  }, [password, passwordWhitespaceBlocked, touched.password]);
 
   useEffect(() => {
     setLoginError(null);
   }, [email, password]);
 
   const handlePasswordChange = (nextValue) => {
-    // Passwords are opaque credentials: never trim, normalize, or otherwise alter them.
-    setPassword(nextValue);
+    const result = blockPasswordWhitespaceInput(nextValue, password);
+    if (result.blocked) {
+      setPasswordWhitespaceBlocked(true);
+      setTouched((prev) => ({ ...prev, password: true }));
+      setErrors((prev) => ({ ...prev, password: PASSWORD_WHITESPACE_MESSAGE }));
+      return;
+    }
+    setPasswordWhitespaceBlocked(false);
+    setPassword(result.value);
   };
 
   // Remember me is an email-only convenience. Session persistence remains
@@ -321,6 +335,8 @@ export default function LoginScreen() {
                   onChangeText={handlePasswordChange}
                   onBlur={() => setTouched(prev => ({ ...prev, password: true }))} 
                   secureTextEntry={!showPassword} 
+                  autoCapitalize="none"
+                  autoCorrect={false}
                 />
                 <TouchableOpacity
                   onPress={() => setShowPassword(!showPassword)}

@@ -18,13 +18,8 @@ describe('authentication stability', () => {
     expect(validateLoginInput('tenant@example.com', '').message).toBe(AUTH_MESSAGES.emptyFields);
   });
 
-  test('password characters are preserved exactly', () => {
-    const password = '  exact password  ';
-    expect(validateLoginInput(' Tenant@Example.com ', password)).toMatchObject({
-      valid: true,
-      email: 'tenant@example.com',
-      password,
-    });
+  test('whitespace password is rejected rather than trimmed or normalized', () => {
+    expect(validateLoginInput(' Tenant@Example.com ', 'exact password').valid).toBe(false);
   });
 
   test('rapid submissions produce one request', async () => {
@@ -59,6 +54,15 @@ describe('authentication stability', () => {
   test('backend access and missing-profile responses are not network failures', () => {
     expect(classifyAuthError({ response: { status: 403 } }).type).toBe('access');
     expect(classifyAuthError({ response: { status: 404 } }).type).toBe('profile');
+  });
+
+  test.each([
+    ['INVALID_CREDENTIALS', 'credentials', AUTH_MESSAGES.invalidCredentials],
+    ['TENANT_NOT_REGISTERED', 'access', AUTH_MESSAGES.tenantNotRegistered],
+    ['TENANT_INACTIVE', 'inactive', AUTH_MESSAGES.tenantInactive],
+  ])('maps canonical backend code %s without frontend string guessing', (code, type, message) => {
+    expect(classifyAuthError({ response: { status: code === 'INVALID_CREDENTIALS' ? 401 : 403, data: { code } } }))
+      .toEqual(expect.objectContaining({ type, message }));
   });
 
   test('email verification has a distinct non-network message', () => {

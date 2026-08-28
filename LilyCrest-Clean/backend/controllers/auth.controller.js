@@ -53,6 +53,12 @@ const SESSION_LIFETIME_MS = 7 * 24 * 60 * 60 * 1000;
 const PASSWORD_LOCK_THRESHOLD = 3;
 const PASSWORD_LOCK_DURATION_MS = 15 * 60 * 1000; // 15 minutes
 const PASSWORD_WHITESPACE_MESSAGE = 'Password must not contain spaces.';
+const LOGIN_ERROR_CODES = Object.freeze({
+  INVALID_CREDENTIALS: 'INVALID_CREDENTIALS',
+  TENANT_NOT_REGISTERED: 'TENANT_NOT_REGISTERED',
+  TENANT_INACTIVE: 'TENANT_INACTIVE',
+  PASSWORD_WHITESPACE_NOT_ALLOWED: 'PASSWORD_WHITESPACE_NOT_ALLOWED',
+});
 const EMAIL_MAX_LENGTH = 254;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -240,6 +246,10 @@ function passwordContainsWhitespace(password = '') {
   return /\s/.test(password);
 }
 
+function loginError(res, status, code, detail, extra = {}) {
+  return res.status(status).json({ code, detail, ...extra });
+}
+
 function validateAuthPassword(password, { requiredMessage = 'Password is required', minLength = 8, maxLength = 128 } = {}) {
   if (!password || typeof password !== 'string') {
     return [requiredMessage];
@@ -276,6 +286,14 @@ async function login(req, res) {
   if (!isValidEmail(emailRaw)) {
     return res.status(400).json({ detail: 'Please provide a valid email address' });
   }
+  if (passwordContainsWhitespace(password)) {
+    return loginError(
+      res,
+      400,
+      LOGIN_ERROR_CODES.PASSWORD_WHITESPACE_NOT_ALLOWED,
+      PASSWORD_WHITESPACE_MESSAGE,
+    );
+  }
   const apiKey = firebaseApiKey();
   if (!apiKey) {
     return res.status(500).json({ detail: 'Firebase API key not configured on backend' });
@@ -311,7 +329,12 @@ async function login(req, res) {
         // Don't create Firebase accounts for inactive tenants
         if (!isAccountActive(mongoUser)) {
           logAttempt(db, emailRaw, false, 'inactive', req);
-          return res.status(403).json({ detail: 'Access denied. Your tenant account is inactive. Please contact admin.' });
+          return loginError(
+            res,
+            403,
+            LOGIN_ERROR_CODES.TENANT_INACTIVE,
+            'This tenant account is inactive. Please contact the admin office.',
+          );
         }
         console.log(`[Login] Auto-creating Firebase account for tenant: ${mongoUser.user_id}`);
         try {
@@ -332,18 +355,21 @@ async function login(req, res) {
               fbUid = retry.data.localId;
             } catch {
               logAttempt(db, emailRaw, false, 'firebase_retry_failed', req);
-              return res.status(401).json({ detail: 'Invalid email or password' });
+              return loginError(res, 401, LOGIN_ERROR_CODES.INVALID_CREDENTIALS, 'Invalid email or password');
             }
           } else {
             logAttempt(db, emailRaw, false, 'firebase_create_failed', req);
-            return res.status(401).json({ detail: 'Invalid email or password' });
+            return loginError(res, 401, LOGIN_ERROR_CODES.INVALID_CREDENTIALS, 'Invalid email or password');
           }
         }
       } else {
         logAttempt(db, emailRaw, false, 'not_tenant', req);
-        return res.status(403).json({
-          detail: 'Access denied. Your account is not registered as a verified tenant. Please contact the admin office.',
-        });
+        return loginError(
+          res,
+          403,
+          LOGIN_ERROR_CODES.TENANT_NOT_REGISTERED,
+          'This account is not registered as an active tenant.',
+        );
       }
     } else if (msg.includes('INVALID_PASSWORD') || msg.includes('INVALID_LOGIN_CREDENTIALS')) {
       // Check MongoDB before responding — if the account is inactive or not a tenant,
@@ -353,13 +379,21 @@ async function login(req, res) {
       if (!mongoUser) {
         // Has a Firebase account but is not in our system as a tenant
         logAttempt(db, emailRaw, false, 'not_tenant', req);
-        return res.status(403).json({
-          detail: 'Access denied. Your account is not registered as a verified tenant. Please contact the admin office.',
-        });
+        return loginError(
+          res,
+          403,
+          LOGIN_ERROR_CODES.TENANT_NOT_REGISTERED,
+          'This account is not registered as an active tenant.',
+        );
       }
       if (!isAccountActive(mongoUser)) {
         logAttempt(db, emailRaw, false, 'inactive', req);
-        return res.status(403).json({ detail: 'Access denied. Your tenant account is inactive. Please contact admin.' });
+        return loginError(
+          res,
+          403,
+          LOGIN_ERROR_CODES.TENANT_INACTIVE,
+          'This tenant account is inactive. Please contact the admin office.',
+        );
       }
       // User is an active tenant but the password is genuinely wrong
       const lockState = await registerFailedPasswordAttempt(db, mongoUser);
@@ -368,16 +402,27 @@ async function login(req, res) {
         return res.status(429).json({ detail: buildPasswordLockMessage(lockState.lockUntil) });
       }
       logAttempt(db, emailRaw, false, 'invalid_password', req);
-      return res.status(401).json({ detail: 'Invalid email or password', attempts_remaining: lockState.remainingAttempts });
+      return loginError(
+        res,
+        401,
+        LOGIN_ERROR_CODES.INVALID_CREDENTIALS,
+        'Invalid email or password',
+        { attempts_remaining: lockState.remainingAttempts },
+      );
     } else if (msg.includes('USER_DISABLED')) {
       logAttempt(db, emailRaw, false, 'user_disabled', req);
-      return res.status(403).json({ detail: 'This account has been disabled' });
+      return loginError(
+        res,
+        403,
+        LOGIN_ERROR_CODES.TENANT_INACTIVE,
+        'This tenant account is inactive. Please contact the admin office.',
+      );
     } else if (msg.includes('TOO_MANY_ATTEMPTS')) {
       logAttempt(db, emailRaw, false, 'too_many_attempts', req);
       return res.status(429).json({ detail: 'Too many failed attempts. Please try again later.' });
     } else {
       logAttempt(db, emailRaw, false, 'firebase_error', req);
-      return res.status(401).json({ detail: 'Invalid email or password' });
+      return loginError(res, 401, LOGIN_ERROR_CODES.INVALID_CREDENTIALS, 'Invalid email or password');
     }
   }
 
@@ -434,10 +479,12 @@ async function login(req, res) {
   });
   if (!tenant) {
     logAttempt(db, emailRaw, false, 'not_tenant', req);
-    return res.status(403).json({
-      code: 'TENANT_ACCESS_REQUIRED',
-      detail: 'Access denied. Your account is not registered as a verified tenant. Please contact the admin office.',
-    });
+    return loginError(
+      res,
+      403,
+      LOGIN_ERROR_CODES.TENANT_NOT_REGISTERED,
+      'This account is not registered as an active tenant.',
+    );
   }
 
   if (!tenant.user_id) {
@@ -447,10 +494,12 @@ async function login(req, res) {
 
   if (!isAccountActive(tenant)) {
     logAttempt(db, emailRaw, false, 'inactive', req);
-    return res.status(403).json({
-      code: 'ACCOUNT_INACTIVE',
-      detail: 'Access denied. Your tenant account is inactive. Please contact admin.',
-    });
+    return loginError(
+      res,
+      403,
+      LOGIN_ERROR_CODES.TENANT_INACTIVE,
+      'This tenant account is inactive. Please contact the admin office.',
+    );
   }
 
   console.log(`[Login] Tenant found: user_id=${tenant.user_id} email=${tenant.email} name=${tenant.name}`);
@@ -574,8 +623,8 @@ async function verifyOtp(req, res) {
   if (!tenant || !isTenantMobileRole(tenant.role)) {
     await db.collection('otp_store').deleteOne({ otp_token_hash: tokenHash }).catch(() => {});
     return res.status(403).json({
-      code: 'TENANT_ACCESS_REQUIRED',
-      detail: 'Access denied. This account is not registered as an active tenant.',
+      code: LOGIN_ERROR_CODES.TENANT_NOT_REGISTERED,
+      detail: 'This account is not registered as an active tenant.',
     });
   }
   if (!isAccountActive(tenant)) {
@@ -584,8 +633,8 @@ async function verifyOtp(req, res) {
       db.collection('user_sessions').deleteMany({ user_id: record.user_id }).catch(() => {}),
     ]);
     return res.status(403).json({
-      code: 'ACCOUNT_INACTIVE',
-      detail: 'Access denied. Your tenant account is inactive. Please contact admin.',
+      code: LOGIN_ERROR_CODES.TENANT_INACTIVE,
+      detail: 'This tenant account is inactive. Please contact the admin office.',
     });
   }
 
@@ -631,15 +680,15 @@ async function resendOtp(req, res) {
   if (!tenant || !isTenantMobileRole(tenant.role)) {
     await db.collection('otp_store').deleteOne({ otp_token_hash: tokenHash }).catch(() => {});
     return res.status(403).json({
-      code: 'TENANT_ACCESS_REQUIRED',
-      detail: 'Access denied. This account is not registered as an active tenant.',
+      code: LOGIN_ERROR_CODES.TENANT_NOT_REGISTERED,
+      detail: 'This account is not registered as an active tenant.',
     });
   }
   if (!isAccountActive(tenant)) {
     await db.collection('otp_store').deleteOne({ otp_token_hash: tokenHash }).catch(() => {});
     return res.status(403).json({
-      code: 'ACCOUNT_INACTIVE',
-      detail: 'Access denied. Your tenant account is inactive. Please contact admin.',
+      code: LOGIN_ERROR_CODES.TENANT_INACTIVE,
+      detail: 'This tenant account is inactive. Please contact the admin office.',
     });
   }
 
@@ -716,15 +765,21 @@ async function googleSignIn(req, res) {
     // Not found → not a registered tenant
     if (!tenant) {
       console.log(`[GoogleSignIn] Not found: ${email}`);
-      return res.status(403).json({
-        detail: 'Access denied. Your Google account is not registered as a verified tenant. Please contact the admin office.',
-      });
+      return loginError(
+        res,
+        403,
+        LOGIN_ERROR_CODES.TENANT_NOT_REGISTERED,
+        'This account is not registered as an active tenant.',
+      );
     }
 
     if (!isAccountActive(tenant)) {
-      return res.status(403).json({
-        detail: 'Access denied. Your tenant account is inactive. Please contact admin.',
-      });
+      return loginError(
+        res,
+        403,
+        LOGIN_ERROR_CODES.TENANT_INACTIVE,
+        'This tenant account is inactive. Please contact the admin office.',
+      );
     }
 
     if (!tenant.user_id) {
@@ -1198,6 +1253,12 @@ async function changePassword(req, res) {
       || typeof new_password !== 'string' || new_password.length === 0) {
       return res.status(400).json({ detail: 'Current password and new password are required' });
     }
+    if (passwordContainsWhitespace(current_password)) {
+      return res.status(400).json({
+        code: LOGIN_ERROR_CODES.PASSWORD_WHITESPACE_NOT_ALLOWED,
+        detail: PASSWORD_WHITESPACE_MESSAGE,
+      });
+    }
     // Server-side complexity checks (mirrors frontend rules)
     const validationErrors = validateNewPassword(new_password);
     if (validationErrors.length > 0) {
@@ -1218,11 +1279,19 @@ async function changePassword(req, res) {
       return res.status(500).json({ detail: 'Firebase API key not configured' });
     }
 
+    let verifiedFirebaseUid = '';
     try {
-      await axios.post(
+      const verificationResponse = await axios.post(
         `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
         { email: userEmail, password: current_password, returnSecureToken: false },
       );
+      verifiedFirebaseUid = String(verificationResponse?.data?.localId || '').trim();
+      if (!verifiedFirebaseUid) {
+        return res.status(502).json({
+          code: 'CURRENT_PASSWORD_VERIFICATION_UNAVAILABLE',
+          detail: 'The password provider returned an incomplete verification response. Please try again.',
+        });
+      }
     } catch (fbErr) {
       const msg = firebasePasswordError(fbErr);
       if (msg.includes('TOO_MANY_ATTEMPTS')) {
@@ -1238,10 +1307,12 @@ async function changePassword(req, res) {
     }
 
     // ── Update password in Firebase ───────────────────────────────────────
-    const uid = req.user.firebase_uid;
-    if (!uid) {
-      return res.status(400).json({ detail: 'No Firebase account linked. Cannot change password.' });
-    }
+    // The successful current-password verification is the authoritative link
+    // to the Firebase credential. Older/admin-provisioned tenant records may
+    // legitimately be missing a cached Mongo `firebase_uid`; rejecting those
+    // users made Settings -> Change Password impossible even though Firebase
+    // had just verified their email and current password.
+    const uid = verifiedFirebaseUid;
     try {
       await admin.auth().updateUser(uid, { password: new_password });
       // Revoke provider-side refresh state as defense in depth. LilyCrest's
@@ -1257,6 +1328,25 @@ async function changePassword(req, res) {
 
     const db = getDb();
     const changeTimestamp = new Date();
+
+    // Repair the cached identity link only after the provider has verified
+    // the current credential. Password mutation does not depend on this
+    // best-effort denormalized backfill, so a transient Mongo write failure
+    // cannot turn a successful provider update into an ambiguous response.
+    if (req.user.firebase_uid !== uid) {
+      try {
+        await db.collection('users').updateMany(
+          { firebase_uid: uid, user_id: { $ne: userId } },
+          { $unset: { firebase_uid: '' } },
+        );
+        await db.collection('users').updateOne(
+          { user_id: userId },
+          { $set: { firebase_uid: uid } },
+        );
+      } catch (linkError) {
+        console.warn('[ChangePassword] Firebase UID backfill failed:', linkError?.code || linkError?.message);
+      }
+    }
 
     // Credential update succeeds first. Only then invalidate sessions; never
     // strand the current user before Firebase has accepted the new password.

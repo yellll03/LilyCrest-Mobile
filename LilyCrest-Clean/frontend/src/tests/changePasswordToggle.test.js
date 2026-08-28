@@ -105,4 +105,14 @@ describe('Change Password screen — password visibility toggles', () => {
     expect(screen.getByPlaceholderText('Enter new password').props.value).toBe('MyValue1!');
     expect(screen.getAllByLabelText('Show password')).toHaveLength(3);
   });
+
+  it.each(FIELDS)('blocks pasted whitespace in "$placeholder" without changing the displayed credential', ({ placeholder }) => {
+    render(<ChangePasswordScreen />);
+    const input = screen.getByPlaceholderText(placeholder);
+    fireEvent.changeText(input, 'ValidPass1!');
+    fireEvent.changeText(input, 'Pasted Value1!');
+
+    expect(screen.getByPlaceholderText(placeholder).props.value).toBe('ValidPass1!');
+    expect(screen.getByText('Password must not contain whitespace.')).toBeTruthy();
+  });
 });

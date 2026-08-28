@@ -57,8 +57,8 @@ test('a Firebase-authenticated applicant cannot proceed through tenant email log
     }, res);
 
     assert.equal(res.statusCode, 403);
-    assert.equal(res.body.code, 'TENANT_ACCESS_REQUIRED');
-    assert.match(res.body.detail, /not registered as a verified tenant/i);
+    assert.equal(res.body.code, 'TENANT_NOT_REGISTERED');
+    assert.match(res.body.detail, /not registered as an active tenant/i);
   } finally {
     axios.post = originalPost;
     if (originalApiKey === undefined) delete process.env.FIREBASE_API_KEY;
