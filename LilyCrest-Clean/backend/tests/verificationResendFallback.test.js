@@ -271,7 +271,7 @@ test('resend revalidates tenant role and rejects an applicant even with a valid 
   await resendOtp({ body: { otp_token: rawToken } }, res);
 
   assert.equal(res.statusCode, 403);
-  assert.equal(res.body.code, 'TENANT_ACCESS_REQUIRED');
+  assert.equal(res.body.code, 'TENANT_NOT_REGISTERED');
 });
 
 test('resend revalidates active status and rejects a tenant deactivated after password verification', async () => {
@@ -283,5 +283,5 @@ test('resend revalidates active status and rejects a tenant deactivated after pa
   await resendOtp({ body: { otp_token: rawToken } }, res);
 
   assert.equal(res.statusCode, 403);
-  assert.equal(res.body.code, 'ACCOUNT_INACTIVE');
+  assert.equal(res.body.code, 'TENANT_INACTIVE');
 });

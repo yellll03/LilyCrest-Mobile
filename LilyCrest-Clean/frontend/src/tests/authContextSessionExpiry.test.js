@@ -215,14 +215,14 @@ describe('AuthContext forced session-expiry cleanup (behavioral)', () => {
     });
   });
 
-  it('preserves the backend tenant-access explanation for an unregistered email login', async () => {
+  it('maps the canonical unregistered-tenant code for an email login', async () => {
     const { api } = require('../services/api');
     api.post.mockRejectedValueOnce({
       response: {
         status: 403,
         data: {
-          code: 'TENANT_ACCESS_REQUIRED',
-          detail: 'Access denied. Your account is not registered as a verified tenant. Please contact the admin office.',
+          code: 'TENANT_NOT_REGISTERED',
+          detail: 'This account is not registered as an active tenant.',
         },
       },
     });
@@ -239,7 +239,7 @@ describe('AuthContext forced session-expiry cleanup (behavioral)', () => {
     expect(result).toMatchObject({
       success: false,
       status: 403,
-      error: 'Access denied. Your account is not registered as a verified tenant. Please contact the admin office.',
+      error: 'This account is not registered as an active tenant.',
     });
   });
 

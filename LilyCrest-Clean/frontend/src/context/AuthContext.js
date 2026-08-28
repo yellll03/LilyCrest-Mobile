@@ -791,7 +791,12 @@ export function AuthProvider({ children }) {
       const classified = classifyAuthError(error);
       if (status === 400) {
         await clearPersistedSession();
-        return { success: false, status, error: AUTH_MESSAGES.unexpected };
+        return {
+          success: false,
+          status,
+          errorType: classified.type,
+          error: classified.type === 'validation' ? classified.message : AUTH_MESSAGES.unexpected,
+        };
       }
       if (status === 401) {
         await clearPersistedSession();
@@ -803,7 +808,8 @@ export function AuthProvider({ children }) {
         return {
           success: false,
           status,
-          error: error.response?.data?.detail || 'Access denied. Please contact the admin office.',
+          errorType: classified.type,
+          error: classified.message,
         };
       }
       return {
@@ -986,7 +992,7 @@ export function AuthProvider({ children }) {
           errorType: 'access',
           stage: 'backend-authorization',
           code,
-          error: detail || 'Access denied. Your account is not registered as an active tenant.',
+          error: classified.message,
         };
       }
       if (status === 401) {

@@ -78,9 +78,9 @@ function connectionTimeoutError() {
   return error;
 }
 
-function serverRejectionError(status, detail) {
+function serverRejectionError(status, detail, code) {
   const error = new Error(`Request failed with status code ${status}`);
-  error.response = { status, data: { detail } };
+  error.response = { status, data: { detail, ...(code ? { code } : {}) } };
   return error;
 }
 
@@ -167,7 +167,11 @@ describe('AuthContext.signInWithGoogle connect-failure retry', () => {
   });
 
   it('does not retry when the server actually responded (e.g. 403)', async () => {
-    mockPost.mockRejectedValueOnce(serverRejectionError(403, 'Access denied. Your account is not registered as an active tenant.'));
+    mockPost.mockRejectedValueOnce(serverRejectionError(
+      403,
+      'This account is not registered as an active tenant.',
+      'TENANT_NOT_REGISTERED',
+    ));
 
     let latest;
     renderAuth((state) => { latest = state; });
@@ -183,8 +187,8 @@ describe('AuthContext.signInWithGoogle connect-failure retry', () => {
       status: 403,
       errorType: 'access',
       stage: 'backend-authorization',
-      code: 'backend-request-failed',
-      error: 'Access denied. Your account is not registered as an active tenant.',
+      code: 'TENANT_NOT_REGISTERED',
+      error: 'This account is not registered as an active tenant.',
     });
     // A real server response must never trigger the connect-failure retry.
     expect(mockPost).toHaveBeenCalledTimes(1);

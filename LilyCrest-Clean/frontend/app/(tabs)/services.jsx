@@ -41,7 +41,7 @@ import {
 import { pickDocument, pickFromCamera, pickFromLibrary } from '../../src/utils/attachmentPicker';
 import { createLatestRequestGate, runLatestRequest } from '../../src/utils/latestRequest';
 import { classifyMaintenanceAttachment, getValidMaintenanceAttachmentUrl } from '../../src/utils/maintenanceAttachmentViewer';
-import { getCreateRequestDescriptionError, getMaintenanceAttachmentErrorMessage, shouldConfirmCreateRequestClose } from '../../src/utils/maintenanceForm';
+import { getCreateRequestDescriptionError, getMaintenanceAttachmentErrorMessage, getMaintenanceAttachmentSelectionError, shouldConfirmCreateRequestClose } from '../../src/utils/maintenanceForm';
 import {
   getMaintenanceAllowedActions,
   getMaintenanceStatusGroup,
@@ -423,6 +423,7 @@ export default function ServicesScreen() {
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
   const [attachmentUploadStatus, setAttachmentUploadStatus] = useState('');
+  const [attachmentSelectionError, setAttachmentSelectionError] = useState('');
   const [showCreateAttachMenu, setShowCreateAttachMenu] = useState(false);
 
   // Detail modal state
@@ -662,6 +663,7 @@ export default function ServicesScreen() {
     setDescription('');
     setAttachments([]);
     setAttachmentUploadStatus('');
+    setAttachmentSelectionError('');
     setFieldTouched({ type: false, description: false });
     setFieldErrors({ type: '', description: '' });
     setHasAttemptedSubmit(false);
@@ -680,15 +682,14 @@ export default function ServicesScreen() {
       const file = await pickerFn();
       if (!file) return;
       const supported = isImageAttachmentCandidate(file) || isDocumentAttachmentCandidate(file);
-      if (!supported) {
-        showBannerMessage('error', 'Please select an image, PDF, document, text, or CSV file.');
-        return;
-      }
       const maxBytes = INQUIRY_ATTACHMENT_MAX_BYTES;
-      if (file.size && file.size > maxBytes) {
-        showBannerMessage('error', 'File must be 5 MB or smaller.');
+      const selectionError = getMaintenanceAttachmentSelectionError(file, { maxBytes, supported });
+      if (selectionError) {
+        setAttachmentSelectionError(selectionError);
+        showBannerMessage('error', selectionError);
         return;
       }
+      setAttachmentSelectionError('');
       setAttachmentUploadStatus('');
       setAttachments((prev) => {
         if (prev.length >= MAX_MAINTENANCE_ATTACHMENTS) {
@@ -1272,6 +1273,9 @@ export default function ServicesScreen() {
                 </TouchableOpacity>
                 {attachmentUploadStatus ? (
                   <Text style={styles.attachmentUploadNote}>{attachmentUploadStatus}</Text>
+                ) : null}
+                {attachmentSelectionError ? (
+                  <Text accessibilityRole="alert" style={styles.fieldError}>{attachmentSelectionError}</Text>
                 ) : null}
                 {attachments.length > 0 && (
                   <View style={styles.attachmentPreview}>

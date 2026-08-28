@@ -1,6 +1,7 @@
 /* global test */
 import {
   NEW_PASSWORD_MAX_LENGTH,
+  blockPasswordWhitespaceInput,
   getStrongPasswordChecks,
   validateLoginPassword,
   validateStrongPassword,
@@ -31,9 +32,20 @@ describe('mobile password contract', () => {
     expect(getStrongPasswordChecks('ValidPass1©').special).toBe(true);
   });
 
-  test('legacy login accepts a whitespace credential unchanged', () => {
-    const password = 'Legacy Pass1!';
-    expect(validateLoginPassword(password)).toEqual({ valid: true, error: '' });
-    expect(password).toBe('Legacy Pass1!');
+  test.each([' Leading1!', 'Trailing1! ', 'Middle Space1!', 'Tab\tValue1!', 'Line\nValue1!'])(
+    'login rejects whitespace credential %p',
+    (password) => {
+      expect(validateLoginPassword(password)).toEqual({
+        valid: false,
+        error: 'Password must not contain whitespace.',
+      });
+    },
+  );
+
+  test('pasted whitespace is blocked as one atomic edit instead of silently stripping characters', () => {
+    expect(blockPasswordWhitespaceInput('Valid1! pasted', 'Valid1!')).toEqual({
+      value: 'Valid1!',
+      blocked: true,
+    });
   });
 });

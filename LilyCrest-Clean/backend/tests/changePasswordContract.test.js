@@ -40,9 +40,12 @@ function fakeDb(order = []) {
       if (name === 'users') {
         return {
           findOne: async () => ({ user_id: 'tenant-a', securityVersion: 2 }),
+          updateMany: async () => ({ modifiedCount: 0 }),
           updateOne: async (_filter, update) => {
-            order.push('security-version-bump');
-            userPatches.push(update.$set);
+            if (update.$set?.securityVersion !== undefined) {
+              order.push('security-version-bump');
+              userPatches.push(update.$set);
+            }
             return { matchedCount: 1, modifiedCount: 1 };
           },
           insertOne: async () => ({ insertedId: 'fake-id' }),
@@ -143,23 +146,19 @@ test('wrong current password is rejected with 401 and the password is never upda
   assert.equal(db._deletedSessionsFor.length, 0);
 });
 
-test('the exact current password, including legacy whitespace, is sent to Firebase unchanged', async () => {
+test('whitespace in the current password is rejected before Firebase verification', async () => {
   const db = fakeDb();
-  let verifiedPassword = null;
+  let firebaseCalled = false;
   await withChangePassword({
     db,
-    axiosImpl: async (_url, body) => {
-      verifiedPassword = body.password;
-      const err = new Error('Firebase auth failed');
-      err.response = { data: { error: { message: 'INVALID_PASSWORD' } } };
-      throw err;
-    },
+    axiosImpl: async () => { firebaseCalled = true; return { data: { localId: 'firebase-uid-a' } }; },
   }, async (changePassword) => {
     const res = fakeResponse();
     await changePassword(baseReq({ body: { current_password: ' Legacy Pass1! ', new_password: 'NewStrong1!' } }), res);
-    assert.equal(res.statusCode, 401);
+    assert.equal(res.statusCode, 400);
+    assert.equal(res.body.code, 'PASSWORD_WHITESPACE_NOT_ALLOWED');
   });
-  assert.equal(verifiedPassword, ' Legacy Pass1! ');
+  assert.equal(firebaseCalled, false);
 });
 
 test('a Firebase verification network failure is not mislabeled as a wrong password', async () => {
@@ -186,7 +185,7 @@ test('a Firebase password-update failure is truthful and leaves sessions intact'
     await withChangePassword({
       db,
       updateUserImpl: async () => { throw Object.assign(new Error('provider unavailable'), { code: 'auth/internal-error' }); },
-      axiosImpl: async () => ({ data: {} }),
+      axiosImpl: async () => ({ data: { localId: 'firebase-uid-a' } }),
     }, async (changePassword) => {
       const res = fakeResponse();
       await changePassword(baseReq({ body: { current_password: 'CurrentStrong1!', new_password: 'NewStrong1!' } }), res);
@@ -232,7 +231,7 @@ test('a successful change updates Firebase and invalidates every existing sessio
       updatedUid = uid;
       updatedPassword = patch.password;
     },
-    axiosImpl: async () => ({ data: {} }),
+    axiosImpl: async () => ({ data: { localId: 'firebase-uid-a' } }),
   }, async (changePassword) => {
     const res = fakeResponse();
     await changePassword(baseReq({ body: { current_password: 'CurrentStrong1!', new_password: 'NewStrong1!' } }), res);
@@ -258,6 +257,24 @@ test('a successful change updates Firebase and invalidates every existing sessio
   assert.deepEqual(revokedUids, ['firebase-uid-a']);
 });
 
+test('a verified Firebase UID repairs a missing Mongo link and still completes the password change', async () => {
+  const db = fakeDb();
+  let updatedUid = null;
+  await withChangePassword({
+    db,
+    updateUserImpl: async (uid) => { updatedUid = uid; },
+    axiosImpl: async () => ({ data: { localId: 'verified-firebase-uid' } }),
+  }, async (changePassword) => {
+    const res = fakeResponse();
+    await changePassword(baseReq({
+      user: { user_id: 'tenant-a', email: 'ana@example.com', name: 'Ana' },
+      body: { current_password: 'CurrentStrong1!', new_password: 'NewStrong1!' },
+    }), res);
+    assert.equal(res.statusCode, 200);
+  });
+  assert.equal(updatedUid, 'verified-firebase-uid');
+});
+
 test('a change is reported as failed if sessions cannot be invalidated at all', async () => {
   const brokenDb = {
     collection() {
@@ -275,7 +292,7 @@ test('a change is reported as failed if sessions cannot be invalidated at all', 
     await withChangePassword({
       db: brokenDb,
       updateUserImpl: async () => {},
-      axiosImpl: async () => ({ data: {} }),
+      axiosImpl: async () => ({ data: { localId: 'firebase-uid-a' } }),
     }, async (changePassword) => {
       const res = fakeResponse();
       await changePassword(baseReq({ body: { current_password: 'CurrentStrong1!', new_password: 'NewStrong1!' } }), res);

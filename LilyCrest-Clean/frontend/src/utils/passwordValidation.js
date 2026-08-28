@@ -18,6 +18,9 @@ export function blockPasswordWhitespaceInput(nextValue, previousValue = '') {
 
 export function validateLoginPassword(password = '') {
   if (!password) return { valid: false, error: 'Password is required' };
+  if (passwordContainsWhitespace(password)) {
+    return { valid: false, error: PASSWORD_WHITESPACE_MESSAGE };
+  }
   return { valid: true, error: '' };
 }
 

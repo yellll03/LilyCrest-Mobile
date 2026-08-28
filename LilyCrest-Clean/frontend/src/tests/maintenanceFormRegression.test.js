@@ -5,6 +5,7 @@ import path from 'path';
 import {
   getCreateRequestDescriptionError,
   getMaintenanceAttachmentErrorMessage,
+  getMaintenanceAttachmentSelectionError,
   shouldConfirmCreateRequestClose,
 } from '../utils/maintenanceForm';
 
@@ -21,7 +22,21 @@ describe('maintenance service-request regression', () => {
   test('picker and deferred upload size checks both produce the required 5 MB explanation', () => {
     expect(getMaintenanceAttachmentErrorMessage(new Error('Attachment exceeds 5 MB limit.')))
       .toBe('File must be 5 MB or smaller.');
-    expect(source.match(/File must be 5 MB or smaller\./g)?.length).toBeGreaterThanOrEqual(2);
+    expect(source).toContain('getMaintenanceAttachmentSelectionError(file, { maxBytes, supported })');
+    expect(source).toContain("showBannerMessage('error', 'File must be 5 MB or smaller.')");
+    expect(source).toContain('setAttachmentSelectionError(selectionError)');
+    expect(source).toContain('accessibilityRole="alert" style={styles.fieldError}>{attachmentSelectionError}');
+  });
+
+  test('an oversized selection is rejected without poisoning the next valid selection', () => {
+    const maxBytes = 5 * 1024 * 1024;
+    const oversized = { name: 'too-large.jpg', size: maxBytes + 1 };
+    const valid = { name: 'valid.jpg', size: maxBytes - 1 };
+    expect(getMaintenanceAttachmentSelectionError(oversized, { maxBytes, supported: true }))
+      .toBe('File must be 5 MB or smaller.');
+    expect(getMaintenanceAttachmentSelectionError(valid, { maxBytes, supported: true }))
+      .toBe('');
+    expect(source).toContain("setAttachmentSelectionError('')");
   });
 
   test('empty close exits immediately while dirty/attempted forms require confirmation', () => {
