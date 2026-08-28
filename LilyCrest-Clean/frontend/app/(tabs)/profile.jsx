@@ -11,6 +11,7 @@ import { useAlert } from '../../src/context/AlertContext';
 import { apiService, getApiErrorMessage } from '../../src/services/api';
 import { useTenantContract } from '../../src/hooks/useTenantContract';
 import { buildContractSummary } from '../../src/utils/contractPresentation';
+import { resolveAccountStatus } from '../../src/utils/accountStatus';
 import { SURVEY_FEEDBACK_ENABLED } from '../../src/config/features';
 import { API_BASE_URL } from '../../src/config/api';
 import { persistCanonicalProfileImage } from '../../src/services/profileImage';
@@ -357,6 +358,14 @@ export default function ProfileScreen() {
   const { contract: tenantContract, error: contractError } = useTenantContract();
   const contractSummary = buildContractSummary(tenantContract);
 
+  // Same resolver Home uses — a well-formed serialized accountStatus wins,
+  // otherwise a verified authenticated tenant session resolves to
+  // "Active Tenant" (backend/utils/tenantEligibility.js parity). Never
+  // guessed from client-only lifecycle fields.
+  const accountStatus = resolveAccountStatus(user, {
+    isAuthenticated: authStatus === 'authenticated',
+  });
+
   const bannerBg = profileBanner
     ? profileBanner.type === 'success'
       ? colors.successBg
@@ -427,15 +436,14 @@ export default function ProfileScreen() {
           </TouchableOpacity>
           <Text style={styles.userName}>{user?.name || 'User'}</Text>
           {user?.username ? <Text style={styles.userHandle}>@{user.username}</Text> : null}
-          <Text style={styles.userEmail}>{user?.email || ''}</Text>
-          {user?.accountStatus?.label ? (
+          {accountStatus?.label ? (
             <View
               style={styles.accountStatusBadge}
               accessibilityRole="text"
-              accessibilityLabel={`Account status: ${user.accountStatus.label}`}
+              accessibilityLabel={`Account status: ${accountStatus.label}`}
             >
               <Ionicons name="checkmark-circle" size={15} color={colors.success} />
-              <Text style={styles.accountStatusText}>{user.accountStatus.label}</Text>
+              <Text style={styles.accountStatusText}>{accountStatus.label}</Text>
             </View>
           ) : null}
         </View>
@@ -816,9 +824,8 @@ const createStyles = (colors, isDarkMode) => StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.surface,
   },
-  userName: { fontSize: 20, fontWeight: '700', color: colors.text, marginBottom: 3 },
-  userHandle: { fontSize: 14, color: colors.textSecondary, marginBottom: 4, fontWeight: '600' },
-  userEmail: { fontSize: 13, color: colors.textSecondary, marginBottom: 14 },
+  userName: { fontSize: 20, fontWeight: '700', color: colors.text, marginBottom: 4 },
+  userHandle: { fontSize: 14, color: colors.textSecondary, marginBottom: 14, fontWeight: '600' },
   accountStatusBadge: { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: colors.successBg, borderColor: colors.success, borderWidth: 1, borderRadius: 999, paddingHorizontal: 12, paddingVertical: 6 },
   accountStatusText: { color: colors.successText, fontSize: 12, fontWeight: '700' },
 

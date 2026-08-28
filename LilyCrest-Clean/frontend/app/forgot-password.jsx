@@ -55,9 +55,13 @@ export default function ForgotPasswordScreen() {
       // never creates or consumes a separate mobile reset credential.
       await apiService.forgotPassword(normalizeEmail(email));
       setSent(true);
+      // The canonical backend intentionally returns the same generic success
+      // for a registered and an unknown email (enumeration-safe), so the app
+      // must not claim a link was definitely sent. Neutral, conditional copy
+      // that matches the on-screen message.
       showToast({
-        type: 'success',
-        title: 'Reset Link Sent',
+        type: 'info',
+        title: 'Check Your Email',
         message: AUTH_MESSAGES.forgotSuccess,
       });
     } catch (err) {

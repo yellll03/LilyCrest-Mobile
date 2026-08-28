@@ -162,8 +162,17 @@ export default function SettingsScreen() {
           
           <TouchableOpacity style={styles.menuItem} onPress={handleChangePassword}>
             <View style={styles.settingLeft}>
-              <View style={[styles.iconContainer, { backgroundColor: colors.accentSubtle }]}>
-                <Ionicons name="lock-closed" size={20} color={colors.heading} />
+              <View
+                style={[
+                  styles.iconContainer,
+                  {
+                    backgroundColor: colors.accentSubtle,
+                    borderWidth: 1,
+                    borderColor: colors.accentLight,
+                  },
+                ]}
+              >
+                <Ionicons name="lock-closed" size={20} color={colors.accent} />
               </View>
               <View>
                 <Text style={styles.settingLabel}>Change Password</Text>
