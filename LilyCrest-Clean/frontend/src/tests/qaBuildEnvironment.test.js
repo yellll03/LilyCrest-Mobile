@@ -2,6 +2,8 @@ const {
   ISOLATED_QA_PUBLIC_ENV,
   createIsolatedQaBuildEnvironment,
 } = require('../../scripts/build-isolated-qa-android');
+const fs = require('fs');
+const path = require('path');
 
 describe('isolated QA Android build environment', () => {
   it('pins the release bundle to loopback and the demo Firebase project', () => {
@@ -24,5 +26,18 @@ describe('isolated QA Android build environment', () => {
     expect(env.EXPO_PUBLIC_QA_LOCAL_RUNTIME).toBe('true');
     expect(env.EXPO_PUBLIC_BACKEND_URL).toBe('http://127.0.0.1:5001');
     expect(env.EXPO_PUBLIC_FIREBASE_PROJECT_ID).toBe('demo-lilycrest-qa');
+  });
+
+  it('uses direct Expo public environment references so release bundling can inline them', () => {
+    const source = fs.readFileSync(path.join(__dirname, '..', 'config', 'qaRuntime.js'), 'utf8');
+    for (const key of [
+      'EXPO_PUBLIC_QA_LOCAL_RUNTIME',
+      'EXPO_PUBLIC_BACKEND_URL',
+      'EXPO_PUBLIC_FIREBASE_AUTH_EMULATOR_URL',
+      'EXPO_PUBLIC_FIREBASE_PROJECT_ID',
+    ]) {
+      expect(source).toContain(`process.env.${key}`);
+    }
+    expect(source).not.toContain('env = process.env');
   });
 });

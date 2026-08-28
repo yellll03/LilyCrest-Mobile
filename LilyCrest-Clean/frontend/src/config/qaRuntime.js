@@ -34,11 +34,20 @@ export function resolveQaRuntime({ enabled, backendUrl, authEmulatorUrl, project
   });
 }
 
-export function resolveQaRuntimeFromEnv(env = process.env) {
+export function resolveQaRuntimeFromEnv(env) {
+  // Expo's release bundler replaces direct process.env.EXPO_PUBLIC_* access at
+  // build time. Do not alias process.env here: an indirect `env.KEY` lookup
+  // survives into the APK as undefined and silently disables the QA gate.
+  const source = env || {
+    EXPO_PUBLIC_QA_LOCAL_RUNTIME: process.env.EXPO_PUBLIC_QA_LOCAL_RUNTIME,
+    EXPO_PUBLIC_BACKEND_URL: process.env.EXPO_PUBLIC_BACKEND_URL,
+    EXPO_PUBLIC_FIREBASE_AUTH_EMULATOR_URL: process.env.EXPO_PUBLIC_FIREBASE_AUTH_EMULATOR_URL,
+    EXPO_PUBLIC_FIREBASE_PROJECT_ID: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+  };
   return resolveQaRuntime({
-    enabled: env.EXPO_PUBLIC_QA_LOCAL_RUNTIME,
-    backendUrl: env.EXPO_PUBLIC_BACKEND_URL,
-    authEmulatorUrl: env.EXPO_PUBLIC_FIREBASE_AUTH_EMULATOR_URL,
-    projectId: env.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
+    enabled: source.EXPO_PUBLIC_QA_LOCAL_RUNTIME,
+    backendUrl: source.EXPO_PUBLIC_BACKEND_URL,
+    authEmulatorUrl: source.EXPO_PUBLIC_FIREBASE_AUTH_EMULATOR_URL,
+    projectId: source.EXPO_PUBLIC_FIREBASE_PROJECT_ID,
   });
 }
