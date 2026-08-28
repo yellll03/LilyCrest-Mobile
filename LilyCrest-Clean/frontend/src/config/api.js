@@ -1,3 +1,5 @@
+import { resolveQaRuntimeFromEnv } from './qaRuntime';
+
 const MOBILE_BACKEND_URL = 'https://api.lilycrest.space';
 
 export const normalizeBackendUrl = (value) => String(value || '').trim().replace(/\/+$/, '');
@@ -48,8 +50,16 @@ function isDevelopmentRuntime() {
   return typeof __DEV__ !== 'undefined' ? __DEV__ : process.env.NODE_ENV !== 'production';
 }
 
-export function resolveBackendUrl(value, { isDevelopment = isDevelopmentRuntime() } = {}) {
+export function resolveBackendUrl(value, {
+  isDevelopment = isDevelopmentRuntime(),
+  qaRuntime = resolveQaRuntimeFromEnv(),
+} = {}) {
   const normalized = normalizeBackendUrl(value);
+
+  // A production-mode QA APK may use loopback only when the dedicated,
+  // fail-closed QA runtime contract has been explicitly enabled. ADB reverse
+  // then maps this device-local address to the isolated workstation server.
+  if (qaRuntime) return qaRuntime.backendUrl;
 
   // Development builds may legitimately point at a local machine, emulator
   // loopback, or LAN IP for Metro/dev-server testing — the production

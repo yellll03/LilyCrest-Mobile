@@ -67,6 +67,7 @@ react {
  * Set this to true in release builds to optimize the app using [R8](https://developer.android.com/topic/performance/app-optimization/enable-app-optimization).
  */
 def enableMinifyInReleaseBuilds = (findProperty('android.enableMinifyInReleaseBuilds') ?: false).toBoolean()
+def isolatedQaBuild = (findProperty('lilycrestQaBuild') ?: false).toBoolean()
 
 /**
  * The preferred build flavor of JavaScriptCore (JSC)
@@ -111,6 +112,16 @@ android {
 
         ndk {
             abiFilters "arm64-v8a"
+        }
+    }
+    if (isolatedQaBuild) {
+        flavorDimensions += "qaEnvironment"
+        productFlavors {
+            isolatedQa {
+                dimension "qaEnvironment"
+                applicationIdSuffix ".qa"
+                versionNameSuffix "-qa"
+            }
         }
     }
     signingConfigs {

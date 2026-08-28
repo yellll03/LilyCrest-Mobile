@@ -1,0 +1,22 @@
+{
+  "project_info": {
+    "project_number": "1234567890",
+    "project_id": "demo-lilycrest-qa",
+    "storage_bucket": "demo-lilycrest-qa.appspot.com"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1234567890:android:isolatedqa",
+        "android_client_info": {
+          "package_name": "com.lilycrest.lilycrestdorm.qa"
+        }
+      },
+      "api_key": [
+        { "current_key": "fake-api-key-for-auth-emulator-only" }
+      ],
+      "services": {}
+    }
+  ],
+  "configuration_version": "1"
+}

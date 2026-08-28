@@ -4,7 +4,7 @@ import {
 } from '../config/api';
 
 describe('api config backend URL resolver', () => {
-  const productionOptions = { isDevelopment: false };
+  const productionOptions = { isDevelopment: false, qaRuntime: null };
 
   it('accepts the canonical LilyCrest API URL', () => {
     expect(resolveBackendUrl('https://api.lilycrest.space', productionOptions))
@@ -52,7 +52,7 @@ describe('api config backend URL resolver', () => {
   });
 
   it('preserves existing development behavior for local backend URLs', () => {
-    expect(resolveBackendUrl('http://localhost:8001', { isDevelopment: true }))
+    expect(resolveBackendUrl('http://localhost:8001', { isDevelopment: true, qaRuntime: null }))
       .toBe('http://localhost:8001');
   });
 

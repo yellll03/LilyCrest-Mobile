@@ -18,6 +18,8 @@
     "generate:icons": "node ./generate-icons.js",
     "verify:release-contract": "node ./scripts/verify-release-contract.js",
     "android:release-apk": "npm run verify:release-contract && cd android && .\\gradlew.bat assembleRelease",
+    "verify:qa-runtime": "node ./scripts/verify-qa-runtime.js",
+    "android:qa-release-apk": "npm run verify:release-contract && npm run verify:qa-runtime && cd android && .\\gradlew.bat assembleIsolatedQaRelease -PlilycrestQaBuild=true",
     "eas-build-pre-install": "node ./scripts/eas-copy-google-services.js"
   },
   "dependencies": {
