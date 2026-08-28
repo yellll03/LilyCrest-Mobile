@@ -43,6 +43,13 @@ import { createLatestRequestGate, runLatestRequest } from '../../src/utils/lates
 import { classifyMaintenanceAttachment, getValidMaintenanceAttachmentUrl } from '../../src/utils/maintenanceAttachmentViewer';
 import { getCreateRequestDescriptionError, getMaintenanceAttachmentErrorMessage, getMaintenanceAttachmentSelectionError, shouldConfirmCreateRequestClose } from '../../src/utils/maintenanceForm';
 import {
+  buildMaintenanceRatingPayload,
+  canRateMaintenanceRequest,
+  getMaintenanceResolutionConfirmation,
+  getSubmittedMaintenanceRating,
+  MAINTENANCE_RATING_LABELS,
+} from '../../src/utils/maintenanceRating';
+import {
   getMaintenanceAllowedActions,
   getMaintenanceStatusGroup,
   MAINTENANCE_ACTIONS,
@@ -405,6 +412,12 @@ export default function ServicesScreen() {
     descriptionCounterOver: { color: c.errorText, fontWeight: '600' },
     confirmOverlay: { flex: 1, backgroundColor: c.overlay, justifyContent: 'center', alignItems: 'center' },
     reopenInput: { backgroundColor: c.inputBackground, borderRadius: 10, borderWidth: 1, borderColor: c.border, padding: 12, fontSize: 14, lineHeight: 20, color: c.text, minHeight: 76 },
+    ratingRow: { flexDirection: 'row', justifyContent: 'center', gap: 6, marginBottom: 8 },
+    ratingButton: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', borderRadius: 10 },
+    ratingLabel: { color: c.text, textAlign: 'center', fontWeight: '700', fontSize: 13, marginBottom: 14 },
+    ratingFeedbackInput: { backgroundColor: c.inputBackground, borderRadius: 10, borderWidth: 1, borderColor: c.border, padding: 12, fontSize: 14, lineHeight: 20, color: c.text, minHeight: 86 },
+    ratingFeedbackCounter: { color: c.textMuted, textAlign: 'right', fontSize: 11, marginTop: 5 },
+    ratingResultCard: { backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border, borderRadius: 14, padding: 14, marginBottom: 14 },
   }));
   const [requests, setRequests] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -439,6 +452,9 @@ export default function ServicesScreen() {
   const [showCancelConfirm, setShowCancelConfirm] = useState(false);
   const [showReopenModal, setShowReopenModal] = useState(false);
   const [reopenNote, setReopenNote] = useState('');
+  const [showRatingModal, setShowRatingModal] = useState(false);
+  const [rating, setRating] = useState(5);
+  const [ratingFeedback, setRatingFeedback] = useState('');
   const [detailLoading, setDetailLoading] = useState(false);
   const [replyMessage, setReplyMessage] = useState('');
   const [replyAttachments, setReplyAttachments] = useState([]);
@@ -738,6 +754,9 @@ export default function ServicesScreen() {
     setShowCancelConfirm(false);
     setShowReopenModal(false);
     setReopenNote('');
+    setShowRatingModal(false);
+    setRating(5);
+    setRatingFeedback('');
     setReplyMessage('');
     setReplyAttachments([]);
     setReplyUploadStatus('');
@@ -837,16 +856,27 @@ export default function ServicesScreen() {
     }
   };
 
+  const openRatingModal = () => {
+    if (!canRateMaintenanceRequest(detailRequest)) return;
+    setRating(5);
+    setRatingFeedback('');
+    setShowRatingModal(true);
+  };
+
   const handleConfirmResolved = async () => {
     if (!detailRequest?.request_id) return;
     setSaving(true);
     try {
-      const response = await apiService.confirmMaintenanceResolved(detailRequest.request_id);
-      setDetailRequest(response?.data || detailRequest);
-      showBannerMessage('success', 'Resolution confirmed.');
+      const payload = buildMaintenanceRatingPayload(rating, ratingFeedback);
+      const response = await apiService.confirmMaintenanceResolved(detailRequest.request_id, payload);
+      const updatedRequest = response?.data?.data?.request || response?.data?.request || response?.data || detailRequest;
+      setDetailRequest(updatedRequest);
+      setShowRatingModal(false);
+      setRatingFeedback('');
+      showBannerMessage('success', 'Thank you! Your rating and resolution confirmation were recorded.');
       fetchRequests();
     } catch (e) {
-      showBannerMessage('error', e?.response?.data?.detail || 'Failed to confirm resolution.');
+      showBannerMessage('error', getApiErrorMessage(e, 'Failed to submit your maintenance rating.'));
     } finally {
       setSaving(false);
     }
@@ -981,6 +1011,9 @@ export default function ServicesScreen() {
   const resolvedRequests = useMemo(() => filterBySearch(requests.filter((request) => getMaintenanceStatusGroup(request.status) === MAINTENANCE_GROUPS.RESOLVED)), [filterBySearch, requests]);
   const cancelledRequests = useMemo(() => filterBySearch(requests.filter((request) => getMaintenanceStatusGroup(request.status) === MAINTENANCE_GROUPS.CANCELLED)), [filterBySearch, requests]);
   const detailAllowedActions = useMemo(() => new Set(getMaintenanceAllowedActions(detailRequest?.status)), [detailRequest?.status]);
+  const detailResolutionConfirmation = useMemo(() => getMaintenanceResolutionConfirmation(detailRequest), [detailRequest]);
+  const detailRating = useMemo(() => getSubmittedMaintenanceRating(detailRequest), [detailRequest]);
+  const detailCanRate = useMemo(() => canRateMaintenanceRequest(detailRequest), [detailRequest]);
   const detailProgressEntries = useMemo(() => buildRequestProgress(detailRequest), [detailRequest]);
   const detailTenantSummary = useMemo(() => detailRequest?.tenant_summary || detailRequest?.tenantSummary || null, [detailRequest]);
   const hasConversationSummary = useMemo(() => detailProgressEntries.some((entry) => entry.isSummary), [detailProgressEntries]);
@@ -1532,6 +1565,28 @@ export default function ServicesScreen() {
                     </View>
                   )}
 
+                  {!editMode && detailRating ? (
+                    <View style={styles.ratingResultCard} testID="maintenance-rating-result">
+                      <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+                        <Text style={{ color: colors.text, fontSize: 14, fontWeight: '800' }}>Your Repair Rating</Text>
+                        <Text style={{ color: colors.warningText, fontSize: 13, fontWeight: '800' }}>{detailRating} / 5</Text>
+                      </View>
+                      <View style={{ flexDirection: 'row', gap: 3, marginBottom: detailResolutionConfirmation?.tenantFeedback ? 9 : 0 }} accessibilityLabel={`Submitted maintenance rating: ${detailRating} out of 5`}>
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <Ionicons key={star} name={star <= detailRating ? 'star' : 'star-outline'} size={21} color={star <= detailRating ? colors.warning : colors.textMuted} />
+                        ))}
+                      </View>
+                      {detailResolutionConfirmation?.tenantFeedback ? (
+                        <Text style={{ color: colors.text, fontSize: 13, lineHeight: 19 }}>“{detailResolutionConfirmation.tenantFeedback}”</Text>
+                      ) : null}
+                      {detailResolutionConfirmation?.confirmedAt || detailResolutionConfirmation?.confirmed_at ? (
+                        <Text style={{ color: colors.textMuted, fontSize: 11, marginTop: 8 }}>
+                          Submitted {safeFormat(detailResolutionConfirmation.confirmedAt || detailResolutionConfirmation.confirmed_at, 'MMM dd, yyyy • h:mm a')}
+                        </Text>
+                      ) : null}
+                    </View>
+                  ) : null}
+
                   {/* Conversation */}
                   {!editMode && (
                     <View style={{ marginBottom: 14 }} testID="maintenance-conversation">
@@ -1770,12 +1825,19 @@ export default function ServicesScreen() {
                             )}
                           </>
                         )}
-                        {!detailRequest.tenant_confirmed_resolved && (detailAllowedActions.has(MAINTENANCE_ACTIONS.CONFIRM_RESOLVED) || detailAllowedActions.has(MAINTENANCE_ACTIONS.REOPEN)) && (
+                        {(detailCanRate || detailAllowedActions.has(MAINTENANCE_ACTIONS.REOPEN)) && (
                           <>
-                            {detailAllowedActions.has(MAINTENANCE_ACTIONS.CONFIRM_RESOLVED) && (
-                              <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#ECFDF5', borderRadius: 12, paddingVertical: 14 }} onPress={handleConfirmResolved} disabled={saving}>
-                                <Ionicons name="checkmark-done-circle-outline" size={20} color="#065F46" />
-                                <Text style={{ color: '#065F46', fontWeight: '700', fontSize: 15 }}>Confirm Resolved</Text>
+                            {detailCanRate && (
+                              <TouchableOpacity
+                                style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.successBg, borderRadius: 12, paddingVertical: 14, borderWidth: 1, borderColor: colors.success }}
+                                onPress={openRatingModal}
+                                disabled={saving}
+                                accessibilityRole="button"
+                                accessibilityLabel="Confirm resolution and rate repair"
+                                accessibilityHint="Opens the required one-to-five star maintenance rating form"
+                              >
+                                <Ionicons name="checkmark-done-circle-outline" size={20} color={colors.successText} />
+                                <Text style={{ color: colors.successText, fontWeight: '700', fontSize: 15 }}>Confirm Resolution & Rate</Text>
                               </TouchableOpacity>
                             )}
                             {detailAllowedActions.has(MAINTENANCE_ACTIONS.REOPEN) && (
@@ -1896,6 +1958,50 @@ export default function ServicesScreen() {
           value={reopenNote}
           onChangeText={setReopenNote}
         />
+      </StyledModal>
+
+      <StyledModal
+        visible={showRatingModal}
+        onClose={() => { if (!saving) setShowRatingModal(false); }}
+        title="Confirm Maintenance Resolution"
+        message="Choose a rating to confirm that the repair is complete."
+        type="success"
+        buttons={[
+          { text: 'Cancel', style: 'cancel', onPress: () => setShowRatingModal(false), disabled: saving },
+          { text: 'Confirm Resolution', style: 'info', onPress: handleConfirmResolved, loading: saving },
+        ]}
+      >
+        <View accessibilityLabel="Maintenance repair rating from one to five stars">
+          <View style={styles.ratingRow}>
+            {[1, 2, 3, 4, 5].map((star) => (
+              <TouchableOpacity
+                key={star}
+                style={[styles.ratingButton, rating === star && { backgroundColor: colors.warningBg }]}
+                onPress={() => setRating(star)}
+                disabled={saving}
+                accessibilityRole="radio"
+                accessibilityLabel={`${star} star${star === 1 ? '' : 's'}, ${MAINTENANCE_RATING_LABELS[star]}`}
+                accessibilityState={{ selected: rating === star, disabled: saving }}
+              >
+                <Ionicons name={star <= rating ? 'star' : 'star-outline'} size={31} color={star <= rating ? colors.warning : colors.textMuted} />
+              </TouchableOpacity>
+            ))}
+          </View>
+          <Text style={styles.ratingLabel}>{rating} / 5 — {MAINTENANCE_RATING_LABELS[rating]}</Text>
+          <TextInput
+            style={styles.ratingFeedbackInput}
+            placeholder="Share optional feedback about the repair..."
+            placeholderTextColor={colors.textMuted}
+            multiline
+            maxLength={500}
+            textAlignVertical="top"
+            value={ratingFeedback}
+            onChangeText={setRatingFeedback}
+            editable={!saving}
+            accessibilityLabel="Optional maintenance repair feedback"
+          />
+          <Text style={styles.ratingFeedbackCounter}>{ratingFeedback.length} / 500</Text>
+        </View>
       </StyledModal>
     </SafeAreaView>
   );

@@ -139,7 +139,7 @@ describe('canonical maintenance presentation', () => {
     expect(api).toContain('sendMaintenanceReply:');
     expect(backendRoutes).toContain("router.post('/:requestId/replies'");
     expect(api).toContain('confirmMaintenanceResolved:');
-    expect(backendRoutes).toContain("router.patch('/:requestId/confirm-resolved'");
+    expect(api).toContain("api.post(`/maintenance/${requestId}/confirm`, data)");
     expect(api).toContain('updateMaintenance:');
     expect(backendRoutes).toContain("router.put('/:requestId'");
     expect(api).toContain('cancelMaintenance:');
