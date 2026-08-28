@@ -42,7 +42,7 @@ function run(command, args, options = {}) {
 }
 
 function main() {
-  run(process.execPath, [path.join('scripts', 'verify-release-contract.js')]);
+  run(process.execPath, [path.join('scripts', 'verify-release-contract.js'), '--require-clean']);
   run(process.execPath, [path.join('scripts', 'verify-qa-runtime.js')]);
 
   // Recreate the app bundle so changed EXPO_PUBLIC_* inputs can never reuse a
