@@ -29,7 +29,10 @@ describe('isolated QA Android build environment', () => {
   });
 
   it('uses direct Expo public environment references so release bundling can inline them', () => {
-    const source = fs.readFileSync(path.join(__dirname, '..', 'config', 'qaRuntime.js'), 'utf8');
+    const source = fs.readFileSync(
+      path.join(process.cwd(), 'src', 'config', 'qaRuntime.js'),
+      'utf8',
+    );
     for (const key of [
       'EXPO_PUBLIC_QA_LOCAL_RUNTIME',
       'EXPO_PUBLIC_BACKEND_URL',
