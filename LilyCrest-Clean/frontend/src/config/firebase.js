@@ -3,12 +3,14 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getApp, getApps, initializeApp } from 'firebase/app';
 import {
     browserLocalPersistence,
+    connectAuthEmulator,
     getAuth,
     getReactNativePersistence,
     initializeAuth,
     onAuthStateChanged
 } from 'firebase/auth';
 import { Platform } from 'react-native';
+import { resolveQaRuntimeFromEnv } from './qaRuntime';
 
 const ENV = {
   FIREBASE_API_KEY: process.env.EXPO_PUBLIC_FIREBASE_API_KEY || '',
@@ -49,6 +51,7 @@ const firebaseAndroidApiKey = requiredEnv(
 
 const firebaseAuthDomain = requiredEnv('EXPO_PUBLIC_FIREBASE_AUTH_DOMAIN', ENV.FIREBASE_AUTH_DOMAIN);
 const firebaseProjectId = requiredEnv('EXPO_PUBLIC_FIREBASE_PROJECT_ID', ENV.FIREBASE_PROJECT_ID);
+const qaRuntime = resolveQaRuntimeFromEnv();
 const firebaseStorageBucket = requiredEnv(
   'EXPO_PUBLIC_FIREBASE_STORAGE_BUCKET',
   ENV.FIREBASE_STORAGE_BUCKET,
@@ -128,9 +131,13 @@ if (!auth || auth._deleted) {
   } catch (error) {
     console.warn('Auth initialization error, using existing instance:', error.message);
     auth = getAuth(app);
-    globalForFirebase.auth = auth;
-    globalThis.__lilycrestFirebase = globalForFirebase;
   }
+  if (qaRuntime) {
+    connectAuthEmulator(auth, qaRuntime.authEmulatorUrl, { disableWarnings: false });
+    globalForFirebase.authEmulatorUrl = qaRuntime.authEmulatorUrl;
+  }
+  globalForFirebase.auth = auth;
+  globalThis.__lilycrestFirebase = globalForFirebase;
 }
 
 /**
