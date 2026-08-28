@@ -24,6 +24,8 @@ describe('maintenance service-request regression', () => {
       .toBe('File must be 5 MB or smaller.');
     expect(source).toContain('getMaintenanceAttachmentSelectionError(file, { maxBytes, supported })');
     expect(source).toContain("showBannerMessage('error', 'File must be 5 MB or smaller.')");
+    expect(source).toContain('setAttachmentSelectionError(selectionError)');
+    expect(source).toContain('accessibilityRole="alert" style={styles.fieldError}>{attachmentSelectionError}');
   });
 
   test('an oversized selection is rejected without poisoning the next valid selection', () => {
@@ -34,6 +36,7 @@ describe('maintenance service-request regression', () => {
       .toBe('File must be 5 MB or smaller.');
     expect(getMaintenanceAttachmentSelectionError(valid, { maxBytes, supported: true }))
       .toBe('');
+    expect(source).toContain("setAttachmentSelectionError('')");
   });
 
   test('empty close exits immediately while dirty/attempted forms require confirmation', () => {

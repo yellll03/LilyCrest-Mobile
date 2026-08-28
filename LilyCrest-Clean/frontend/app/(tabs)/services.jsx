@@ -423,6 +423,7 @@ export default function ServicesScreen() {
   const [showDiscardConfirm, setShowDiscardConfirm] = useState(false);
   const [hasAttemptedSubmit, setHasAttemptedSubmit] = useState(false);
   const [attachmentUploadStatus, setAttachmentUploadStatus] = useState('');
+  const [attachmentSelectionError, setAttachmentSelectionError] = useState('');
   const [showCreateAttachMenu, setShowCreateAttachMenu] = useState(false);
 
   // Detail modal state
@@ -662,6 +663,7 @@ export default function ServicesScreen() {
     setDescription('');
     setAttachments([]);
     setAttachmentUploadStatus('');
+    setAttachmentSelectionError('');
     setFieldTouched({ type: false, description: false });
     setFieldErrors({ type: '', description: '' });
     setHasAttemptedSubmit(false);
@@ -683,9 +685,11 @@ export default function ServicesScreen() {
       const maxBytes = INQUIRY_ATTACHMENT_MAX_BYTES;
       const selectionError = getMaintenanceAttachmentSelectionError(file, { maxBytes, supported });
       if (selectionError) {
+        setAttachmentSelectionError(selectionError);
         showBannerMessage('error', selectionError);
         return;
       }
+      setAttachmentSelectionError('');
       setAttachmentUploadStatus('');
       setAttachments((prev) => {
         if (prev.length >= MAX_MAINTENANCE_ATTACHMENTS) {
@@ -1269,6 +1273,9 @@ export default function ServicesScreen() {
                 </TouchableOpacity>
                 {attachmentUploadStatus ? (
                   <Text style={styles.attachmentUploadNote}>{attachmentUploadStatus}</Text>
+                ) : null}
+                {attachmentSelectionError ? (
+                  <Text accessibilityRole="alert" style={styles.fieldError}>{attachmentSelectionError}</Text>
                 ) : null}
                 {attachments.length > 0 && (
                   <View style={styles.attachmentPreview}>
