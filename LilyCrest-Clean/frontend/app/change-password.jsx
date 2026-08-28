@@ -168,7 +168,9 @@ export default function ChangePasswordScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.keyboardView}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <View style={styles.iconContainer}>
-            <Ionicons name="lock-closed" size={40} color="#0A1628" />
+            {/* Gold glyph — a hardcoded near-black (#0A1628) was invisible on
+                the accentSubtle chip in dark mode. Matches the Settings row. */}
+            <Ionicons name="lock-closed" size={40} color={colors.accent} />
           </View>
           
           <Text style={styles.title}>Update Your Password</Text>

@@ -66,4 +66,14 @@ describe('Change Password reachability and contract', () => {
     expect(source).toContain('await logout()');
     expect(source).toContain("router.replace('/login')");
   });
+
+  test('the hero lock icon uses the themed gold accent, not a hardcoded dark colour (dark-mode visibility)', () => {
+    const source = read('app/change-password.jsx');
+    // The 40px hero icon inside styles.iconContainer must take colors.accent
+    // so it stays visible on the accentSubtle chip in dark mode.
+    expect(source).toMatch(/name="lock-closed"\s+size=\{40\}\s+color=\{colors\.accent\}/);
+    expect(source).not.toContain('color="#0A1628"');
+    // The chip keeps the accentSubtle fill + accentLight border treatment.
+    expect(source).toMatch(/iconContainer:\s*\{[^}]*backgroundColor:\s*colors\.accentSubtle[^}]*borderColor:\s*colors\.accentLight/);
+  });
 });
