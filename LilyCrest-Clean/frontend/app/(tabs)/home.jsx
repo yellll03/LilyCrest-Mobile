@@ -1184,7 +1184,7 @@ export default function HomeScreen() {
         <View style={styles.bottomSpacer} />
       </ScrollView>
 
-      <LilyAssistantFab />
+      <LilyAssistantFab returnTo="/(tabs)/home" />
 
       <StyledModal
         visible={modalData.visible}

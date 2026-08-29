@@ -55,9 +55,10 @@ describe('authenticated navigation bootstrap', () => {
     });
   });
 
-  test('empty and unknown notification payloads preserve the current route', () => {
-    expect(resolveNotificationRoute()).toBeNull();
-    expect(resolveNotificationRoute({})).toBeNull();
-    expect(resolveNotificationRoute({ type: 'unknown-event' })).toBeNull();
+  test('empty, unknown, and unsafe notification payloads fall back to the inbox', () => {
+    expect(resolveNotificationRoute()).toBe('/notifications');
+    expect(resolveNotificationRoute({})).toBe('/notifications');
+    expect(resolveNotificationRoute({ type: 'unknown-event' })).toBe('/notifications');
+    expect(resolveNotificationRoute({ url: '/applicant/payment/legacy' })).toBe('/notifications');
   });
 });

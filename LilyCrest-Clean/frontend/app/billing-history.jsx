@@ -1,10 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
-import { Link, useRouter } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Platform, Pressable, RefreshControl, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import LilyFlowerIcon from '../src/components/assistant/LilyFlowerIcon';
+import { FlatList, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import LilyAssistantFab from '../src/components/assistant/LilyAssistantFab';
 import { useAuth } from '../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
 import { apiService, getApiErrorMessage } from '../src/services/api';
@@ -106,7 +106,6 @@ function mergeBillingLists(...lists) {
 
 export default function BillingScreen() {
   const router = useRouter();
-  const insets = useSafeAreaInsets();
   const { user, authReady, authStatus, isLoading: authLoading, checkAuth } = useAuth();
   const { colors } = useTheme();
   const styles = useThemedStyles(createStyles);
@@ -597,15 +596,7 @@ export default function BillingScreen() {
         }
       />
 
-      <Link href="/(tabs)/chatbot" prefetch asChild>
-        <TouchableOpacity
-          style={[styles.chatbotFab, { bottom: Math.max(insets.bottom + 76, 92) }]}
-          accessibilityRole="button"
-          accessibilityLabel="Open AI Assistant"
-        >
-          <LilyFlowerIcon size={26} />
-        </TouchableOpacity>
-      </Link>
+      <LilyAssistantFab returnTo="/(tabs)/billing" />
     </SafeAreaView>
   );
 }
@@ -793,15 +784,5 @@ function createStyles(c, isDarkMode) {
     emptyTitle: { fontSize: 17, fontWeight: '700', color: c.text },
     emptyHint: { fontSize: 13, color: c.textMuted, textAlign: 'center' },
 
-    // Lily AI FAB
-    chatbotFab: {
-      position: 'absolute', right: 20,
-      width: 52, height: 52, borderRadius: 26, backgroundColor: c.headerBg,
-      justifyContent: 'center', alignItems: 'center',
-      ...Platform.select({
-        ios: { shadowColor: c.headerBg, shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.16, shadowRadius: 4 },
-        android: { elevation: 3 },
-      }),
-    },
   });
 }

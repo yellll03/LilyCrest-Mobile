@@ -1201,7 +1201,7 @@ export default function ServicesScreen() {
         ListFooterComponent={<View style={styles.bottomSpacer} />}
       />
 
-      <LilyAssistantFab />
+      <LilyAssistantFab returnTo="/(tabs)/services" />
 
       <Modal visible={showModal} animationType="slide" transparent={true} onRequestClose={confirmCloseModal}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalContainer}>

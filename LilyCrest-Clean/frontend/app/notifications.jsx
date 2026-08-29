@@ -71,9 +71,21 @@ export default function NotificationsScreen() {
     if (notification?.notification_id) {
       await markNotificationRead(notification.notification_id);
     }
-    const destination = resolveNotificationRoute(buildNotificationRouteData(notification));
+    const destination = resolveNotificationRoute(
+      buildNotificationRouteData(notification),
+      { reportUnsupported: true },
+    );
+    if (destination === '/notifications') {
+      await showAlert({
+        title: notification?.title || 'Notification',
+        message: notification?.body || notification?.content || 'This update has no additional destination.',
+        type: 'info',
+        buttons: [{ text: 'OK' }],
+      });
+      return;
+    }
     if (destination) router.push(destination);
-  }, [markNotificationRead, router]);
+  }, [markNotificationRead, router, showAlert]);
 
   const handleClear = useCallback(async () => {
     const decision = await showAlert({

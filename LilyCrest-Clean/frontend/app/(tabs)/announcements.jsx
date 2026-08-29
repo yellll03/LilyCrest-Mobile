@@ -30,6 +30,7 @@ import {
   sortNotifications,
 } from '../../src/utils/notificationFilters';
 import { getAnnouncementCategoryPresentation } from '../../src/utils/announcementPresentation';
+import LilyAssistantFab from '../../src/components/assistant/LilyAssistantFab';
 
 function safeFormat(dateStr, fmt) {
   try {
@@ -1100,6 +1101,8 @@ export default function AnnouncementsScreen() {
           </View>
         </View>
       </Modal>
+
+      <LilyAssistantFab returnTo="/(tabs)/announcements" />
 
     </SafeAreaView>
   );

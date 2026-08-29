@@ -1,5 +1,9 @@
 const { getDb } = require('../config/database');
-const { sanitizeStoredNotification, normalizePriority } = require('../services/notificationService');
+const {
+  filterNotificationsForTenantLifecycle,
+  sanitizeStoredNotification,
+  normalizePriority,
+} = require('../services/notificationService');
 const {
   filterStoredNotificationsForTenant,
   loadVisibleAnnouncementsForTenant,
@@ -107,10 +111,14 @@ async function getMyNotifications(req, res) {
       .sort({ created_at: -1, updated_at: -1 })
       .limit(120)
       .toArray();
+    const lifecycleRelevantNotifications = filterNotificationsForTenantLifecycle(
+      req.user,
+      storedNotificationCandidates
+    );
     const storedNotifications = await filterStoredNotificationsForTenant(
       db,
       req.user,
-      storedNotificationCandidates
+      lifecycleRelevantNotifications
     );
 
     const [dismissals, clearedState] = await Promise.all([
@@ -170,7 +178,8 @@ async function getMyNotifications(req, res) {
 async function findOwnedVisibleNotification(db, user, notificationKey) {
   const userId = user?.user_id;
   const storedCandidates = await db.collection('notifications').find({ user_id: userId }).limit(200).toArray();
-  const stored = await filterStoredNotificationsForTenant(db, user, storedCandidates);
+  const lifecycleRelevantCandidates = filterNotificationsForTenantLifecycle(user, storedCandidates);
+  const stored = await filterStoredNotificationsForTenant(db, user, lifecycleRelevantCandidates);
   const ownedStored = stored
     .map((doc) => sanitizeStoredNotification(doc))
     .find((item) => buildNotificationKey(item) === notificationKey || item.notification_id === notificationKey);

@@ -372,7 +372,7 @@ export function AuthProvider({ children }) {
     const interaction = isResponseInteraction
       ? interactionOrData
       : { data: interactionOrData, responseId: null };
-    const destination = resolveNotificationRoute(interaction.data);
+    const destination = resolveNotificationRoute(interaction.data, { reportUnsupported: true });
 
     if (!destination) {
       pendingNotificationRef.current = null;

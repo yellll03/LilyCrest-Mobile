@@ -25,6 +25,44 @@ const PUSH_SYNC_SIGNATURE_KEY = '@lilycrest_push_sync_signature';
 const PUSH_INSTALLATION_ID_KEY = '@lilycrest_push_installation_id';
 const LAST_HANDLED_NOTIFICATION_RESPONSE_KEY = '@lilycrest_last_handled_notification_response';
 const DEFAULT_CHANNEL_ID = 'default';
+const NOTIFICATION_INBOX_ROUTE = '/notifications';
+const SAFE_NOTIFICATION_DIRECT_PATHS = new Set([
+  '/notifications',
+  '/settings',
+  '/bill-details',
+  '/billing-history',
+  '/contract-viewer',
+  '/document-viewer',
+  '/documents',
+  '/my-documents',
+  '/(tabs)/home',
+  '/(tabs)/services',
+  '/(tabs)/announcements',
+  '/(tabs)/billing',
+  '/(tabs)/profile',
+  '/(tabs)/chatbot',
+]);
+
+function notificationRouteFallback(data = {}, reason = 'unsupported', options = {}) {
+  if (options.reportUnsupported === true) {
+    const type = typeof data?.type === 'string' ? data.type.trim() : '';
+    const category = typeof data?.category === 'string' ? data.category.trim() : '';
+    const screen = typeof data?.screen === 'string' ? data.screen.trim() : '';
+    console.warn('[Notifications] Falling back to the notification inbox', {
+      reason,
+      type: type || 'unknown',
+      category: category || 'unknown',
+      screen: screen || 'unknown',
+    });
+  }
+  return NOTIFICATION_INBOX_ROUTE;
+}
+
+function isSafeNotificationDirectUrl(url = '') {
+  if (typeof url !== 'string' || !url.startsWith('/')) return false;
+  const path = url.split(/[?#]/, 1)[0].replace(/\/+$/, '') || '/';
+  return SAFE_NOTIFICATION_DIRECT_PATHS.has(path);
+}
 
 export function initializeNotificationHandler() {
   if (!Notifications || handlerConfigured) return;
@@ -451,8 +489,10 @@ export async function clearLastNotificationResponse(responseId) {
   }
 }
 
-export function resolveNotificationRoute(data = {}) {
-  if (!data || typeof data !== 'object' || Array.isArray(data)) return null;
+export function resolveNotificationRoute(data = {}, options = {}) {
+  if (!data || typeof data !== 'object' || Array.isArray(data)) {
+    return notificationRouteFallback({}, 'invalid-payload', options);
+  }
 
   const directUrl = typeof data?.url === 'string' ? data.url.trim() : '';
   const conversationId = data?.conversation_id || data?.conversationId || data?.session_id;
@@ -501,9 +541,9 @@ export function resolveNotificationRoute(data = {}) {
   if (directSurvey) {
     return SURVEY_FEEDBACK_ENABLED
       ? { pathname: '/survey-form', params: { surveyId: decodeURIComponent(directSurvey[1]) } }
-      : null;
+      : notificationRouteFallback(data, 'survey-feature-disabled', options);
   }
-  if (directUrl.startsWith('/') && !/^\/surveys?(\/|$)/i.test(directUrl)) return directUrl;
+  if (isSafeNotificationDirectUrl(directUrl)) return directUrl;
 
   const billingId = data?.billing_id || data?.bill_id;
   const surveyId = data?.surveyId || data?.survey_id;
@@ -558,7 +598,9 @@ export function resolveNotificationRoute(data = {}) {
       return '/(tabs)/home';
     case 'survey':
     case 'surveys':
-      if (!SURVEY_FEEDBACK_ENABLED) return null;
+      if (!SURVEY_FEEDBACK_ENABLED) {
+        return notificationRouteFallback(data, 'survey-feature-disabled', options);
+      }
       return surveyId
         ? { pathname: '/survey-form', params: { surveyId: String(surveyId) } }
         : '/surveys';
@@ -579,9 +621,10 @@ export function resolveNotificationRoute(data = {}) {
     case 'system':
       return '/(tabs)/profile';
     default:
-      // Unknown, empty, or stale payloads preserve the current route. News is
-      // only an intentional destination for explicit announcement events.
-      return null;
+      // Unknown, empty, stale, or unsafe direct payloads always land on a
+      // valid informational parent route. Callers handling an actual tap opt
+      // into the warning above; render-time route previews stay side-effect free.
+      return notificationRouteFallback(data, 'unsupported-or-stale-route', options);
   }
 }
 

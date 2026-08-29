@@ -27,7 +27,7 @@ describe('unified tenant notifications contract', () => {
     expect(screen).toContain('markNotificationRead,');
     expect(screen).toContain('dismissNotification,');
     expect(screen).toContain('clearNotifications,');
-    expect(screen).toContain('resolveNotificationRoute(buildNotificationRouteData(notification))');
+    expect(screen).toMatch(/resolveNotificationRoute\(\s*buildNotificationRouteData\(notification\),\s*\{ reportUnsupported: true \},\s*\)/);
     expect(screen).not.toContain('useCanonicalAnnouncements');
     expect(screen).not.toContain("api.get('/announcements')");
   });

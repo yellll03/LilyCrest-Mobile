@@ -104,7 +104,7 @@ describe('Phase 2 destination ownership guards', () => {
   );
 
   it('the Home notification sheet resolves and pushes each canonical event destination', () => {
-    expect(appHeaderSource).toContain('resolveNotificationRoute(buildNotificationRouteData(notification))');
+    expect(appHeaderSource).toMatch(/resolveNotificationRoute\(\s*buildNotificationRouteData\(notification\),\s*\{ reportUnsupported: true \},\s*\)/);
     expect(appHeaderSource).toMatch(/if \(destination\) setTimeout/);
     expect(appHeaderSource).toMatch(/router\.push\(destination\)/);
     expect(appHeaderSource).toMatch(/markNotificationRead\(notification\.notification_id\)/);
