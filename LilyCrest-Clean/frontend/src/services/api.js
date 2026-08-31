@@ -400,6 +400,10 @@ api.interceptors.response.use(
 export const apiService = {
   // Dashboard
   getDashboard: () => api.get('/dashboard/me'),
+  getCurrentRoomTransfer: () => api.get('/room-transfer-request/current'),
+  getRoomTransferPreferences: () => api.get('/room-transfer-preferences'),
+  createRoomTransferRequest: (data) => api.post('/room-transfer-requests', data),
+  cancelRoomTransferRequest: (requestId) => api.patch(`/room-transfer-requests/${requestId}/cancel`),
   
   // Rooms
   getRooms: (params) => api.get('/rooms', { params }),
