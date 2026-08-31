@@ -41,6 +41,7 @@ import {
   formatRoomNumber,
   formatRoomType,
 } from '../../src/utils/homePresentation';
+import { getRoomTransferPresentation } from '../../src/utils/roomTransferPresentation';
 
 // ── Helpers ──────────────────────────────────────────────────
 function safeFormatDate(dateStr, fmt = 'MMM dd, yyyy') {
@@ -186,6 +187,10 @@ export default function HomeScreen() {
 
   const notifications = useMemo(() => (Array.isArray(authNotifications) ? authNotifications : []), [authNotifications]);
   const policyItems = useMemo(() => dashboardData?.policies || dashboardData?.house_rules || [], [dashboardData]);
+  const roomTransfer = useMemo(
+    () => getRoomTransferPresentation(dashboardData?.roomTransfer || null),
+    [dashboardData],
+  );
   const billingHeadlineTone = billingInsightPanel?.headline?.tone || 'neutral';
   const billingIsCleared = outstandingBillCount === 0 && Boolean(latestBill);
   const billingCardMode = useMemo(() => {
@@ -518,10 +523,15 @@ export default function HomeScreen() {
       // the canonical, dismiss/clear-aware list (see the `notifications`
       // memo above), so a second independent fetch would just risk this
       // screen showing a stale copy that ignores tenant dismiss/clear state.
-      const [dashboardRes, billingHistoryRes] = await Promise.all([
+      const [dashboardRes, billingHistoryRes, roomTransferRes] = await Promise.all([
         apiService.getDashboard(),
         apiService.getBillingHistory
           ? apiService.getBillingHistory()
+            .then((response) => ({ ...response, ok: true }))
+            .catch(() => ({ data: null, ok: false }))
+          : Promise.resolve({ data: null, ok: false }),
+        apiService.getCurrentRoomTransfer
+          ? apiService.getCurrentRoomTransfer()
             .then((response) => ({ ...response, ok: true }))
             .catch(() => ({ data: null, ok: false }))
           : Promise.resolve({ data: null, ok: false }),
@@ -550,7 +560,13 @@ export default function HomeScreen() {
             : [];
 
       if (latestDashboardRequestRef.current !== requestId || activeUserIdRef.current !== requestUserId) return;
-      setDashboardData({ ...dashboard, billing: billingItems, maintenance: mItems });
+      setDashboardData({
+        ...dashboard,
+        billing: billingItems,
+        maintenance: mItems,
+        roomTransfer: roomTransferRes?.ok ? roomTransferRes.data : null,
+        roomTransferLoaded: roomTransferRes?.ok === true,
+      });
       setBillingHistory(billingItems);
       setDashboardOwnerId(requestUserId);
     } catch (error) {
@@ -610,13 +626,14 @@ export default function HomeScreen() {
     if (!authReady || !userId) return undefined;
     return subscribeCanonicalNotifications((notification) => {
       const type = String(notification?.data?.type || notification?.type || '').toLowerCase();
+      const title = String(notification?.data?.title || notification?.title || '').toLowerCase();
       if ([
         'move_out',
         'stay_terminal',
         'termination_complete',
         'renewal_effective',
         'transfer_complete',
-      ].includes(type)) {
+      ].includes(type) || title.includes('room transfer')) {
         fetchDashboard(true);
       }
     });
@@ -1003,6 +1020,28 @@ export default function HomeScreen() {
               </View>
             </TouchableOpacity>
           </View>
+
+          {tenancyAssignment ? (
+            <TouchableOpacity
+              style={styles.roomTransferRow}
+              onPress={() => router.push('/room-transfer')}
+              activeOpacity={0.75}
+              accessibilityRole="button"
+              accessibilityLabel={dashboardData?.roomTransferLoaded === false
+                ? 'Room transfer status unavailable'
+                : roomTransfer.statusLabel ? `Room transfer: ${roomTransfer.statusLabel}` : 'Request Room Transfer'}
+            >
+              <View style={styles.roomTransferIcon}><Ionicons name="swap-horizontal" size={18} color={colors.interactive} /></View>
+              <View style={styles.roomTransferBody}>
+                <Text style={styles.roomTransferLabel}>Room Transfer</Text>
+                <Text style={styles.roomTransferValue}>{dashboardData?.roomTransferLoaded === false
+                  ? 'Status unavailable'
+                  : roomTransfer.statusLabel || 'Request Room Transfer'}</Text>
+                {roomTransfer.scheduledLabel ? <Text style={styles.roomTransferMeta}>{roomTransfer.scheduledLabel}</Text> : null}
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+            </TouchableOpacity>
+          ) : null}
         </View>
 
         <View style={styles.billingInsightCard}>
@@ -1291,6 +1330,12 @@ function createStyles(c) {
     dateLabel: { fontSize: 11, color: c.textMuted },
     dateValue: { fontSize: 12, fontWeight: '600', color: c.text },
     dateMeta: { fontSize: 10, fontWeight: '600', color: c.textMuted, marginTop: 2 },
+    roomTransferRow: { flexDirection: 'row', alignItems: 'center', gap: 11, marginTop: 12, paddingTop: 13, borderTopWidth: 1, borderTopColor: c.border },
+    roomTransferIcon: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accentLight },
+    roomTransferBody: { flex: 1 },
+    roomTransferLabel: { color: c.textMuted, fontSize: 10, fontWeight: '700', textTransform: 'uppercase', letterSpacing: .6 },
+    roomTransferValue: { color: c.text, fontSize: 13, fontWeight: '800', marginTop: 2 },
+    roomTransferMeta: { color: c.textSecondary, fontSize: 11, marginTop: 2 },
 
     // Summary
     summaryRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },

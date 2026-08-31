@@ -49,6 +49,9 @@ describe('notification route safety matrix', () => {
       .toEqual({ pathname: '/(tabs)/chatbot', params: { conversationId: 'chat-1' } });
     expect(resolveNotificationRoute({ type: 'announcement', announcement_id: 'a-1' }))
       .toEqual({ pathname: '/(tabs)/announcements', params: { announcementId: 'a-1' } });
+    expect(resolveNotificationRoute({ type: 'room_transfer', screen: 'room_transfer' }))
+      .toBe('/room-transfer');
+    expect(resolveNotificationRoute({ url: '/room-transfer' })).toBe('/room-transfer');
   });
 
   test('missing resources route to valid parent screens and legacy types use the inbox', () => {
