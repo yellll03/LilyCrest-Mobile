@@ -23,13 +23,13 @@ module.exports = {
     newArchEnabled: true,
     ios: {
       bundleIdentifier: 'com.lilycrest.lilycrestdorm',
-      // Build 24 (commit f6e47c13) already finished as a store-distribution
-      // build — confirmed via `eas build:list --platform ios`. Reusing 24
+      // Build 25 (commit 955b8154) is the last shipped iOS artifact.
+      // Reusing 25
       // would be rejected by App Store
       // Connect for a duplicate build number; Android's versionCode is
       // intentionally NOT bumped alongside this — the platforms have
       // legitimately independent build numbers.
-      buildNumber: '25',
+      buildNumber: '26',
       supportsTablet: true,
       googleServicesFile: process.env.GOOGLE_SERVICES_PLIST || './GoogleService-Info.plist',
       infoPlist: {
