@@ -20,7 +20,9 @@ describe('mobile room transfer connection', () => {
   it('shows backend status and blocks scheduled tenant cancellation in presentation state', () => {
     expect(screen).toContain('presentation.statusLabel');
     expect(screen).toContain('presentation.canCancel');
-    expect(screen).toContain('Please coordinate with the Administration Office for changes to a scheduled room transfer.');
+    expect(screen).toContain('presentation.guidance');
+    expect(screen).toContain('presentation.settlement?.required');
+    expect(screen).toContain('presentation.utilitiesNote');
   });
 
   it('connects Home and the native screen to the canonical mobile routes', () => {

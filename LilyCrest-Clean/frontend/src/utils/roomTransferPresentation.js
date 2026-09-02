@@ -1,4 +1,10 @@
-export const OPEN_ROOM_TRANSFER_STATUSES = Object.freeze(['pending', 'scheduled']);
+export const OPEN_ROOM_TRANSFER_STATUSES = Object.freeze([
+  'pending',
+  'scheduled',
+  'awaiting_settlement',
+  'ready_for_transfer',
+  'action_required',
+]);
 
 export function getRoomTransferPresentation(lifecycle) {
   const status = lifecycle?.status || null;
@@ -11,6 +17,10 @@ export function getRoomTransferPresentation(lifecycle) {
     canRequest: !OPEN_ROOM_TRANSFER_STATUSES.includes(status),
     scheduledLabel: formatRoomTransferSchedule(scheduled),
     declineReason: status === 'declined' ? lifecycle?.request?.declineReason || '' : '',
+    guidance: scheduled?.tenantGuidance || '',
+    utilitiesNote: scheduled?.utilitiesNote || '',
+    settlement: scheduled?.settlement || null,
+    actionRequiredReason: scheduled?.actionRequiredReason || null,
   };
 }
 

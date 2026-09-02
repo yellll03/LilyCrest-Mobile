@@ -34,6 +34,24 @@ describe('room transfer presentation parity', () => {
       .toBe(false);
   });
 
+  it.each(['awaiting_settlement', 'ready_for_transfer', 'action_required'])(
+    'treats canonical %s state as an open lifecycle and uses server guidance',
+    (status) => {
+      const result = getRoomTransferPresentation({
+        status,
+        statusLabel: status,
+        scheduledRoomTransfer: {
+          status,
+          tenantGuidance: 'Canonical tenant guidance',
+          settlement: { required: status === 'awaiting_settlement', remaining: 250 },
+        },
+      });
+      expect(result.canRequest).toBe(false);
+      expect(result.guidance).toBe('Canonical tenant guidance');
+      expect(result.settlement?.remaining).toBe(250);
+    },
+  );
+
   it('validates optional preferred date without inventing lifecycle state', () => {
     const today = new Date('2026-08-31T10:00:00+08:00');
     expect(isValidPreferredTransferDate('', today)).toBe(true);

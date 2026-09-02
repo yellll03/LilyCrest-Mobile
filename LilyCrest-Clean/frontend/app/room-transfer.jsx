@@ -138,7 +138,13 @@ export default function RoomTransferScreen() {
                   <Text style={styles.statusTitle}>{presentation.statusLabel}</Text>
                   {presentation.scheduledLabel ? <Text style={styles.statusDetail}>{presentation.scheduledLabel}</Text> : null}
                   {presentation.declineReason ? <Text style={styles.statusDetail}>{presentation.declineReason}</Text> : null}
-                  {presentation.status === 'scheduled' ? <Text style={styles.guidance}>Please coordinate with the Administration Office for changes to a scheduled room transfer.</Text> : null}
+                  {presentation.guidance ? <Text style={styles.guidance}>{presentation.guidance}</Text> : null}
+                  {presentation.settlement?.required ? (
+                    <Text style={styles.statusDetail}>
+                      Settlement: ₱{Number(presentation.settlement.remaining || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} remaining
+                    </Text>
+                  ) : null}
+                  {presentation.utilitiesNote ? <Text style={styles.guidance}>{presentation.utilitiesNote}</Text> : null}
                 </View>
                 {presentation.canCancel ? <TouchableOpacity disabled={saving} onPress={cancel} style={styles.cancelButton}><Text style={styles.cancelText}>Cancel</Text></TouchableOpacity> : null}
               </View>
