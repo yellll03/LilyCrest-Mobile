@@ -41,7 +41,8 @@ describe('navigation regression contracts', () => {
   test('Android Back closes Maintenance and News detail modals in place', () => {
     const services = read('app/(tabs)/services.jsx');
     const announcements = read('app/(tabs)/announcements.jsx');
-    expect(services).toMatch(/visible=\{showDetailModal\}[\s\S]*?onRequestClose=\{\(\) => \{[\s\S]*?setShowDetailModal\(false\);[\s\S]*?\}\}/);
+    expect(services).toMatch(/visible=\{showDetailModal\}[\s\S]*?onRequestClose=\{closeMaintenanceDetail\}/);
+    expect(services).toMatch(/const closeMaintenanceDetail = \(\) => \{[\s\S]*?setShowDetailModal\(false\);/);
     expect(announcements).toMatch(/visible=\{!!selectedAnn\}[\s\S]*?onRequestClose=\{\(\) => setSelectedAnn\(null\)\}/);
   });
 });
