@@ -44,6 +44,10 @@ import {
   MAX_MAINTENANCE_ATTACHMENTS,
   extractMaintenanceList,
   extractMaintenanceRequest,
+  getMaintenanceLocationParts,
+  getMaintenanceRequestBranchDisplayName,
+  getMaintenanceRequestFloorDisplayName,
+  getMaintenanceRequestRoomDisplayName,
   reconcileMaintenanceRequest,
 } from '../../src/utils/maintenanceContract';
 import { classifyMaintenanceAttachment, getValidMaintenanceAttachmentUrl } from '../../src/utils/maintenanceAttachmentViewer';
@@ -1227,7 +1231,7 @@ export default function ServicesScreen() {
     const latestUpdate = request.latestTenantVisibleUpdate || null;
     const lastActivity = request.latestActivityAt || request.lastActivityAt || request.updated_at || request.created_at;
     const hasNewAttachment = latestUpdate?.hasAttachments;
-    const locationParts = [request.branch, request.room_id || request.roomId].filter(Boolean);
+    const locationParts = getMaintenanceLocationParts(request);
     return (
       <TouchableOpacity style={[styles.requestCard, { borderLeftColor: statusColor.solid }]} onPress={() => openDetail(request)} activeOpacity={0.85}>
         <View style={styles.requestHeader}>
@@ -1707,8 +1711,11 @@ export default function ServicesScreen() {
                         {[
                           ['Request ID', detailRequest.request_id],
                           ['Submitted', safeFormat(detailRequest.created_at || detailRequest.createdAt, 'MMM dd, yyyy \u2022 h:mm a')],
-                          ['Branch', detailRequest.branch || 'Not specified'],
-                          ['Room / Unit', detailRequest.room_id || detailRequest.roomId || 'Not specified'],
+                          ['Branch', getMaintenanceRequestBranchDisplayName(detailRequest, 'Not specified')],
+                          ['Room / Unit', getMaintenanceRequestRoomDisplayName(detailRequest, 'Not specified')],
+                          ...(getMaintenanceRequestFloorDisplayName(detailRequest, '')
+                            ? [['Floor', getMaintenanceRequestFloorDisplayName(detailRequest, '')]]
+                            : []),
                         ].map(([label, value]) => (
                           <View key={label} style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
                             <Text style={{ fontSize: 12, color: colors.textMuted, flex: 1 }}>{label}</Text>
