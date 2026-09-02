@@ -5,13 +5,13 @@ import {
   ActivityIndicator,
   Image,
   Modal,
-  PanResponder,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
   useWindowDimensions,
 } from 'react-native';
+import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useTheme } from '../context/ThemeContext';
 import {
   clampProfileCropOffset,
@@ -31,6 +31,9 @@ export default function ProfilePhotoCropModal({ asset, error = '', onCancel, onS
   const [croppedAsset, setCroppedAsset] = useState(null);
   const [applyingCrop, setApplyingCrop] = useState(false);
   const dragStart = useRef({ x: 0, y: 0 });
+  const pinchStart = useRef({ zoom: PROFILE_CROP_MIN_ZOOM, offset: { x: 0, y: 0 } });
+  const zoomRef = useRef(PROFILE_CROP_MIN_ZOOM);
+  const offsetRef = useRef({ x: 0, y: 0 });
 
   useEffect(() => {
     if (!visible) return;
@@ -40,28 +43,65 @@ export default function ProfilePhotoCropModal({ asset, error = '', onCancel, onS
     setApplyingCrop(false);
   }, [asset?.uri, visible]);
 
+  useEffect(() => {
+    zoomRef.current = zoom;
+  }, [zoom]);
+
+  useEffect(() => {
+    offsetRef.current = offset;
+  }, [offset]);
+
   const layout = useMemo(
     () => getProfileCropLayout(asset, cropSize, zoom, offset),
     [asset, cropSize, offset, zoom],
   );
 
-  const panResponder = useMemo(() => PanResponder.create({
-    onMoveShouldSetPanResponder: (_event, gesture) => Math.abs(gesture.dx) > 2 || Math.abs(gesture.dy) > 2,
-    onPanResponderGrant: () => {
-      dragStart.current = offset;
-    },
-    onPanResponderMove: (_event, gesture) => {
-      setOffset(clampProfileCropOffset(asset, cropSize, zoom, {
-        x: dragStart.current.x + gesture.dx,
-        y: dragStart.current.y + gesture.dy,
-      }));
-    },
-  }), [asset, cropSize, offset, zoom]);
+  const cropGesture = useMemo(() => {
+    const pan = Gesture.Pan()
+      .minDistance(0)
+      .maxPointers(1)
+      .onBegin(() => {
+        dragStart.current = offsetRef.current;
+      })
+      .onUpdate((gesture) => {
+        const nextOffset = clampProfileCropOffset(asset, cropSize, zoomRef.current, {
+          x: dragStart.current.x + gesture.translationX,
+          y: dragStart.current.y + gesture.translationY,
+        });
+        offsetRef.current = nextOffset;
+        setOffset(nextOffset);
+      })
+      .runOnJS(true);
+
+    const pinch = Gesture.Pinch()
+      .onBegin(() => {
+        pinchStart.current = { zoom: zoomRef.current, offset: offsetRef.current };
+      })
+      .onUpdate((gesture) => {
+        const nextZoom = Math.min(
+          PROFILE_CROP_MAX_ZOOM,
+          Math.max(PROFILE_CROP_MIN_ZOOM, pinchStart.current.zoom * gesture.scale),
+        );
+        const nextOffset = clampProfileCropOffset(asset, cropSize, nextZoom, pinchStart.current.offset);
+        zoomRef.current = nextZoom;
+        offsetRef.current = nextOffset;
+        setZoom(nextZoom);
+        setOffset(nextOffset);
+      })
+      .runOnJS(true);
+
+    return Gesture.Simultaneous(pan, pinch);
+  }, [asset, cropSize]);
 
   const changeZoom = (nextZoom) => {
     const bounded = Math.min(PROFILE_CROP_MAX_ZOOM, Math.max(PROFILE_CROP_MIN_ZOOM, nextZoom));
+    zoomRef.current = bounded;
     setZoom(bounded);
-    setOffset((current) => clampProfileCropOffset(asset, cropSize, bounded, current));
+    setOffset((current) => {
+      const nextOffset = clampProfileCropOffset(asset, cropSize, bounded, current);
+      offsetRef.current = nextOffset;
+      return nextOffset;
+    });
   };
 
   const applyCrop = async () => {
@@ -118,24 +158,26 @@ export default function ProfilePhotoCropModal({ asset, error = '', onCancel, onS
               style={[styles.preview, { width: cropSize, height: cropSize, backgroundColor: colors.surfaceSecondary }]}
             />
           ) : (
-            <View
-              accessibilityLabel="Profile photo crop area"
-              style={[styles.cropWindow, { width: cropSize, height: cropSize, backgroundColor: colors.surfaceSecondary }]}
-              {...panResponder.panHandlers}
-            >
-              <Image
-                source={{ uri: asset.uri }}
-                style={{
-                  height: layout.displayHeight,
-                  width: layout.displayWidth,
-                  transform: [
-                    { translateX: layout.offset.x },
-                    { translateY: layout.offset.y },
-                  ],
-                }}
-              />
-              <View pointerEvents="none" style={[styles.cropBorder, { borderColor: colors.accent }]} />
-            </View>
+            <GestureDetector gesture={cropGesture}>
+              <View
+                accessibilityLabel="Profile photo crop area"
+                style={[styles.cropWindow, { width: cropSize, height: cropSize, backgroundColor: colors.surfaceSecondary }]}
+              >
+                <Image
+                  pointerEvents="none"
+                  source={{ uri: asset.uri }}
+                  style={{
+                    height: layout.displayHeight,
+                    width: layout.displayWidth,
+                    transform: [
+                      { translateX: layout.offset.x },
+                      { translateY: layout.offset.y },
+                    ],
+                  }}
+                />
+                <View pointerEvents="none" style={[styles.cropBorder, { borderColor: colors.accent }]} />
+              </View>
+            </GestureDetector>
           )}
 
           {!croppedAsset ? (
@@ -162,7 +204,12 @@ export default function ProfilePhotoCropModal({ asset, error = '', onCancel, onS
               <TouchableOpacity
                 accessibilityLabel="Reset crop"
                 accessibilityRole="button"
-                onPress={() => { setZoom(PROFILE_CROP_MIN_ZOOM); setOffset({ x: 0, y: 0 }); }}
+                onPress={() => {
+                  zoomRef.current = PROFILE_CROP_MIN_ZOOM;
+                  offsetRef.current = { x: 0, y: 0 };
+                  setZoom(PROFILE_CROP_MIN_ZOOM);
+                  setOffset({ x: 0, y: 0 });
+                }}
                 style={styles.resetButton}
               >
                 <Text style={[styles.resetText, { color: colors.accent }]}>Reset</Text>

@@ -52,6 +52,19 @@ const SUPPORT_UPLOAD_MIME_TYPES = [
   'application/pdf',
 ];
 
+const ASSISTANT_RETURN_ROUTES = new Set([
+  '/(tabs)/home',
+  '/(tabs)/services',
+  '/(tabs)/announcements',
+  '/(tabs)/billing',
+  '/(tabs)/profile',
+]);
+
+function normalizeAssistantReturnRoute(value) {
+  const route = Array.isArray(value) ? value[0] : value;
+  return ASSISTANT_RETURN_ROUTES.has(route) ? route : '/(tabs)/home';
+}
+
 function createClientOperationId(prefix) {
   return `${prefix}:${Crypto.randomUUID()}`;
 }
@@ -385,6 +398,7 @@ export default function LilyAssistantScreen() {
   const {
     conversationId: notificationConversationIdParam,
     messageId: notificationMessageIdParam,
+    returnTo: returnToParam,
   } = useLocalSearchParams();
   const notificationConversationId = Array.isArray(notificationConversationIdParam)
     ? notificationConversationIdParam[0]
@@ -392,6 +406,7 @@ export default function LilyAssistantScreen() {
   const notificationMessageId = Array.isArray(notificationMessageIdParam)
     ? notificationMessageIdParam[0]
     : notificationMessageIdParam;
+  const assistantReturnRoute = normalizeAssistantReturnRoute(returnToParam);
   const scrollRef = useRef(null);
   const adminScrollRef = useRef(null);
   const seenSupportMsgIds = useRef(new Set());
@@ -1922,6 +1937,15 @@ export default function LilyAssistantScreen() {
           <View style={[styles.screen, { paddingBottom: bottomTabInset }]}>
             <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
               <View style={styles.headerLeft}>
+                <Pressable
+                  style={styles.backButton}
+                  onPress={() => router.replace(assistantReturnRoute)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Back"
+                  accessibilityHint="Returns to the screen that opened Lily Assistant"
+                >
+                  <Ionicons name="arrow-back" size={22} color={colors.onPrimary} />
+                </Pressable>
                 <View style={styles.headerAvatar}>
                   <LilyFlowerIcon size={34} pulse={isSending} imageScale={1.28} />
                 </View>

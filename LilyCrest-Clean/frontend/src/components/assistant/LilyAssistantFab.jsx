@@ -1,18 +1,23 @@
-import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useRouter } from 'expo-router';
 import { Platform, StyleSheet, TouchableOpacity } from 'react-native';
 import LilyFlowerIcon from './LilyFlowerIcon';
 
 const FAB_SIZE = 52;
 
-export default function LilyAssistantFab() {
+export default function LilyAssistantFab({ returnTo = '/(tabs)/home' }) {
   const router = useRouter();
-  const tabBarHeight = useBottomTabBarHeight();
+  // Keep this aligned with the fixed safe-area-aware geometry in
+  // app/(tabs)/_layout.jsx. Avoiding navigator-only hooks also keeps this
+  // reusable on the Billing wrapper and in isolated screen tests.
+  const tabBarHeight = Platform.OS === 'ios' ? 88 : 72;
 
   return (
     <TouchableOpacity
       style={[styles.button, { bottom: tabBarHeight + 12 }]}
-      onPress={() => router.push('/(tabs)/chatbot')}
+      onPress={() => router.push({
+        pathname: '/(tabs)/chatbot',
+        params: { returnTo },
+      })}
       activeOpacity={0.84}
       accessibilityRole="button"
       accessibilityLabel="Open Lily Assistant"

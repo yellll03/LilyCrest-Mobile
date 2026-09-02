@@ -40,6 +40,12 @@ import {
 } from '../../src/services/firebaseStorageUpload';
 import { pickDocument, pickFromCamera, pickFromLibrary } from '../../src/utils/attachmentPicker';
 import { createLatestRequestGate, runLatestRequest } from '../../src/utils/latestRequest';
+import {
+  MAX_MAINTENANCE_ATTACHMENTS,
+  extractMaintenanceList,
+  extractMaintenanceRequest,
+  reconcileMaintenanceRequest,
+} from '../../src/utils/maintenanceContract';
 import { classifyMaintenanceAttachment, getValidMaintenanceAttachmentUrl } from '../../src/utils/maintenanceAttachmentViewer';
 import { getCreateRequestDescriptionError, getMaintenanceAttachmentErrorMessage, getMaintenanceAttachmentSelectionError, shouldConfirmCreateRequestClose } from '../../src/utils/maintenanceForm';
 import {
@@ -216,11 +222,55 @@ function buildChatItems(entries = []) {
   return items;
 }
 
+function InlineMaintenanceDialog({ visible, title, message, type = 'info', buttons = [], children, onClose, colors }) {
+  if (!visible) return null;
+  const tone = type === 'error'
+    ? { icon: 'alert-circle', color: colors.errorText, background: colors.errorBg }
+    : type === 'success'
+      ? { icon: 'checkmark-circle', color: colors.successText, background: colors.successBg }
+      : { icon: 'information-circle', color: colors.infoText, background: colors.infoBg };
+  return (
+    <View style={[StyleSheet.absoluteFillObject, { zIndex: 200, elevation: 30, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.overlay }]}>
+      <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={onClose} accessibilityLabel="Close maintenance action dialog" />
+      <View style={{ width: '88%', maxWidth: 430, borderRadius: 16, padding: 20, gap: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }} accessibilityViewIsModal>
+        <View style={{ width: 46, height: 46, borderRadius: 23, alignSelf: 'center', alignItems: 'center', justifyContent: 'center', backgroundColor: tone.background }}>
+          <Ionicons name={tone.icon} size={26} color={tone.color} />
+        </View>
+        <Text style={{ color: colors.text, fontSize: 18, fontWeight: '800', textAlign: 'center' }}>{title}</Text>
+        {message ? <Text style={{ color: colors.textMuted, fontSize: 13, lineHeight: 19, textAlign: 'center' }}>{message}</Text> : null}
+        {children}
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          {buttons.map((button) => {
+            const destructive = button.style === 'destructive';
+            const primary = button.style === 'info' || button.style === 'primary';
+            const backgroundColor = destructive ? colors.error : primary ? colors.primary : colors.surfaceSecondary;
+            const textColor = destructive || primary ? colors.onPrimary : colors.text;
+            return (
+              <TouchableOpacity
+                key={button.text}
+                style={{ flex: 1, minHeight: 46, borderRadius: 12, alignItems: 'center', justifyContent: 'center', backgroundColor, opacity: button.disabled || button.loading ? 0.65 : 1 }}
+                onPress={button.onPress}
+                disabled={button.disabled || button.loading}
+                accessibilityRole="button"
+                accessibilityState={{ disabled: button.disabled || button.loading }}
+              >
+                {button.loading ? <ActivityIndicator size="small" color={textColor} /> : <Text style={{ color: textColor, fontWeight: '800', textAlign: 'center' }}>{button.text}</Text>}
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+    </View>
+  );
+}
+
 const REQUEST_TYPES = [
   { id: 'maintenance', label: 'Maintenance', icon: 'construct', color: '#0A1628' },
   { id: 'plumbing', label: 'Plumbing', icon: 'water', color: '#0A1628' },
   { id: 'electrical', label: 'Electrical', icon: 'flash', color: '#0A1628' },
   { id: 'aircon', label: 'Air Conditioning', icon: 'snow', color: '#0A1628' },
+  { id: 'elevator', label: 'Elevator', icon: 'business', color: '#0A1628' },
+  { id: 'internet', label: 'Internet / Network', icon: 'wifi', color: '#0A1628' },
   { id: 'cleaning', label: 'Cleaning', icon: 'sparkles', color: '#0A1628' },
   { id: 'pest', label: 'Pest Control', icon: 'bug', color: '#0A1628' },
   { id: 'furniture', label: 'Furniture', icon: 'bed', color: '#0A1628' },
@@ -236,20 +286,23 @@ function getServiceTypeIconColor(typeColor, colors, isDarkMode) {
 const URGENCY_LEVELS = [
   { id: 'low', label: 'Low', description: 'Can wait a few days', color: '#059669' },
   { id: 'normal', label: 'Normal', description: 'Within 1-2 days', color: '#D97706' },
-  { id: 'high', label: 'Urgent', description: 'Needs immediate attention', color: '#DC2626' },
+  { id: 'high', label: 'High', description: 'Within 24 hours', color: '#EA580C' },
+  { id: 'urgent', label: 'Urgent', description: 'Priority response required', color: '#DC2626' },
+  { id: 'emergency', label: 'Emergency', description: 'Immediate safety or critical issue', color: '#991B1B' },
 ];
 
 const RESOLUTION_ESTIMATES = {
   low: '3–5 business days',
   normal: '1–2 business days',
   high: 'Within 24 hours',
+  urgent: 'Within 24 hours',
+  emergency: 'Immediate / Priority',
 };
 
 const MIN_DESCRIPTION_LENGTH = 10;
 // Mirrors backend/controllers/maintenance.controller.js DESCRIPTION_MAX.
 // Frontend enforcement here is UX only — the backend remains authoritative.
 const MAX_DESCRIPTION_LENGTH = 1000;
-const MAX_MAINTENANCE_ATTACHMENTS = 4;
 // Every inquiry attachment (image, PDF, or other supported document type) is
 // capped at 5MB, regardless of the generic upload endpoint's own larger
 // per-mime ceiling. Mirrors INQUIRY_ATTACHMENT_MAX_BYTES enforced server-side
@@ -303,7 +356,7 @@ export default function ServicesScreen() {
   const notificationRequestId = Array.isArray(notificationRequestIdParam)
     ? notificationRequestIdParam[0]
     : notificationRequestIdParam;
-  const { user, authReady, authStatus } = useAuth();
+  const { user, authReady, authStatus, notifications = [] } = useAuth();
   const { colors, isDarkMode } = useTheme();
   const { showToast } = useToast();
   const styles = useThemedStyles((c) => StyleSheet.create({
@@ -453,6 +506,10 @@ export default function ServicesScreen() {
   const [showReopenModal, setShowReopenModal] = useState(false);
   const [reopenNote, setReopenNote] = useState('');
   const [showRatingModal, setShowRatingModal] = useState(false);
+  const [showRescheduleModal, setShowRescheduleModal] = useState(false);
+  const [rescheduleDate, setRescheduleDate] = useState('');
+  const [rescheduleTime, setRescheduleTime] = useState('');
+  const [rescheduleReason, setRescheduleReason] = useState('');
   const [rating, setRating] = useState(5);
   const [ratingFeedback, setRatingFeedback] = useState('');
   const [detailLoading, setDetailLoading] = useState(false);
@@ -465,6 +522,8 @@ export default function ServicesScreen() {
   const [searchQuery, setSearchQuery] = useState('');
   const bannerTimerRef = useRef(null);
   const handledNotificationRequestRef = useRef('');
+  const maintenanceRefreshSignalRef = useRef('');
+  const maintenanceMutationRef = useRef(false);
   const requestGateRef = useRef(null);
   if (!requestGateRef.current) requestGateRef.current = createLatestRequestGate();
   // Idempotency key for the current submission attempt. Minted once and
@@ -583,7 +642,7 @@ export default function ServicesScreen() {
       gate: requestGateRef.current,
       request: () => apiService.getMyMaintenance(),
       onSuccess: (response) => {
-        const nextRequests = [...(response.data || [])].sort((a, b) => {
+        const nextRequests = [...extractMaintenanceList(response)].sort((a, b) => {
           const aTime = new Date(a.latestActivityAt || a.lastActivityAt || a.updated_at || a.created_at || 0).getTime();
           const bTime = new Date(b.latestActivityAt || b.lastActivityAt || b.updated_at || b.created_at || 0).getTime();
           return bTime - aTime;
@@ -660,11 +719,15 @@ export default function ServicesScreen() {
         attachments: uploadedAttachments.map(toStoredAttachmentMetadata),
         client_request_id: submissionRequestIdRef.current,
       };
-      await apiService.createMaintenance(payload);
+      const response = await apiService.createMaintenance(payload);
+      const createdRequest = extractMaintenanceRequest(response);
+      if (createdRequest?.request_id) {
+        setRequests((current) => reconcileMaintenanceRequest(current, createdRequest));
+      }
       showBannerMessage('success', 'Maintenance request submitted successfully.');
       setShowModal(false);
       resetForm();
-      fetchRequests();
+      await fetchRequests();
     } catch (error) {
       setAttachmentUploadStatus(attachments.length ? 'Upload failed, please retry' : '');
       showBannerMessage('error', getMaintenanceAttachmentErrorMessage(error));
@@ -745,7 +808,8 @@ export default function ServicesScreen() {
     }
   }, [colors]);
 
-  const getTypeInfo = (type) => REQUEST_TYPES.find(t => t.id === type) || REQUEST_TYPES[7];
+  const getTypeInfo = (type) => REQUEST_TYPES.find(t => t.id === type)
+    || REQUEST_TYPES.find(t => t.id === 'other');
 
   // --- Detail modal handlers ---
   const openDetail = useCallback(async (request) => {
@@ -755,6 +819,7 @@ export default function ServicesScreen() {
     setShowReopenModal(false);
     setReopenNote('');
     setShowRatingModal(false);
+    setShowRescheduleModal(false);
     setRating(5);
     setRatingFeedback('');
     setReplyMessage('');
@@ -765,18 +830,42 @@ export default function ServicesScreen() {
     setDetailLoading(true);
     try {
       const response = await apiService.getMaintenance(request.request_id);
-      const detail = response?.data || request;
+      const detail = extractMaintenanceRequest(response, request);
       setDetailRequest(detail);
-      fetchRequests();
-      if (detail?.hasUnreadTenantUpdates || detail?.unreadTenantCount) {
-        apiService.markMaintenanceRead(request.request_id).catch(() => {});
+      await fetchRequests();
+      if (detail?.isUpdatedForTenant || detail?.hasUnreadTenantUpdates || detail?.unreadTenantCount) {
+        try {
+          const readResponse = await apiService.markMaintenanceRead(request.request_id);
+          const lastTenantReadAt = readResponse?.data?.data?.lastTenantReadAt
+            || readResponse?.data?.lastTenantReadAt
+            || new Date().toISOString();
+          setDetailRequest((current) => current?.request_id === request.request_id
+            ? { ...current, isUpdatedForTenant: false, hasUnreadTenantUpdates: false, unreadTenantCount: 0, lastTenantReadAt }
+            : current);
+          setRequests((current) => current.map((item) => item?.request_id === request.request_id
+            ? { ...item, isUpdatedForTenant: false, hasUnreadTenantUpdates: false, unreadTenantCount: 0, lastTenantReadAt }
+            : item));
+        } catch (readError) {
+          console.warn('[Maintenance] mark-read failed:', readError?.normalized || readError?.message);
+          showBannerMessage('warning', 'Updates opened, but read status could not be saved. Pull to retry.', { withToast: false });
+        }
       }
     } catch (error) {
-      showBannerMessage('error', error?.response?.data?.detail || 'Failed to load maintenance details.');
+      showBannerMessage('error', getApiErrorMessage(error, 'Failed to load maintenance details.'));
     } finally {
       setDetailLoading(false);
     }
   }, [fetchRequests, showBannerMessage]);
+
+  const closeMaintenanceDetail = () => {
+    if (showCancelConfirm) return setShowCancelConfirm(false);
+    if (showReopenModal) return setShowReopenModal(false);
+    if (showRatingModal) return setShowRatingModal(false);
+    if (showRescheduleModal) return setShowRescheduleModal(false);
+    setEditMode(false);
+    setShowReplyAttachMenu(false);
+    setShowDetailModal(false);
+  };
 
   useEffect(() => {
     const targetRequestId = String(notificationRequestId || '').trim();
@@ -794,6 +883,35 @@ export default function ServicesScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [notificationRequestId, requests]);
 
+  const maintenanceNotificationSignal = useMemo(() => {
+    const notification = notifications.find((item) => {
+      const type = String(item?.type || item?.data?.type || '').toLowerCase();
+      const category = String(item?.category || item?.data?.category || '').toLowerCase();
+      return type.includes('maintenance') || category === 'maintenance';
+    });
+    if (!notification) return null;
+    const requestId = notification.request_id || notification.data?.request_id || notification.data?.requestId || '';
+    const identity = notification.notification_id || notification.dedup_key || notification.updated_at || notification.created_at;
+    return { identity: `${identity || 'maintenance'}:${requestId}`, requestId: String(requestId || '') };
+  }, [notifications]);
+
+  useEffect(() => {
+    if (!maintenanceNotificationSignal?.identity
+      || maintenanceRefreshSignalRef.current === maintenanceNotificationSignal.identity) return;
+    maintenanceRefreshSignalRef.current = maintenanceNotificationSignal.identity;
+    fetchRequests();
+    if (showDetailModal && detailRequest?.request_id
+      && (!maintenanceNotificationSignal.requestId
+        || maintenanceNotificationSignal.requestId === String(detailRequest.request_id))) {
+      apiService.getMaintenance(detailRequest.request_id)
+        .then((response) => setDetailRequest(extractMaintenanceRequest(response, detailRequest)))
+        .catch((error) => {
+          console.warn('[Maintenance] notification refresh failed:', error?.normalized || error?.message);
+          showBannerMessage('warning', 'A maintenance update arrived, but details could not be refreshed.', { withToast: false });
+        });
+    }
+  }, [detailRequest, fetchRequests, maintenanceNotificationSignal, showBannerMessage, showDetailModal]);
+
   const enterEditMode = () => {
     if (!detailRequest) return;
     setEditType(detailRequest.request_type);
@@ -809,49 +927,64 @@ export default function ServicesScreen() {
     }
     setSaving(true);
     try {
-      await apiService.updateMaintenance(detailRequest.request_id, {
+      const response = await apiService.updateMaintenance(detailRequest.request_id, {
         request_type: editType,
         urgency: editUrgency,
         description: editDescription.trim(),
       });
+      const updatedRequest = extractMaintenanceRequest(response, detailRequest);
+      setDetailRequest(updatedRequest);
+      setRequests((current) => reconcileMaintenanceRequest(current, updatedRequest));
       showBannerMessage('success', 'Maintenance request updated successfully.');
       setEditMode(false);
       setShowDetailModal(false);
-      fetchRequests();
+      await fetchRequests();
     } catch (e) {
-      showBannerMessage('error', e?.response?.data?.detail || 'Failed to update request.');
+      showBannerMessage('error', getApiErrorMessage(e, 'Failed to update request.'));
     } finally {
       setSaving(false);
     }
   };
 
   const handleCancel = async () => {
+    if (maintenanceMutationRef.current) return;
+    maintenanceMutationRef.current = true;
     setSaving(true);
     try {
-      await apiService.cancelMaintenance(detailRequest.request_id);
+      const response = await apiService.cancelMaintenance(detailRequest.request_id);
+      const updatedRequest = extractMaintenanceRequest(response, detailRequest);
+      setDetailRequest(updatedRequest);
+      setRequests((current) => reconcileMaintenanceRequest(current, updatedRequest));
       showBannerMessage('success', 'Request cancelled successfully.');
       setShowCancelConfirm(false);
       setShowDetailModal(false);
-      fetchRequests();
+      await fetchRequests();
     } catch (e) {
-      showBannerMessage('error', e?.response?.data?.detail || 'Failed to cancel request. Please try again.');
+      showBannerMessage('error', getApiErrorMessage(e, 'Failed to cancel request. Please try again.'));
     } finally {
+      maintenanceMutationRef.current = false;
       setSaving(false);
     }
   };
 
   const handleReopen = async () => {
+    if (maintenanceMutationRef.current) return;
+    maintenanceMutationRef.current = true;
     setSaving(true);
     try {
-      await apiService.reopenMaintenance(detailRequest.request_id, { reopen_note: reopenNote.trim() || undefined });
+      const response = await apiService.reopenMaintenance(detailRequest.request_id, { reopen_note: reopenNote.trim() || undefined });
+      const updatedRequest = extractMaintenanceRequest(response, detailRequest);
+      setDetailRequest(updatedRequest);
+      setRequests((current) => reconcileMaintenanceRequest(current, updatedRequest));
       showBannerMessage('success', 'Maintenance request reopened successfully.');
       setShowReopenModal(false);
       setShowDetailModal(false);
       setReopenNote('');
-      fetchRequests();
+      await fetchRequests();
     } catch (e) {
-      showBannerMessage('error', e?.response?.data?.detail || 'Failed to reopen request. Please try again.');
+      showBannerMessage('error', getApiErrorMessage(e, 'Failed to reopen request. Please try again.'));
     } finally {
+      maintenanceMutationRef.current = false;
       setSaving(false);
     }
   };
@@ -864,20 +997,63 @@ export default function ServicesScreen() {
   };
 
   const handleConfirmResolved = async () => {
-    if (!detailRequest?.request_id) return;
+    if (!detailRequest?.request_id || maintenanceMutationRef.current) return;
+    maintenanceMutationRef.current = true;
     setSaving(true);
     try {
       const payload = buildMaintenanceRatingPayload(rating, ratingFeedback);
       const response = await apiService.confirmMaintenanceResolved(detailRequest.request_id, payload);
-      const updatedRequest = response?.data?.data?.request || response?.data?.request || response?.data || detailRequest;
+      const updatedRequest = extractMaintenanceRequest(response, detailRequest);
       setDetailRequest(updatedRequest);
+      setRequests((current) => reconcileMaintenanceRequest(current, updatedRequest));
       setShowRatingModal(false);
       setRatingFeedback('');
       showBannerMessage('success', 'Thank you! Your rating and resolution confirmation were recorded.');
-      fetchRequests();
+      await fetchRequests();
     } catch (e) {
       showBannerMessage('error', getApiErrorMessage(e, 'Failed to submit your maintenance rating.'));
     } finally {
+      maintenanceMutationRef.current = false;
+      setSaving(false);
+    }
+  };
+
+  const openRescheduleModal = () => {
+    setRescheduleDate('');
+    setRescheduleTime('');
+    setRescheduleReason('');
+    setShowRescheduleModal(true);
+  };
+
+  const handleRequestReschedule = async () => {
+    if (!detailRequest?.request_id || maintenanceMutationRef.current) return;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(rescheduleDate) || !/^\d{2}:\d{2}$/.test(rescheduleTime)) {
+      showBannerMessage('warning', 'Enter a preferred date and time in the requested format.', { withToast: false });
+      return;
+    }
+    const proposedDate = new Date(`${rescheduleDate}T${rescheduleTime}:00`);
+    if (Number.isNaN(proposedDate.getTime())) {
+      showBannerMessage('warning', 'Enter a valid preferred visit date and time.', { withToast: false });
+      return;
+    }
+
+    maintenanceMutationRef.current = true;
+    setSaving(true);
+    try {
+      const response = await apiService.requestMaintenanceReschedule(detailRequest.request_id, {
+        proposedDate: proposedDate.toISOString(),
+        reason: rescheduleReason.trim() || undefined,
+      });
+      const updatedRequest = extractMaintenanceRequest(response, detailRequest);
+      setDetailRequest(updatedRequest);
+      setRequests((current) => reconcileMaintenanceRequest(current, updatedRequest));
+      setShowRescheduleModal(false);
+      showBannerMessage('success', 'Your preferred maintenance schedule was submitted.');
+      await fetchRequests();
+    } catch (error) {
+      showBannerMessage('error', getApiErrorMessage(error, 'Unable to request a maintenance reschedule.'));
+    } finally {
+      maintenanceMutationRef.current = false;
       setSaving(false);
     }
   };
@@ -934,11 +1110,13 @@ export default function ServicesScreen() {
         message: replyMessage.trim(),
         attachments: uploadedAttachments.map(toStoredAttachmentMetadata),
       });
-      setDetailRequest(response?.data || detailRequest);
+      const updatedRequest = extractMaintenanceRequest(response, detailRequest);
+      setDetailRequest(updatedRequest);
+      setRequests((current) => reconcileMaintenanceRequest(current, updatedRequest));
       setReplyMessage('');
       setReplyAttachments([]);
       setReplyUploadStatus('');
-      fetchRequests();
+      await fetchRequests();
     } catch (error) {
       setReplyUploadStatus(replyAttachments.length ? 'Upload failed, please retry' : '');
       showBannerMessage('error', error?.response?.data?.detail || error?.message || 'Failed to send your message. Please try again.');
@@ -1010,12 +1188,22 @@ export default function ServicesScreen() {
   const activeRequests = useMemo(() => filterBySearch(requests.filter((request) => getMaintenanceStatusGroup(request.status) === MAINTENANCE_GROUPS.ACTIVE)), [filterBySearch, requests]);
   const resolvedRequests = useMemo(() => filterBySearch(requests.filter((request) => getMaintenanceStatusGroup(request.status) === MAINTENANCE_GROUPS.RESOLVED)), [filterBySearch, requests]);
   const cancelledRequests = useMemo(() => filterBySearch(requests.filter((request) => getMaintenanceStatusGroup(request.status) === MAINTENANCE_GROUPS.CANCELLED)), [filterBySearch, requests]);
-  const detailAllowedActions = useMemo(() => new Set(getMaintenanceAllowedActions(detailRequest?.status)), [detailRequest?.status]);
+  const detailAllowedActions = useMemo(() => new Set(getMaintenanceAllowedActions(detailRequest)), [detailRequest]);
   const detailResolutionConfirmation = useMemo(() => getMaintenanceResolutionConfirmation(detailRequest), [detailRequest]);
   const detailRating = useMemo(() => getSubmittedMaintenanceRating(detailRequest), [detailRequest]);
-  const detailCanRate = useMemo(() => canRateMaintenanceRequest(detailRequest), [detailRequest]);
+  const detailCanRate = useMemo(
+    () => detailAllowedActions.has(MAINTENANCE_ACTIONS.CONFIRM_RESOLVED)
+      && canRateMaintenanceRequest(detailRequest),
+    [detailAllowedActions, detailRequest],
+  );
   const detailProgressEntries = useMemo(() => buildRequestProgress(detailRequest), [detailRequest]);
   const detailTenantSummary = useMemo(() => detailRequest?.tenant_summary || detailRequest?.tenantSummary || null, [detailRequest]);
+  const detailProvider = useMemo(() => detailRequest?.providerDetails || detailRequest?.provider_details || null, [detailRequest]);
+  const detailSchedule = useMemo(() => detailRequest?.schedule || null, [detailRequest]);
+  const detailReschedule = useMemo(() => detailRequest?.rescheduleRequest || detailRequest?.reschedule_request || null, [detailRequest]);
+  const detailCompletion = useMemo(() => detailRequest?.completionReport || detailRequest?.completion_report || null, [detailRequest]);
+  const detailProof = useMemo(() => detailRequest?.resolutionProof || detailRequest?.resolution_proof || null, [detailRequest]);
+  const detailCost = useMemo(() => detailRequest?.costBreakdown || detailRequest?.cost_breakdown || null, [detailRequest]);
   const hasConversationSummary = useMemo(() => detailProgressEntries.some((entry) => entry.isSummary), [detailProgressEntries]);
   const chatItems = useMemo(() => buildChatItems(detailProgressEntries), [detailProgressEntries]);
   const latestTenantEntryId = useMemo(() => {
@@ -1201,7 +1389,7 @@ export default function ServicesScreen() {
         ListFooterComponent={<View style={styles.bottomSpacer} />}
       />
 
-      <LilyAssistantFab />
+      <LilyAssistantFab returnTo="/(tabs)/services" />
 
       <Modal visible={showModal} animationType="slide" transparent={true} onRequestClose={confirmCloseModal}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalContainer}>
@@ -1365,13 +1553,13 @@ export default function ServicesScreen() {
       />
 
       {/* ===== REQUEST DETAIL MODAL ===== */}
-      <Modal visible={showDetailModal} animationType="slide" transparent onRequestClose={() => { setEditMode(false); setShowReplyAttachMenu(false); setShowDetailModal(false); }}>
+      <Modal visible={showDetailModal} animationType="slide" transparent onRequestClose={closeMaintenanceDetail}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.modalContainer}>
           <View style={styles.modalOverlay}>
             <View style={[styles.modalContent, { maxHeight: '92%' }]}>
               <View style={styles.modalHeader}>
                 <Text style={styles.modalTitle}>{editMode ? 'Edit Request' : 'Request Details'}</Text>
-                <TouchableOpacity onPress={() => { setEditMode(false); setShowReplyAttachMenu(false); setShowDetailModal(false); }}>
+                <TouchableOpacity onPress={closeMaintenanceDetail}>
                   <Ionicons name="close" size={24} color={colors.textMuted} />
                 </TouchableOpacity>
               </View>
@@ -1564,6 +1752,89 @@ export default function ServicesScreen() {
                       ) : null}
                     </View>
                   )}
+
+                  {!editMode && (detailRequest.tenantVisibleProviderLabel || detailProvider?.tenantVisibleLabel || detailRequest.scheduledDate || detailSchedule?.scheduledDate) ? (
+                    <View style={{ backgroundColor: colors.surfaceSecondary, borderRadius: 14, padding: 14, marginBottom: 14 }} testID="maintenance-provider-schedule">
+                      <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text, marginBottom: 10 }}>Provider & Schedule</Text>
+                      {(detailRequest.tenantVisibleProviderLabel || detailProvider?.tenantVisibleLabel) ? (
+                        <View style={{ marginBottom: 8 }}>
+                          <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '800', textTransform: 'uppercase' }}>Assigned provider</Text>
+                          <Text style={{ fontSize: 13, color: colors.text, lineHeight: 19 }}>{detailRequest.tenantVisibleProviderLabel || detailProvider.tenantVisibleLabel}</Text>
+                        </View>
+                      ) : null}
+                      {(detailRequest.scheduledDate || detailSchedule?.scheduledDate) ? (
+                        <View style={{ marginBottom: detailSchedule?.notes ? 8 : 0 }}>
+                          <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '800', textTransform: 'uppercase' }}>Scheduled visit</Text>
+                          <Text style={{ fontSize: 13, color: colors.text, lineHeight: 19 }}>{safeFormat(detailRequest.scheduledDate || detailSchedule.scheduledDate, 'MMM dd, yyyy • h:mm a')}</Text>
+                        </View>
+                      ) : null}
+                      {detailSchedule?.notes ? (
+                        <View>
+                          <Text style={{ fontSize: 11, color: colors.textMuted, fontWeight: '800', textTransform: 'uppercase' }}>Schedule guidance</Text>
+                          <Text style={{ fontSize: 13, color: colors.text, lineHeight: 19 }}>{detailSchedule.notes}</Text>
+                        </View>
+                      ) : null}
+                    </View>
+                  ) : null}
+
+                  {!editMode && detailReschedule?.status ? (
+                    <View style={{ backgroundColor: colors.infoBg, borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: colors.info }} testID="maintenance-reschedule-state">
+                      <Text style={{ fontSize: 14, fontWeight: '800', color: colors.infoText, marginBottom: 9 }}>Reschedule Request</Text>
+                      <Text style={{ fontSize: 12, color: colors.infoText, fontWeight: '800', marginBottom: 4 }}>{formatStatusLabel(detailReschedule.status)}</Text>
+                      {detailReschedule.proposedDate ? <Text style={{ fontSize: 13, color: colors.infoText, lineHeight: 19 }}>Proposed: {safeFormat(detailReschedule.proposedDate, 'MMM dd, yyyy • h:mm a')}</Text> : null}
+                      {detailReschedule.reason ? <Text style={{ fontSize: 13, color: colors.infoText, lineHeight: 19 }}>Reason: {detailReschedule.reason}</Text> : null}
+                      {detailReschedule.responseNote ? <Text style={{ fontSize: 13, color: colors.infoText, lineHeight: 19 }}>Response: {detailReschedule.responseNote}</Text> : null}
+                    </View>
+                  ) : null}
+
+                  {!editMode && detailCompletion ? (
+                    <View style={{ backgroundColor: colors.successBg, borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: colors.success }} testID="maintenance-completion-report">
+                      <Text style={{ fontSize: 14, fontWeight: '800', color: colors.successText, marginBottom: 9 }}>Completion Report</Text>
+                      {[
+                        ['Summary', detailCompletion.summary],
+                        ['Work completed', detailCompletion.workDone],
+                        ['Parts replaced', detailCompletion.partsReplaced],
+                        ['Preventive advice', detailCompletion.preventiveAdvice],
+                      ].filter(([, value]) => Boolean(value)).map(([label, value]) => (
+                        <View key={label} style={{ marginBottom: 8 }}>
+                          <Text style={{ fontSize: 11, color: colors.successText, fontWeight: '800', textTransform: 'uppercase' }}>{label}</Text>
+                          <Text style={{ fontSize: 13, color: colors.successText, lineHeight: 19 }}>{value}</Text>
+                        </View>
+                      ))}
+                      {detailCompletion.finalizedAt ? <Text style={{ fontSize: 11, color: colors.successText }}>Finalized {safeFormat(detailCompletion.finalizedAt, 'MMM dd, yyyy • h:mm a')}</Text> : null}
+                      {detailCompletion.reportUrl ? (
+                        <TouchableOpacity style={{ marginTop: 8, alignSelf: 'flex-start' }} onPress={() => openAttachment({ url: detailCompletion.reportUrl, name: 'Completion report' })}>
+                          <Text style={{ color: colors.successText, fontSize: 12, fontWeight: '800', textDecorationLine: 'underline' }}>Open report</Text>
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
+                  ) : null}
+
+                  {!editMode && (detailProof?.note || detailProof?.resolvedAt || detailProof?.attachments?.length) ? (
+                    <View style={{ backgroundColor: colors.surfaceSecondary, borderRadius: 14, padding: 14, marginBottom: 14 }} testID="maintenance-resolution-proof">
+                      <Text style={{ fontSize: 14, fontWeight: '800', color: colors.text, marginBottom: 9 }}>Resolution Proof</Text>
+                      {detailProof.note ? <Text style={{ fontSize: 13, color: colors.text, lineHeight: 19, marginBottom: 7 }}>{detailProof.note}</Text> : null}
+                      {detailProof.resolvedAt ? <Text style={{ fontSize: 11, color: colors.textMuted, marginBottom: 7 }}>Resolved {safeFormat(detailProof.resolvedAt, 'MMM dd, yyyy • h:mm a')}</Text> : null}
+                      {detailProof.attachments?.length ? (
+                        <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
+                          {detailProof.attachments.map((attachment, index) => (
+                            <TouchableOpacity key={`${getAttachmentDisplayName(attachment, index)}_${index}`} style={styles.previewChip} onPress={() => openAttachment(attachment)}>
+                              <Ionicons name={isImageAttachment(attachment) ? 'image-outline' : 'document-outline'} size={13} color={colors.text} />
+                              <Text style={styles.previewText} numberOfLines={1}>{getAttachmentDisplayName(attachment, index)}</Text>
+                            </TouchableOpacity>
+                          ))}
+                        </View>
+                      ) : null}
+                    </View>
+                  ) : null}
+
+                  {!editMode && detailCost?.isTenantChargeable ? (
+                    <View style={{ backgroundColor: colors.warningBg, borderRadius: 14, padding: 14, marginBottom: 14, borderWidth: 1, borderColor: colors.warning }} testID="maintenance-tenant-cost">
+                      <Text style={{ fontSize: 14, fontWeight: '800', color: colors.warningText, marginBottom: 7 }}>Tenant Charge</Text>
+                      <Text style={{ fontSize: 18, fontWeight: '800', color: colors.warningText }}>₱{Number(detailCost.totalCost || 0).toLocaleString('en-PH', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</Text>
+                      {detailCost.chargeReason ? <Text style={{ fontSize: 13, color: colors.warningText, lineHeight: 19, marginTop: 5 }}>{detailCost.chargeReason}</Text> : null}
+                    </View>
+                  ) : null}
 
                   {!editMode && detailRating ? (
                     <View style={styles.ratingResultCard} testID="maintenance-rating-result">
@@ -1848,6 +2119,18 @@ export default function ServicesScreen() {
                             )}
                           </>
                         )}
+                        {detailAllowedActions.has(MAINTENANCE_ACTIONS.RESCHEDULE) && (
+                          <TouchableOpacity
+                            style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.infoBg, borderRadius: 12, paddingVertical: 14, borderWidth: 1, borderColor: colors.info }}
+                            onPress={openRescheduleModal}
+                            disabled={saving}
+                            accessibilityRole="button"
+                            accessibilityLabel="Request a different maintenance visit time"
+                          >
+                            <Ionicons name="calendar-outline" size={20} color={colors.infoText} />
+                            <Text style={{ color: colors.infoText, fontWeight: '700', fontSize: 15 }}>Request Reschedule</Text>
+                          </TouchableOpacity>
+                        )}
                         {detailAllowedActions.has(MAINTENANCE_ACTIONS.SUBMIT_SIMILAR) && (
                           <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.surfaceSecondary, borderRadius: 12, paddingVertical: 14 }} onPress={submitSimilar}>
                             <Ionicons name="copy-outline" size={20} color={colors.text} />
@@ -1922,11 +2205,11 @@ export default function ServicesScreen() {
             </View>
           ) : null}
         </KeyboardAvoidingView>
-      </Modal>
 
-      {/* Cancel Confirmation */}
-      <StyledModal
+      {/* Maintenance actions stay inside the already-presented detail modal. */}
+      <InlineMaintenanceDialog
         visible={showCancelConfirm}
+        colors={colors}
         onClose={() => setShowCancelConfirm(false)}
         title="Cancel this request?"
         message="This action will cancel your service request. You can submit a new one anytime."
@@ -1938,8 +2221,9 @@ export default function ServicesScreen() {
       />
 
       {/* Reopen Modal */}
-      <StyledModal
+      <InlineMaintenanceDialog
         visible={showReopenModal}
+        colors={colors}
         onClose={() => { setShowReopenModal(false); setReopenNote(''); }}
         title="Reopen this request?"
         message="The request will be set back to Pending so the team can review it again."
@@ -1958,10 +2242,11 @@ export default function ServicesScreen() {
           value={reopenNote}
           onChangeText={setReopenNote}
         />
-      </StyledModal>
+      </InlineMaintenanceDialog>
 
-      <StyledModal
+      <InlineMaintenanceDialog
         visible={showRatingModal}
+        colors={colors}
         onClose={() => { if (!saving) setShowRatingModal(false); }}
         title="Confirm Maintenance Resolution"
         message="Choose a rating to confirm that the repair is complete."
@@ -2002,7 +2287,58 @@ export default function ServicesScreen() {
           />
           <Text style={styles.ratingFeedbackCounter}>{ratingFeedback.length} / 500</Text>
         </View>
-      </StyledModal>
+      </InlineMaintenanceDialog>
+
+      <InlineMaintenanceDialog
+        visible={showRescheduleModal}
+        onClose={() => { if (!saving) setShowRescheduleModal(false); }}
+        title="Request a different visit time"
+        message="Choose a proposed date and time. Lilycrest will review the request before the schedule changes."
+        type="info"
+        buttons={[
+          { text: 'Cancel', style: 'cancel', onPress: () => setShowRescheduleModal(false), disabled: saving },
+          { text: 'Send Request', style: 'info', onPress: handleRequestReschedule, loading: saving },
+        ]}
+        colors={colors}
+      >
+        <View style={{ gap: 10 }}>
+          <TextInput
+            style={styles.reopenInput}
+            placeholder="Date (YYYY-MM-DD)"
+            placeholderTextColor={colors.textMuted}
+            value={rescheduleDate}
+            onChangeText={setRescheduleDate}
+            editable={!saving}
+            autoCapitalize="none"
+            keyboardType="numbers-and-punctuation"
+            accessibilityLabel="Proposed maintenance date"
+          />
+          <TextInput
+            style={styles.reopenInput}
+            placeholder="Time (HH:mm)"
+            placeholderTextColor={colors.textMuted}
+            value={rescheduleTime}
+            onChangeText={setRescheduleTime}
+            editable={!saving}
+            autoCapitalize="none"
+            keyboardType="numbers-and-punctuation"
+            accessibilityLabel="Proposed maintenance time"
+          />
+          <TextInput
+            style={styles.reopenInput}
+            placeholder="Reason (optional)"
+            placeholderTextColor={colors.textMuted}
+            multiline
+            textAlignVertical="top"
+            value={rescheduleReason}
+            onChangeText={setRescheduleReason}
+            editable={!saving}
+            maxLength={500}
+            accessibilityLabel="Reason for maintenance reschedule"
+          />
+        </View>
+      </InlineMaintenanceDialog>
+      </Modal>
     </SafeAreaView>
   );
 }

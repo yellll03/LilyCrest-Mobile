@@ -1,3 +1,5 @@
+import { getMaintenanceTenantActions } from './maintenanceContract';
+
 export const MAINTENANCE_GROUPS = Object.freeze({
   ACTIVE: 'active',
   RESOLVED: 'resolved',
@@ -10,6 +12,7 @@ export const MAINTENANCE_ACTIONS = Object.freeze({
   REPLY: 'reply',
   CONFIRM_RESOLVED: 'confirm_resolved',
   REOPEN: 'reopen',
+  RESCHEDULE: 'reschedule',
   SUBMIT_SIMILAR: 'submit_similar',
 });
 
@@ -97,6 +100,21 @@ export function getMaintenanceStatusGroup(status) {
   return getMaintenanceStatusDefinition(status).group;
 }
 
-export function getMaintenanceAllowedActions(status) {
-  return getMaintenanceStatusDefinition(status).actions;
+export function getMaintenanceAllowedActions(requestOrStatus) {
+  if (requestOrStatus && typeof requestOrStatus === 'object') {
+    const serverActions = getMaintenanceTenantActions(requestOrStatus);
+    if (serverActions) {
+      return [
+        serverActions.canEdit && MAINTENANCE_ACTIONS.EDIT,
+        serverActions.canCancel && MAINTENANCE_ACTIONS.CANCEL,
+        serverActions.canReply && MAINTENANCE_ACTIONS.REPLY,
+        serverActions.canConfirmResolution && MAINTENANCE_ACTIONS.CONFIRM_RESOLVED,
+        serverActions.canReopen && MAINTENANCE_ACTIONS.REOPEN,
+        serverActions.canRequestReschedule && MAINTENANCE_ACTIONS.RESCHEDULE,
+        serverActions.canSubmitSimilar && MAINTENANCE_ACTIONS.SUBMIT_SIMILAR,
+      ].filter(Boolean);
+    }
+    return getMaintenanceStatusDefinition(requestOrStatus.status).actions;
+  }
+  return getMaintenanceStatusDefinition(requestOrStatus).actions;
 }

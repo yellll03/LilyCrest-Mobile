@@ -51,8 +51,10 @@ describe('tenant billing UI polish', () => {
   });
 
   test('reserves safe space for the assistant and bottom navigation', () => {
-    expect(source).toContain('useSafeAreaInsets');
-    expect(source).toContain('Math.max(insets.bottom + 76, 92)');
+    const fab = fs.readFileSync(path.resolve(__dirname, '../components/assistant/LilyAssistantFab.jsx'), 'utf8');
+    expect(source).toContain('<LilyAssistantFab returnTo="/(tabs)/billing" />');
+    expect(fab).toContain("Platform.OS === 'ios' ? 88 : 72");
+    expect(fab).toContain('bottom: tabBarHeight + 12');
     expect(source).toContain('paddingBottom: 176');
   });
 

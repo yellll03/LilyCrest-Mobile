@@ -106,7 +106,16 @@ describe('Change Password screen — password visibility toggles', () => {
     expect(screen.getAllByLabelText('Show password')).toHaveLength(3);
   });
 
-  it.each(FIELDS)('blocks pasted whitespace in "$placeholder" without changing the displayed credential', ({ placeholder }) => {
+  it('preserves a legacy current password containing whitespace exactly', () => {
+    render(<ChangePasswordScreen />);
+    const input = screen.getByPlaceholderText('Enter current password');
+    fireEvent.changeText(input, ' legacy current password ');
+
+    expect(screen.getByPlaceholderText('Enter current password').props.value).toBe(' legacy current password ');
+    expect(screen.queryByText('Password must not contain whitespace.')).toBeNull();
+  });
+
+  it.each(FIELDS.slice(1))('blocks pasted whitespace in "$placeholder" without changing the displayed credential', ({ placeholder }) => {
     render(<ChangePasswordScreen />);
     const input = screen.getByPlaceholderText(placeholder);
     fireEvent.changeText(input, 'ValidPass1!');

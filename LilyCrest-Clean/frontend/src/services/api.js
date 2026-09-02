@@ -30,6 +30,8 @@ export function isNetworkOrColdStartError(error) {
 function getErrorDetail(error) {
   return typeof error?.response?.data?.detail === 'string'
     ? error.response.data.detail.trim()
+    : typeof error?.response?.data?.error?.message === 'string'
+      ? error.response.data.error.message.trim()
     : typeof error?.response?.data?.message === 'string'
       ? error.response.data.message.trim()
       : typeof error?.response?.data?.error === 'string'
@@ -400,6 +402,10 @@ api.interceptors.response.use(
 export const apiService = {
   // Dashboard
   getDashboard: () => api.get('/dashboard/me'),
+  getCurrentRoomTransfer: () => api.get('/room-transfer-request/current'),
+  getRoomTransferPreferences: () => api.get('/room-transfer-preferences'),
+  createRoomTransferRequest: (data) => api.post('/room-transfer-requests', data),
+  cancelRoomTransferRequest: (requestId) => api.patch(`/room-transfer-requests/${requestId}/cancel`),
   
   // Rooms
   getRooms: (params) => api.get('/rooms', { params }),
@@ -449,6 +455,8 @@ export const apiService = {
   updateMaintenance: (requestId, data) => api.put(`/maintenance/${requestId}`, data),
   cancelMaintenance: (requestId) => api.patch(`/maintenance/${requestId}/cancel`),
   reopenMaintenance: (requestId, data) => api.patch(`/maintenance/${requestId}/reopen`, data),
+  requestMaintenanceReschedule: (requestId, data) =>
+    api.post(`/maintenance/${requestId}/reschedule-request`, data),
   
   // Announcements
   getAnnouncements: () => api.get('/announcements'),

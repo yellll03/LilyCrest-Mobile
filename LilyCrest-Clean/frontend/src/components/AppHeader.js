@@ -108,7 +108,10 @@ export default function AppHeader() {
     if (notification?.notification_id && markNotificationRead) {
       markNotificationRead(notification.notification_id).catch(() => {});
     }
-    const destination = resolveNotificationRoute(buildNotificationRouteData(notification));
+    const destination = resolveNotificationRoute(
+      buildNotificationRouteData(notification),
+      { reportUnsupported: true },
+    );
     closeSheet();
     if (destination) setTimeout(() => router.push(destination), 270);
   }, [closeSheet, markNotificationRead, router]);

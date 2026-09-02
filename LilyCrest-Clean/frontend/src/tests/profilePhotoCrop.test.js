@@ -1,5 +1,7 @@
-/* global test */
+/* global test, __dirname */
 import React from 'react';
+import fs from 'fs';
+import path from 'path';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import * as ImageManipulator from 'expo-image-manipulator';
 import ProfilePhotoCropModal from '../components/ProfilePhotoCropModal';
@@ -39,6 +41,14 @@ describe('profile photo crop geometry', () => {
   test('zoom changes the source crop while keeping it within image bounds', () => {
     const layout = getProfileCropLayout(asset, 300, 2, { x: 0, y: 0 });
     expect(layout.crop).toEqual({ originX: 400, originY: 200, width: 400, height: 400 });
+  });
+
+  test('crop surface uses native pan and pinch gestures while the image cannot retain the responder', () => {
+    const source = fs.readFileSync(path.resolve(__dirname, '../components/ProfilePhotoCropModal.jsx'), 'utf8');
+    expect(source).toContain('Gesture.Pan()');
+    expect(source).toContain('Gesture.Pinch()');
+    expect(source).toContain('Gesture.Simultaneous(pan, pinch)');
+    expect(source).toMatch(/<Image\s+pointerEvents="none"/);
   });
 });
 

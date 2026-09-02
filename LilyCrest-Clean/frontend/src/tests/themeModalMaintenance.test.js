@@ -113,13 +113,15 @@ describe('theme-aware dialogs and maintenance conversation', () => {
     expect(modal).toContain('accessibilityLabel={btn.text}');
   });
 
-  test('profile and maintenance confirmations use the shared themed dialog', () => {
+  test('profile uses shared dialogs while maintenance actions stay inside the detail modal', () => {
     const profile = read('../../app/(tabs)/profile.jsx');
     const maintenance = read('../../app/(tabs)/services.jsx');
     expect(profile).not.toMatch(/<Modal visible=\{logoutModalVisible\}|<Modal visible=\{discardModalVisible\}/);
     expect(profile.match(/<StyledModal/g)).toHaveLength(2);
     expect(maintenance).not.toMatch(/<Modal visible=\{showDiscardConfirm\}|<Modal visible=\{showCancelConfirm\}|<Modal visible=\{showReopenModal\}/);
-    expect(maintenance.match(/<StyledModal/g)).toHaveLength(4);
+    expect(maintenance.match(/<StyledModal/g)).toHaveLength(1);
+    expect(maintenance.match(/<InlineMaintenanceDialog/g)).toHaveLength(4);
+    expect(maintenance).toContain('Maintenance actions stay inside the already-presented detail modal.');
     expect(maintenance).toContain('visible={showRatingModal}');
   });
 

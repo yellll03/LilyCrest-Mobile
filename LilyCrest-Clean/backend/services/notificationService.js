@@ -5,6 +5,59 @@ function normalizeString(value) {
   return typeof value === 'string' ? value.trim() : '';
 }
 
+const TENANT_NOTIFICATION_ROLES = new Set(['tenant', 'resident']);
+const APPLICANT_NOTIFICATION_ROLES = new Set([
+  'applicant',
+  'prospect',
+  'reservation_applicant',
+  'pending_tenant',
+]);
+
+function isApplicantLifecycleNotification(notification = {}) {
+  const roleAtCreation = normalizeString(
+    notification.role_at_creation || notification.roleAtCreation || ''
+  ).toLowerCase();
+
+  // A stamped role is authoritative. In particular, never hide a legitimate
+  // tenant billing item merely because its copy happens to mention a
+  // reservation or move-in.
+  if (TENANT_NOTIFICATION_ROLES.has(roleAtCreation)) return false;
+  if (APPLICANT_NOTIFICATION_ROLES.has(roleAtCreation)) return true;
+
+  // Older records predate role_at_creation. Infer only from strong applicant
+  // lifecycle signals; generic payment/billing records remain visible.
+  const data = notification.data && typeof notification.data === 'object'
+    ? notification.data
+    : {};
+  const lifecycleRoute = [
+    notification.type,
+    notification.category,
+    notification.source,
+    notification.url,
+    data.type,
+    data.category,
+    data.screen,
+    data.url,
+  ].map((value) => normalizeString(value).toLowerCase()).join(' ');
+  if (/(^|[\s_./-])(applicant|application|reservation)(?=$|[\s_./-])/.test(lifecycleRoute)) return true;
+
+  const reservationId = normalizeString(
+    notification.reservation_id || notification.reservationId
+      || data.reservation_id || data.reservationId || ''
+  );
+  const billingId = normalizeString(
+    notification.billing_id || notification.billingId || notification.bill_id
+      || data.billing_id || data.billingId || data.bill_id || ''
+  );
+  return Boolean(reservationId && !billingId);
+}
+
+function filterNotificationsForTenantLifecycle(user = {}, notifications = []) {
+  const currentRole = normalizeString(user.role).toLowerCase();
+  if (!TENANT_NOTIFICATION_ROLES.has(currentRole)) return [...notifications];
+  return notifications.filter((notification) => !isApplicantLifecycleNotification(notification));
+}
+
 function normalizePriority(value) {
   const raw = normalizeString(value).toLowerCase();
   if (raw === 'high' || raw === 'urgent' || raw === 'critical') return 'high';
@@ -32,10 +85,8 @@ function buildNotificationDocument(userId, payload = {}) {
   const priority = normalizePriority(payload.priority);
   // Applicant and tenant share the same user_id — a notification created
   // while someone was an applicant stays attached to that account after
-  // approval. Nothing reads this yet, but stamping the account's role at
-  // creation time here means future lifecycle-aware routing/UX (Phase 12/13
-  // of the mobile audit) has real data to work from instead of needing a
-  // best-effort backfill later.
+  // approval. Tenant feed filtering reads this stamp so historical
+  // applicant-only actions do not leak into the current tenant experience.
   const roleAtCreation = normalizeString(payload.role_at_creation || payload.roleAtCreation || '');
   const body = normalizeString(payload.body || payload.content || payload.message);
   const sourceLabel = normalizeString(payload.source_label || payload.author_name || payload.authorName || 'LilyCrest System');
@@ -214,6 +265,8 @@ async function saveNotificationForAllTenants(db, payload = {}) {
 }
 
 module.exports = {
+  filterNotificationsForTenantLifecycle,
+  isApplicantLifecycleNotification,
   normalizePriority,
   sanitizeStoredNotification,
   saveNotificationForUser,
