@@ -43,11 +43,12 @@ describe('Change Password reachability and contract', () => {
     expect(apiSource).toContain("api.post('/auth/change-password'");
   });
 
-  test('all three password fields reject whitespace through the same input guard', () => {
+  test('current credential is preserved exactly while new-password fields enforce current policy', () => {
     const source = read('app/change-password.jsx');
-    expect(source).toMatch(/validateCurrentPassword[\s\S]{0,180}\/\\s\/\.test\(password\)/);
+    expect(source).not.toMatch(/validateCurrentPassword[\s\S]{0,180}\/\\s\/\.test\(password\)/);
+    expect(source).toContain("if (field === 'current') {");
+    expect(source).toContain('setCurrentPassword(value);');
     expect(source).toContain('blockPasswordWhitespaceInput(value, currentValue)');
-    expect(source).toContain("if (field === 'current') setCurrentPassword(nextValue);");
     expect(source).not.toContain('>No spaces</Text>');
   });
 

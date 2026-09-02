@@ -55,10 +55,24 @@ jest.mock('react-native-gesture-handler/Swipeable', () => {
 // same react-native Touchable under test; native gesture negotiation itself
 // is exercised by the Android/iOS build/device QA.
 jest.mock('react-native-gesture-handler', () => {
+  const React = require('react');
   const RN = require('react-native');
+  const chain = () => {
+    const gesture = {};
+    ['minDistance', 'maxPointers', 'onBegin', 'onUpdate', 'runOnJS'].forEach((method) => {
+      gesture[method] = jest.fn(() => gesture);
+    });
+    return gesture;
+  };
   return {
     TouchableOpacity: RN.TouchableOpacity,
     GestureHandlerRootView: RN.View,
+    GestureDetector: ({ children }) => React.createElement(RN.View, null, children),
+    Gesture: {
+      Pan: jest.fn(chain),
+      Pinch: jest.fn(chain),
+      Simultaneous: jest.fn((...gestures) => ({ gestures })),
+    },
   };
 });
 

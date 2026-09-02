@@ -42,7 +42,6 @@ export default function ChangePasswordScreen() {
   const doPasswordsMatch = Boolean(confirmPassword) && newPassword === confirmPassword;
   const validateCurrentPassword = (password) => {
     if (!password) return 'Current password is required';
-    if (/\s/.test(password)) return PASSWORD_WHITESPACE_MESSAGE;
     return '';
   };
 
@@ -50,7 +49,7 @@ export default function ChangePasswordScreen() {
     const nextErrors = {};
 
     if (touched.current) {
-      nextErrors.current = blockedWhitespace.current ? PASSWORD_WHITESPACE_MESSAGE : validateCurrentPassword(currentPassword);
+      nextErrors.current = validateCurrentPassword(currentPassword);
     }
 
     if (touched.new) {
@@ -146,6 +145,14 @@ export default function ChangePasswordScreen() {
   };
 
   const handlePasswordFieldChange = (field, value) => {
+    // The current credential is authentication input, not a new-policy value.
+    // Preserve it byte-for-byte so legacy passwords containing whitespace remain usable.
+    if (field === 'current') {
+      setCurrentPassword(value);
+      setBlockedWhitespace((prev) => ({ ...prev, current: false }));
+      return;
+    }
+
     const currentValue = field === 'current' ? currentPassword : field === 'new' ? newPassword : confirmPassword;
     const { value: nextValue, blocked } = blockPasswordWhitespaceInput(value, currentValue);
 
