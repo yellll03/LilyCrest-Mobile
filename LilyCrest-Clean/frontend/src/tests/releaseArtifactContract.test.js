@@ -31,7 +31,7 @@ describe('standalone release artifact contract', () => {
     expect(config).toContain("{ name: 'GoogleUtilities', modular_headers: true }");
     expect(config).toContain("{ name: 'RecaptchaInterop', modular_headers: true }");
     expect(config).toContain('ITSAppUsesNonExemptEncryption: false');
-    expect(config).toContain("buildNumber: '26'");
+    expect(config).toContain("buildNumber: '27'");
     expect(config).toContain("googleServicesFile: process.env.GOOGLE_SERVICES_PLIST || './GoogleService-Info.plist'");
     expect(config).toContain("'@react-native-google-signin/google-signin'");
     expect(packageJson.dependencies['expo-local-authentication']).toBeUndefined();

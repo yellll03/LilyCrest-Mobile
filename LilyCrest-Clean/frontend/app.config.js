@@ -23,13 +23,13 @@ module.exports = {
     newArchEnabled: true,
     ios: {
       bundleIdentifier: 'com.lilycrest.lilycrestdorm',
-      // Build 25 (commit 955b8154) is the last shipped iOS artifact.
-      // Reusing 25
+      // Build 26 (commit cfd3b897) is the latest iOS store artifact.
+      // Reusing 26
       // would be rejected by App Store
       // Connect for a duplicate build number; Android's versionCode is
       // intentionally NOT bumped alongside this — the platforms have
       // legitimately independent build numbers.
-      buildNumber: '26',
+      buildNumber: '27',
       supportsTablet: true,
       googleServicesFile: process.env.GOOGLE_SERVICES_PLIST || './GoogleService-Info.plist',
       infoPlist: {
