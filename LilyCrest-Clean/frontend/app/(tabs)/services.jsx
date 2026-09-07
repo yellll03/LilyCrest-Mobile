@@ -44,6 +44,10 @@ import {
   MAX_MAINTENANCE_ATTACHMENTS,
   extractMaintenanceList,
   extractMaintenanceRequest,
+  getMaintenanceLocationParts,
+  getMaintenanceRequestBranchDisplayName,
+  getMaintenanceRequestFloorDisplayName,
+  getMaintenanceRequestRoomDisplayName,
   reconcileMaintenanceRequest,
 } from '../../src/utils/maintenanceContract';
 import { classifyMaintenanceAttachment, getValidMaintenanceAttachmentUrl } from '../../src/utils/maintenanceAttachmentViewer';
@@ -232,7 +236,7 @@ function InlineMaintenanceDialog({ visible, title, message, type = 'info', butto
   return (
     <View style={[StyleSheet.absoluteFillObject, { zIndex: 200, elevation: 30, justifyContent: 'center', alignItems: 'center', backgroundColor: colors.overlay }]}>
       <TouchableOpacity style={StyleSheet.absoluteFillObject} activeOpacity={1} onPress={onClose} accessibilityLabel="Close maintenance action dialog" />
-      <View style={{ width: '88%', maxWidth: 430, borderRadius: 16, padding: 20, gap: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }} accessibilityViewIsModal>
+      <View style={{ width: '88%', maxWidth: 430, borderRadius: 16, padding: 20, gap: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border }} accessibilityViewIsModal onAccessibilityEscape={onClose}>
         <View style={{ width: 46, height: 46, borderRadius: 23, alignSelf: 'center', alignItems: 'center', justifyContent: 'center', backgroundColor: tone.background }}>
           <Ionicons name={tone.icon} size={26} color={tone.color} />
         </View>
@@ -524,6 +528,7 @@ export default function ServicesScreen() {
   const handledNotificationRequestRef = useRef('');
   const maintenanceRefreshSignalRef = useRef('');
   const maintenanceMutationRef = useRef(false);
+  const reopenRequestIdRef = useRef(null);
   const requestGateRef = useRef(null);
   if (!requestGateRef.current) requestGateRef.current = createLatestRequestGate();
   // Idempotency key for the current submission attempt. Minted once and
@@ -816,6 +821,7 @@ export default function ServicesScreen() {
     setDetailRequest(request);
     setEditMode(false);
     setShowCancelConfirm(false);
+    reopenRequestIdRef.current = null;
     setShowReopenModal(false);
     setReopenNote('');
     setShowRatingModal(false);
@@ -857,9 +863,26 @@ export default function ServicesScreen() {
     }
   }, [fetchRequests, showBannerMessage]);
 
+  const openReopenModal = () => {
+    if (!detailRequest?.request_id || saving || maintenanceMutationRef.current
+      || reopenRequestIdRef.current
+      || !getMaintenanceAllowedActions(detailRequest).includes(MAINTENANCE_ACTIONS.REOPEN)) return;
+    reopenRequestIdRef.current = detailRequest.request_id;
+    setReopenNote('');
+    setShowReopenModal(true);
+  };
+
+  const dismissReopenModal = () => {
+    // Once confirmed, the mutation must settle before the dialog can close.
+    if (maintenanceMutationRef.current) return;
+    reopenRequestIdRef.current = null;
+    setShowReopenModal(false);
+    setReopenNote('');
+  };
+
   const closeMaintenanceDetail = () => {
     if (showCancelConfirm) return setShowCancelConfirm(false);
-    if (showReopenModal) return setShowReopenModal(false);
+    if (showReopenModal) return dismissReopenModal();
     if (showRatingModal) return setShowRatingModal(false);
     if (showRescheduleModal) return setShowRescheduleModal(false);
     setEditMode(false);
@@ -968,7 +991,9 @@ export default function ServicesScreen() {
   };
 
   const handleReopen = async () => {
-    if (maintenanceMutationRef.current) return;
+    if (!detailRequest?.request_id || reopenRequestIdRef.current !== detailRequest.request_id
+      || saving || maintenanceMutationRef.current
+      || !getMaintenanceAllowedActions(detailRequest).includes(MAINTENANCE_ACTIONS.REOPEN)) return;
     maintenanceMutationRef.current = true;
     setSaving(true);
     try {
@@ -977,6 +1002,7 @@ export default function ServicesScreen() {
       setDetailRequest(updatedRequest);
       setRequests((current) => reconcileMaintenanceRequest(current, updatedRequest));
       showBannerMessage('success', 'Maintenance request reopened successfully.');
+      reopenRequestIdRef.current = null;
       setShowReopenModal(false);
       setShowDetailModal(false);
       setReopenNote('');
@@ -1227,7 +1253,7 @@ export default function ServicesScreen() {
     const latestUpdate = request.latestTenantVisibleUpdate || null;
     const lastActivity = request.latestActivityAt || request.lastActivityAt || request.updated_at || request.created_at;
     const hasNewAttachment = latestUpdate?.hasAttachments;
-    const locationParts = [request.branch, request.room_id || request.roomId].filter(Boolean);
+    const locationParts = getMaintenanceLocationParts(request);
     return (
       <TouchableOpacity style={[styles.requestCard, { borderLeftColor: statusColor.solid }]} onPress={() => openDetail(request)} activeOpacity={0.85}>
         <View style={styles.requestHeader}>
@@ -1707,8 +1733,11 @@ export default function ServicesScreen() {
                         {[
                           ['Request ID', detailRequest.request_id],
                           ['Submitted', safeFormat(detailRequest.created_at || detailRequest.createdAt, 'MMM dd, yyyy \u2022 h:mm a')],
-                          ['Branch', detailRequest.branch || 'Not specified'],
-                          ['Room / Unit', detailRequest.room_id || detailRequest.roomId || 'Not specified'],
+                          ['Branch', getMaintenanceRequestBranchDisplayName(detailRequest, 'Not specified')],
+                          ['Room / Unit', getMaintenanceRequestRoomDisplayName(detailRequest, 'Not specified')],
+                          ...(getMaintenanceRequestFloorDisplayName(detailRequest, '')
+                            ? [['Floor', getMaintenanceRequestFloorDisplayName(detailRequest, '')]]
+                            : []),
                         ].map(([label, value]) => (
                           <View key={label} style={{ flexDirection: 'row', justifyContent: 'space-between', gap: 12 }}>
                             <Text style={{ fontSize: 12, color: colors.textMuted, flex: 1 }}>{label}</Text>
@@ -2112,7 +2141,7 @@ export default function ServicesScreen() {
                               </TouchableOpacity>
                             )}
                             {detailAllowedActions.has(MAINTENANCE_ACTIONS.REOPEN) && (
-                              <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#EFF6FF', borderRadius: 12, paddingVertical: 14 }} onPress={() => setShowReopenModal(true)}>
+                              <TouchableOpacity style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: '#EFF6FF', borderRadius: 12, paddingVertical: 14 }} onPress={openReopenModal} disabled={saving || showReopenModal} accessibilityRole="button" accessibilityLabel="Reopen maintenance request" accessibilityHint="Opens a confirmation before reopening this request">
                                 <Ionicons name="refresh" size={20} color="#2563EB" />
                                 <Text style={{ color: '#2563EB', fontWeight: '700', fontSize: 15 }}>Still an Issue</Text>
                               </TouchableOpacity>
@@ -2224,12 +2253,12 @@ export default function ServicesScreen() {
       <InlineMaintenanceDialog
         visible={showReopenModal}
         colors={colors}
-        onClose={() => { setShowReopenModal(false); setReopenNote(''); }}
+        onClose={dismissReopenModal}
         title="Reopen this request?"
         message="The request will be set back to Pending so the team can review it again."
         type="info"
         buttons={[
-          { text: 'Nevermind', style: 'cancel', onPress: () => { setShowReopenModal(false); setReopenNote(''); } },
+          { text: 'Cancel', style: 'cancel', onPress: dismissReopenModal, disabled: saving },
           { text: 'Reopen', style: 'info', onPress: handleReopen, loading: saving },
         ]}
       >
@@ -2241,6 +2270,7 @@ export default function ServicesScreen() {
           textAlignVertical="top"
           value={reopenNote}
           onChangeText={setReopenNote}
+          editable={!saving}
         />
       </InlineMaintenanceDialog>
 

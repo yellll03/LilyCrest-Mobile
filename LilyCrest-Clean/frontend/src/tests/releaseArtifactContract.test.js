@@ -16,9 +16,9 @@ describe('standalone release artifact contract', () => {
     const config = read('app.config.js');
     const gradle = read('android/app/build.gradle');
     expect(config).toContain("version: '1.2.2'");
-    expect(config).toContain('versionCode: 21');
+    expect(config).toContain('versionCode: 22');
     expect(gradle).toContain('versionName "1.2.2"');
-    expect(gradle).toContain('versionCode 21');
+    expect(gradle).toContain('versionCode 22');
   });
 
   test('iOS release keeps Google sign-in pods modular and export compliance explicit', () => {
@@ -31,7 +31,7 @@ describe('standalone release artifact contract', () => {
     expect(config).toContain("{ name: 'GoogleUtilities', modular_headers: true }");
     expect(config).toContain("{ name: 'RecaptchaInterop', modular_headers: true }");
     expect(config).toContain('ITSAppUsesNonExemptEncryption: false');
-    expect(config).toContain("buildNumber: '26'");
+    expect(config).toContain("buildNumber: '28'");
     expect(config).toContain("googleServicesFile: process.env.GOOGLE_SERVICES_PLIST || './GoogleService-Info.plist'");
     expect(config).toContain("'@react-native-google-signin/google-signin'");
     expect(packageJson.dependencies['expo-local-authentication']).toBeUndefined();
