@@ -91,6 +91,25 @@ describe('canonical mobile maintenance contract', () => {
     expect(getMaintenanceRequestRoomDisplayName(request)).toBe('204');
   });
 
+  test.each(['', '   ', null, undefined])('falls back from blank location %p to populated room data', (blank) => {
+    const request = normalizeMaintenanceRequest({
+      request_id: 'm1', branch: blank, branchName: blank, floor: blank,
+      room: { _id: 'room-101', roomNumber: '101', branch: { name: 'Gil Puyat' }, floor: 0 },
+    });
+    expect(request.branch).toBe('Gil Puyat');
+    expect(request.floor).toBe('0');
+    expect(getMaintenanceLocationParts(request)).toEqual(['Gil Puyat', '101']);
+  });
+
+  test('explicit location values retain precedence, including floor zero', () => {
+    const request = normalizeMaintenanceRequest({
+      request_id: 'm1', branch: 'Guadalupe', floor: 0,
+      room: { _id: 'room-101', branch: 'Gil Puyat', floor: 1 },
+    });
+    expect(request.branch).toBe('Guadalupe');
+    expect(request.floor).toBe('0');
+  });
+
   test('maps room selectors to separate scalar identifier and label values', () => {
     expect(toMaintenanceRoomOption({
       _id: 'room-305-id',

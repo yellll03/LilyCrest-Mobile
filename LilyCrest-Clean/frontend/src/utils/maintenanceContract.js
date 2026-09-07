@@ -195,20 +195,18 @@ export function normalizeMaintenanceRequest(request) {
         floor: getMaintenanceFloorDisplayName(roomSource.floor, '') || null,
       }
     : roomSource;
-  const branch = getMaintenanceBranchDisplayName(
-    request.branch
-      ?? request.branchName
-      ?? request.branch_name
-      ?? (isRecord(roomSource) ? roomSource.branch : null)
-      ?? request.occupancyContext?.branch,
-    '',
-  ) || null;
-  const floor = getMaintenanceFloorDisplayName(
-    request.floor
-      ?? (isRecord(roomSource) ? roomSource.floor : null)
-      ?? request.occupancyContext?.floor,
-    '',
-  ) || null;
+  const branch = [
+    request.branch,
+    request.branchName,
+    request.branch_name,
+    isRecord(roomSource) ? roomSource.branch : null,
+    request.occupancyContext?.branch,
+  ].map((value) => getMaintenanceBranchDisplayName(value, '')).find(Boolean) || null;
+  const floor = [
+    request.floor,
+    isRecord(roomSource) ? roomSource.floor : null,
+    request.occupancyContext?.floor,
+  ].map((value) => getMaintenanceFloorDisplayName(value, '')).find(Boolean) || null;
 
   return {
     ...request,
