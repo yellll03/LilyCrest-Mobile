@@ -23,13 +23,8 @@ module.exports = {
     newArchEnabled: true,
     ios: {
       bundleIdentifier: 'com.lilycrest.lilycrestdorm',
-      // Build 26 (commit cfd3b897) is the latest iOS store artifact.
-      // Reusing 26
-      // would be rejected by App Store
-      // Connect for a duplicate build number; Android's versionCode is
-      // intentionally NOT bumped alongside this — the platforms have
-      // legitimately independent build numbers.
-      buildNumber: '27',
+      // Build 27 already exists in EAS; use a fresh TestFlight build identity.
+      buildNumber: '28',
       supportsTablet: true,
       googleServicesFile: process.env.GOOGLE_SERVICES_PLIST || './GoogleService-Info.plist',
       infoPlist: {
@@ -42,7 +37,7 @@ module.exports = {
     android: {
       package: 'com.lilycrest.lilycrestdorm',
       // Keep in sync with android/app/build.gradle's versionCode (see note above).
-      versionCode: 21,
+      versionCode: 22,
       googleServicesFile: process.env.GOOGLE_SERVICES_JSON || './google-services.json',
       config: {
         googleSignIn: {
