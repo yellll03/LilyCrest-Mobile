@@ -14,7 +14,7 @@ import {
   getBillingApiMessage,
   isBillingUnavailableMessage,
 } from '../src/services/billingState';
-import { safeBack } from '../src/utils/navigation';
+import { returnToBilling } from '../src/utils/navigation';
 import { billingDocumentCacheKey } from '../src/utils/billingDocumentCache';
 import { getBillChargeRows, getMoveInBillingSummary } from '../src/utils/billingBreakdown';
 import { getBillPaymentDate, getUtilityReleaseSchedule, isBillOutstanding } from '../src/utils/billingStatus';
@@ -219,7 +219,7 @@ export default function BillDetailsScreen() {
         )}
       >
         <Text style={styles.errorText}>{error || BILL_UNAVAILABLE_MESSAGE}</Text>
-        <Pressable onPress={() => safeBack(router)} style={styles.backBtn}><Text style={styles.backBtnText}>Go Back</Text></Pressable>
+        <Pressable onPress={() => returnToBilling(router)} style={styles.backBtn}><Text style={styles.backBtnText}>Go Back</Text></Pressable>
       </ScrollView>
     );
   }
@@ -244,7 +244,7 @@ export default function BillDetailsScreen() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      <ScreenHeader title="Billing Statement" subtitle={bill.billing_period || 'Statement details'} onBack={() => safeBack(router)} strong />
+      <ScreenHeader title="Billing Statement" subtitle={bill.billing_period || 'Statement details'} onBack={() => returnToBilling(router)} strong />
 
       <ScrollView
         contentContainerStyle={styles.content}

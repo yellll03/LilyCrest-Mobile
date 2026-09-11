@@ -12,13 +12,17 @@ import { act, render, waitFor } from '@testing-library/react-native';
 import { Text } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '../context/AuthContext';
-import { ThemeProvider } from '../context/ThemeContext';
-import { ToastProvider } from '../context/ToastContext';
 
+const mockRouter = { replace: jest.fn(), push: jest.fn() };
+const mockSegments = ['(tabs)', 'home'];
+const mockShowToast = jest.fn();
+// Presentation providers load native icon/font and theme effects unrelated to
+// feed synchronization. Keep the real AuthProvider and isolate those effects.
+jest.mock('../context/ToastContext', () => ({ useToast: () => ({showToast:mockShowToast}) }));
 jest.mock('expo-router', () => ({
-  useRouter: () => ({ replace: jest.fn(), push: jest.fn() }),
+  useRouter: () => mockRouter,
   usePathname: () => '/(tabs)/home',
-  useSegments: () => ['(tabs)', 'home'],
+  useSegments: () => mockSegments,
 }));
 
 jest.mock('../config/firebase', () => ({
@@ -81,18 +85,16 @@ function TestConsumer({ onRender }) {
   return <Text>{authState.notificationUnreadCount}</Text>;
 }
 
-function renderAuth(onRender) {
-  return render(
-    <SafeAreaProvider initialMetrics={{ frame: { x: 0, y: 0, width: 320, height: 640 }, insets: { top: 0, left: 0, right: 0, bottom: 0 } }}>
-      <ThemeProvider>
-        <ToastProvider>
-          <AuthProvider>
-            <TestConsumer onRender={onRender} />
-          </AuthProvider>
-        </ToastProvider>
-      </ThemeProvider>
-    </SafeAreaProvider>,
-  );
+// RNTL discovers native host components lazily on the first render, loading
+// TextInput/Modal/etc. Cold transforms previously consumed the first test's
+// five-second deadline. Initialize that harness once, outside feed assertions;
+// the notification tests retain their normal timeout and real AuthProvider.
+beforeAll(() => { render(<Text>Initialize native test renderer</Text>).unmount(); }, 30000);
+
+async function renderAuth(onRender) {
+  const mounted = render(<SafeAreaProvider initialMetrics={{frame:{x:0,y:0,width:320,height:640},insets:{top:0,left:0,right:0,bottom:0}}}><AuthProvider><TestConsumer onRender={onRender} /></AuthProvider></SafeAreaProvider>);
+  await waitFor(() => expect(mockGet).toHaveBeenCalledWith('/notifications'));
+  return mounted;
 }
 
 describe('notification sync — single source of truth (regression)', () => {
@@ -111,7 +113,7 @@ describe('notification sync — single source of truth (regression)', () => {
   });
 
   it('derives unread count from the backend read field, not a client-local timestamp', async () => {
-    renderAuth(capture);
+    await renderAuth(capture);
     await waitFor(() => expect(latest.notificationUnreadCount).toBe(1));
     expect(latest.notifications).toHaveLength(2);
   });
@@ -129,7 +131,7 @@ describe('notification sync — single source of truth (regression)', () => {
       return Promise.resolve({ data: {} });
     });
 
-    renderAuth(capture);
+    await renderAuth(capture);
     await waitFor(() => expect(latest.notificationUnreadCount).toBe(4));
     expect(latest.notifications.map((item) => item.type)).toEqual([
       'contract_document_ready',
@@ -140,7 +142,7 @@ describe('notification sync — single source of truth (regression)', () => {
   });
 
   it('markNotificationRead optimistically marks the row read and calls the per-item backend endpoint', async () => {
-    renderAuth(capture);
+    await renderAuth(capture);
     await waitFor(() => expect(latest.notificationUnreadCount).toBe(1));
 
     await act(async () => {
@@ -153,7 +155,7 @@ describe('notification sync — single source of truth (regression)', () => {
   });
 
   it('markNotificationRead rolls back to the exact prior state if the backend call fails', async () => {
-    renderAuth(capture);
+    await renderAuth(capture);
     await waitFor(() => expect(latest.notificationUnreadCount).toBe(1));
     mockPatch.mockRejectedValueOnce(new Error('network down'));
 
@@ -166,7 +168,7 @@ describe('notification sync — single source of truth (regression)', () => {
   });
 
   it('clearNotificationUnread (mark all) zeroes the count and marks every row read', async () => {
-    renderAuth(capture);
+    await renderAuth(capture);
     await waitFor(() => expect(latest.notificationUnreadCount).toBe(1));
 
     await act(async () => {
@@ -179,7 +181,7 @@ describe('notification sync — single source of truth (regression)', () => {
   });
 
   it('clearNotificationUnread rolls back every row if the backend call fails', async () => {
-    renderAuth(capture);
+    await renderAuth(capture);
     await waitFor(() => expect(latest.notificationUnreadCount).toBe(1));
     mockPatch.mockRejectedValueOnce(new Error('network down'));
 
@@ -197,7 +199,7 @@ describe('notification sync — single source of truth (regression)', () => {
       if (url === '/notifications') return Promise.resolve({ data: [{ notification_id: 'n-read', read: true, created_at: '2026-08-01T00:00:00.000Z' }] });
       return Promise.resolve({ data: {} });
     });
-    renderAuth(capture);
+    await renderAuth(capture);
     await waitFor(() => expect(latest.notificationUnreadCount).toBe(0));
 
     await act(async () => {
@@ -213,7 +215,7 @@ describe('notification sync — single source of truth (regression)', () => {
       if (url === '/notifications') return Promise.resolve({ data: [] });
       return Promise.resolve({ data: {} });
     });
-    renderAuth(capture);
+    await renderAuth(capture);
     await waitFor(() => expect(latest.notificationUnreadCount).toBe(0));
     expect(latest.notifications).toEqual([]);
     expect(Number.isNaN(latest.notificationUnreadCount)).toBe(false);
