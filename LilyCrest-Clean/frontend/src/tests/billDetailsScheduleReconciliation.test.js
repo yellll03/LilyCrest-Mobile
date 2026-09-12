@@ -14,8 +14,8 @@ describe('Bill Details utility schedule reconciliation', () => {
 
   test('keeps useful cycle and reading dates in the detailed breakdowns', () => {
     expect(source).toContain('Meter cycle');
-    expect(source).toContain('Usage period');
-    expect(source).toContain('Reading date');
+    expect(source).toContain('<WaterBreakdown');
+    expect(fs.readFileSync(path.resolve(__dirname, '../components/WaterBreakdown.jsx'), 'utf8')).toContain('allocation.reading_date');
     expect(source).toContain('reading_date_from');
     expect(source).toContain('reading_date_to');
   });

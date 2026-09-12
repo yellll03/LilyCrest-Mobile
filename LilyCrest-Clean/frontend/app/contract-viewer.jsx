@@ -129,6 +129,7 @@ export default function ContractViewer() {
               </View>
             ) : null}
 
+            {['active', 'expiring_soon'].includes(summary.lifecycleState) ? <ActionButton label="Extend Stay" onPress={() => router.push('/extend-stay')} /> : null}
             <SurfaceCard style={styles.card}>
               <SectionHeader
                 icon="shield-checkmark-outline"

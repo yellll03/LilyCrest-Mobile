@@ -36,6 +36,7 @@ const SAFE_NOTIFICATION_DIRECT_PATHS = new Set([
   '/documents',
   '/my-documents',
   '/room-transfer',
+  '/extend-stay',
   '/(tabs)/home',
   '/(tabs)/services',
   '/(tabs)/announcements',
@@ -597,6 +598,9 @@ export function resolveNotificationRoute(data = {}, options = {}) {
         : '/(tabs)/chatbot';
     case 'reservation':
       return '/(tabs)/home';
+    case 'stay_extension':
+    case 'extend-stay':
+      return '/extend-stay';
     case 'room_transfer':
     case 'room-transfer':
       return '/room-transfer';

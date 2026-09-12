@@ -1,0 +1,21 @@
+mobile-audit-native-bundles/
+
+# Reproducible local audit outputs; retain the Markdown reports in Git.
+mobile-audit-visual/
+mobile-audit-final-results.json
+mobile-maintenance-final-results.json
+extend-stay-screen-results.json
+
+# Extracted DOCX media, contact sheets and intermediate guide renders.
+# Keep authored scripts/review notes and final docs/user-guide deliverables visible.
+user-guide-work/ref*-image*.png
+user-guide-work/ref*-image*.jpeg
+user-guide-work/contact-*.jpg
+user-guide-work/reference-*.txt
+user-guide-work/delivery-render/
+user-guide-work/rendered/
+user-guide-work/rendered-final/
+user-guide-work/rendered-v2/
+user-guide-work/website-layout-render/
+user-guide-work/website-layout-v2/
+user-guide-work/website-reference/

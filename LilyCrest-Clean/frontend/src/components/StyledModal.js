@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { ActivityIndicator, Animated, Modal, Platform, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, View } from 'react-native';
+import { ActivityIndicator, Animated, Modal, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, TouchableWithoutFeedback, useWindowDimensions, View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useTheme } from '../context/ThemeContext';
 
@@ -30,6 +31,8 @@ export default function StyledModal({
   const scaleAnim = useRef(new Animated.Value(0.85)).current;
   const opacityAnim = useRef(new Animated.Value(0)).current;
   const { colors, isDarkMode } = useTheme();
+  const insets = useSafeAreaInsets();
+  const { height } = useWindowDimensions();
 
   useEffect(() => {
     if (visible) {
@@ -44,10 +47,10 @@ export default function StyledModal({
   }, [opacityAnim, scaleAnim, visible]);
 
   const typeConfig = {
-    success: { icon: 'checkmark-circle', color: colors.success, background: colors.successBg },
-    error: { icon: 'close-circle', color: colors.error, background: colors.errorBg },
-    warning: { icon: 'warning', color: colors.warning, background: colors.warningBg },
-    info: { icon: 'information-circle', color: colors.info, background: colors.infoBg },
+    success: { icon: 'checkmark-circle', color: colors.successText, background: colors.successBg },
+    error: { icon: 'close-circle', color: colors.errorText, background: colors.errorBg },
+    warning: { icon: 'warning', color: colors.warningText, background: colors.warningBg },
+    info: { icon: 'information-circle', color: colors.infoText, background: colors.infoBg },
   };
 
   const cfg = type ? typeConfig[type] : null;
@@ -63,10 +66,13 @@ export default function StyledModal({
         justifyContent: 'center',
         alignItems: 'center',
         padding: 28,
+        paddingTop: Math.max(insets.top, 28),
+        paddingBottom: Math.max(insets.bottom, 28),
       },
       card: {
         width: '100%',
         maxWidth: 340,
+        maxHeight: height - Math.max(insets.top, 28) - Math.max(insets.bottom, 28),
         backgroundColor: colors.modalBackground,
         borderWidth: 1,
         borderColor: colors.border,
@@ -162,7 +168,7 @@ export default function StyledModal({
               style={[styles.card, { opacity: opacityAnim, transform: [{ scale: scaleAnim }] }]}
             >
               <View style={styles.accentBar} />
-              <View style={styles.body}>
+              <ScrollView contentContainerStyle={styles.body} bounces={false}>
                 {resolvedIcon && (
                   <View style={styles.iconWrap}>
                     <Ionicons name={resolvedIcon} size={28} color={resolvedColor || colors.interactive} />
@@ -171,7 +177,7 @@ export default function StyledModal({
                 {title ? <Text style={styles.title}>{title}</Text> : null}
                 {message ? <Text style={styles.message}>{message}</Text> : null}
                 {children ? <View style={styles.childContent}>{children}</View> : null}
-              </View>
+              </ScrollView>
               <View style={styles.divider} />
               <View style={styles.btnRow}>
                 {actionButtons.map((btn, idx) => (

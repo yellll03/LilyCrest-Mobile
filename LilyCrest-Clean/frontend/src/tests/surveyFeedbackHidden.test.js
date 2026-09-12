@@ -1,3 +1,5 @@
+jest.mock('react-native-safe-area-context', () => ({ ...jest.requireActual('react-native-safe-area-context'), useSafeAreaInsets: () => ({ top: 24, bottom: 24, left: 0, right: 0 }) }));
+jest.mock('../context/ToastContext', () => ({ useToast: () => ({ showToast: jest.fn() }) }));
 /* global __dirname */
 // Regression coverage for temporarily hiding Survey/Feedback from normal
 // tenant navigation (deployment-testing pass). The feature is gated behind

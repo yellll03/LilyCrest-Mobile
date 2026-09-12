@@ -42,7 +42,7 @@ describe('critical mobile fixes', () => {
 
   test('bill details never presents the PayMongo gateway name as the tenant\'s payment method', () => {
     const source = read('app/bill-details.jsx');
-    expect(source).toContain('paymentMethodLabel(bill.payment_method, bill.payment_channel)');
+    expect(source).toContain('getBillPaymentMethodLabel(bill)');
     expect(source).not.toContain("bill.payment_method === 'paymongo' ? 'PayMongo'");
   });
 });

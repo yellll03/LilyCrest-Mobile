@@ -1,3 +1,5 @@
+jest.mock('react-native-safe-area-context', () => ({ ...jest.requireActual('react-native-safe-area-context'), useSafeAreaInsets: () => ({ top: 24, bottom: 24, left: 0, right: 0 }) }));
+jest.mock('../context/ToastContext', () => ({ useToast: () => ({ showToast: jest.fn() }) }));
 /* global test */
 // Regression history: the mobile Profile screen once derived a
 // "Pending Move-in" / "Active Tenant" badge from `user.tenantStatus` — a

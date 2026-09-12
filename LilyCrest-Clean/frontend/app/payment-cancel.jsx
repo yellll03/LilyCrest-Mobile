@@ -1,6 +1,7 @@
+import { safeBack } from '../src/utils/navigation';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import { useEffect, useMemo } from 'react';
+import { useMemo } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useTheme } from '../src/context/ThemeContext';
@@ -10,12 +11,7 @@ export default function PaymentCancelScreen() {
   const { colors } = useTheme();
   const styles = useMemo(() => createStyles(colors), [colors]);
 
-  useEffect(() => {
-    const timer = setTimeout(() => {
-      router.replace('/(tabs)/billing');
-    }, 5000);
-    return () => clearTimeout(timer);
-  }, [router]);
+
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
@@ -28,9 +24,9 @@ export default function PaymentCancelScreen() {
           No charges were made. You can try again anytime from your billing page.
         </Text>
 
-        <Pressable style={styles.primaryBtn} onPress={() => router.replace('/(tabs)/billing')}>
+        <Pressable style={styles.primaryBtn} onPress={() => safeBack(router)}>
           <Ionicons name="arrow-back-outline" size={18} color="#fff" />
-          <Text style={styles.primaryBtnText}>Back to Billing</Text>
+          <Text style={styles.primaryBtnText}>Back</Text>
         </Pressable>
 
         <Pressable style={styles.secondaryBtn} onPress={() => router.replace('/(tabs)/home')}>

@@ -1,3 +1,4 @@
+import { safeBack } from '../src/utils/navigation';
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
@@ -78,7 +79,7 @@ export default function PaymentSuccessScreen() {
   );
 
   // Confirm the PayMongo checkout result so backend can mark the bill as paid.
-  // If checkout_id is missing (older app flows), fall back to the old timed redirect.
+  // Keep the result visible until the tenant chooses their next action.
   useEffect(() => {
     let timer;
     let cancelled = false;
@@ -86,11 +87,6 @@ export default function PaymentSuccessScreen() {
     const pollCheckoutStatus = async () => {
       if (!checkoutId) {
         setIsVerifying(false);
-        timer = setTimeout(() => {
-          emitBillingRefresh('payment_success');
-          nudgeContractRefreshAfterPayment();
-          router.replace('/(tabs)/billing');
-        }, 5000);
         return;
       }
 
@@ -106,15 +102,10 @@ export default function PaymentSuccessScreen() {
 
           if (status === 'paid') {
             setOutcome('paid');
-            setVerifyMessage('Payment confirmed. Redirecting to billing...');
+            setVerifyMessage('Payment confirmed.');
             setIsVerifying(false);
             emitBillingRefresh('payment_success');
             nudgeContractRefreshAfterPayment();
-            timer = setTimeout(() => {
-              if (!cancelled) {
-                router.replace('/(tabs)/billing');
-              }
-            }, 1200);
             return;
           }
 
@@ -196,9 +187,9 @@ export default function PaymentSuccessScreen() {
             <Text style={styles.primaryBtnText}>Try Again</Text>
           </Pressable>
         ) : (
-          <Pressable style={styles.primaryBtn} onPress={() => { emitBillingRefresh('payment_success'); router.replace('/(tabs)/billing'); }}>
+          <Pressable style={styles.primaryBtn} onPress={() => { emitBillingRefresh('payment_success'); safeBack(router); }}>
             <Ionicons name="receipt-outline" size={18} color="#fff" />
-            <Text style={styles.primaryBtnText}>View Billing</Text>
+            <Text style={styles.primaryBtnText}>Back</Text>
           </Pressable>
         )}
 

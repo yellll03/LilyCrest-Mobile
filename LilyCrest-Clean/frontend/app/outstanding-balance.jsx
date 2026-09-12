@@ -5,7 +5,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { ScreenHeader } from '../src/components/ui/LilycrestUI';
+import { ScreenHeader, StatusBadge } from '../src/components/ui/LilycrestUI';
 import { useAlert } from '../src/context/AlertContext';
 import { useAuth } from '../src/context/AuthContext';
 import { useTheme, useThemedStyles } from '../src/context/ThemeContext';
@@ -116,7 +116,7 @@ export default function OutstandingBalanceScreen() {
       const result = await WebBrowser.openAuthSessionAsync(checkoutUrl, 'frontend://');
       if (result.type !== 'success') return;
       const returnUrl = result.url || '';
-      router.replace({
+      router.push({
         pathname: returnUrl.includes('payment-success') ? '/payment-success' : '/payment-cancel',
         params: { billing_id: 'outstanding', checkout_id: checkoutId || '' },
       });
@@ -201,7 +201,7 @@ export default function OutstandingBalanceScreen() {
                 <View key={String(bill.billing_id || bill.id || bill._id)} style={styles.billRow}>
                   <View style={styles.billCopy}>
                     <Text style={styles.billTitle}>{billLabel(bill)}</Text>
-                    <Text style={styles.muted}>{String(bill.status || 'unpaid').replaceAll('_', ' ')}</Text>
+                    <StatusBadge status={bill.status || 'unpaid'} label={String(bill.status_label || bill.status || 'unpaid').replaceAll('_', ' ').replace(/\b\w/g, (letter) => letter.toUpperCase())} />
                   </View>
                   <Text style={styles.billAmount}>{currency(bill.remaining_amount ?? bill.total ?? bill.amount)}</Text>
                 </View>
@@ -244,7 +244,7 @@ const createStyles = (c) => StyleSheet.create({
   grandTotalLabel: { color: c.text, fontSize: 16, fontWeight: '900' },
   grandTotalAmount: { color: c.interactive, fontSize: 18, fontWeight: '900' },
   billRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12, paddingTop: 4 },
-  billCopy: { flex: 1, gap: 2 },
+  billCopy: { flex: 1, gap: 6, alignItems: 'flex-start' },
   billTitle: { color: c.text, fontSize: 14, fontWeight: '700' },
   billAmount: { color: c.text, fontSize: 14, fontWeight: '800' },
   muted: { color: c.textSecondary, fontSize: 13, lineHeight: 19, textAlign: 'center' },

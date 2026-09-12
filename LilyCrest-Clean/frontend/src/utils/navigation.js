@@ -1,11 +1,9 @@
 export const HOME_ROUTE = '/(tabs)/home';
 export const LOGIN_ROUTE = '/login';
 
-// A bill opened from a notification still belongs to Billing. Dismiss to an
-// existing Billing route when possible; otherwise replace the detail route.
+// Preserve the actual caller, including notification and nested entry paths.
 export function returnToBilling(router) {
-  if (typeof router?.dismissTo === 'function') router.dismissTo('/(tabs)/billing');
-  else router?.replace?.('/(tabs)/billing');
+  safeBack(router);
 }
 
 const AUTHENTICATION_PATHS = new Set([

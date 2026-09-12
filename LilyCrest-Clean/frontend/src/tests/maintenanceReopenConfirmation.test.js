@@ -1,3 +1,4 @@
+jest.mock('react-native-safe-area-context', () => ({ ...jest.requireActual('react-native-safe-area-context'), useSafeAreaInsets: () => ({ top: 24, bottom: 24, left: 0, right: 0 }) }));
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { Modal, Platform } from 'react-native';
 import ServicesScreen from '../../app/(tabs)/services';

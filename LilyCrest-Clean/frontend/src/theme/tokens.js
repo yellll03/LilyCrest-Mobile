@@ -22,7 +22,7 @@ export const SURFACES = Object.freeze({
 });
 
 export const TEXT = Object.freeze({
-  light: Object.freeze({ heading: '#0A1628', body: '#1E293B', secondary: '#4B5563', muted: '#6B7280' }),
+  light: Object.freeze({ heading: '#0A1628', body: '#1E293B', secondary: '#4B5563', muted: '#626B79' }),
   dark: Object.freeze({ heading: '#F8FAFC', body: '#D0D7E2', secondary: '#A8B3C3', muted: '#4B5563' }),
 });
 
@@ -64,6 +64,9 @@ export const LIGHT_COLORS = Object.freeze({
   onPrimary: '#FFFFFF',
   onAccent: BRAND.primary,
   inputBackground: SURFACES.light.muted,
+  inputBorder: '#7C8796',
+  selectionBg: BRAND.accentLight,
+  selectionText: BRAND.primary,
   modalBackground: SURFACES.light.card,
   overlay: 'rgba(0,0,0,0.50)',
   iconPrimary: TEXT.light.body,
@@ -109,6 +112,9 @@ export const DARK_COLORS = Object.freeze({
   onPrimary: '#FFFFFF',
   onAccent: BRAND.primary,
   inputBackground: SURFACES.dark.section,
+  inputBorder: '#64748B',
+  selectionBg: '#35250E',
+  selectionText: '#F3E4B0',
   modalBackground: SURFACES.dark.card,
   overlay: 'rgba(0,0,0,0.68)',
   iconPrimary: TEXT.dark.body,
@@ -120,7 +126,7 @@ export const DARK_COLORS = Object.freeze({
 });
 
 const SUCCESS_STATES = new Set(['paid', 'active', 'verified', 'approved', 'completed', 'resolved', 'solved', 'online']);
-const WARNING_STATES = new Set(['pending', 'unpaid', 'awaiting tenant', 'awaiting_tenant', 'under review', 'under_review', 'open', 'waiting_tenant', 'not started', 'not_started']);
+const WARNING_STATES = new Set(['partially_paid', 'partially paid', 'pending', 'unpaid', 'awaiting tenant', 'awaiting_tenant', 'under review', 'under_review', 'open', 'waiting_tenant', 'not started', 'not_started']);
 const DANGER_STATES = new Set(['overdue', 'rejected', 'terminated', 'delete', 'deleted', 'failed', 'cancelled', 'canceled']);
 const INFO_STATES = new Set(['processing', 'in progress', 'in_progress', 'scheduled', 'submitted', 'viewed', 'assigned']);
 

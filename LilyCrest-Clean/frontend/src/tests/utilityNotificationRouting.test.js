@@ -12,12 +12,12 @@ test.each(['water', 'electricity'])('%s notification and feed payload open the s
   expect(resolveNotificationRoute(buildNotificationRouteData({ ...payload,
     notification_id:'event-1', category:'billing', read:false }))).toBe(`/bill-details?billId=${billId}`);
 });
-test('Back from a notification bill returns to Billing without duplicating its route', () => {
-  const router = { dismissTo:jest.fn(), replace:jest.fn() };
+test('Back from a notification bill uses history and falls back to Home only without history', () => {
+  const router = { canGoBack: () => true, back: jest.fn(), replace:jest.fn() };
   returnToBilling(router);
-  expect(router.dismissTo).toHaveBeenCalledWith('/(tabs)/billing');
+  expect(router.back).toHaveBeenCalledTimes(1);
   expect(router.replace).not.toHaveBeenCalled();
   const coldRouter = { replace:jest.fn() };
   returnToBilling(coldRouter);
-  expect(coldRouter.replace).toHaveBeenCalledWith('/(tabs)/billing');
+  expect(coldRouter.replace).toHaveBeenCalledWith('/(tabs)/home');
 });

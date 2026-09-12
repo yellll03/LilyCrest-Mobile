@@ -130,9 +130,9 @@ export default function PaymentScreen() {
       if (result.type === 'success') {
         const returnUrl = result.url || '';
         if (returnUrl.includes('payment-success')) {
-          router.replace({ pathname: '/payment-success', params: { billing_id: id, checkout_id: checkoutId || '' } });
+          router.push({ pathname: '/payment-success', params: { billing_id: id, checkout_id: checkoutId || '' } });
         } else {
-          router.replace({ pathname: '/payment-cancel', params: { billing_id: id, checkout_id: checkoutId || '' } });
+          router.push({ pathname: '/payment-cancel', params: { billing_id: id, checkout_id: checkoutId || '' } });
         }
       }
       // result.type === 'cancel' means the user closed the browser — stay on page.

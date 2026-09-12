@@ -1,3 +1,4 @@
+import WaterBreakdown, { formatMeterValue } from '../src/components/WaterBreakdown';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
@@ -17,7 +18,7 @@ import {
 import { returnToBilling } from '../src/utils/navigation';
 import { billingDocumentCacheKey } from '../src/utils/billingDocumentCache';
 import { getBillChargeRows, getMoveInBillingSummary } from '../src/utils/billingBreakdown';
-import { getBillPaymentDate, getUtilityReleaseSchedule, isBillOutstanding } from '../src/utils/billingStatus';
+import { getBillPaymentDate, getBillPaymentMethodLabel, getBillPaymentReference, getUtilityReleaseSchedule, isBillOutstanding } from '../src/utils/billingStatus';
 import { ScreenHeader } from '../src/components/ui/LilycrestUI';
 
 const getBillId = (bill) => bill?.billing_id || bill?.id || bill?._id || bill?.billingId || bill?.billId || bill?.reference_id;
@@ -31,7 +32,7 @@ function safeCurrency(amount) {
   if (amount === null || amount === undefined || amount === '') return 'Not available';
   const n = Number(amount);
   if (!Number.isFinite(n) || n === 0) return '\u20b10.00';
-  const absolute = Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2 });
+  const absolute = Math.abs(n).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return `${n < 0 ? '\u2212' : ''}\u20b1${absolute}`;
 }
 
@@ -56,24 +57,6 @@ function shortDate(value) {
 // back to a generic "Online Payment" label for older records where it
 // wasn't captured. Mirrors backend/controllers/billing.controller.js's
 // PAYMENT_CHANNEL_LABELS/billPaymentMethodLabel.
-const PAYMENT_CHANNEL_LABELS = {
-  gcash: 'GCash',
-  card: 'Card',
-  grab_pay: 'GrabPay',
-  paymaya: 'Maya',
-  billease: 'BillEase',
-  dob: 'Online Banking',
-  dob_ubp: 'Online Banking',
-};
-
-function paymentMethodLabel(rawMethod, channel) {
-  const channelLabel = PAYMENT_CHANNEL_LABELS[String(channel || '').trim().toLowerCase()];
-  if (channelLabel) return channelLabel;
-  const value = String(rawMethod || '').trim();
-  if (!value) return '';
-  return value.toLowerCase() === 'paymongo' ? 'Online Payment' : value;
-}
-
 const STATUS_CONFIG = {
   paid: { bg: '#ECFDF5', text: '#065F46', icon: 'checkmark-circle', label: 'Paid' },
   settled: { bg: '#ECFDF5', text: '#065F46', icon: 'checkmark-circle', label: 'Paid' },
@@ -176,9 +159,9 @@ export default function BillDetailsScreen() {
       if (result.type === 'success') {
         const returnUrl = result.url || '';
         if (returnUrl.includes('payment-success')) {
-          router.replace({ pathname: '/payment-success', params: { billing_id: id, checkout_id: checkoutId || '' } });
+          router.push({ pathname: '/payment-success', params: { billing_id: id, checkout_id: checkoutId || '' } });
         } else {
-          router.replace({ pathname: '/payment-cancel', params: { billing_id: id, checkout_id: checkoutId || '' } });
+          router.push({ pathname: '/payment-cancel', params: { billing_id: id, checkout_id: checkoutId || '' } });
         }
       }
       // result.type === 'cancel' means the user closed the browser — stay on page
@@ -409,7 +392,7 @@ export default function BillDetailsScreen() {
                       <Text style={styles.elecRowValue}>{shortDate(seg.reading_date_from || seg.period_start)}</Text>
                     </View>
                     <View style={styles.elecColKwh}>
-                      <Text style={styles.elecRowValue}>{seg.reading_from}</Text>
+                      <Text style={styles.elecRowValue}>{formatMeterValue(seg.reading_from)}</Text>
                     </View>
                   </View>
 
@@ -422,7 +405,7 @@ export default function BillDetailsScreen() {
                       <Text style={styles.elecRowValue}>{shortDate(seg.reading_date_to || seg.period_end)}</Text>
                     </View>
                     <View style={styles.elecColKwh}>
-                      <Text style={styles.elecRowValue}>{seg.reading_to}</Text>
+                      <Text style={styles.elecRowValue}>{formatMeterValue(seg.reading_to)}</Text>
                     </View>
                   </View>
 
@@ -433,7 +416,7 @@ export default function BillDetailsScreen() {
                     </View>
                     <View style={styles.elecColDate} />
                     <View style={styles.elecColKwh}>
-                      <Text style={[styles.elecRowValue, { fontWeight: '700' }]}>{consumption.toFixed(2)}</Text>
+                      <Text style={[styles.elecRowValue, { fontWeight: '700' }]}>{formatMeterValue(consumption)}</Text>
                     </View>
                   </View>
 
@@ -499,43 +482,9 @@ export default function BillDetailsScreen() {
               <Text style={styles.sectionTitle}>Water Breakdown</Text>
             </View>
 
-            <View style={styles.segmentCard}>
-              {(bill.water_breakdown.period_start || bill.water_breakdown.period_end) && (
-                <View style={styles.breakdownMetaRow}>
-                  <View style={styles.breakdownMetaItem}>
-                    <Text style={styles.breakdownMetaLabel}>Usage period</Text>
-                    <Text style={styles.breakdownMetaValue}>{shortDate(bill.water_breakdown.period_start)} {'–'} {shortDate(bill.water_breakdown.period_end)}</Text>
-                  </View>
-                  <View style={styles.breakdownMetaItem}>
-                    <Text style={styles.breakdownMetaLabel}>Reading date</Text>
-                    <Text style={styles.breakdownMetaValue}>{shortDate(bill.water_breakdown.reading_date)}</Text>
-                  </View>
-                </View>
-              )}
-              <View style={styles.segmentGrid}>
-                <View style={styles.segmentGridItem}>
-                  <Text style={styles.segmentGridLabel}>Meter Reading</Text>
-                  <Text style={styles.segmentGridValue}>
-                    {bill.water_breakdown.reading_from} → {bill.water_breakdown.reading_to}
-                  </Text>
-                </View>
-                <View style={styles.segmentGridItem}>
-                  <Text style={styles.segmentGridLabel}>Consumption</Text>
-                  <Text style={styles.segmentGridValue}>{bill.water_breakdown.consumption} cu.m</Text>
-                </View>
-                <View style={styles.segmentGridItem}>
-                  <Text style={styles.segmentGridLabel}>Rate</Text>
-                  <Text style={styles.segmentGridValue}>₱{bill.water_breakdown.rate}/cu.m</Text>
-                </View>
-                <View style={styles.segmentGridItem}>
-                  <Text style={styles.segmentGridLabel}>Total</Text>
-                  <Text style={styles.segmentGridValue}>{safeCurrency(bill.water_breakdown.total)}</Text>
-                </View>
-              </View>
-              {bill.water_breakdown.sharing_policy && (
-                <Text style={styles.sharingPolicy}>{bill.water_breakdown.sharing_policy}</Text>
-              )}
-            </View>
+            <WaterBreakdown breakdown={bill.water_breakdown} total={bill.water}
+              dueDate={bill.utility_schedules?.water?.due_date || bill.due_date}
+              styles={styles} currency={safeCurrency} date={safeDate} />
           </View>
         )}
 
@@ -558,16 +507,16 @@ export default function BillDetailsScreen() {
                   <Text style={styles.paymentInfoValue}>{safeDate(getBillPaymentDate(bill))}</Text>
                 </View>
               )}
-              {bill.paymongo_reference && (
+              {getBillPaymentReference(bill) && (
                 <View style={styles.paymentInfoRow}>
                   <Text style={styles.paymentInfoLabel}>Reference No.</Text>
-                  <Text style={styles.paymentInfoValue}>{bill.paymongo_reference}</Text>
+                  <Text style={styles.paymentInfoValue}>{getBillPaymentReference(bill)}</Text>
                 </View>
               )}
-              {bill.payment_method && (
+              {getBillPaymentMethodLabel(bill) && (
                 <View style={styles.paymentInfoRow}>
                   <Text style={styles.paymentInfoLabel}>Method</Text>
-                  <Text style={styles.paymentInfoValue}>{paymentMethodLabel(bill.payment_method, bill.payment_channel)}</Text>
+                  <Text style={styles.paymentInfoValue}>{getBillPaymentMethodLabel(bill)}</Text>
                 </View>
               )}
             </View>
@@ -785,10 +734,10 @@ const createStyles = (c, isDarkMode) => StyleSheet.create({
   // Payment
   paidInfo: { gap: 8 },
   paidBadge: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  paidBadgeText: { fontSize: 14, fontWeight: '700', color: '#065F46' },
+  paidBadgeText: { fontSize: 14, fontWeight: '700', color: c.successText },
   paymentInfoRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   paymentInfoLabel: { fontSize: 13, color: c.textMuted, fontWeight: '600' },
-  paymentInfoValue: { fontSize: 13, fontWeight: '700', color: c.text },
+  paymentInfoValue: { flex: 1, marginLeft: 12, textAlign: 'right', fontSize: 13, fontWeight: '700', color: c.text },
   paySection: { gap: 10 },
   paymongoBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,

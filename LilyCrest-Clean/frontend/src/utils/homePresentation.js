@@ -3,10 +3,13 @@ function hasDisplayValue(value) {
   return typeof value !== 'string' || value.trim().length > 0;
 }
 
+export function hasHomeCurrencyAmount(amount) {
+  return hasDisplayValue(amount) && Number.isFinite(Number(amount));
+}
+
 export function formatHomeCurrency(amount) {
-  if (!hasDisplayValue(amount)) return 'Amount unavailable';
+  if (!hasHomeCurrencyAmount(amount)) return 'Amount unavailable';
   const numericAmount = Number(amount);
-  if (!Number.isFinite(numericAmount)) return 'Amount unavailable';
   return `₱${numericAmount.toLocaleString()}`;
 }
 

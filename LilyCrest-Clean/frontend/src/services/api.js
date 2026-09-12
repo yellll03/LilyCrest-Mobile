@@ -402,6 +402,8 @@ api.interceptors.response.use(
 export const apiService = {
   // Dashboard
   getDashboard: () => api.get('/dashboard/me'),
+  getCurrentStayExtension: () => api.get('/stay-extension/current'),
+  createStayExtension: (data) => api.post('/stay-extension-requests', data),
   getCurrentRoomTransfer: () => api.get('/room-transfer-request/current'),
   getRoomTransferPreferences: () => api.get('/room-transfer-preferences'),
   createRoomTransferRequest: (data) => api.post('/room-transfer-requests', data),

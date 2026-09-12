@@ -42,6 +42,7 @@ export function AlertProvider({ children }) {
     buttons,
   } = {}) => {
     return new Promise((resolve) => {
+      resolveRef.current?.('__superseded__');
       resolveRef.current = resolve;
 
       // Wrap button onPress so the modal auto-closes and the promise resolves
@@ -49,8 +50,9 @@ export function AlertProvider({ children }) {
         ...btn,
         onPress: () => {
           setAlertState((prev) => ({ ...prev, visible: false }));
-          btn.onPress?.();
+          resolveRef.current = null;
           resolve(btn.text);
+          btn.onPress?.();
         },
       }));
 
@@ -69,6 +71,7 @@ export function AlertProvider({ children }) {
   const handleClose = useCallback(() => {
     setAlertState((prev) => ({ ...prev, visible: false }));
     resolveRef.current?.('__closed__');
+    resolveRef.current = null;
   }, []);
 
   return (

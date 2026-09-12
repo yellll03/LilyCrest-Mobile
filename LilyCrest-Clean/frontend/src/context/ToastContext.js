@@ -75,7 +75,7 @@ export function ToastProvider({ children }) {
 
   const showToast = useCallback((options) => {
     const nextToast = typeof options === 'string'
-      ? { message: options, type: 'info' }
+      ? { message: options, type: 'info', duration: 2800 }
       : {
           title: options?.title || '',
           message: options?.message || '',
@@ -135,6 +135,7 @@ export function ToastProvider({ children }) {
         ...preset,
         background: colors.surface,
         border: colors.border,
+        iconColor: colors.text,
         titleColor: colors.text,
         messageColor: colors.textSecondary,
       };
@@ -192,6 +193,7 @@ export function ToastProvider({ children }) {
 
   return (
     <ToastContext.Provider value={{ showToast, dismissToast }}>
+      <View style={{ flex: 1 }}>
       {children}
       {toast && toastConfig ? (
         <View pointerEvents="box-none" style={styles.overlay}>
@@ -219,6 +221,7 @@ export function ToastProvider({ children }) {
           </Animated.View>
         </View>
       ) : null}
+      </View>
     </ToastContext.Provider>
   );
 }

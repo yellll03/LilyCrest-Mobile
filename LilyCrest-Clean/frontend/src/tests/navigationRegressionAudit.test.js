@@ -6,12 +6,12 @@ const root = path.resolve(__dirname, '../..');
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'utf8');
 
 describe('navigation regression contracts', () => {
-  test('Home remains the authenticated root and tab Back target', () => {
+  test('Home remains the authenticated root and tabs respect history', () => {
     const rootLayout = read('app/_layout.jsx');
     const tabLayout = read('app/(tabs)/_layout.jsx');
     expect(rootLayout).toContain("initialRouteName: '(tabs)'");
     expect(tabLayout).toContain('initialRouteName="home"');
-    expect(tabLayout).toContain('backBehavior="initialRoute"');
+    expect(tabLayout).toContain('backBehavior="history"');
   });
 
   test('foreground lifecycle handlers refresh state without navigating', () => {

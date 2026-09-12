@@ -37,6 +37,9 @@ export default function SurveyFormScreen() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
+  useEffect(() => {
+    if (message && survey && !loading) showAlert({ title: message === 'Draft saved.' ? 'Draft saved' : 'Survey', message, type: message === 'Draft saved.' ? 'success' : 'error' });
+  }, [message, survey, loading, showAlert]);
   const [submittedAt, setSubmittedAt] = useState(null);
   const hydrated = useRef(false);
   const scrollRef = useRef(null);

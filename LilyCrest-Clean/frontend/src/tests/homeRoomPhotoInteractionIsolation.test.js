@@ -36,7 +36,7 @@ describe('Home room photo vs room info tap isolation', () => {
 
   test('tapping the room info area opens the info modal, not the image lightbox', () => {
     const detailsIndex = source.indexOf('style={styles.roomDetails}');
-    const detailsBlockEnd = source.indexOf('priceValue', detailsIndex);
+    const detailsBlockEnd = source.indexOf('</TouchableOpacity>', detailsIndex);
     const detailsBlock = source.slice(detailsIndex, detailsBlockEnd);
     expect(detailsBlock).toContain('setModalData({');
     expect(detailsBlock).not.toContain('setImagePreview');

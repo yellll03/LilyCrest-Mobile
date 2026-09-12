@@ -1,3 +1,4 @@
+import { useToast } from '../../src/context/ToastContext';
 import { Ionicons } from '@expo/vector-icons';
 import Constants from 'expo-constants';
 import * as ImagePicker from 'expo-image-picker';
@@ -101,6 +102,13 @@ export default function ProfileScreen() {
   const profileMutationGuardRef = useRef(false);
   const [profileError, setProfileError] = useState('');
   const [profileBanner, setProfileBanner] = useState(null);
+  const { showToast } = useToast();
+  useEffect(() => {
+    if (profileBanner) {
+      showToast({ type: profileBanner.type, message: profileBanner.text });
+      setProfileBanner(null);
+    }
+  }, [profileBanner, showToast]);
   const [refreshing, setRefreshing] = useState(false);
   const [activeSurvey, setActiveSurvey] = useState(null);
   const [photoCropAsset, setPhotoCropAsset] = useState(null);
@@ -652,6 +660,9 @@ export default function ProfileScreen() {
                     <Ionicons name="document-text-outline" size={18} color={colors.accent} />
                     <Text style={styles.outlineButtonText}>View Contract</Text>
                   </TouchableOpacity>
+                  {accountStatus?.code === 'active' ? <TouchableOpacity style={styles.outlineButton} onPress={() => router.push('/extend-stay')}>
+                    <Text style={{ color: colors.interactive, fontWeight: '700' }}>Extend Stay</Text>
+                  </TouchableOpacity> : null}
                   {!contractSummary.canOpenPdf ? (
                     <Text style={styles.emptyText}>Some contract details are still being finalized.</Text>
                   ) : null}

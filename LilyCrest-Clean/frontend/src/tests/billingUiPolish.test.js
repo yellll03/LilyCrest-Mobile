@@ -47,7 +47,7 @@ describe('tenant billing UI polish', () => {
     expect(details).not.toContain('Electricity Billing Schedule');
     expect(details).not.toContain('Water Billing Schedule');
     expect(details).toContain('Meter cycle');
-    expect(details).toContain('Usage period');
+    expect(details).toContain('<WaterBreakdown');
   });
 
   test('reserves safe space for the assistant and bottom navigation', () => {

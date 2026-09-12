@@ -19,6 +19,7 @@ import {
 } from 'react-native';
 import AppHeader from '../../src/components/AppHeader';
 import ImageLightbox from '../../src/components/ImageLightbox';
+import HomeMonthlyRate from '../../src/components/HomeMonthlyRate';
 import { getBillOwedAmount, isBillOutstanding } from '../../src/utils/billingStatus';
 import PropertyShowcase from '../../src/components/PropertyShowcase';
 import StyledModal from '../../src/components/StyledModal';
@@ -929,10 +930,7 @@ export default function HomeScreen() {
                   <Text style={styles.roomInfoText}>{formatRoomFloor(tenancyRoom?.floor)}</Text>
                 </View>
               </View>
-              <View style={styles.priceRow}>
-                <Text style={styles.priceLabel}>Monthly Rate</Text>
-                <Text style={styles.priceValue}>{safeCurrency(tenancyRoom?.price)}</Text>
-              </View>
+              <HomeMonthlyRate amount={tenancyRoom?.price} colors={colors} />
             </TouchableOpacity>
           </View>
 
@@ -1315,14 +1313,11 @@ function createStyles(c) {
     roomTypeBadge: { position: 'absolute', bottom: 6, left: 6, backgroundColor: c.headerBg, paddingVertical: 3, paddingHorizontal: 8, borderRadius: 6 },
     roomTypeText: { fontSize: 10, fontWeight: '600', color: '#ffffff' },
     roomViewBadge: { position: 'absolute', top: 6, right: 6, width: 24, height: 24, borderRadius: 6, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center' },
-    roomDetails: { flex: 1, justifyContent: 'center' },
+    roomDetails: { flex: 1, minWidth: 0, justifyContent: 'center' },
     roomNumber: { fontSize: 21, fontWeight: '700', color: c.text, marginBottom: 8 },
     roomInfoGrid: { gap: 5 },
     roomInfoItem: { flexDirection: 'row', alignItems: 'center', gap: 7 },
     roomInfoText: { fontSize: 13, color: c.textSecondary },
-    priceRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, paddingTop: 10, borderTopWidth: 1, borderTopColor: c.border },
-    priceLabel: { fontSize: 12, color: c.textSecondary },
-    priceValue: { fontSize: 18, fontWeight: '700', color: c.interactive },
     tenancyDates: { flexDirection: 'row', alignItems: 'center', backgroundColor: c.surfaceSecondary, borderRadius: 12, padding: 14 },
     dateItem: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 10 },
     dateItemIcon: { width: 34, height: 34, borderRadius: 10, justifyContent: 'center', alignItems: 'center' },

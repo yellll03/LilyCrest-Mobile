@@ -579,7 +579,7 @@ export default function ServicesScreen() {
         <Ionicons
           name={banner.type === 'success' ? 'checkmark-circle' : banner.type === 'error' ? 'alert-circle' : 'information-circle'}
           size={18}
-          color={banner.type === 'success' ? '#065F46' : banner.type === 'error' ? '#991B1B' : '#92400e'}
+          color={banner.type === 'success' ? colors.successText : banner.type === 'error' ? colors.errorText : colors.warningText}
         />
         <Text style={styles.bannerText}>{banner.text}</Text>
         <TouchableOpacity onPress={() => setBanner(null)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -1432,8 +1432,8 @@ export default function ServicesScreen() {
                   <Ionicons name="close" size={24} color={colors.textMuted} />
                 </TouchableOpacity>
               </View>
+              {showModal ? renderBanner() : null}
               <ScrollView showsVerticalScrollIndicator={false}>
-                {showModal ? renderBanner() : null}
                 <Text style={styles.modalSectionTitle}>Select Service Type</Text>
                 <View style={styles.typeGrid}>
                   {REQUEST_TYPES.map((type) => {

@@ -26,7 +26,11 @@ export default function RoomTransferScreen() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
   const [saving, setSaving] = useState(false);
-  const [message, setMessage] = useState('');
+  const [message, setMessageState] = useState('');
+  const setMessage = useCallback((nextMessage) => {
+    setMessageState(nextMessage);
+    if (nextMessage) showAlert({ title: 'Room Transfer', message: nextMessage, type: 'error' });
+  }, [showAlert]);
   const [preferredRoomType, setPreferredRoomType] = useState('');
   const [preferredTransferDate, setPreferredTransferDate] = useState('');
   const [reason, setReason] = useState('');
@@ -54,7 +58,7 @@ export default function RoomTransferScreen() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [setMessage]);
 
   useFocusEffect(useCallback(() => { load(); }, [load]));
   useEffect(() => {
@@ -132,7 +136,7 @@ export default function RoomTransferScreen() {
           <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
             {hasStatus ? (
               <View style={styles.statusCard} accessibilityLabel={`Room transfer status: ${presentation.statusLabel}`}>
-                <View style={styles.statusIcon}><Ionicons name="swap-horizontal" size={20} color={colors.interactive} /></View>
+                <View style={styles.statusIcon}><Ionicons name="swap-horizontal" size={20} color={colors.selectionText} /></View>
                 <View style={styles.statusBody}>
                   <Text style={styles.eyebrow}>Current status</Text>
                   <Text style={styles.statusTitle}>{presentation.statusLabel}</Text>
@@ -194,12 +198,12 @@ export default function RoomTransferScreen() {
 const createStyles = (c) => StyleSheet.create({
   safe: { flex: 1, backgroundColor: c.background }, flex: { flex: 1 }, center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   content: { padding: 18, paddingBottom: 48, gap: 16 }, statusCard: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, padding: 16, borderRadius: 14, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border },
-  statusIcon: { width: 38, height: 38, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: c.accentLight }, statusBody: { flex: 1, gap: 3 }, eyebrow: { color: c.textMuted, textTransform: 'uppercase', letterSpacing: .7, fontSize: 10, fontWeight: '800' },
+  statusIcon: { width: 38, height: 38, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: c.selectionBg }, statusBody: { flex: 1, gap: 3 }, eyebrow: { color: c.textMuted, textTransform: 'uppercase', letterSpacing: .7, fontSize: 10, fontWeight: '800' },
   statusTitle: { color: c.text, fontSize: 17, fontWeight: '800' }, statusDetail: { color: c.textSecondary, fontSize: 13, lineHeight: 19 }, guidance: { color: c.textSecondary, fontSize: 12, lineHeight: 18, marginTop: 4 },
-  cancelButton: { paddingVertical: 7, paddingHorizontal: 10, borderWidth: 1, borderColor: c.border, borderRadius: 9 }, cancelText: { color: c.danger || '#DC2626', fontSize: 12, fontWeight: '800' },
+  cancelButton: { paddingVertical: 7, paddingHorizontal: 10, borderWidth: 1, borderColor: c.border, borderRadius: 9 }, cancelText: { color: c.errorText, fontSize: 12, fontWeight: '800' },
   formCard: { padding: 18, borderRadius: 14, backgroundColor: c.surface, borderWidth: 1, borderColor: c.border }, title: { color: c.text, fontSize: 20, fontWeight: '800' }, helper: { color: c.textSecondary, lineHeight: 20, marginTop: 5, marginBottom: 6 },
-  label: { color: c.text, fontSize: 13, fontWeight: '700', marginTop: 14, marginBottom: 7 }, chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, chip: { paddingVertical: 9, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: c.border }, chipSelected: { borderColor: c.interactive, backgroundColor: c.accentLight }, chipText: { color: c.textSecondary, fontWeight: '600' }, chipTextSelected: { color: c.interactive },
-  input: { color: c.text, borderWidth: 1, borderColor: c.border, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11, backgroundColor: c.inputBg || c.background }, textarea: { minHeight: 94 }, textareaSmall: { minHeight: 70 },
-  notice: { marginTop: 15, padding: 12, borderRadius: 10, backgroundColor: c.accentLight, color: c.textSecondary, fontSize: 12, lineHeight: 18 }, error: { color: c.danger || '#DC2626', marginTop: 12, lineHeight: 19 }, errorBox: { color: c.danger || '#DC2626', padding: 14, borderRadius: 10, backgroundColor: c.surface },
+  label: { color: c.text, fontSize: 13, fontWeight: '700', marginTop: 14, marginBottom: 7 }, chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 }, chip: { paddingVertical: 9, paddingHorizontal: 12, borderRadius: 10, borderWidth: 1, borderColor: c.border }, chipSelected: { borderColor: c.interactive, backgroundColor: c.selectionBg }, chipText: { color: c.textSecondary, fontWeight: '600' }, chipTextSelected: { color: c.selectionText },
+  input: { color: c.text, borderWidth: 1, borderColor: c.inputBorder, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 11, backgroundColor: c.inputBg || c.background }, textarea: { minHeight: 94 }, textareaSmall: { minHeight: 70 },
+  notice: { marginTop: 15, padding: 12, borderRadius: 10, backgroundColor: c.infoBg, color: c.infoText, fontSize: 12, lineHeight: 18 }, error: { color: c.errorText, marginTop: 12, lineHeight: 19 }, errorBox: { color: c.errorText, padding: 14, borderRadius: 10, backgroundColor: c.surface },
   submit: { marginTop: 16, minHeight: 48, alignItems: 'center', justifyContent: 'center', borderRadius: 10, backgroundColor: c.primary }, submitText: { color: '#fff', fontWeight: '800' }, disabled: { opacity: .6 },
 });

@@ -21,7 +21,7 @@ describe('authenticated navigation bootstrap', () => {
     expect(index).toContain("router.replace('/login')");
     expect(index).not.toContain("router.push('/login')");
     expect(tabLayout).toContain('initialRouteName="home"');
-    expect(tabLayout).toContain('backBehavior="initialRoute"');
+    expect(tabLayout).toContain('backBehavior="history"');
     expect(rootLayout).toContain("initialRouteName: '(tabs)'");
   });
 
