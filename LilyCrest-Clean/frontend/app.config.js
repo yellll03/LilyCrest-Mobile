@@ -23,8 +23,8 @@ module.exports = {
     newArchEnabled: true,
     ios: {
       bundleIdentifier: 'com.lilycrest.lilycrestdorm',
-      // Build 27 already exists in EAS; use a fresh TestFlight build identity.
-      buildNumber: '28',
+      // Build 28 already exists in EAS; use a fresh TestFlight build identity.
+      buildNumber: '29',
       supportsTablet: true,
       googleServicesFile: process.env.GOOGLE_SERVICES_PLIST || './GoogleService-Info.plist',
       infoPlist: {
@@ -37,7 +37,7 @@ module.exports = {
     android: {
       package: 'com.lilycrest.lilycrestdorm',
       // Keep in sync with android/app/build.gradle's versionCode (see note above).
-      versionCode: 22,
+      versionCode: 23,
       googleServicesFile: process.env.GOOGLE_SERVICES_JSON || './google-services.json',
       config: {
         googleSignIn: {
