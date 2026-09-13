@@ -39,7 +39,7 @@ describe('mobile room transfer connection', () => {
     expect(screen).toContain('loadError');
     expect(screen).toContain('Unable to load your room transfer status.');
     expect(screen).toContain("AppState.addEventListener('change'");
-    expect(screen).toContain('error?.response?.status === 409');
+    expect(screen).toContain('await load();');
     const submitBody = screen.slice(screen.indexOf('const submit ='), screen.indexOf('const cancel ='));
     expect(submitBody).not.toContain('setLifecycle(');
     expect(home).toContain('roomTransferLoaded');

@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, AppState, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { ScreenHeader } from '../src/components/ui/LilycrestUI';
@@ -25,6 +25,8 @@ export default function RoomTransferScreen() {
   const [lifecycle, setLifecycle] = useState(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState('');
+  const submitting = useRef(false);
+  const requestSequence = useRef(0);
   const [saving, setSaving] = useState(false);
   const [message, setMessageState] = useState('');
   const setMessage = useCallback((nextMessage) => {
@@ -44,19 +46,24 @@ export default function RoomTransferScreen() {
   )), [preferredRoomType, rooms]);
 
   const load = useCallback(async () => {
+    const requestId = ++requestSequence.current;
     setLoading(true);
     try {
       setLoadError('');
       setMessage('');
       const response = await apiService.getCurrentRoomTransfer();
+      if (requestId !== requestSequence.current) return;
       setLifecycle(response?.data || null);
       const roomsResponse = await apiService.getRoomTransferPreferences().catch(() => ({ data: { rooms: [] } }));
       const roomPayload = roomsResponse?.data?.rooms;
+      if (requestId !== requestSequence.current) return;
       setRooms(Array.isArray(roomPayload) ? roomPayload : []);
+      return response?.data;
     } catch (error) {
+      if (requestId !== requestSequence.current) return;
       setLoadError(getApiErrorMessage(error, 'Unable to load your room transfer status.'));
     } finally {
-      setLoading(false);
+      if (requestId === requestSequence.current) setLoading(false);
     }
   }, [setMessage]);
 
@@ -76,6 +83,7 @@ export default function RoomTransferScreen() {
   }), [load]);
 
   const submit = async () => {
+    if (submitting.current || !presentation.canRequest) return;
     const trimmedReason = reason.trim();
     if (!preferredRoomType || !trimmedReason) {
       setMessage('Select a preferred room type and enter a reason.');
@@ -85,6 +93,7 @@ export default function RoomTransferScreen() {
       setMessage('Use a valid date in YYYY-MM-DD format that is today or later.');
       return;
     }
+    submitting.current = true;
     setSaving(true); setMessage('');
     try {
       await apiService.createRoomTransferRequest({
@@ -98,9 +107,10 @@ export default function RoomTransferScreen() {
       await showAlert({ title: 'Request received', message: 'Your room transfer request is pending Admin review.', type: 'success' });
       await load();
     } catch (error) {
-      if (error?.response?.status === 409) await load();
-      setMessage(getApiErrorMessage(error, 'Unable to submit your room transfer request.'));
-    } finally { setSaving(false); }
+      const latest = await load();
+      if (latest?.request?.status === 'pending' && latest.request.reason === trimmedReason) await showAlert({ title: 'Request received', message: 'Your room transfer request is pending Admin review.', type: 'success' });
+      else setMessage(getApiErrorMessage(error, 'Unable to submit your room transfer request.'));
+    } finally { submitting.current = false; setSaving(false); }
   };
 
   const cancel = async () => {
@@ -116,9 +126,9 @@ export default function RoomTransferScreen() {
       await apiService.cancelRoomTransferRequest(lifecycle?.request?.id);
       await load();
     } catch (error) {
-      if (error?.response?.status === 409) await load();
+      await load();
       setMessage(getApiErrorMessage(error, 'Unable to cancel your room transfer request.'));
-    } finally { setSaving(false); }
+    } finally { submitting.current = false; setSaving(false); }
   };
 
   const hasStatus = Boolean(presentation.status);

@@ -11,7 +11,7 @@ export function getRoomTransferPresentation(lifecycle) {
   const scheduled = lifecycle?.scheduledRoomTransfer || null;
   return {
     status,
-    statusLabel: lifecycle?.statusLabel || '',
+    statusLabel: status === 'pending' && lifecycle?.request?.acknowledgedAt ? 'Reviewed' : lifecycle?.statusLabel || '',
     isOpen: OPEN_ROOM_TRANSFER_STATUSES.includes(status),
     canCancel: status === 'pending' && lifecycle?.request?.canCancel === true,
     canRequest: !OPEN_ROOM_TRANSFER_STATUSES.includes(status),
@@ -42,9 +42,9 @@ export function formatRoomTransferSchedule(transfer) {
 export function isValidPreferredTransferDate(value, today = new Date()) {
   if (!value) return true;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return false;
-  const floor = new Date(today);
-  floor.setHours(0, 0, 0, 0);
-  return date >= floor;
+  const date = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) return false;
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(today);
+  const part = type => parts.find(p => p.type === type).value;
+  return value >= `${part('year')}-${part('month')}-${part('day')}`;
 }
