@@ -1,3 +1,4 @@
+/* global test */
 import { resolveNotificationRoute } from '../services/notifications';
 import { returnToBilling } from '../utils/navigation';
 import { buildNotificationRouteData } from '../utils/notificationPresentation';
