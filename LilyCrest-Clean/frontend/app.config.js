@@ -24,7 +24,7 @@ module.exports = {
     ios: {
       bundleIdentifier: 'com.lilycrest.lilycrestdorm',
       // Build 28 already exists in EAS; use a fresh TestFlight build identity.
-      buildNumber: '29',
+      buildNumber: '30',
       supportsTablet: true,
       googleServicesFile: process.env.GOOGLE_SERVICES_PLIST || './GoogleService-Info.plist',
       infoPlist: {
