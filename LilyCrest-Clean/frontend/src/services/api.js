@@ -478,6 +478,7 @@ export const apiService = {
   // User Profile
   getProfile: () => api.get('/users/me'),
   updateProfile: (data) => api.put('/users/me', data),
+  markTenantGuideSeen: () => api.post('/users/me/manual-guide-seen'),
 
   // User Documents (uploaded IDs, etc.)
   uploadUserDocument: (data) => api.post('/users/documents', data),

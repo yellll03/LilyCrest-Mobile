@@ -1121,6 +1121,33 @@ async function savePushToken(req, res) {
   }
 }
 
+// Marks the tenant mobile app guide as completed or intentionally skipped for
+// the authenticated account. This is the authoritative server-side record —
+// the mobile app may cache the result locally, but reinstalling the app,
+// clearing local storage, or signing in on another device must never bring
+// the guide back for an account that has already seen it, so the decision
+// cannot live in device storage alone.
+async function markTenantOnboardingSeen(req, res) {
+  try {
+    const db = getDb();
+    await db.collection('users').updateOne(
+      { user_id: req.user.user_id },
+      { $set: { tenant_onboarding_seen_at: new Date() } },
+    );
+    const updatedUser = await db.collection('users').findOne({ user_id: req.user.user_id });
+    if (!updatedUser) {
+      return res.status(404).json({ detail: 'User not found.' });
+    }
+    // Return the full canonical profile (not just the flag) so the client's
+    // existing updateUser(response.data) contract — "a complete canonical
+    // /users/me response" — holds here too.
+    res.json(await buildTenantProfile(db, updatedUser));
+  } catch (error) {
+    console.error('Mark tenant onboarding seen error:', error);
+    res.status(500).json({ detail: 'Failed to save your guide preference.' });
+  }
+}
+
 // Admin: list all users (tenants + admins)
 async function adminGetAllUsers(req, res) {
   try {
@@ -1139,6 +1166,7 @@ module.exports = {
   getMe,
   updateMe,
   savePushToken,
+  markTenantOnboardingSeen,
   persistPushTokenForUser,
   uploadDocument,
   getUserDocuments,

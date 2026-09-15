@@ -75,6 +75,19 @@ test('sanitizeUserForClient handles null/undefined input', () => {
   assert.equal(sanitizeUserForClient(undefined), undefined);
 });
 
+test('tenantOnboardingSeen reflects tenant_onboarding_seen_at, not device/local state', () => {
+  const unseen = normalizeUser({ ...RAW_LEGACY_USER });
+  assert.equal(unseen.tenantOnboardingSeen, false);
+  assert.equal(sanitizeUserForClient(unseen).tenantOnboardingSeen, false);
+
+  const seen = normalizeUser({ ...RAW_LEGACY_USER, tenant_onboarding_seen_at: new Date('2026-01-01T00:00:00Z') });
+  assert.equal(seen.tenantOnboardingSeen, true);
+  assert.equal(sanitizeUserForClient(seen).tenantOnboardingSeen, true);
+
+  // The raw timestamp itself is internal bookkeeping, not an allowlisted field.
+  assert.equal(sanitizeUserForClient(seen).tenant_onboarding_seen_at, undefined);
+});
+
 test('admin user lists use an allowlist and never expose authentication or internal fields', () => {
   const safe = sanitizeUserForAdminList({
     ...RAW_LEGACY_USER,
