@@ -235,11 +235,29 @@ export function AuthProvider({ children }) {
   // Notifications screen, which now sources its unified feed from this same
   // context instead of polling independently) can react to a failed refresh
   // without this function's own silent-retry polling behavior having to change.
+  const tenancyNotificationFeed = useRef({ userId: null, keys: null });
+  const notificationRequestSequence = useRef(0);
+  const notificationAccount = useRef(null);
+  const currentNotificationAccount = authStatus === 'authenticated' ? user?.user_id : null;
+  if (notificationAccount.current !== currentNotificationAccount) {
+    notificationAccount.current = currentNotificationAccount;
+    notificationRequestSequence.current += 1;
+    tenancyNotificationFeed.current = { userId: null, keys: null };
+  }
   const refreshNotifications = useCallback(async () => {
     if (authStatusRef.current !== 'authenticated' || !userRef.current?.user_id) return false;
+    const userId = userRef.current.user_id;
+    const requestId = ++notificationRequestSequence.current;
+    const isCurrent = () => requestId === notificationRequestSequence.current && authStatusRef.current === 'authenticated' && userRef.current?.user_id === userId;
     try {
       const response = await api.get('/notifications');
+      if (!isCurrent()) return false;
       const items = Array.isArray(response?.data) ? response.data : [];
+      const tenancyRows = items.filter(item => /room transfer|stay extension|stay_extension|renewal_effective|contract_document_ready|contract_finalized|contract_replaced/i.test(`${item?.title || ''} ${item?.type || ''} ${item?.data?.type || ''}`));
+      const previousFeed = tenancyNotificationFeed.current;
+      const nextKeys = new Set(tenancyRows.map(canonicalNotificationKey));
+      // Record first, then publish. Subscribers may request another refresh.
+      tenancyNotificationFeed.current = { userId, keys: nextKeys };
       const nextUnreadCount = items.filter((item) => !item?.read).length;
       // Skip the state update entirely when nothing actually changed (e.g. an
       // empty list refetched as still-empty) — avoids replacing an array with
@@ -251,8 +269,14 @@ export function AuthProvider({ children }) {
           : items
       ));
       setNotificationUnreadCount((prev) => (prev === nextUnreadCount ? prev : nextUnreadCount));
+      if (previousFeed.userId === userId && previousFeed.keys) {
+        for (const item of tenancyRows) {
+          if (!previousFeed.keys.has(canonicalNotificationKey(item))) publishCanonicalNotification(item);
+        }
+      }
       return true;
     } catch (error) {
+      if (!isCurrent()) return false;
       if (getConfirmedSessionInvalidation(error)) {
         await clearPersistedSession();
         setUser(null);
