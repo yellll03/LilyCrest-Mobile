@@ -1,3 +1,4 @@
+import { apiService } from '../services/api';
 // Regression test for the performance-audit finding: announcements.jsx
 // rendered its list via an unbounded ScrollView + .map(), with no
 // virtualization — every announcement's card mounted at once regardless of
@@ -13,10 +14,11 @@
 // push new announcement lists and have the screen re-render, exactly like a
 // real hook state change would.
 
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { FlatList } from 'react-native';
 import AnnouncementsScreen from '../../app/(tabs)/announcements';
 
+jest.mock('../services/api', () => ({ apiService: { markAnnouncementRead: jest.fn(), getAnnouncement: jest.fn(), acknowledgeAnnouncement: jest.fn() } }));
 let mockLocalSearchParams = {};
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
@@ -74,8 +76,9 @@ jest.mock('../context/ThemeContext', () => ({
   }, false),
 }));
 
+const mockShowToast = jest.fn();
 jest.mock('../context/ToastContext', () => ({
-  useToast: () => ({ showToast: jest.fn() }),
+  useToast: () => ({ showToast: mockShowToast }),
 }));
 
 jest.mock('../services/notifications', () => ({
@@ -137,4 +140,59 @@ describe('announcements list virtualization and behavior (regression)', () => {
 
     await waitFor(() => expect(getAllByText('Linked announcement').length).toBeGreaterThanOrEqual(2));
   });
+});
+
+it('requires explicit acknowledgement, guards double taps, and shows success', async () => {
+  const item = announcement({ announcement_id: 'ack-test', requiresAcknowledgment: true, acknowledged: false });
+  setStoreAnnouncements([item]);
+  apiService.markAnnouncementRead.mockResolvedValue({ data: { ...item, isRead: true } });
+  apiService.getAnnouncement.mockResolvedValue({ data: item });
+  let resolveAck;
+  apiService.acknowledgeAnnouncement.mockImplementation(() => new Promise(resolve => { resolveAck = resolve; }));
+  const ui = render(<AnnouncementsScreen />);
+  expect(ui.getByText('Acknowledgement Required')).toBeTruthy();
+  fireEvent.press(ui.getByLabelText(`Announcement: ${item.title}`));
+  await waitFor(() => expect(apiService.markAnnouncementRead).toHaveBeenCalledWith('ack-test'));
+  expect(apiService.acknowledgeAnnouncement).not.toHaveBeenCalled();
+  await act(async () => { fireEvent.press(ui.getByLabelText('Acknowledge')); fireEvent.press(ui.getByLabelText('Acknowledge')); });
+  expect(ui.getByText('Acknowledging...')).toBeTruthy();
+  expect(apiService.acknowledgeAnnouncement).toHaveBeenCalledTimes(1);
+  await act(async () => resolveAck({ data: { ...item, acknowledged: true } }));
+  expect(ui.getByText('Acknowledged')).toBeTruthy();
+  expect(ui.queryByLabelText('Acknowledge')).toBeNull();
+});
+it('ordinary announcement has no acknowledgement control', async () => {
+  const item = announcement({ requiresAcknowledgment: false });
+  setStoreAnnouncements([item]);
+  apiService.markAnnouncementRead.mockResolvedValue({ data: item });
+  const ui = render(<AnnouncementsScreen />);
+  fireEvent.press(ui.getByLabelText(`Announcement: ${item.title}`));
+  await act(async () => {});
+  expect(ui.queryByText('Acknowledgement Required')).toBeNull();
+  expect(ui.queryByLabelText('Acknowledge')).toBeNull();
+});
+
+it('removed announcement notification shows a friendly unavailable message', async () => {
+  mockLocalSearchParams = { announcementId: 'removed' };
+  setStoreAnnouncements([]);
+  apiService.getAnnouncement.mockRejectedValueOnce({ response: { status: 404, data: { detail: 'private route text' } } });
+  render(<AnnouncementsScreen />);
+  await waitFor(() => expect(mockShowToast).toHaveBeenCalledWith(expect.objectContaining({ message: 'This announcement is no longer available.' })));
+  mockLocalSearchParams = {};
+});
+
+it('closing the screen while checking acknowledgement cancels the pending write', async () => {
+ jest.clearAllMocks();
+ const item = announcement({ announcement_id: 'cancel-ack', requiresAcknowledgment: true });
+ setStoreAnnouncements([item]);
+ apiService.markAnnouncementRead.mockResolvedValue({ data: item });
+ let resolveRead;
+ apiService.getAnnouncement.mockImplementationOnce(() => new Promise(resolve => { resolveRead = resolve; }));
+ const ui = render(<AnnouncementsScreen />);
+ fireEvent.press(ui.getByLabelText(`Announcement: ${item.title}`));
+ await act(async () => {});
+ fireEvent.press(ui.getByLabelText('Acknowledge'));
+ ui.unmount();
+ await act(async () => resolveRead({ data: item }));
+ expect(apiService.acknowledgeAnnouncement).not.toHaveBeenCalled();
 });
