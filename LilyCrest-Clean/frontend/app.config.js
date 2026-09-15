@@ -37,7 +37,7 @@ module.exports = {
     android: {
       package: 'com.lilycrest.lilycrestdorm',
       // Keep in sync with android/app/build.gradle's versionCode (see note above).
-      versionCode: 23,
+      versionCode: 24,
       googleServicesFile: process.env.GOOGLE_SERVICES_JSON || './google-services.json',
       config: {
         googleSignIn: {
