@@ -131,3 +131,7 @@ describe('Phase 2 destination ownership guards', () => {
     expect(indexSource).not.toMatch(/redirectTimer/);
   });
 });
+
+it('routes stay extension notifications to the lifecycle screen', () => {
+  expect(resolveNotificationRoute({ type: 'stay_extension' })).toBe('/extend-stay');
+});

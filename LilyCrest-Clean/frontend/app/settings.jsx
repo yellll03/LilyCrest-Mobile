@@ -1,3 +1,4 @@
+import { useMobileGuide } from '../src/context/MobileGuideProvider';
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, ScrollView, TouchableOpacity, Switch } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -20,6 +21,7 @@ import { ScreenHeader } from '../src/components/ui/LilycrestUI';
 export default function SettingsScreen() {
   const router = useRouter();
   const { user, authReady, authStatus } = useAuth();
+  const { replay } = useMobileGuide();
   const { isDarkMode, toggleDarkMode, colors } = useTheme();
   const { showToast } = useToast();
   const [notifications, setNotifications] = useState(true);
@@ -109,6 +111,7 @@ export default function SettingsScreen() {
       <ScreenHeader strong title="Settings" subtitle="Preferences, security, and legal" onBack={() => safeBack(router)} />
 
       <ScrollView style={styles.scrollView} contentContainerStyle={styles.scrollContent}>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Replay App Guide" onPress={replay} style={[styles.settingRow, { minHeight: 48 }]}><Text style={styles.settingLabel}>Replay App Guide</Text></TouchableOpacity>
         {/* Appearance */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Appearance</Text>

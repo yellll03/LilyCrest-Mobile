@@ -1,3 +1,6 @@
+import { apiService } from '../../src/services/api';
+import { acknowledgementError, confirmAcknowledgement } from '../../src/utils/announcementEngagement';
+import { subscribeCanonicalNotifications } from '../../src/services/canonicalEvents';
 import { Ionicons } from '@expo/vector-icons';
 import { format, formatDistanceToNow } from 'date-fns';
 import { useFocusEffect, useLocalSearchParams, useRouter } from 'expo-router';
@@ -378,6 +381,43 @@ export default function AnnouncementsScreen() {
   const [priorityFilter, setPriorityFilter] = useState('all');
   const [isFilterSheetVisible, setIsFilterSheetVisible] = useState(false);
   const [selectedAnn, setSelectedAnn] = useState(null);
+  const [ackBusy, setAckBusy] = useState(false);
+  const [ackError, setAckError] = useState('');
+  const ackGuard = useRef(false);
+  const mountedRef = useRef(true);
+  useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
+  const selectedId = getCanonicalAnnouncementId(selectedAnn);
+  const selectedIdRef = useRef(selectedId);
+  selectedIdRef.current = selectedId;
+  useEffect(() => {
+    if (!selectedId) return;
+    let active = true;
+    setAckError('');
+    const refreshDetail = async (markRead = false) => {
+      try {
+        const response = await (markRead ? apiService.markAnnouncementRead(selectedId) : apiService.getAnnouncement(selectedId));
+        if (active) {
+          setSelectedAnn((current) => getCanonicalAnnouncementId(current) === selectedId ? { ...response.data, ...(current.acknowledged ? { acknowledged: true, acknowledgedAt: current.acknowledgedAt } : {}) } : current);
+          setAckError('');
+        }
+      } catch (error) { if (active) setAckError(acknowledgementError(error)); }
+    };
+    refreshDetail(true);
+    const sub = AppState.addEventListener('change', (state) => { if (state === 'active') refreshDetail(); });
+    const unsubscribe = subscribeCanonicalNotifications(() => { refreshDetail(); loadAnnouncements({ silent: true }); });
+    return () => { active = false; sub.remove(); unsubscribe(); };
+  }, [selectedId, loadAnnouncements]);
+  const acknowledgeSelected = async () => {
+    if (ackGuard.current || !selectedId) return;
+    ackGuard.current = true; setAckBusy(true); setAckError('');
+    try {
+      const updated = await confirmAcknowledgement(apiService, selectedId, { isCurrent: () => mountedRef.current && selectedIdRef.current === selectedId });
+      if (!mountedRef.current || selectedIdRef.current !== selectedId) return;
+      setSelectedAnn((current) => getCanonicalAnnouncementId(current) === selectedId ? updated : current);
+      await loadAnnouncements({ silent: true });
+    } catch (error) { if (mountedRef.current && error.code !== 'ENGAGEMENT_CANCELLED' && selectedIdRef.current === selectedId) setAckError(acknowledgementError(error)); }
+    finally { ackGuard.current = false; setAckBusy(false); }
+  };
   const [sortOrder, setSortOrder] = useState('newest');
   const [expandedIds, setExpandedIds] = useState(new Set());
 
@@ -395,12 +435,25 @@ export default function AnnouncementsScreen() {
     const ownedAnnouncement = feedItems.find(
       (announcement) => getCanonicalAnnouncementId(announcement) === targetId,
     );
-    if (!ownedAnnouncement) return;
+    if (!ownedAnnouncement) {
+      if (!hasLoadedOnce || fetchError) return;
+      handledLinkedAnnouncementRef.current = targetId;
+      (async () => {
+        try {
+          const response = await apiService.getAnnouncement(targetId);
+          if (handledLinkedAnnouncementRef.current === targetId) setSelectedAnn(response.data);
+        } catch (error) {
+          if (handledLinkedAnnouncementRef.current === targetId) showToast({ type: 'error', title: 'Announcement unavailable', message: acknowledgementError(error) });
+        }
+      })();
+      return;
+    }
     handledLinkedAnnouncementRef.current = targetId;
     setSelectedAnn(ownedAnnouncement);
-  }, [feedItems, linkedAnnouncementId]);
+  }, [feedItems, linkedAnnouncementId, hasLoadedOnce, fetchError, showToast]);
 
   useEffect(() => () => {
+    handledLinkedAnnouncementRef.current = '';
     if (undoTimerRef.current) clearTimeout(undoTimerRef.current);
   }, []);
 
@@ -653,6 +706,7 @@ export default function AnnouncementsScreen() {
           </View>
 
           {/* Content preview */}
+          {announcement.requiresAcknowledgment && !announcement.acknowledged ? <Text style={{ color: colors.textMuted, marginVertical: 6 }}>Acknowledgement Required</Text> : null}
           <Text style={styles.announcementContent} numberOfLines={isExpanded ? undefined : 3}>
             {announcement.content}
           </Text>
@@ -1036,6 +1090,13 @@ export default function AnnouncementsScreen() {
                     )}
                   </View>
 
+                  {ackError ? <Text accessibilityRole="alert" style={{ color: colors.errorText, padding: 12 }}>{ackError}</Text> : null}
+                  {selectedAnn.requiresAcknowledgment ? (
+                    selectedAnn.acknowledged ? <Text accessibilityLiveRegion="polite" style={{ color: colors.text, padding: 12 }}>Acknowledged{selectedAnn.acknowledgedAt ? ` on ${safeFormat(selectedAnn.acknowledgedAt, 'MMM dd, yyyy · h:mm a')}` : ''}</Text> :
+                    <TouchableOpacity accessibilityRole="button" accessibilityLabel="Acknowledge" accessibilityState={{ disabled: ackBusy, busy: ackBusy }} disabled={ackBusy} onPress={acknowledgeSelected} style={{ minHeight: 48, padding: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 12 }}>
+                      <Text style={{ color: colors.interactive }}>{ackBusy ? 'Acknowledging...' : 'Acknowledge'}</Text>
+                    </TouchableOpacity>
+                  ) : null}
                   {/* Full content */}
                   <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
                     <Text style={styles.modalContent}>{selectedAnn.content}</Text>

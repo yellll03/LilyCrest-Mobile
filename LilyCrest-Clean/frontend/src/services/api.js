@@ -462,6 +462,9 @@ export const apiService = {
   
   // Announcements
   getAnnouncements: () => api.get('/announcements'),
+  getAnnouncement: (id) => api.get(`/announcements/${encodeURIComponent(id)}`),
+  markAnnouncementRead: (id) => api.post(`/announcements/${encodeURIComponent(id)}/read`),
+  acknowledgeAnnouncement: (id) => api.post(`/announcements/${encodeURIComponent(id)}/acknowledge`),
   dismissAnnouncement: (announcementId) =>
     api.post(`/announcements/${encodeURIComponent(announcementId)}/dismiss`),
   restoreAnnouncement: (announcementId) =>

@@ -1,3 +1,4 @@
+import { MobileGuideProvider } from '../src/context/MobileGuideProvider';
 import { Stack, usePathname, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { StatusBar } from 'expo-status-bar';
@@ -294,7 +295,7 @@ export default function RootLayout() {
           <AlertProvider>
             <ToastProvider>
               <AuthProvider>
-                <LayoutContent />
+                <MobileGuideProvider><LayoutContent /></MobileGuideProvider>
               </AuthProvider>
             </ToastProvider>
           </AlertProvider>
