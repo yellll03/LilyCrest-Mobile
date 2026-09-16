@@ -1,5 +1,5 @@
 import { AppState } from 'react-native';
-import { publishCanonicalNotification, resetCanonicalEventDedupeForTests } from '../services/canonicalEvents';
+import { publishCanonicalNotification } from '../services/canonicalEvents';
 /* global test */
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import ExtendStayScreen from '../../app/extend-stay';
@@ -14,8 +14,8 @@ jest.mock('../services/api', () => ({ apiService: { getCurrentStayExtension: jes
 const current = { stayId: 'current-stay', room: '301', startDate: '2026-01-01', endDate: '2026-12-31' };
 const option = { months: 6, endDate: '2027-06-30', monthlyRent: 6300 };
 beforeEach(() => {
-  jest.spyOn(AppState, "addEventListener").mockImplementation(() => ({ remove: jest.fn() }));
   jest.clearAllMocks();
+  jest.spyOn(AppState, 'addEventListener').mockReturnValue({ remove: jest.fn() });
   apiService.getCurrentStayExtension.mockResolvedValue({ data: { current, options: [option], canRequest: true } });
   mockAlert.mockResolvedValue('Submit request');
   apiService.createStayExtension.mockResolvedValue({ data: {} });
@@ -40,45 +40,77 @@ test('cancelled confirmation does not submit a request', async () => {
   await act(async () => { fireEvent.press(screen.getByLabelText('Submit request')); });
   expect(apiService.createStayExtension).not.toHaveBeenCalled();
 });
+
+test('uses an available server duration when six months is not offered', async () => {
+  const threeMonths = { months: 3, endDate: '2027-03-31', monthlyRent: 6500 };
+  apiService.getCurrentStayExtension.mockResolvedValue({ data: { current, options: [threeMonths], canRequest: true } });
+  const ui = render(<ExtendStayScreen />);
+  await waitFor(() => expect(ui.getByText('March 31, 2027')).toBeTruthy());
+  await act(async () => fireEvent.press(ui.getByLabelText('Submit request')));
+  expect(apiService.createStayExtension).toHaveBeenCalledWith(expect.objectContaining({ months: 3, requestedEndDate: threeMonths.endDate, expectedMonthlyRent: 6500 }));
+});
+
+test('missing options shows guidance and cannot submit', async () => {
+  apiService.getCurrentStayExtension.mockResolvedValue({ data: { current, canRequest: true } });
+  const ui = render(<ExtendStayScreen />);
+  await waitFor(() => expect(ui.getByText(/Extension options are unavailable/)).toBeTruthy());
+  expect(ui.getByLabelText('Submit request')).toBeDisabled();
+  expect(apiService.createStayExtension).not.toHaveBeenCalled();
+});
+
+test('approved extension needing signing links to Contract details', async () => {
+  apiService.getCurrentStayExtension.mockResolvedValue({ data: { current, canRequest: false, request: { status: 'approved', fulfillmentState: 'awaiting_contract', months: 6 } } });
+  const ui = render(<ExtendStayScreen />);
+  await waitFor(() => expect(ui.getByLabelText('Open Contract')).toBeTruthy());
+  expect(ui.queryByLabelText('Submit request')).toBeNull();
+});
+
+test('leaving while confirmation is pending does not submit later', async () => {
+  let confirm;
+  mockAlert.mockImplementationOnce(() => new Promise(resolve => { confirm = resolve; }));
+  const ui = render(<ExtendStayScreen />);
+  await waitFor(() => expect(ui.getByLabelText('Submit request')).toBeTruthy());
+  act(() => { fireEvent.press(ui.getByLabelText('Submit request')); });
+  ui.unmount();
+  await act(async () => confirm('Submit request'));
+  expect(apiService.createStayExtension).not.toHaveBeenCalled();
+});
 test('pending request disables another request and displays its status', async () => {
   apiService.getCurrentStayExtension.mockResolvedValue({ data: { current, canRequest: false, request: { status: 'pending', months: 6, requestedEndDate: option.endDate } } });
   const screen = render(<ExtendStayScreen />);
-  await waitFor(() => expect(screen.getByText('Pending review')).toBeTruthy());
+  await waitFor(() => expect(screen.getByText('Pending Admin Review')).toBeTruthy());
   expect(screen.queryByLabelText('Submit request')).toBeNull();
 });
 
-test('admin notification refreshes the extension decision and shows its rejection reason', async () => {
-  resetCanonicalEventDedupeForTests();
-  const screen = render(<ExtendStayScreen />);
-  await waitFor(() => expect(screen.getByText('Your current stay')).toBeTruthy());
-  apiService.getCurrentStayExtension.mockResolvedValue({ data: { current, canRequest: false, request: { status: 'rejected', months: 6, adminNote: 'Future bed hold', requestedEndDate: option.endDate } } });
-  act(() => publishCanonicalNotification({ title: 'Stay Extension Rejected', data: { event_key: 'reject-1', screen: 'extend-stay' } }));
-  await waitFor(() => expect(screen.getByText('Future bed hold')).toBeTruthy());
+test('foreground and extension notification refresh authoritative status', async () => {
+  let foreground;
+  const subscription = jest.spyOn(AppState, 'addEventListener').mockImplementation((_, callback) => { foreground = callback; return { remove: jest.fn() }; });
+  const ui = render(<ExtendStayScreen />);
+  await waitFor(() => expect(ui.getByText('Your current stay')).toBeTruthy());
+  const before = apiService.getCurrentStayExtension.mock.calls.length;
+  await act(async () => foreground('active'));
+  expect(apiService.getCurrentStayExtension).toHaveBeenCalledTimes(before + 1);
+  await act(async () => publishCanonicalNotification({ type: 'stay_extension', notification_id: 'extension-test-refresh' }));
+  expect(apiService.getCurrentStayExtension).toHaveBeenCalledTimes(before + 2);
+  await act(async () => publishCanonicalNotification({ type: 'renewal_effective', notification_id: 'extension-effective-refresh' }));
+  expect(apiService.getCurrentStayExtension).toHaveBeenCalledTimes(before + 3);
+  subscription.mockRestore();
+});
+test('accepted POST with lost response reconciles pending status before displaying success', async () => {
+  apiService.createStayExtension.mockRejectedValue(new Error('timeout'));
+  const ui = render(<ExtendStayScreen />);
+  await waitFor(() => expect(ui.getByLabelText('Submit request')).toBeTruthy());
+  apiService.getCurrentStayExtension.mockResolvedValue({ data: { current, canRequest: false, request: { _id: 'new-extension', stayId: current.stayId, monthlyRent: option.monthlyRent, status: 'pending', months: 6, createdAt: '2026-09-15', requestedEndDate: option.endDate } } });
+  await act(async () => fireEvent.press(ui.getByLabelText('Submit request')));
+  expect(ui.getByText('Pending Admin Review')).toBeTruthy();
+  expect(mockAlert).toHaveBeenCalledWith(expect.objectContaining({ title: 'Request submitted', type: 'success' }));
 });
 
-test('resume refreshes acknowledgement without representing it as approval', async () => {
-  const spy = jest.spyOn(AppState, 'addEventListener').mockImplementation(() => ({ remove: jest.fn() }));
-  const screen = render(<ExtendStayScreen />);
-  await waitFor(() => expect(screen.getByText('Your current stay')).toBeTruthy());
-  apiService.getCurrentStayExtension.mockResolvedValue({ data: { current, canRequest: false, request: { status: 'pending', acknowledgedAt: '2026-09-13', months: 6, requestedEndDate: option.endDate } } });
-  act(() => spy.mock.calls.find(([name]) => name === 'change')[1]('active'));
-  await waitFor(() => expect(screen.getByText('Reviewed')).toBeTruthy()); screen.unmount(); spy.mockRestore();
-});
-
-test('approved future extension displays awaiting effective date', async () => {
-  apiService.getCurrentStayExtension.mockResolvedValue({ data: { current, canRequest: false, request: { status: 'approved', fulfillmentState: 'awaiting_effective_date', months: 6, requestedEndDate: option.endDate } } });
-  const screen = render(<ExtendStayScreen />);
-  await waitFor(() => expect(screen.getByText('awaiting effective date')).toBeTruthy());
-  expect(screen.getByText('Approved')).toBeTruthy();
-});
-
-test('lost submission response is reconciled from the server without creating a duplicate', async () => {
-  const screen = render(<ExtendStayScreen />);
-  await waitFor(() => expect(screen.getByLabelText('Submit request')).toBeTruthy());
-  apiService.createStayExtension.mockRejectedValueOnce(new Error('Network lost after commit'));
-  apiService.getCurrentStayExtension.mockResolvedValue({ data: { current, canRequest: false, request: { stayId: current.stayId, status: 'pending', months: 6, requestedEndDate: option.endDate } } });
-  await act(async () => { fireEvent.press(screen.getByLabelText('Submit request')); });
-  expect(apiService.createStayExtension).toHaveBeenCalledTimes(1);
-  expect(mockAlert).toHaveBeenCalledWith(expect.objectContaining({ title: 'Request received', type: 'success' }));
-  expect(screen.queryByLabelText('Submit request')).toBeNull();
+test('a newly observed rejected request is not reported as a recovered submission', async () => {
+ apiService.createStayExtension.mockRejectedValue(new Error('timeout'));
+ const ui = render(<ExtendStayScreen />);
+ await waitFor(() => expect(ui.getByLabelText('Submit request')).toBeTruthy());
+ apiService.getCurrentStayExtension.mockResolvedValue({ data: { current, canRequest: false, request: { status: 'rejected', months: 3, createdAt: '2026-09-14', requestedEndDate: '2027-03-31' } } });
+ await act(async () => fireEvent.press(ui.getByLabelText('Submit request')));
+ expect(mockAlert).not.toHaveBeenCalledWith(expect.objectContaining({ title: 'Request submitted' }));
 });

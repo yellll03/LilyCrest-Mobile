@@ -1,6 +1,11 @@
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import AnnouncementsScreen from '../../app/(tabs)/announcements';
 
+jest.mock('react-native-safe-area-context', () => require('react-native-safe-area-context/jest/mock').default);
+jest.mock('../services/api', () => ({ apiService: {
+  getAnnouncement: jest.fn(), markAnnouncementRead: jest.fn(), acknowledgeAnnouncement: jest.fn(),
+} }));
+
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
   useLocalSearchParams: () => ({}),
