@@ -41,6 +41,19 @@ test('cancelled confirmation does not submit a request', async () => {
   expect(apiService.createStayExtension).not.toHaveBeenCalled();
 });
 
+test('successful submission stays successful when the follow-up refresh fails', async () => {
+  const ui = render(<ExtendStayScreen />);
+  await waitFor(() => expect(ui.getByLabelText('Submit request')).toBeTruthy());
+  apiService.getCurrentStayExtension.mockRejectedValueOnce(new Error('Refresh unavailable'));
+  await act(async () => fireEvent.press(ui.getByLabelText('Submit request')));
+  expect(apiService.createStayExtension).toHaveBeenCalledTimes(1);
+  expect(mockAlert).toHaveBeenCalledWith(expect.objectContaining({ title: 'Request submitted', type: 'success' }));
+  expect(mockAlert).not.toHaveBeenCalledWith(expect.objectContaining({ title: 'Unable to submit request' }));
+  expect(ui.getByLabelText('Retry')).toBeTruthy();
+  await act(async () => fireEvent.press(ui.getByLabelText('Retry')));
+  expect(apiService.createStayExtension).toHaveBeenCalledTimes(1);
+});
+
 test('uses an available server duration when six months is not offered', async () => {
   const threeMonths = { months: 3, endDate: '2027-03-31', monthlyRent: 6500 };
   apiService.getCurrentStayExtension.mockResolvedValue({ data: { current, options: [threeMonths], canRequest: true } });
