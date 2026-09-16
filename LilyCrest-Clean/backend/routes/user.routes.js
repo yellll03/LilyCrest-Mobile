@@ -6,7 +6,6 @@ const { authMiddleware, adminMiddleware, tenantMiddleware } = require('../middle
 router.get('/me', authMiddleware, tenantMiddleware, userController.getMe);
 router.put('/me', authMiddleware, tenantMiddleware, userController.updateMe);
 router.post('/push-token', authMiddleware, tenantMiddleware, userController.savePushToken);
-router.post('/me/manual-guide-seen', authMiddleware, tenantMiddleware, userController.markTenantOnboardingSeen);
 
 // Document management
 router.post('/documents', authMiddleware, tenantMiddleware, userController.uploadDocument);

@@ -40,6 +40,54 @@ test('cancelled confirmation does not submit a request', async () => {
   await act(async () => { fireEvent.press(screen.getByLabelText('Submit request')); });
   expect(apiService.createStayExtension).not.toHaveBeenCalled();
 });
+
+test('successful submission stays successful when the follow-up refresh fails', async () => {
+  const ui = render(<ExtendStayScreen />);
+  await waitFor(() => expect(ui.getByLabelText('Submit request')).toBeTruthy());
+  apiService.getCurrentStayExtension.mockRejectedValueOnce(new Error('Refresh unavailable'));
+  await act(async () => fireEvent.press(ui.getByLabelText('Submit request')));
+  expect(apiService.createStayExtension).toHaveBeenCalledTimes(1);
+  expect(mockAlert).toHaveBeenCalledWith(expect.objectContaining({ title: 'Request submitted', type: 'success' }));
+  expect(mockAlert).not.toHaveBeenCalledWith(expect.objectContaining({ title: 'Unable to submit request' }));
+  expect(ui.getByLabelText('Retry')).toBeTruthy();
+  await act(async () => fireEvent.press(ui.getByLabelText('Retry')));
+  expect(apiService.createStayExtension).toHaveBeenCalledTimes(1);
+});
+
+test('uses an available server duration when six months is not offered', async () => {
+  const threeMonths = { months: 3, endDate: '2027-03-31', monthlyRent: 6500 };
+  apiService.getCurrentStayExtension.mockResolvedValue({ data: { current, options: [threeMonths], canRequest: true } });
+  const ui = render(<ExtendStayScreen />);
+  await waitFor(() => expect(ui.getByText('March 31, 2027')).toBeTruthy());
+  await act(async () => fireEvent.press(ui.getByLabelText('Submit request')));
+  expect(apiService.createStayExtension).toHaveBeenCalledWith(expect.objectContaining({ months: 3, requestedEndDate: threeMonths.endDate, expectedMonthlyRent: 6500 }));
+});
+
+test('missing options shows guidance and cannot submit', async () => {
+  apiService.getCurrentStayExtension.mockResolvedValue({ data: { current, canRequest: true } });
+  const ui = render(<ExtendStayScreen />);
+  await waitFor(() => expect(ui.getByText(/Extension options are unavailable/)).toBeTruthy());
+  expect(ui.getByLabelText('Submit request')).toBeDisabled();
+  expect(apiService.createStayExtension).not.toHaveBeenCalled();
+});
+
+test('approved extension needing signing links to Contract details', async () => {
+  apiService.getCurrentStayExtension.mockResolvedValue({ data: { current, canRequest: false, request: { status: 'approved', fulfillmentState: 'awaiting_contract', months: 6 } } });
+  const ui = render(<ExtendStayScreen />);
+  await waitFor(() => expect(ui.getByLabelText('Open Contract')).toBeTruthy());
+  expect(ui.queryByLabelText('Submit request')).toBeNull();
+});
+
+test('leaving while confirmation is pending does not submit later', async () => {
+  let confirm;
+  mockAlert.mockImplementationOnce(() => new Promise(resolve => { confirm = resolve; }));
+  const ui = render(<ExtendStayScreen />);
+  await waitFor(() => expect(ui.getByLabelText('Submit request')).toBeTruthy());
+  act(() => { fireEvent.press(ui.getByLabelText('Submit request')); });
+  ui.unmount();
+  await act(async () => confirm('Submit request'));
+  expect(apiService.createStayExtension).not.toHaveBeenCalled();
+});
 test('pending request disables another request and displays its status', async () => {
   apiService.getCurrentStayExtension.mockResolvedValue({ data: { current, canRequest: false, request: { status: 'pending', months: 6, requestedEndDate: option.endDate } } });
   const screen = render(<ExtendStayScreen />);

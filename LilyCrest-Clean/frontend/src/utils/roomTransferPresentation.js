@@ -6,19 +6,29 @@ export const OPEN_ROOM_TRANSFER_STATUSES = Object.freeze([
   'action_required',
 ]);
 
+const LABELS = Object.freeze({ pending: 'Pending Admin Review', scheduled: 'Transfer Scheduled', awaiting_settlement: 'Payment Required', ready_for_transfer: 'Ready for Transfer', action_required: 'Administration Review Required', declined: 'Declined', cancelled: 'Cancelled', completed: 'Transfer Completed' });
+export function isValidRoomTransferLifecycle(value) {
+  return !!value && typeof value === 'object' && !Array.isArray(value) &&
+    Object.prototype.hasOwnProperty.call(value, 'status') &&
+    (value.status === null || Object.prototype.hasOwnProperty.call(LABELS, value.status)) &&
+    (!value.request || (typeof value.request === 'object' && !Array.isArray(value.request))) &&
+    (!value.scheduledRoomTransfer || (typeof value.scheduledRoomTransfer === 'object' && !Array.isArray(value.scheduledRoomTransfer)));
+}
+const text = value => typeof value === 'string' ? value : '';
 export function getRoomTransferPresentation(lifecycle) {
-  const status = lifecycle?.status || null;
-  const scheduled = lifecycle?.scheduledRoomTransfer || null;
+  const valid = isValidRoomTransferLifecycle(lifecycle);
+  const status = valid ? lifecycle.status : null;
+  const scheduled = valid ? lifecycle.scheduledRoomTransfer : null;
   return {
     status,
-    statusLabel: lifecycle?.statusLabel || '',
+    statusLabel: LABELS[status] || '',
     isOpen: OPEN_ROOM_TRANSFER_STATUSES.includes(status),
-    canCancel: status === 'pending' && lifecycle?.request?.canCancel === true,
-    canRequest: !OPEN_ROOM_TRANSFER_STATUSES.includes(status),
+    canCancel: valid && status === 'pending' && lifecycle?.request?.canCancel === true,
+    canRequest: valid && !OPEN_ROOM_TRANSFER_STATUSES.includes(status) && lifecycle.canRequest !== false,
     scheduledLabel: formatRoomTransferSchedule(scheduled),
-    declineReason: status === 'declined' ? lifecycle?.request?.declineReason || '' : '',
-    guidance: scheduled?.tenantGuidance || '',
-    utilitiesNote: scheduled?.utilitiesNote || '',
+    declineReason: status === 'declined' ? text(lifecycle?.request?.declineReason) || 'Contact administration for the reason, or submit a new request with updated preferences.' : '',
+    guidance: text(scheduled?.tenantGuidance) || text(lifecycle?.eligibilityReason),
+    utilitiesNote: text(scheduled?.utilitiesNote),
     settlement: scheduled?.settlement || null,
     actionRequiredReason: scheduled?.actionRequiredReason || null,
   };
@@ -28,7 +38,8 @@ export function formatRoomTransferSchedule(transfer) {
   if (!transfer?.effectiveTransferDate) return '';
   const date = new Date(transfer.effectiveTransferDate);
   if (Number.isNaN(date.getTime())) return '';
-  const minutes = Number(transfer.effectiveTransferTimeMinutes ?? 540);
+  const suppliedMinutes = Number(transfer.effectiveTransferTimeMinutes ?? 540);
+  const minutes = Number.isInteger(suppliedMinutes) && suppliedMinutes >= 0 && suppliedMinutes < 1440 ? suppliedMinutes : 540;
   const dateLabel = new Intl.DateTimeFormat('en-PH', {
     month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Manila',
   }).format(date);
@@ -42,9 +53,9 @@ export function formatRoomTransferSchedule(transfer) {
 export function isValidPreferredTransferDate(value, today = new Date()) {
   if (!value) return true;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
-  const date = new Date(`${value}T00:00:00`);
-  if (Number.isNaN(date.getTime())) return false;
-  const floor = new Date(today);
-  floor.setHours(0, 0, 0, 0);
-  return date >= floor;
+  const date = new Date(`${value}T00:00:00Z`);
+  if (Number.isNaN(date.getTime()) || date.toISOString().slice(0, 10) !== value) return false;
+  const parts = new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Manila', year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(today);
+  const part = type => parts.find(p => p.type === type).value;
+  return value >= `${part('year')}-${part('month')}-${part('day')}`;
 }

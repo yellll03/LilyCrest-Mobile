@@ -660,14 +660,15 @@ export default function ProfileScreen() {
                     <Ionicons name="document-text-outline" size={18} color={colors.accent} />
                     <Text style={styles.outlineButtonText}>View Contract</Text>
                   </TouchableOpacity>
-                  {accountStatus?.code === 'active' ? <TouchableOpacity style={styles.outlineButton} onPress={() => router.push('/extend-stay')}>
-                    <Text style={{ color: colors.interactive, fontWeight: '700' }}>Extend Stay</Text>
-                  </TouchableOpacity> : null}
                   {!contractSummary.canOpenPdf ? (
                     <Text style={styles.emptyText}>Some contract details are still being finalized.</Text>
                   ) : null}
                 </>
               ) : <Text style={styles.emptyText}>{contractError || 'No current contract is available.'}</Text>}
+              {accountStatus?.code === 'active' ? <TouchableOpacity style={styles.outlineButton} accessibilityRole="button" onPress={() => router.push('/extend-stay')}>
+                <Ionicons name="calendar-outline" size={18} color={colors.interactive} />
+                <Text style={{ color: colors.interactive, fontWeight: '700' }}>Extend Stay</Text>
+              </TouchableOpacity> : null}
             </View>
           </View>
 

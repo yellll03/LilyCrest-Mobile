@@ -64,13 +64,6 @@ function normalizeUser(doc) {
 
   user.accountStatus = tenantAccountStatus(user);
 
-  // Authoritative, server-side record of whether this account has completed
-  // or skipped the tenant mobile app guide. Device storage (AsyncStorage) may
-  // cache this for fast UI, but this field — not local storage — decides
-  // whether the guide is shown, so it survives reinstalls, cleared app data,
-  // and logins from a different device.
-  user.tenantOnboardingSeen = Boolean(user.tenant_onboarding_seen_at);
-
   return user;
 }
 
@@ -108,7 +101,6 @@ const CLIENT_VISIBLE_USER_FIELDS = [
   'serverTime',
   'role',
   'accountStatus',
-  'tenantOnboardingSeen',
 ];
 
 function sanitizeUserForClient(user) {

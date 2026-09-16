@@ -43,6 +43,7 @@ describe('navigation regression contracts', () => {
     const announcements = read('app/(tabs)/announcements.jsx');
     expect(services).toMatch(/visible=\{showDetailModal\}[\s\S]*?onRequestClose=\{closeMaintenanceDetail\}/);
     expect(services).toMatch(/const closeMaintenanceDetail = \(\) => \{[\s\S]*?setShowDetailModal\(false\);/);
-    expect(announcements).toMatch(/visible=\{!!selectedAnn\}[\s\S]*?onRequestClose=\{\(\) => setSelectedAnn\(null\)\}/);
+    expect(announcements).toMatch(/visible=\{!!selectedAnn\}[\s\S]*?onRequestClose=\{closeAnnouncement\}/);
+    expect(announcements).toMatch(/const closeAnnouncement = \(\) => \{[\s\S]*?setSelectedAnn\(null\);/);
   });
 });

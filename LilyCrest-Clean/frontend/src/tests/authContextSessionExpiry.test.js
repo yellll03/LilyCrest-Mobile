@@ -375,4 +375,48 @@ describe('AuthContext forced session-expiry cleanup (behavioral)', () => {
     expect(clearDocumentCache).not.toHaveBeenCalled();
     expect(teardownExpiredSession).not.toHaveBeenCalled();
   });
+  it('publishes a newly polled tenancy decision once without a refresh loop', async () => {
+    const { api } = require('../services/api');
+    const { subscribeCanonicalNotifications } = require('../services/canonicalEvents');
+    let latest;
+    renderAuth(state => { latest = state; });
+    await waitFor(() => expect(latest.authStatus).toBe('authenticated'));
+    await act(async () => latest.refreshNotifications());
+    const decision = { notification_id: 'polled-transfer-test', title: 'Room Transfer Completed', read: false };
+    const received = [];
+    const unsubscribe = subscribeCanonicalNotifications(event => received.push(event));
+    const originalGet = api.get.getMockImplementation();
+    api.get.mockImplementation(url => url === '/notifications' ? Promise.resolve({ data: [decision] }) : originalGet(url));
+    try {
+      await act(async () => latest.refreshNotifications());
+      await act(async () => latest.refreshNotifications());
+      expect(received.filter(event => event.title === decision.title)).toHaveLength(1);
+      expect(latest.notifications).toEqual([decision]);
+    } finally { unsubscribe(); api.get.mockImplementation(originalGet); }
+  });
+
+  it('ignores an old account notification failure after another account logs in', async () => {
+    const { api } = require('../services/api');
+    let latest;
+    renderAuth(state => { latest = state; });
+    await waitFor(() => expect(latest.authStatus).toBe('authenticated'));
+    let rejectOld;
+    api.get.mockImplementationOnce(() => new Promise((_, reject) => { rejectOld = reject; }));
+    let oldRefresh;
+    act(() => { oldRefresh = latest.refreshNotifications(); });
+    const originalGet = api.get.getMockImplementation();
+    api.get.mockImplementation(url => url === '/users/me' ? Promise.resolve({ data: { user_id: 'tenant-b', name: 'Tenant B', role: 'tenant' } }) : originalGet(url));
+    api.post.mockResolvedValueOnce({ data: { user: { user_id: 'tenant-b', name: 'Tenant B', role: 'tenant' }, session_token: 'session-b' } });
+    await act(async () => latest.login('b@example.com', 'test-password'));
+    expect(latest.user.user_id).toBe('tenant-b');
+    await act(async () => {
+      rejectOld({ response: { status: 401, data: { code: 'SESSION_REVOKED' } } });
+      await oldRefresh;
+    });
+    expect(latest.user.user_id).toBe('tenant-b');
+    expect(latest.authStatus).toBe('authenticated');
+    expect(clearCredentials).not.toHaveBeenCalled();
+    api.get.mockImplementation(originalGet);
+  });
+
 });
