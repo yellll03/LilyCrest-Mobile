@@ -14,7 +14,8 @@ import Swipeable from 'react-native-gesture-handler/Swipeable';
 // react-native Touchable inside it can miss taps or conflict with swipe
 // detection on iOS specifically.
 import { TouchableOpacity as GestureTouchableOpacity } from 'react-native-gesture-handler';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ActionButton } from '../../src/components/ui/LilycrestUI';
 import { useTheme, useThemedStyles } from '../../src/context/ThemeContext';
 import { useToast } from '../../src/context/ToastContext';
 import {
@@ -88,6 +89,7 @@ export default function AnnouncementsScreen() {
     ? announcementIdParam[0]
     : announcementIdParam;
   const { colors } = useTheme();
+  const insets = useSafeAreaInsets();
   // The News tab reads the backend's canonical announcement list. Home's
   // notification center remains a separate AuthContext-owned collection.
   const {
@@ -301,7 +303,7 @@ export default function AnnouncementsScreen() {
     modalSheet: {
       backgroundColor: c.surface,
       borderTopLeftRadius: 12, borderTopRightRadius: 12,
-      padding: 18, paddingBottom: Platform.OS === 'ios' ? 34 : 20,
+      padding: 18, paddingBottom: Math.max(insets.bottom, 20),
       maxHeight: '82%', borderWidth: 1, borderColor: c.border,
     },
     dragHandle: { alignItems: 'center', marginBottom: 14 },
@@ -315,10 +317,17 @@ export default function AnnouncementsScreen() {
     modalTitleWrap: { flex: 1 },
     modalTitle: { fontSize: 15, fontWeight: '700', color: c.text, lineHeight: 22 },
     modalTime: { fontSize: 12, color: c.textMuted, marginTop: 3 },
-    modalBody: { marginVertical: 12 },
+    modalBody: { marginVertical: 12, flexShrink: 1 },
+    acknowledgementCard: {
+      marginTop: 18, padding: 14, borderRadius: 12, gap: 10,
+      backgroundColor: c.surfaceSecondary, borderWidth: 1, borderColor: c.border,
+    },
+    acknowledgementTitle: { color: c.text, fontSize: 15, fontWeight: '700' },
+    acknowledgementCopy: { color: c.textSecondary, fontSize: 14, lineHeight: 21 },
+    acknowledgementError: { color: c.errorText, fontSize: 14, lineHeight: 21 },
     modalContent: { fontSize: 14, color: c.textSecondary, lineHeight: 22 },
     modalFooter: {
-      flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
+      flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'space-between', alignItems: 'center',
       borderTopWidth: 1, borderTopColor: c.border, paddingTop: 12,
     },
     notificationAction: {
@@ -384,39 +393,52 @@ export default function AnnouncementsScreen() {
   const [ackBusy, setAckBusy] = useState(false);
   const [ackError, setAckError] = useState('');
   const ackGuard = useRef(false);
+  const detailSequence = useRef(0);
+  const [detailRetry, setDetailRetry] = useState(0);
   const mountedRef = useRef(true);
   useEffect(() => { mountedRef.current = true; return () => { mountedRef.current = false; }; }, []);
   const selectedId = getCanonicalAnnouncementId(selectedAnn);
   const selectedIdRef = useRef(selectedId);
   selectedIdRef.current = selectedId;
+  const closeAnnouncement = () => {
+    selectedIdRef.current = '';
+    detailSequence.current += 1;
+    setSelectedAnn(null);
+  };
   useEffect(() => {
     if (!selectedId) return;
     let active = true;
     setAckError('');
     const refreshDetail = async (markRead = false) => {
+      if (ackGuard.current) return;
+      const requestId = ++detailSequence.current;
       try {
         const response = await (markRead ? apiService.markAnnouncementRead(selectedId) : apiService.getAnnouncement(selectedId));
-        if (active) {
-          setSelectedAnn((current) => getCanonicalAnnouncementId(current) === selectedId ? { ...response.data, ...(current.acknowledged ? { acknowledged: true, acknowledgedAt: current.acknowledgedAt } : {}) } : current);
+        if (active && requestId === detailSequence.current) {
+          if (getCanonicalAnnouncementId(response?.data) !== selectedId) throw new Error('Announcement detail unavailable.');
+          setSelectedAnn((current) => getCanonicalAnnouncementId(current) === selectedId ? response.data : current);
           setAckError('');
         }
-      } catch (error) { if (active) setAckError(acknowledgementError(error)); }
+      } catch (error) { if (active && requestId === detailSequence.current) setAckError(acknowledgementError(error)); }
     };
     refreshDetail(true);
     const sub = AppState.addEventListener('change', (state) => { if (state === 'active') refreshDetail(); });
     const unsubscribe = subscribeCanonicalNotifications(() => { refreshDetail(); loadAnnouncements({ silent: true }); });
     return () => { active = false; sub.remove(); unsubscribe(); };
-  }, [selectedId, loadAnnouncements]);
+  }, [selectedId, loadAnnouncements, detailRetry]);
   const acknowledgeSelected = async () => {
-    if (ackGuard.current || !selectedId) return;
+    if (ackGuard.current || !selectedId || selectedAnn?.acknowledged || !selectedAnn?.requiresAcknowledgment) return;
+    detailSequence.current += 1;
     ackGuard.current = true; setAckBusy(true); setAckError('');
+    const acknowledgementSequence = detailSequence.current;
     try {
-      const updated = await confirmAcknowledgement(apiService, selectedId, { isCurrent: () => mountedRef.current && selectedIdRef.current === selectedId });
+      const updated = await confirmAcknowledgement(apiService, selectedId, { isCurrent: () => mountedRef.current && selectedIdRef.current === selectedId && detailSequence.current === acknowledgementSequence });
       if (!mountedRef.current || selectedIdRef.current !== selectedId) return;
+      detailSequence.current += 1;
       setSelectedAnn((current) => getCanonicalAnnouncementId(current) === selectedId ? updated : current);
       await loadAnnouncements({ silent: true });
     } catch (error) { if (mountedRef.current && error.code !== 'ENGAGEMENT_CANCELLED' && selectedIdRef.current === selectedId) setAckError(acknowledgementError(error)); }
-    finally { ackGuard.current = false; setAckBusy(false); }
+    finally { ackGuard.current = false; if (mountedRef.current) setAckBusy(false); }
   };
   const [sortOrder, setSortOrder] = useState('newest');
   const [expandedIds, setExpandedIds] = useState(new Set());
@@ -1044,10 +1066,10 @@ export default function AnnouncementsScreen() {
         visible={!!selectedAnn}
         animationType="slide"
         transparent
-        onRequestClose={() => setSelectedAnn(null)}
+        onRequestClose={closeAnnouncement}
       >
         <View style={styles.modalOverlay}>
-          <View style={styles.modalSheet}>
+          <View style={styles.modalSheet} accessibilityViewIsModal>
             {/* Drag handle */}
             <View style={styles.dragHandle}>
               <View style={styles.dragHandlePill} />
@@ -1069,7 +1091,9 @@ export default function AnnouncementsScreen() {
                     </View>
                     <TouchableOpacity
                       style={styles.modalCloseBtn}
-                      onPress={() => setSelectedAnn(null)}
+                      accessibilityRole="button"
+                      accessibilityLabel="Close announcement"
+                      onPress={closeAnnouncement}
                       hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                     >
                       <Ionicons name="close" size={15} color={colors.textMuted} />
@@ -1090,16 +1114,24 @@ export default function AnnouncementsScreen() {
                     )}
                   </View>
 
-                  {ackError ? <Text accessibilityRole="alert" style={{ color: colors.errorText, padding: 12 }}>{ackError}</Text> : null}
-                  {selectedAnn.requiresAcknowledgment ? (
-                    selectedAnn.acknowledged ? <Text accessibilityLiveRegion="polite" style={{ color: colors.text, padding: 12 }}>Acknowledged{selectedAnn.acknowledgedAt ? ` on ${safeFormat(selectedAnn.acknowledgedAt, 'MMM dd, yyyy · h:mm a')}` : ''}</Text> :
-                    <TouchableOpacity accessibilityRole="button" accessibilityLabel="Acknowledge" accessibilityState={{ disabled: ackBusy, busy: ackBusy }} disabled={ackBusy} onPress={acknowledgeSelected} style={{ minHeight: 48, padding: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 12 }}>
-                      <Text style={{ color: colors.interactive }}>{ackBusy ? 'Acknowledging...' : 'Acknowledge'}</Text>
-                    </TouchableOpacity>
-                  ) : null}
                   {/* Full content */}
-                  <ScrollView style={styles.modalBody} showsVerticalScrollIndicator={false}>
+                  <ScrollView style={styles.modalBody} showsVerticalScrollIndicator>
                     <Text style={styles.modalContent}>{selectedAnn.content}</Text>
+                    {selectedAnn.requiresAcknowledgment ? (
+                      <View style={styles.acknowledgementCard}>
+                        <Text style={styles.acknowledgementTitle}>Announcement acknowledgement</Text>
+                        {selectedAnn.acknowledged ? (
+                          <Text accessibilityLiveRegion="polite" style={styles.acknowledgementCopy}>Acknowledged{selectedAnn.acknowledgedAt ? ` on ${safeFormat(selectedAnn.acknowledgedAt, 'MMM dd, yyyy · h:mm a')}` : ''}</Text>
+                        ) : <>
+                          <Text style={styles.acknowledgementCopy}>Confirm that you have read and understood this announcement.</Text>
+                          <ActionButton label={ackBusy ? 'Acknowledging...' : 'Acknowledge'} disabled={ackBusy} onPress={acknowledgeSelected} />
+                        </>}
+                      </View>
+                    ) : null}
+                    {ackError ? <View style={styles.acknowledgementCard}>
+                      <Text accessibilityRole="alert" style={styles.acknowledgementError}>{ackError}</Text>
+                      <ActionButton label="Retry announcement" variant="secondary" disabled={ackBusy} onPress={() => setDetailRetry((value) => value + 1)} />
+                    </View> : null}
                     {SURVEY_FEEDBACK_ENABLED && String(selectedAnn.category || selectedAnn.type || '').toLowerCase() === 'survey' ? (
                       <TouchableOpacity
                         style={styles.notificationAction}
@@ -1112,7 +1144,7 @@ export default function AnnouncementsScreen() {
                             type: 'survey',
                             surveyId: selectedAnn.data?.surveyId || selectedAnn.surveyId,
                           });
-                          setSelectedAnn(null);
+                          closeAnnouncement();
                           router.push(destination);
                         }}
                       >
@@ -1136,7 +1168,7 @@ export default function AnnouncementsScreen() {
                             screen: 'billing',
                             billing_id: selectedAnn.billing_id,
                           });
-                          setSelectedAnn(null);
+                          closeAnnouncement();
                           router.push(destination);
                         }}
                       >

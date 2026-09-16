@@ -18,7 +18,13 @@ import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { FlatList } from 'react-native';
 import AnnouncementsScreen from '../../app/(tabs)/announcements';
 
-jest.mock('../services/api', () => ({ apiService: { markAnnouncementRead: jest.fn(), getAnnouncement: jest.fn(), acknowledgeAnnouncement: jest.fn() } }));
+jest.mock('react-native-safe-area-context', () => require('react-native-safe-area-context/jest/mock').default);
+jest.mock('../services/api', () => ({ apiService: {
+  getAnnouncement: jest.fn(),
+  markAnnouncementRead: jest.fn(async (id) => ({ data: mockStoreState.announcements.find(item => item.announcement_id === id) })),
+  acknowledgeAnnouncement: jest.fn(),
+} }));
+
 let mockLocalSearchParams = {};
 jest.mock('expo-router', () => ({
   useRouter: () => ({ push: jest.fn(), replace: jest.fn() }),
@@ -97,12 +103,13 @@ function announcement(overrides = {}) {
   };
 }
 
-describe('announcements list virtualization and behavior (regression)', () => {
-  beforeEach(() => {
+beforeEach(() => {
     jest.clearAllMocks();
     mockLocalSearchParams = {};
     mockStoreState = { announcements: [], hasLoadedOnce: true, fetchError: null };
-  });
+});
+
+describe('announcements list virtualization and behavior (regression)', () => {
 
   it('renders the list through FlatList, not a plain ScrollView + map', async () => {
     setStoreAnnouncements([announcement()]);

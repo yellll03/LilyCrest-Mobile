@@ -12,8 +12,14 @@ export async function confirmAcknowledgement(api, id, { isCurrent = () => true }
   assertCurrent();
   const current = (await api.getAnnouncement(id)).data;
   assertCurrent();
-  if (current.acknowledged || !current.requiresAcknowledgment) return current;
-  try { return (await api.acknowledgeAnnouncement(id)).data; }
+  if (current?.acknowledged === true || current?.requiresAcknowledgment === false) return current;
+  if (current?.requiresAcknowledgment !== true) throw new Error('Announcement status unavailable.');
+  try {
+    const confirmed = (await api.acknowledgeAnnouncement(id)).data;
+    assertCurrent();
+    if (confirmed?.acknowledged !== true) throw new Error('Acknowledgement not confirmed.');
+    return confirmed;
+  }
   catch (error) {
     assertCurrent();
     try {

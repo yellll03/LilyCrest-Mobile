@@ -21,6 +21,7 @@ export default function ExtendStayScreen() {
   const [loading, setLoading] = useState(true), [saving, setSaving] = useState(false);
   const [months, setMonths] = useState(6), [reason, setReason] = useState(''), [note, setNote] = useState('');
   const guard = useRef(false);
+  const mounted = useRef(true);
   const sequence = useRef(0);
   const load = useCallback(async () => {
     const requestId = ++sequence.current;
@@ -31,31 +32,40 @@ export default function ExtendStayScreen() {
   }, []);
   useFocusEffect(useCallback(() => { load(); }, [load]));
   useEffect(() => {
+    mounted.current = true;
     const sub = AppState.addEventListener('change', (state) => { if (state === 'active') load(); });
     const unsubscribe = subscribeCanonicalNotifications((notification) => {
       if (/stay_extension|extend-stay|renewal_effective|contract_document_ready|contract_finalized|contract_replaced/.test(JSON.stringify(notification))) load();
     });
-    return () => { sub.remove(); unsubscribe(); sequence.current += 1; };
+    return () => { mounted.current = false; sub.remove(); unsubscribe(); sequence.current += 1; };
   }, [load]);
   const presentation = extensionPresentation(data?.request);
-  const selected = data?.options?.find((option) => option.months === months);
+  const options = Array.isArray(data?.options) ? data.options : [];
+  const selected = options.find((option) => option.months === months) || options[0];
+  const canRequest = data?.canRequest === true && Boolean(data?.current?.stayId);
   const submit = async () => {
-    if (guard.current || !data?.canRequest || !selected) return;
+    if (guard.current || loading || !canRequest || !selected) return;
     guard.current = true;
-    const intent = { stayId: data.current.stayId, months, requestedEndDate: selected.endDate, expectedMonthlyRent: selected.monthlyRent, reason, note };
+    setSaving(true);
+    const intent = { stayId: data.current.stayId, months: selected.months, requestedEndDate: selected.endDate, expectedMonthlyRent: selected.monthlyRent, reason, note };
     try {
       const decision = await showAlert({ title: 'Request stay extension?', message: `Request an extension through ${date(selected.endDate)} at ${money(selected.monthlyRent)} per month, subject to Admin approval and contract signing?`, type: 'info', buttons: [{ text: 'Cancel', style: 'cancel' }, { text: 'Submit request' }] });
-      if (decision !== 'Submit request') return;
-      setSaving(true);
+      if (decision !== 'Submit request' || !mounted.current) return;
       await apiService.createStayExtension(intent);
+      if (!mounted.current) return;
       setReason(''); setNote('');
       await load();
       showAlert({ title: 'Request submitted', message: 'Your extension is pending Admin review.', type: 'success' });
     } catch (err) {
+      if (!mounted.current) return;
       const recovered = await load();
-      if ((!err.response || err.response.status >= 500) && isRecoveredExtension(recovered?.request, data?.request, intent)) showAlert({ title: 'Request submitted', message: 'Your extension request is being processed.', type: 'success' });
+      if (!mounted.current) return;
+      if ((!err.response || err.response.status >= 500) && isRecoveredExtension(recovered?.request, data?.request, intent)) {
+        setReason(''); setNote('');
+        showAlert({ title: 'Request submitted', message: 'Your extension request is being processed.', type: 'success' });
+      }
       else showAlert({ title: 'Unable to submit request', message: extensionError(err), type: 'error' });
-    } finally { guard.current = false; setSaving(false); }
+    } finally { guard.current = false; if (mounted.current) setSaving(false); }
   };
   const input = [styles.input, { color: colors.text, backgroundColor: colors.inputBackground, borderColor: colors.inputBorder }];
   return <SafeAreaView style={[styles.root, { backgroundColor: colors.background }]}>
@@ -72,9 +82,10 @@ export default function ExtendStayScreen() {
           {data.request.reviewedAt ? <DataRow label="Reviewed on" value={date(data.request.reviewedAt)} /> : null}
           <DataRow label="Extension starts" value={date(presentation.start)} />
           <DataRow label="Requested end date" value={date(data.request.requestedEndDate)} /><DataRow label="Extension" value={`${data.request.months} months`} /><DataRow label="Admin note" value={data.request.adminNote || 'No note'} last /></SurfaceCard> : null}
-          {data?.canRequest ? <SurfaceCard>
+          {canRequest ? <SurfaceCard>
             <Text style={[styles.title, { color: colors.heading }]}>Request an extension</Text>
-            <View style={styles.options}>{data.options.map((option) => <ActionButton key={option.months} label={`${option.months} month${option.months === 1 ? '' : 's'}`} variant={months === option.months ? 'gold' : 'secondary'} disabled={saving} onPress={() => setMonths(option.months)} />)}</View>
+            <View style={styles.options}>{options.map((option) => <ActionButton key={option.months} label={`${option.months} month${option.months === 1 ? '' : 's'}`} variant={selected?.months === option.months ? 'gold' : 'secondary'} disabled={saving} onPress={() => setMonths(option.months)} />)}</View>
+            {!selected ? <Text style={{ color: colors.textSecondary }}>Extension options are unavailable. Pull down to refresh or contact Administration.</Text> : null}
             <DataRow label="Requested new end date" value={date(selected?.endDate)} />
             <DataRow label="Monthly rent for extension" value={selected ? money(selected.monthlyRent) : 'Not available'} />
             <Text style={{ color: colors.text }}>Reason (optional)</Text><TextInput accessibilityLabel="Reason" value={reason} onChangeText={setReason} editable={!saving} multiline maxLength={500} style={input} placeholder="Why would you like to extend your stay?" placeholderTextColor={colors.textMuted} />

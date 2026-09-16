@@ -24,7 +24,7 @@ module.exports = {
     ios: {
       bundleIdentifier: 'com.lilycrest.lilycrestdorm',
       // Build 31 already exists in EAS; use a fresh TestFlight build identity.
-      buildNumber: '32',
+      buildNumber: '33',
       supportsTablet: true,
       googleServicesFile: process.env.GOOGLE_SERVICES_PLIST || './GoogleService-Info.plist',
       infoPlist: {
@@ -37,7 +37,7 @@ module.exports = {
     android: {
       package: 'com.lilycrest.lilycrestdorm',
       // Keep in sync with android/app/build.gradle's versionCode (see note above).
-      versionCode: 26,
+      versionCode: 27,
       googleServicesFile: process.env.GOOGLE_SERVICES_JSON || './google-services.json',
       config: {
         googleSignIn: {

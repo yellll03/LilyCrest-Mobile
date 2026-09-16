@@ -35,5 +35,7 @@ export function isRecoveredExtension(request, previous, intent) {
     && String(request.stayId) === String(intent.stayId)
     && Number(request.months) === Number(intent.months)
     && Number(request.monthlyRent) === Number(intent.expectedMonthlyRent)
+    && String(request.reason || '').trim() === String(intent.reason || '').trim()
+    && String(request.note || '').trim() === String(intent.note || '').trim()
     && new Date(request.requestedEndDate).getTime() === new Date(intent.requestedEndDate).getTime());
 }
