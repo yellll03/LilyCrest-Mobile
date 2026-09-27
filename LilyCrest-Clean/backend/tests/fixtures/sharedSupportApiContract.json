@@ -1,0 +1,12 @@
+{
+  "authority": "kuurz-z/Capstone-Website",
+  "sourceCommit": "8ca4c683c370589966aa17fe772aac17a1eb26ef",
+  "sourceFile": "server/routes/mobileChatRoutes.js",
+  "sourceUrl": "https://github.com/kuurz-z/Capstone-Website/blob/8ca4c683c370589966aa17fe772aac17a1eb26ef/server/routes/mobileChatRoutes.js",
+  "mount": "/api/m",
+  "scope": "Shared-only support endpoint absent from the local reference backend. This fixture validates client method/path expectations; it does not claim production deployment or implement lifecycle behavior. Existing reference route checks remain active.",
+  "releaseGate": "Website PR #180 must be merged, deployed and its API contracts verified before the Mobile update is released.",
+  "routes": [
+    "PATCH /chat/:conversationId/rating"
+  ]
+}

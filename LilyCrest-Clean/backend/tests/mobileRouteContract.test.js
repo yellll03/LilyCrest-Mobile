@@ -1,7 +1,9 @@
 'use strict';
 
-// Contract test: every canonical support-chat path the mobile app calls must
-// resolve to a route this backend actually registers.
+// Contract test: every support-chat path the Mobile app calls must match the
+// local reference routes or an explicit shared-production-API contract.
+// Capstone's /api/m router is production authority. Shared-only endpoints are
+// pinned in a reviewed fixture, not implemented a second time in this backend.
 //
 // This is the support-scoped check that was missing. Four support-chat
 // endpoints and a Socket.IO channel shipped as client affordances without a
@@ -20,6 +22,7 @@ const path = require('node:path');
 
 const BACKEND_ROOT = path.resolve(__dirname, '..');
 const FRONTEND_ROOT = path.resolve(BACKEND_ROOT, '..', 'frontend');
+const sharedSupportContract = require('./fixtures/sharedSupportApiContract.json');
 
 // Mobile call sites live in the axios client and in AuthContext, which calls
 // a handful of /auth paths directly rather than through apiService.
@@ -116,16 +119,7 @@ function callMatchesRoute(callPath, routePath) {
   });
 }
 
-test('every canonical mobile support API path resolves to a registered Express route', () => {
-  const registered = collectRegisteredRoutes();
-  const calls = collectMobileCalls().filter((call) => (
-    call.rawPath === '/chat/start'
-    || call.rawPath === '/chat/me'
-    || call.rawPath.startsWith('/chat/${')
-  ));
-
-  assert.ok(calls.length >= 8, `expected to find the mobile support API surface, found ${calls.length} calls`);
-
+function unmatchedCalls(calls, registered) {
   const registeredByMethod = new Map();
   for (const entry of registered) {
     const [method, routePath] = entry.split(' ');
@@ -133,17 +127,44 @@ test('every canonical mobile support API path resolves to a registered Express r
     registeredByMethod.get(method).push(routePath);
   }
 
-  const unmatched = calls.filter((call) => !(registeredByMethod.get(call.method) || [])
+  return calls.filter((call) => !(registeredByMethod.get(call.method) || [])
     .some((routePath) => callMatchesRoute(call.rawPath, routePath)));
+}
+
+test('every Mobile support call matches a reference route or the explicit shared API contract', () => {
+  const registered = new Set([...collectRegisteredRoutes(), ...sharedSupportContract.routes]);
+  const calls = collectMobileCalls().filter((call) => (
+    call.rawPath === '/chat/start'
+    || call.rawPath === '/chat/me'
+    || call.rawPath.startsWith('/chat/${')
+  ));
+
+  assert.ok(calls.length >= 8, `expected to find the mobile support API surface, found ${calls.length} calls`);
+  const unmatched = unmatchedCalls(calls, registered);
 
   assert.deepEqual(
     unmatched.map((call) => `${call.method} ${call.rawPath}  (${call.file})`),
     [],
-    'these mobile calls have no matching registered backend route',
+    'these Mobile calls match neither a reference route nor the reviewed shared API contract',
   );
 });
 
-test('the support-chat endpoints the mobile UI exposes buttons for are registered', () => {
+test('the shared-only rating contract rejects unknown methods and paths', () => {
+  const routes = new Set(sharedSupportContract.routes);
+  const rating = { method: 'PATCH', rawPath: '/chat/${conversationId}/rating' };
+  assert.deepEqual(unmatchedCalls([rating], routes), []);
+  const invalid = [
+    { ...rating, method: 'POST' },
+    { ...rating, rawPath: '/chat/${conversationId}/ratings' },
+    { ...rating, rawPath: '/chat/${conversationId}/rating/extra' },
+    { ...rating, rawPath: '/chat/${conversationId}/unknown-action' },
+  ];
+  assert.deepEqual(unmatchedCalls(invalid, routes), invalid);
+  assert.ok(collectMobileCalls().some((call) => call.method === rating.method
+    && callMatchesRoute(call.rawPath, '/chat/:conversationId/rating')));
+});
+
+test('the reference backend retains its existing support-chat route surface', () => {
   const registered = collectRegisteredRoutes();
   for (const route of [
     'PATCH /chat/:conversationId/resolution',

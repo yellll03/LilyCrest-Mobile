@@ -33,7 +33,18 @@ describe('production mutation guards', () => {
     expect(otp).toContain('resendGuardRef.current = true');
     expect(support).toContain('replyGuardRef.current');
     expect(support).toContain('reopenGuardRef.current');
-    expect(support).toContain('resolutionGuardRef.current');
+    const confirmation = read('../components/assistant/SupportConcernRating.jsx');
+    // The new component owns one synchronous guard shared by submit and reopen.
+    // Keep checking ordering: neither action may start an API call before locking.
+    for (const [handler, apiMethod] of [['submit', 'rateSupportInquiry'], ['reopen', 'reopenSupportChat']]) {
+      const body = confirmation.slice(confirmation.indexOf(`const ${handler} = async`));
+      const check = body.indexOf('if (guard.current || needsCheck || !eligible');
+      const lock = body.indexOf('guard.current = true');
+      const request = body.indexOf(`await apiService.${apiMethod}`);
+      expect(check).toBeGreaterThanOrEqual(0);
+      expect(lock).toBeGreaterThan(check);
+      expect(request).toBeGreaterThan(lock);
+    }
   });
 
   test('sign-out is confirmed, destructive, and double-tap guarded', () => {
