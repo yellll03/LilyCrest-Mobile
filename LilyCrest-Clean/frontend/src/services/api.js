@@ -535,11 +535,14 @@ export const apiService = {
     api.patch(`/chat/${conversationId}/resolution`, {
       resolved,
       note,
+        ...(satisfaction.requestId ? { requestId: satisfaction.requestId } : {}),
       ...(satisfaction.rating ? { rating: satisfaction.rating } : {}),
       ...(satisfaction.feedback?.trim() ? { feedback: satisfaction.feedback.trim() } : {}),
     }),
-  reopenSupportChat: (conversationId, note) =>
-    api.patch(`/chat/${conversationId}/reopen`, { note }),
+  rateSupportInquiry: (conversationId, payload) =>
+    api.patch(`/chat/${conversationId}/rating`, payload),
+  reopenSupportChat: (conversationId, note, identity = {}) =>
+    api.patch(`/chat/${conversationId}/reopen`, { note, ...identity }),
   closeSupportChat: (conversationId, note) =>
     api.patch(`/chat/${conversationId}/close`, { note }),
   

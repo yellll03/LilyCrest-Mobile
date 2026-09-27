@@ -1,6 +1,7 @@
 /* global __dirname, test */
 const fs = require('fs');
 const path = require('path');
+const { api: authenticatedApi, apiService } = require('../services/api');
 
 const root = path.resolve(__dirname, '..', '..');
 const read = (relativePath) => fs.readFileSync(path.join(root, relativePath), 'utf8');
@@ -19,12 +20,27 @@ describe('mobile contract/support canonical consumption', () => {
     expect(contractViewer).not.toMatch(/branch\s*:/);
   });
 
-  test('support lifecycle exposes actual statuses, optional satisfaction, and same-thread NO', () => {
+  test('support lifecycle exposes saved satisfaction and sends canonical rating/reopen identities', async () => {
     expect(assistant).toContain('supportStatusLabel(selectedInquiry.canonicalStatus)');
     expect(assistant).toContain('satisfactionRating');
     expect(assistant).toContain('satisfactionFeedback');
-    expect(assistant).toContain('confirmInquiryResolution(false, conversationId)');
-    expect(api).toContain('...(satisfaction.rating ? { rating: satisfaction.rating } : {})');
+    expect(assistant).toContain('<SupportConcernRating');
+    const patch = jest.spyOn(authenticatedApi, 'patch').mockResolvedValue({ data: {} });
+    try {
+      await apiService.rateSupportInquiry('thread-1', {
+        requestId: 'request-1', revision: 2, rating: 4, feedback: 'Fixed',
+      });
+      expect(patch).toHaveBeenNthCalledWith(1, '/chat/thread-1/rating', {
+        requestId: 'request-1', revision: 2, rating: 4, feedback: 'Fixed',
+      });
+      await apiService.reopenSupportChat('thread-1', '', { requestId: 'request-1', revision: 2 });
+      expect(patch).toHaveBeenNthCalledWith(2, '/chat/thread-1/reopen', {
+        note: '', requestId: 'request-1', revision: 2,
+      });
+      expect(patch).toHaveBeenCalledTimes(2);
+    } finally {
+      patch.mockRestore();
+    }
   });
 
   test('canonical chat_reply routing retains both conversation and message IDs', () => {

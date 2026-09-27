@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import { resolveNotificationRoute } from '../services/notifications';
+import { matchesSupportNotification } from '../utils/supportConversationPresentation';
 
 jest.mock('../config/firebase', () => ({ getFreshIdToken: jest.fn() }));
 
@@ -113,8 +114,17 @@ describe('Phase 2 destination ownership guards', () => {
 
   it('opens a chat deep link only after the target appears in the authenticated tenant conversation list', () => {
     expect(assistantSource).toMatch(/conversations\.find\(/);
-    expect(assistantSource).toMatch(/String\(conversation\.id\) === targetConversationId/);
+    expect(assistantSource).toContain('matchesSupportNotification(conversation, targetConversationId, notificationRequestIdParam)');
     expect(assistantSource).toMatch(/targetConversation\s*&&/);
+    const owned = [{ id: 'conversation-1', requestId: 'request-1' }];
+    const find = (conversationId, requestId) => owned.find(
+      (conversation) => matchesSupportNotification(conversation, conversationId, requestId),
+    );
+    expect(find('conversation-1', 'request-1')).toBe(owned[0]);
+    expect(find('someone-elses-conversation', 'request-1')).toBeUndefined();
+    expect(find('conversation-1', 'different-request')).toBeUndefined();
+    // Older notifications without request identity still require an owned conversation.
+    expect(find('conversation-1')).toBe(owned[0]);
   });
 
   it('opens a maintenance deep link only after the target appears in the authenticated tenant request list', () => {

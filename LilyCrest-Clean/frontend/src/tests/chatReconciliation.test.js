@@ -7,13 +7,27 @@ describe('chat tenant/auth reconciliation', () => {
   const apiSource = fs.readFileSync(path.resolve(__dirname, '../services/api.js'), 'utf8');
   const screenSource = fs.readFileSync(path.resolve(__dirname, '../screens/LilyAssistantScreen.jsx'), 'utf8');
 
+  it('exposes saved ratings and offers rating for resolved details', () => {
+    expect(screenSource).toContain('Your rating: ${selectedInquiry.conversation.satisfactionRating}/5');
+    expect(screenSource).toContain("selectedInquiry.conversation?.status === 'resolved' ? renderResolutionConfirmation");
+    expect(screenSource).toContain('<SupportConcernRating');
+    expect(screenSource).toContain('userId={user?.user_id}');
+  });
+
+  it('polls selected inquiry details and discards superseded refresh responses', () => {
+    expect(screenSource).toContain('const conversationId = selectedInquiry?.id || supportConversationId');
+    expect(screenSource).toContain('if (cancelled || pending) return');
+    expect(screenSource).toContain('requestVersion !== supportRefreshRef.current');
+    expect(screenSource).toContain('requestVersion !== inquiryRefreshRef.current');
+  });
+
   it('uses the canonical support route through the authenticated API client', () => {
     expect(apiSource).toContain("getMySupportChats: () => api.get('/chat/me')");
     expect(apiSource).toContain('config.headers.Authorization = `Bearer ${token}`');
   });
 
   it('reopens the same persisted inquiry and enables follow-up in its existing thread', () => {
-    expect(apiSource).toContain('api.patch(`/chat/${conversationId}/reopen`, { note })');
+    expect(apiSource).toContain('api.patch(`/chat/${conversationId}/reopen`, { note, ...identity })');
     expect(screenSource).toContain('apiService.reopenSupportChat(');
     expect(screenSource).toContain('selectedInquiry.id');
     expect(screenSource).toContain('Reopen Inquiry');

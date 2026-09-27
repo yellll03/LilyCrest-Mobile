@@ -1,5 +1,19 @@
 export const INQUIRY_TICKET_ID_PATTERN = /^INQ-\d{4}-\d{6}$/;
 
+export function newerSupportConcern(current, incoming) {
+  if (!current || current.id !== incoming?.id || current.requestId !== incoming?.requestId) return incoming;
+  // New-model ratings are immutable, even if a stale list omits its revision.
+  if (current.requestId && (current.satisfaction || current.satisfactionRating != null)
+    && !(incoming.satisfaction || incoming.satisfactionRating != null)) return current;
+  if (Number(current.revision || 0) > Number(incoming?.revision || 0)) return current;
+  return incoming;
+}
+
+export function matchesSupportNotification(conversation, conversationId, requestId) {
+  return String(conversation.id) === String(conversationId)
+    && (!requestId || conversation.requestId === requestId);
+}
+
 export function inquiryTicketLabel(ticketId) {
   const value = String(ticketId || '').trim().toUpperCase();
   return INQUIRY_TICKET_ID_PATTERN.test(value) ? value : 'Inquiry ID pending';

@@ -1,4 +1,12 @@
 /* global __dirname, test */
+import { act, fireEvent, render } from '@testing-library/react-native';
+import SupportConcernRating from '../components/assistant/SupportConcernRating';
+import { apiService } from '../services/api';
+
+jest.mock('../context/ThemeContext', () => ({ useTheme: () => ({ colors: {} }) }));
+jest.mock('../services/api', () => ({ apiService: {
+  rateSupportInquiry: jest.fn(), reopenSupportChat: jest.fn(), getSupportChatMessages: jest.fn(),
+} }));
 const fs = require('fs');
 const path = require('path');
 
@@ -17,13 +25,35 @@ describe('Phase 4 inquiry, archive, and attachment reconciliation', () => {
     expect(announcements).toContain('accessibilityLabel={`Archive');
   });
 
-  test('waiting_tenant renders an explicit YES / NO confirmation backed by the canonical endpoint', () => {
-    expect(screen).toContain("AWAITING_CONFIRMATION: 'awaiting_confirmation'");
-    expect(screen).toContain('Was your concern resolved?');
-    expect(screen).toContain('confirmInquiryResolution(true');
-    expect(screen).toContain('confirmInquiryResolution(false');
-    expect(api).toContain('confirmSupportResolution:');
-    expect(api).toContain("api.patch(`/chat/${conversationId}/resolution`");
+  test('only admin-resolved inquiries ask Yes/No; Yes reveals rating without a mutation', async () => {
+    jest.clearAllMocks();
+    const conversation = { id: 'thread-1', requestId: 'request-1', tenantUserId: 'tenant-1',
+      status: 'waiting_tenant', revision: 1, satisfactionRating: null };
+    const view = render(<SupportConcernRating conversation={conversation} userId="tenant-1" />);
+    expect(view.queryByText('Is your inquiry resolved?')).toBeNull();
+    expect(view.queryByLabelText('Submit rating')).toBeNull();
+    const resolved = { ...conversation, status: 'resolved', revision: 2,
+      resolvedAt: '2026-09-28T00:00:00.000Z', resolvedBy: 'admin-1' };
+    view.rerender(<SupportConcernRating conversation={resolved} userId="tenant-1" />);
+    expect(view.getByText('Is your inquiry resolved?')).toBeTruthy();
+    expect(view.getByLabelText('No, I still need help')).toBeTruthy();
+    expect(view.queryByLabelText('5 stars')).toBeNull();
+    fireEvent.press(view.getByLabelText("Yes, it's resolved"));
+    expect(view.getByLabelText('Submit rating')).toBeDisabled();
+    expect(apiService.rateSupportInquiry).not.toHaveBeenCalled();
+    expect(apiService.reopenSupportChat).not.toHaveBeenCalled();
+    fireEvent.press(view.getByLabelText('3 stars'));
+    fireEvent.press(view.getByLabelText('5 stars'));
+    expect(view.getByLabelText('5 stars').props.accessibilityState.selected).toBe(true);
+    apiService.rateSupportInquiry.mockResolvedValue({ data: { conversation: {
+      ...resolved, status: 'closed', revision: 3, satisfactionRating: 5,
+    } } });
+    await act(async () => fireEvent.press(view.getByLabelText('Submit rating')));
+    expect(apiService.rateSupportInquiry).toHaveBeenCalledWith('thread-1', {
+      requestId: 'request-1', revision: 2, rating: 5, feedback: '',
+    });
+    expect(view.getByText('Your rating: 5/5')).toBeTruthy();
+    expect(view.queryByLabelText('Submit rating')).toBeNull();
   });
 
   test('same-thread reopen and resolved timestamp remain visible', () => {
