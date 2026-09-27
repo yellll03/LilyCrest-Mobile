@@ -17,6 +17,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import InquiryCard from '../components/assistant/InquiryCard';
+import SupportConcernRating from '../components/assistant/SupportConcernRating';
 import AttachmentPickerSheet from '../components/AttachmentPickerSheet';
 import LilyFlowerIcon from '../components/assistant/LilyFlowerIcon';
 import MessageBubble from '../components/assistant/MessageBubble';
@@ -35,6 +36,8 @@ import { pickDocument, pickFromCamera, pickFromLibrary } from '../utils/attachme
 import { openChatAttachment } from '../utils/chatAttachmentViewer';
 import {
   getLatestOutgoingMessageId,
+  newerSupportConcern,
+  matchesSupportNotification,
   inquiryTicketLabel,
   supportStatusGroup,
   supportStatusLabel,
@@ -318,9 +321,11 @@ const supportTitle = (category = '') => {
   return normalized.replace(/_/g, ' ').replace(/\b\w/g, (value) => value.toUpperCase());
 };
 
+const mergeLifecycleEvents = (messages = [], conversation) => [...new Map([...(messages || []), ...(conversation?.lifecycleEvents || [])].map((item) => [item.id, item])).values()].sort((a, b) => new Date(a.createdAt) - new Date(b.createdAt));
+
 const toSupportFeedMessage = (message) => ({
   id: `support-${message.id}`,
-  sender: message.senderRole === 'tenant' ? 'user' : 'admin',
+  sender: message.senderRole === 'system' ? 'system' : message.senderRole === 'tenant' ? 'user' : 'admin',
   text: message.message || '',
   time: formatTime(message.createdAt ? new Date(message.createdAt) : new Date()),
   avatar: message.senderRole === 'tenant' ? 'U' : 'A',
@@ -331,7 +336,7 @@ const toSupportFeedMessage = (message) => ({
 
 const toSupportThreadMessage = (message) => ({
   id: message.id || `thread-${Date.now()}`,
-  sender: message.senderRole === 'tenant' ? 'user' : 'admin',
+  sender: message.senderRole === 'system' ? 'system' : message.senderRole === 'tenant' ? 'user' : 'admin',
   text: message.message || '',
   time: formatTime(message.createdAt ? new Date(message.createdAt) : new Date()),
   attachments: Array.isArray(message.attachments) ? message.attachments : [],
@@ -354,7 +359,8 @@ const toInquiryCard = (conversation) => {
   const last = conversation.lastMessageAt ? new Date(conversation.lastMessageAt) : created;
   return {
     id: conversation.id,
-    ticketId: inquiryTicketLabel(conversation.ticketId),
+    ticketId: conversation.requestId ? `Concern ${conversation.requestId}` : inquiryTicketLabel(conversation.ticketId),
+    rating: conversation.satisfactionRating,
     title: supportTitle(conversation.category),
     status: supportStatusGroup(conversation.status),
     canonicalStatus: conversation.status || 'open',
@@ -378,7 +384,7 @@ const getConversationMode = (conversation) => {
     case 'closed':
       return CHAT_MODE.CLOSED;
     case 'waiting_tenant':
-      return CHAT_MODE.AWAITING_CONFIRMATION;
+      return CHAT_MODE.ACTIVE;
     case 'open':
     case 'in_review':
       return CHAT_MODE.WAITING;
@@ -397,6 +403,7 @@ export default function LilyAssistantScreen() {
   const router = useRouter();
   const {
     conversationId: notificationConversationIdParam,
+    requestId: notificationRequestIdParam,
     messageId: notificationMessageIdParam,
     returnTo: returnToParam,
   } = useLocalSearchParams();
@@ -417,7 +424,10 @@ export default function LilyAssistantScreen() {
   const supportMessageRequestRef = useRef(null);
   const replyMessageRequestRef = useRef(null);
   const reopenGuardRef = useRef(false);
-  const resolutionGuardRef = useRef(false);
+  const latestConcernsRef = useRef(new Map());
+  const selectedInquiryRequestRef = useRef(0);
+  const supportRefreshRef = useRef(0);
+  const inquiryRefreshRef = useRef(0);
   const sendCooldownRef = useRef(0);
   const handledNotificationConversationRef = useRef('');
   const preserveDetailScrollRef = useRef(false);
@@ -437,9 +447,6 @@ export default function LilyAssistantScreen() {
   const [replyText, setReplyText] = useState('');
   const [isSendingReply, setIsSendingReply] = useState(false);
   const [isReopeningInquiry, setIsReopeningInquiry] = useState(false);
-  const [isConfirmingResolution, setIsConfirmingResolution] = useState(false);
-  const [satisfactionRating, setSatisfactionRating] = useState(0);
-  const [satisfactionFeedback, setSatisfactionFeedback] = useState('');
   const [chatMode, setChatMode] = useState(CHAT_MODE.AI);
   const [pendingAdminReason, setPendingAdminReason] = useState('');
   const [pendingAdminIntent, setPendingAdminIntent] = useState('general');
@@ -557,6 +564,8 @@ export default function LilyAssistantScreen() {
 
   const updateInquiryRecord = (conversation, thread = null) => {
     if (!conversation?.id) return;
+    conversation = newerSupportConcern(latestConcernsRef.current.get(conversation.id), conversation);
+    latestConcernsRef.current.set(conversation.id, conversation);
     const mapped = toInquiryCard(conversation);
     const nextRecord = { ...mapped, thread: thread || mapped.thread };
 
@@ -582,6 +591,8 @@ export default function LilyAssistantScreen() {
     if (!conversation) return;
     const { preserveClosed = false } = options;
 
+    conversation = newerSupportConcern(latestConcernsRef.current.get(conversation.id), conversation);
+    latestConcernsRef.current.set(conversation.id, conversation);
     setSupportConversation(conversation);
     setSupportConversationId(conversation.status === 'closed' ? null : conversation.id || null);
     if (conversation.assignedAdminName) {
@@ -595,8 +606,14 @@ export default function LilyAssistantScreen() {
 
   const loadSupportInquiries = async (options = {}) => {
     const { preserveSelection = true } = options;
+    const requestVersion = ++inquiryRefreshRef.current;
     const { data } = await apiService.getMySupportChats();
-    const conversations = Array.isArray(data?.conversations) ? data.conversations : [];
+    const conversations = (Array.isArray(data?.conversations) ? data.conversations : []).map((item) => {
+      const latest = newerSupportConcern(latestConcernsRef.current.get(item.id), item);
+      latestConcernsRef.current.set(item.id, latest);
+      return latest;
+    });
+    if (requestVersion !== inquiryRefreshRef.current) return [];
     setInquiries(conversations.map(toInquiryCard));
 
     if (preserveSelection && selectedInquiry?.id) {
@@ -616,17 +633,21 @@ export default function LilyAssistantScreen() {
 
   const refreshSupportConversation = async (conversationId, options = {}) => {
     if (!conversationId) return { conversation: null, thread: [] };
-    const { replaceMainFeed = false, scroll = false } = options;
+    const { replaceMainFeed = false, scroll = false, detailOnly = false } = options;
+    const requestVersion = ++supportRefreshRef.current;
     const { data } = await apiService.getSupportChatMessages(conversationId);
-    const conversation = data?.conversation || null;
-    const rawMessages = Array.isArray(data?.messages) ? data.messages : [];
+    if (requestVersion !== supportRefreshRef.current) return { conversation: null, thread: [] };
+    const conversation = newerSupportConcern(latestConcernsRef.current.get(conversationId), data?.conversation || null);
+    const rawMessages = mergeLifecycleEvents(data?.messages, conversation);
     const thread = rawMessages.map(toSupportThreadMessage);
     setConversationPages((prev) => ({
       ...prev,
       [conversationId]: data?.pageInfo || { hasMore: false, nextCursor: null },
     }));
 
-    if (replaceMainFeed) {
+    if (detailOnly) {
+      // Inquiry details have their own thread; leave the assistant feed in place.
+    } else if (replaceMainFeed) {
       rawMessages.forEach((item) => seenSupportMsgIds.current.add(item.id));
       setMessages(rawMessages.map(toSupportFeedMessage));
     } else {
@@ -639,7 +660,7 @@ export default function LilyAssistantScreen() {
     }
 
     if (conversation) {
-      syncConversationState(conversation);
+      if (!detailOnly) syncConversationState(conversation);
       updateInquiryRecord(conversation, thread);
     }
 
@@ -824,7 +845,7 @@ export default function LilyAssistantScreen() {
     if (!supportConversationId) return;
     const decision = await showAlert({
       title: 'Close support conversation?',
-      message: 'This ends the current thread. You can reopen it later from My Inquiries if the concern returns.',
+      message: 'This closes the current concern. Start a new concern if you need further assistance.',
       type: 'warning',
       buttons: [
         { text: 'Keep Open', style: 'cancel' },
@@ -924,7 +945,7 @@ export default function LilyAssistantScreen() {
         const conversations = await loadSupportInquiries({ preserveSelection: false });
         const targetConversationId = String(notificationConversationId || '').trim();
         const targetConversation = conversations.find(
-          (conversation) => String(conversation.id) === targetConversationId,
+          (conversation) => matchesSupportNotification(conversation, targetConversationId, notificationRequestIdParam),
         );
         if (
           targetConversation
@@ -946,21 +967,26 @@ export default function LilyAssistantScreen() {
     bootstrapSupport();
     // These support helpers intentionally use the latest selected conversation refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [authReady, notificationConversationId, user?.user_id]);
+  }, [authReady, notificationConversationId, notificationRequestIdParam, user?.user_id]);
 
   useEffect(() => {
-    if (!supportConversationId) return;
-    if (!isSupportMode(chatMode) && chatMode !== CHAT_MODE.RESOLVED) return;
+    const conversationId = selectedInquiry?.id || supportConversationId;
+    if (!conversationId) return;
+    if (!selectedInquiry?.id && !isSupportMode(chatMode) && chatMode !== CHAT_MODE.RESOLVED) return;
 
     let cancelled = false;
+    let pending = false;
     const poll = async () => {
       try {
-        if (cancelled) return;
-        await refreshSupportConversation(supportConversationId, { replaceMainFeed: false, scroll: true });
+        if (cancelled || pending) return;
+        pending = true;
+        await refreshSupportConversation(conversationId, { replaceMainFeed: false, scroll: false, detailOnly: Boolean(selectedInquiry?.id) });
       } catch (error) {
         if (!cancelled) {
           console.warn('[Support Chat] Poll failed:', error?.message);
         }
+      } finally {
+        pending = false;
       }
     };
 
@@ -968,11 +994,12 @@ export default function LilyAssistantScreen() {
     const interval = setInterval(poll, LIVE_CHAT_POLL_MS);
     return () => {
       cancelled = true;
+      supportRefreshRef.current += 1;
       clearInterval(interval);
     };
     // Polling uses the current conversation id and mode; helper identity is not a trigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supportConversationId, chatMode]);
+  }, [supportConversationId, chatMode, selectedInquiry?.id]);
 
   // A socket-fed refresh effect used to sit here, listening for
   // 'chat:message-new'/'chat:conversation-updated'. No Socket.IO server has
@@ -1014,11 +1041,6 @@ export default function LilyAssistantScreen() {
     if (chatMode === CHAT_MODE.NEEDS_ADMIN) {
       setChatMode(CHAT_MODE.AI);
       clearEscalationPrompt();
-    }
-
-    if (chatMode === CHAT_MODE.AWAITING_CONFIRMATION) {
-      setNetworkError('Please choose YES or NO before continuing this support conversation.');
-      return;
     }
 
     if (chatMode === CHAT_MODE.UNAVAILABLE || chatMode === CHAT_MODE.CLOSED) {
@@ -1314,40 +1336,6 @@ export default function LilyAssistantScreen() {
     }
   };
 
-  const confirmInquiryResolution = async (resolved, conversationId = null, satisfaction = {}) => {
-    const targetId = conversationId || selectedInquiry?.id || supportConversationId;
-    if (!targetId || isConfirmingResolution || resolutionGuardRef.current) return;
-    resolutionGuardRef.current = true;
-    setIsConfirmingResolution(true);
-    setNetworkError(null);
-    try {
-      const { data } = await apiService.confirmSupportResolution(
-        targetId,
-        resolved,
-        resolved ? '' : 'My concern is not resolved yet.',
-        satisfaction,
-      );
-      if (data?.conversation) {
-        syncConversationState(data.conversation);
-        updateInquiryRecord(data.conversation, selectedInquiry?.thread || null);
-      }
-      await refreshSupportConversation(targetId, {
-        replaceMainFeed: targetId === supportConversationId,
-        scroll: true,
-      });
-      await loadSupportInquiries();
-      if (resolved) {
-        setSatisfactionRating(0);
-        setSatisfactionFeedback('');
-      }
-    } catch (error) {
-      setNetworkError(getChatErrorMessage(error, 'Unable to save your resolution choice.'));
-    } finally {
-      resolutionGuardRef.current = false;
-      setIsConfirmingResolution(false);
-    }
-  };
-
   const handleOpenChatAttachment = async (attachment) => {
     setNetworkError(null);
     try {
@@ -1358,16 +1346,19 @@ export default function LilyAssistantScreen() {
   };
 
   const handleSelectInquiry = async (item) => {
+    const version = ++selectedInquiryRequestRef.current;
     try {
       const { data } = await apiService.getSupportChatMessages(item.id);
-      const conversation = data?.conversation || item.conversation;
-      const thread = Array.isArray(data?.messages) ? data.messages.map(toSupportThreadMessage) : [];
+      if (version !== selectedInquiryRequestRef.current) return;
+      const conversation = newerSupportConcern(latestConcernsRef.current.get(item.id), data?.conversation || item.conversation);
+      const thread = mergeLifecycleEvents(data?.messages, data?.conversation).map(toSupportThreadMessage);
       updateInquiryRecord(conversation, thread);
       setSelectedInquiry({
         ...toInquiryCard(conversation),
         thread,
       });
     } catch (error) {
+      if (version !== selectedInquiryRequestRef.current) return;
       console.warn('[Support Chat] Load thread failed:', error?.message);
       setSelectedInquiry(item);
     }
@@ -1487,54 +1478,15 @@ export default function LilyAssistantScreen() {
     );
   };
 
-  const renderResolutionConfirmation = (conversationId) => (
-    <View style={styles.resolutionCard}>
-      <Text style={styles.resolutionLabel}>Optional satisfaction rating</Text>
-      <View style={styles.ratingRow} accessibilityLabel="Satisfaction rating from one to five">
-        {[1, 2, 3, 4, 5].map((rating) => (
-          <Pressable
-            key={rating}
-            onPress={() => setSatisfactionRating(rating)}
-            accessibilityRole="button"
-            accessibilityLabel={`${rating} star${rating === 1 ? '' : 's'}`}
-          >
-            <Ionicons
-              name={rating <= satisfactionRating ? 'star' : 'star-outline'}
-              size={24}
-              color={colors.interactive}
-            />
-          </Pressable>
-        ))}
-      </View>
-      <TextInput
-        style={styles.feedbackInput}
-        value={satisfactionFeedback}
-        onChangeText={setSatisfactionFeedback}
-        placeholder="Optional feedback"
-        placeholderTextColor={colors.textMuted}
-        maxLength={1000}
-        multiline
-      />
-      <View style={styles.supportBannerActions}>
-        <Pressable
-          style={[styles.supportPositiveButton, isConfirmingResolution && styles.buttonDisabled]}
-          onPress={() => confirmInquiryResolution(true, conversationId, {
-            rating: satisfactionRating || undefined,
-            feedback: satisfactionFeedback,
-          })}
-          disabled={isConfirmingResolution}
-        >
-          <Text style={styles.supportPrimaryButtonText}>Yes, resolved</Text>
-        </Pressable>
-        <Pressable
-          style={[styles.supportGhostButton, isConfirmingResolution && styles.buttonDisabled]}
-          onPress={() => confirmInquiryResolution(false, conversationId)}
-          disabled={isConfirmingResolution}
-        >
-          <Text style={styles.supportGhostButtonText}>No, continue</Text>
-        </Pressable>
-      </View>
-    </View>
+  const renderResolutionConfirmation = (conversationId, conversation = supportConversation) => (
+    <SupportConcernRating key={conversation?.requestId || conversationId}
+      conversation={conversation} userId={user?.user_id}
+      onChange={(saved) => {
+        supportRefreshRef.current += 1;
+        syncConversationState(saved);
+        updateInquiryRecord(saved, selectedInquiry?.thread || null);
+        refreshSupportConversation(saved.id, { replaceMainFeed: saved.id === supportConversationId, detailOnly: saved.id !== supportConversationId }).catch(() => undefined);
+      }} />
   );
 
   const renderSupportBanner = () => {
@@ -1609,9 +1561,9 @@ export default function LilyAssistantScreen() {
       return (
         <View style={[styles.supportBannerActive, styles.supportBannerStacked]}>
           <View style={styles.supportBannerContent}>
-            <Text style={styles.supportBannerTitle}>Was your concern resolved?</Text>
+            <Text style={styles.supportBannerTitle}>Your concern is awaiting your reply.</Text>
             <Text style={styles.supportBannerText}>
-              Please confirm whether the administrator&apos;s response solved your concern.
+              An admin must resolve this concern before you can rate it.
             </Text>
           </View>
           {renderResolutionConfirmation(supportConversationId)}
@@ -1626,22 +1578,26 @@ export default function LilyAssistantScreen() {
       return (
         <View style={styles.supportBannerActive}>
           <View style={styles.supportBannerContent}>
-            <Text style={styles.supportBannerTitle}>You confirmed this concern was resolved.</Text>
+            <Text style={styles.supportBannerTitle}>The admin marked this inquiry as resolved.</Text>
             <Text style={styles.supportBannerText}>
               {resolvedTimestamp ? `Resolved on ${resolvedTimestamp}. ` : ''}
-              Reopen the same conversation if the concern persists.
+              {supportConversation?.satisfactionRating == null ? 'Please confirm whether your concern has been addressed.' : 'Start a new concern for further assistance.'}
             </Text>
+            {supportConversation?.closingNote ? <Text style={styles.supportBannerText}>{supportConversation.closingNote}</Text> : null}
+            {supportConversation?.satisfactionRating != null
+              ? <Text style={styles.supportBannerText}>{`Your rating: ${supportConversation.satisfactionRating}/5. ${supportConversation.satisfactionFeedback || ''}`}</Text>
+              : renderResolutionConfirmation(supportConversationId, supportConversation)}
           </View>
           <View style={styles.supportBannerActions}>
-            <Pressable
+            {!supportConversation?.requestId && <Pressable
               style={[styles.supportPrimaryButton, isReopeningInquiry && styles.buttonDisabled]}
               onPress={() => reopenSelectedInquiry(supportConversationId)}
-              disabled={isReopeningInquiry}
+              disabled={isReopeningInquiry || supportConversation?.satisfactionRating != null}
             >
               <Text style={styles.supportPrimaryButtonText}>
                 {isReopeningInquiry ? 'Reopening...' : 'Reopen Concern'}
               </Text>
-            </Pressable>
+            </Pressable>}
             <Pressable
               style={styles.supportGhostButton}
               onPress={() => returnToLilyAssistant()}
@@ -1673,7 +1629,8 @@ export default function LilyAssistantScreen() {
       return (
         <View style={styles.supportBannerWarn}>
           <View style={styles.supportBannerContent}>
-            <Text style={styles.supportBannerTitle}>Lily Assistant is available again.</Text>
+            <Text style={styles.supportBannerTitle}>This inquiry is closed.</Text>
+            {renderResolutionConfirmation(supportConversationId, supportConversation)}
             <Text style={styles.supportBannerText}>You can continue with Lily Assistant for a new concern.</Text>
           </View>
           <View style={styles.supportBannerActions}>
@@ -1692,7 +1649,6 @@ export default function LilyAssistantScreen() {
     if (!selectedInquiry) return null;
 
     const isSolved = selectedInquiry.status === 'solved';
-    const isAwaitingConfirmation = selectedInquiry.conversation?.status === 'waiting_tenant';
     const resolvedTimestamp = selectedInquiry.conversation?.resolvedAt
       ? formatTimestamp(new Date(selectedInquiry.conversation.resolvedAt))
       : '';
@@ -1700,7 +1656,7 @@ export default function LilyAssistantScreen() {
     return (
       <View style={[styles.detailScreen, { paddingBottom: bottomTabInset }]}>
         <View style={[styles.header, { paddingTop: insets.top + 10 }]}>
-          <Pressable style={styles.backButton} onPress={() => setSelectedInquiry(null)}>
+          <Pressable style={styles.backButton} onPress={() => { selectedInquiryRequestRef.current += 1; setSelectedInquiry(null); }}>
             <Ionicons name="arrow-back" size={22} color={colors.onPrimary} />
           </Pressable>
           <View style={styles.detailHeaderInfo}>
@@ -1779,16 +1735,20 @@ export default function LilyAssistantScreen() {
             <View style={styles.resolvedActions}>
               <View style={styles.resolvedNotice}>
                 <Ionicons name="checkmark-circle" size={16} color={colors.successText} />
-                <Text style={styles.resolvedNoticeText}>This support conversation is resolved.</Text>
+                <Text style={styles.resolvedNoticeText}>{selectedInquiry.conversation?.status === 'closed' ? 'This concern is closed.' : 'This concern is resolved.'}</Text>
               </View>
               {resolvedTimestamp ? (
                 <Text style={styles.reopenPrompt}>Resolved on {resolvedTimestamp}</Text>
               ) : null}
-              <Text style={styles.reopenPrompt}>Still having this issue?</Text>
-              <Pressable
+
+              {selectedInquiry.conversation?.closingNote ? <Text style={styles.reopenPrompt}>{selectedInquiry.conversation.closingNote}</Text> : null}
+              {selectedInquiry.conversation?.satisfactionRating != null
+                ? <Text style={styles.reopenPrompt}>{`Your rating: ${selectedInquiry.conversation.satisfactionRating}/5. ${selectedInquiry.conversation.satisfactionFeedback || ''}`}</Text>
+                : selectedInquiry.conversation?.status === 'resolved' ? renderResolutionConfirmation(selectedInquiry.id, selectedInquiry.conversation) : null}
+              {!selectedInquiry.conversation?.requestId && <Pressable
                 style={[styles.primaryFooterButton, isReopeningInquiry && styles.buttonDisabled]}
                 onPress={() => reopenSelectedInquiry()}
-                disabled={isReopeningInquiry}
+                disabled={isReopeningInquiry || selectedInquiry.conversation?.status !== 'resolved' || selectedInquiry.conversation?.satisfactionRating != null}
                 accessibilityRole="button"
                 accessibilityLabel="Reopen inquiry"
               >
@@ -1796,13 +1756,7 @@ export default function LilyAssistantScreen() {
                 <Text style={styles.primaryFooterButtonText}>
                   {isReopeningInquiry ? 'Reopening...' : 'Reopen Inquiry'}
                 </Text>
-              </Pressable>
-            </View>
-          ) : isAwaitingConfirmation ? (
-            <View style={styles.resolvedActions}>
-              <Text style={styles.resolvedNoticeText}>Was your concern resolved?</Text>
-              <Text style={styles.reopenPrompt}>Continue the same inquiry if the administrator&apos;s response did not solve it.</Text>
-              {renderResolutionConfirmation(selectedInquiry.id)}
+              </Pressable>}
             </View>
           ) : (
             <>
@@ -2209,6 +2163,7 @@ export default function LilyAssistantScreen() {
                   ) : (
                     filteredInquiries.map((item) => (
                       <InquiryCard
+                        rating={item.rating}
                         key={item.id}
                         title={item.title}
                         ticketId={item.ticketId}

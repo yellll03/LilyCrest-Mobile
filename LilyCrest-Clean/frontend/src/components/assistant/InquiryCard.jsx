@@ -3,7 +3,7 @@ import { useTheme } from '../../context/ThemeContext';
 import { semanticStatusPalette, statusTone } from '../../theme/tokens';
 import { supportStatusLabel } from '../../utils/supportConversationPresentation';
 
-export default function InquiryCard({ title, ticketId, preview, status, canonicalStatus, timestamp, onPress }) {
+export default function InquiryCard({ title, ticketId, preview, status, canonicalStatus, timestamp, rating, onPress }) {
   const { colors } = useTheme();
   const actualStatus = canonicalStatus || (status === 'solved' ? 'resolved' : 'open');
   const tone = semanticStatusPalette(colors, statusTone(actualStatus));
@@ -14,11 +14,12 @@ export default function InquiryCard({ title, ticketId, preview, status, canonica
         <Text style={[styles.title, { color: colors.heading }]} numberOfLines={1}>{title}</Text>
         <View style={[styles.chip, { backgroundColor: tone.background, borderColor: tone.solid }]}>
           <Text style={[styles.chipText, { color: tone.text }]}>
-            {supportStatusLabel(actualStatus)}
+            {actualStatus === 'resolved' && rating == null ? 'Awaiting confirmation' : supportStatusLabel(actualStatus)}
           </Text>
         </View>
       </View>
       {ticketId ? <Text style={[styles.ticketId, { color: colors.textSecondary }]}>{ticketId}</Text> : null}
+      {rating != null ? <Text style={{ color: colors.textSecondary }}>{`Rated ${rating}/5`}</Text> : null}
       {preview ? (
         <Text style={[styles.preview, { color: colors.textSecondary }]} numberOfLines={2}>{preview}</Text>
       ) : null}
