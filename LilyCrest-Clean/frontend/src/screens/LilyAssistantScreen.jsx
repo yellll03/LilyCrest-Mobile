@@ -1589,22 +1589,13 @@ export default function LilyAssistantScreen() {
     }
 
     if (chatMode === CHAT_MODE.RESOLVED) {
-      const resolvedTimestamp = supportConversation?.resolvedAt
-        ? formatTimestamp(new Date(supportConversation.resolvedAt))
-        : '';
       return (
-        <View style={styles.supportBannerActive}>
-          <View style={styles.supportBannerContent}>
-            <Text style={styles.supportBannerTitle}>The admin marked this inquiry as resolved.</Text>
-            <Text style={styles.supportBannerText}>
-              {resolvedTimestamp ? `Resolved on ${resolvedTimestamp}. ` : ''}
-              {supportConversation?.satisfactionRating == null ? 'Please confirm whether your concern has been addressed.' : 'Start a new concern for further assistance.'}
-            </Text>
-            {supportConversation?.closingNote ? <Text style={styles.supportBannerText}>{supportConversation.closingNote}</Text> : null}
-            {supportConversation?.satisfactionRating != null
-              ? <Text style={styles.supportBannerText}>{`Your rating: ${supportConversation.satisfactionRating}/5. ${supportConversation.satisfactionFeedback || ''}`}</Text>
-              : renderResolutionConfirmation(supportConversationId, supportConversation)}
-          </View>
+        <View style={styles.resolutionSection}>
+          {renderResolutionConfirmation(supportConversationId, supportConversation)}
+          {!supportConversation?.requestId && supportConversation?.satisfactionRating == null ?
+            <View><Text style={styles.supportBannerText}>This inquiry is resolved.</Text>
+              {supportConversation?.resolvedAt ? <Text style={styles.supportBannerText}>{formatTimestamp(new Date(supportConversation.resolvedAt))}</Text> : null}
+              {supportConversation?.closingNote ? <Text style={styles.supportBannerText}>{supportConversation.closingNote}</Text> : null}</View> : null}
           <View style={styles.supportBannerActions}>
             {!supportConversation?.requestId && <Pressable
               style={[styles.supportPrimaryButton, isReopeningInquiry && styles.buttonDisabled]}
@@ -1644,7 +1635,7 @@ export default function LilyAssistantScreen() {
 
     if (chatMode === CHAT_MODE.CLOSED) {
       return (
-        <View style={styles.supportBannerWarn}>
+        <View style={styles.resolutionSection}>
           <View style={styles.supportBannerContent}>
             <Text style={styles.supportBannerTitle}>This inquiry is closed.</Text>
             {renderResolutionConfirmation(supportConversationId, supportConversation)}
@@ -1666,9 +1657,6 @@ export default function LilyAssistantScreen() {
     if (!selectedInquiry) return null;
 
     const isSolved = selectedInquiry.status === 'solved';
-    const resolvedTimestamp = selectedInquiry.conversation?.resolvedAt
-      ? formatTimestamp(new Date(selectedInquiry.conversation.resolvedAt))
-      : '';
     const latestOutgoingMessageId = getLatestOutgoingMessageId(selectedInquiry.thread);
     return (
       <View style={[styles.detailScreen, { paddingBottom: bottomTabInset }]}>
@@ -1689,6 +1677,7 @@ export default function LilyAssistantScreen() {
         </View>
 
         <ScrollView
+          keyboardShouldPersistTaps="handled"
           ref={adminScrollRef}
           style={styles.detailMessages}
           contentContainerStyle={styles.detailMessagesContent}
@@ -1745,23 +1734,14 @@ export default function LilyAssistantScreen() {
               highlighted={String(item.id) === String(notificationMessageId || '')}
             />
           ))}
-        </ScrollView>
-
-        <View style={styles.detailFooter}>
           {isSolved ? (
             <View style={styles.resolvedActions}>
-              <View style={styles.resolvedNotice}>
-                <Ionicons name="checkmark-circle" size={16} color={colors.successText} />
-                <Text style={styles.resolvedNoticeText}>{selectedInquiry.conversation?.status === 'closed' ? 'This concern is closed.' : 'This concern is resolved.'}</Text>
-              </View>
-              {resolvedTimestamp ? (
-                <Text style={styles.reopenPrompt}>Resolved on {resolvedTimestamp}</Text>
-              ) : null}
-
-              {selectedInquiry.conversation?.closingNote ? <Text style={styles.reopenPrompt}>{selectedInquiry.conversation.closingNote}</Text> : null}
-              {selectedInquiry.conversation?.satisfactionRating != null
-                ? <Text style={styles.reopenPrompt}>{`Your rating: ${selectedInquiry.conversation.satisfactionRating}/5. ${selectedInquiry.conversation.satisfactionFeedback || ''}`}</Text>
-                : selectedInquiry.conversation?.status === 'resolved' ? renderResolutionConfirmation(selectedInquiry.id, selectedInquiry.conversation) : null}
+              {selectedInquiry.conversation?.status === 'closed' ? <Text style={styles.resolvedNoticeText}>This concern is closed.</Text> : null}
+              {selectedInquiry.conversation?.requestId || selectedInquiry.conversation?.satisfactionRating != null
+                ? renderResolutionConfirmation(selectedInquiry.id, selectedInquiry.conversation)
+                : <View><Text style={styles.resolvedNoticeText}>{selectedInquiry.conversation?.status !== 'closed' ? 'This concern is resolved.' : ''}</Text>
+                  {selectedInquiry.conversation?.resolvedAt ? <Text style={styles.reopenPrompt}>{formatTimestamp(new Date(selectedInquiry.conversation.resolvedAt))}</Text> : null}
+                  {selectedInquiry.conversation?.closingNote ? <Text style={styles.reopenPrompt}>{selectedInquiry.conversation.closingNote}</Text> : null}</View>}
               {!selectedInquiry.conversation?.requestId && <Pressable
                 style={[styles.primaryFooterButton, isReopeningInquiry && styles.buttonDisabled]}
                 onPress={() => reopenSelectedInquiry()}
@@ -1775,7 +1755,11 @@ export default function LilyAssistantScreen() {
                 </Text>
               </Pressable>}
             </View>
-          ) : (
+          ) : null}
+        </ScrollView>
+
+        <View style={styles.detailFooter}>
+          {!isSolved ? (
             <>
               {attachments.length ? (
                 <View style={styles.attachmentRow}>
@@ -1868,7 +1852,7 @@ export default function LilyAssistantScreen() {
                 </View>
               ) : null}
             </>
-          )}
+          ) : null}
         </View>
       </View>
     );
@@ -2049,10 +2033,11 @@ export default function LilyAssistantScreen() {
                   ))}
 
                   {chat.isTyping ? <TypingIndicator label={getTypingLabel(chat.typingIntent)} /> : null}
+                  {[CHAT_MODE.RESOLVED, CHAT_MODE.CLOSED].includes(chatMode) ? renderSupportBanner() : null}
                 </ScrollView>
 
                 <View style={styles.bottomZone}>
-                  {renderSupportBanner()}
+                  {![CHAT_MODE.RESOLVED, CHAT_MODE.CLOSED].includes(chatMode) ? renderSupportBanner() : null}
 
                   {attachments.length ? (
                     <View style={styles.attachmentRow}>
@@ -2503,6 +2488,7 @@ function createAssistantStyles(c, dark) {
     alignItems: 'center',
     gap: 8,
   },
+  resolutionSection: { gap: 12, width: '100%' },
   resolutionCard: {
     width: '100%',
     gap: 8,

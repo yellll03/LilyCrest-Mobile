@@ -30,12 +30,12 @@ describe('Phase 4 inquiry, archive, and attachment reconciliation', () => {
     const conversation = { id: 'thread-1', requestId: 'request-1', tenantUserId: 'tenant-1',
       status: 'waiting_tenant', revision: 1, satisfactionRating: null };
     const view = render(<SupportConcernRating conversation={conversation} userId="tenant-1" />);
-    expect(view.queryByText('Is your inquiry resolved?')).toBeNull();
+    expect(view.queryByText('Is your concern resolved?')).toBeNull();
     expect(view.queryByLabelText('Submit rating')).toBeNull();
     const resolved = { ...conversation, status: 'resolved', revision: 2,
       resolvedAt: '2026-09-28T00:00:00.000Z', resolvedBy: 'admin-1' };
     view.rerender(<SupportConcernRating conversation={resolved} userId="tenant-1" />);
-    expect(view.getByText('Is your inquiry resolved?')).toBeTruthy();
+    expect(view.getByText('Is your concern resolved?')).toBeTruthy();
     expect(view.getByLabelText('No, I still need help')).toBeTruthy();
     expect(view.queryByLabelText('5 stars')).toBeNull();
     fireEvent.press(view.getByLabelText("Yes, it's resolved"));
@@ -58,7 +58,8 @@ describe('Phase 4 inquiry, archive, and attachment reconciliation', () => {
 
   test('same-thread reopen and resolved timestamp remain visible', () => {
     expect(api).toContain('reopenSupportChat:');
-    expect(screen).toContain('Resolved on {resolvedTimestamp}');
+    const view = render(<SupportConcernRating conversation={{ id: 'date-thread', requestId: 'date-request', tenantUserId: 'tenant', status: 'resolved', resolvedBy: 'admin', resolvedAt: '2026-10-10T08:00:00Z', revision: 2 }} userId="tenant" />);
+    expect(view.getByText(new Date('2026-10-10T08:00:00Z').toLocaleString())).toBeTruthy();
     expect(screen).toContain("'Reopen Inquiry'");
     expect(screen).toContain('selectedInquiry.thread.map');
   });
