@@ -41,8 +41,8 @@ describe('support inquiry presentation', () => {
   test('composer releases hidden tab-bar space while the keyboard is visible', () => {
     const screen = read('src/screens/LilyAssistantScreen.jsx');
     expect(screen).toContain('useBottomTabBarHeight()');
-    expect(screen).toContain("Keyboard.addListener('keyboardDidShow'");
-    expect(screen).toContain("Keyboard.addListener('keyboardDidHide'");
+    expect(screen).toContain("'keyboardWillShow' : 'keyboardDidShow'");
+    expect(screen).toContain("'keyboardWillHide' : 'keyboardDidHide'");
     expect(screen).toContain('const bottomTabInset = isKeyboardVisible ? 0 : tabBarHeight;');
     expect(screen).toContain('styles.detailScreen, { paddingBottom: bottomTabInset }');
     expect(screen).toContain('styles.screen, { paddingBottom: bottomTabInset }');
