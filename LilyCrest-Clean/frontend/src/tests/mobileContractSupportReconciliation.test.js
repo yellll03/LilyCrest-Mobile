@@ -23,7 +23,7 @@ describe('mobile contract/support canonical consumption', () => {
   test('support lifecycle exposes saved satisfaction and sends canonical rating/reopen identities', async () => {
     expect(assistant).toContain('supportStatusLabel(selectedInquiry.canonicalStatus)');
     expect(assistant).toContain('satisfactionRating');
-    expect(assistant).toContain('satisfactionFeedback');
+    expect(read('src/components/assistant/SupportConcernRating.jsx')).toContain('satisfactionFeedback');
     expect(assistant).toContain('<SupportConcernRating');
     const patch = jest.spyOn(authenticatedApi, 'patch').mockResolvedValue({ data: {} });
     try {

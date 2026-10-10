@@ -1,7 +1,7 @@
 /* global test */
 import React from 'react';
-import { act, fireEvent, render } from '@testing-library/react-native';
-import { AppState, Keyboard, KeyboardAvoidingView, Platform } from 'react-native';
+import { act, fireEvent, render, within } from '@testing-library/react-native';
+import { AppState, Keyboard, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
 import LilyAssistantScreen from '../screens/LilyAssistantScreen';
 import { apiService } from '../services/api';
 
@@ -162,4 +162,22 @@ test('a poll completed after blur cannot overwrite the foreground reconciliation
   await act(async () => finishOldRead({ data: { conversation: resolved, messages: [] } }));
   expect(view.getByText('Your rating: 5/5')).toBeTruthy();
   expect(view.queryByLabelText("Yes, it's resolved")).toBeNull();
+});
+
+
+test('resolved card scrolls independently of the composer and Continue with Lily stays outside both cards', async () => {
+  conversation = { ...resolved, closingNote: 'A long resolution note '.repeat(40) };
+  const view = await mount();
+  const confirmation = view.getByTestId('support-confirmation-card');
+  expect(view.UNSAFE_getAllByType(ScrollView).some((scroll) => within(scroll).queryByTestId('support-confirmation-card'))).toBe(true);
+  expect(within(confirmation).queryByText('Continue with Lily')).toBeNull();
+  expect(view.getAllByText('Continue with Lily')).toHaveLength(1);
+  fireEvent.press(view.getByLabelText("Yes, it's resolved"));
+  const rating = view.getByTestId('support-rating-card');
+  expect(within(rating).queryByText('Continue with Lily')).toBeNull();
+  expect(view.queryByText('Your concern has been marked as resolved.')).toBeNull();
+  fireEvent.press(view.getByText('Continue with Lily'));
+  expect(view.queryByTestId('support-rating-card')).toBeNull();
+  expect(apiService.rateSupportInquiry).not.toHaveBeenCalled();
+  expect(apiService.reopenSupportChat).not.toHaveBeenCalled();
 });

@@ -116,51 +116,78 @@ function RatingForm({ conversation, userId, onChange }) {
   };
   if (!owned) return null;
   if (hasRating(current)) return (
-    <View style={styles.card}>
+    <View testID="support-rating-completed" style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <Text style={{ color: colors.textPrimary }}>{(current.satisfaction?.rating ?? current.satisfactionRating) != null ? 'Your rating: ' + (current.satisfaction?.rating ?? current.satisfactionRating) + '/5' : 'Your rating has been submitted.'}</Text>
       {(current.satisfaction?.feedback || current.satisfactionFeedback) ? <Text style={{ color: colors.textSecondary }}>{current.satisfaction?.feedback || current.satisfactionFeedback}</Text> : null}
     </View>
   );
   if (!eligible && !needsCheck && !error) return null;
   return (
-    <View style={styles.card}>
+    <View testID={confirmed ? "support-rating-card" : "support-confirmation-card"} style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       {eligible && !confirmed ? <>
-        <Text style={{ color: colors.textPrimary }}>Is your inquiry resolved?</Text>
-        <Text style={{ color: colors.textSecondary }}>The admin marked this inquiry as resolved. Please let us know if your concern has been addressed.</Text>
+        <Text accessibilityRole="header" style={[styles.heading, { color: colors.textPrimary }]}>Your concern has been marked as resolved.</Text>
+        <Text style={[styles.description, { color: colors.textSecondary }]}>{new Date(current.resolvedAt).toLocaleString()}</Text>
+        {(current.resolutionNote || current.closingNote) ? <View style={[styles.note, { backgroundColor: colors.surfaceSecondary }]}>
+          <Text style={[styles.label, { color: colors.textPrimary }]}>Admin resolution note</Text>
+          <Text style={[styles.description, { color: colors.textPrimary }]}>{current.resolutionNote || current.closingNote}</Text>
+        </View> : null}
+        <Text style={[styles.label, { color: colors.textPrimary }]}>Is your concern resolved?</Text>
         <Pressable accessibilityRole="button" accessibilityLabel="Yes, it's resolved" disabled={pending || needsCheck}
+          style={[styles.button, { backgroundColor: colors.primary }, (pending || needsCheck) && styles.disabled]}
           accessibilityState={{ disabled: pending || needsCheck }} onPress={() => setConfirmed(true)}>
-          <Text style={{ color: colors.interactive }}>Yes, it’s resolved</Text>
+          <Text style={[styles.buttonText, { color: colors.onPrimary }]}>Yes, It&apos;s Resolved</Text>
         </Pressable>
         <Pressable accessibilityRole="button" accessibilityLabel="No, I still need help" disabled={pending || needsCheck}
+          style={[styles.button, styles.secondary, { borderColor: colors.interactive }, (pending || needsCheck) && styles.disabled]}
           accessibilityState={{ disabled: pending || needsCheck }} onPress={reopen}>
-          <Text style={{ color: colors.interactive }}>{pending ? 'Reopening...' : 'No, I still need help'}</Text>
+          <Text style={[styles.buttonText, { color: colors.interactive }]}>{pending ? 'Reopening...' : 'No, I Still Need Help'}</Text>
         </Pressable>
       </> : null}
       {eligible && confirmed ? <>
-        <Text style={{ color: colors.textPrimary }}>Rate your support experience</Text>
+        <Text accessibilityRole="header" style={[styles.heading, { color: colors.textPrimary }]}>Rate your support experience</Text>
+        <Text style={[styles.description, { color: colors.textSecondary }]}>How satisfied are you with the support you received?</Text>
         <View style={styles.row}>
           {[1, 2, 3, 4, 5].map((value) => (
-            <Pressable key={value} disabled={pending || needsCheck} onPress={() => setRating(value)} accessibilityRole="button"
+            <Pressable key={value} style={styles.star} disabled={pending || needsCheck} onPress={() => setRating(value)} accessibilityRole="button"
               accessibilityLabel={value + ' stars'} accessibilityState={{ selected: value === rating, disabled: pending || needsCheck }}>
-              <Text style={{ color: colors.interactive, fontSize: 26 }}>{value <= rating ? '★' : '☆'}</Text>
+              <Text style={{ color: colors.interactive, fontSize: 32 }}>{value <= rating ? '★' : '☆'}</Text>
             </Pressable>
           ))}
         </View>
-        <TextInput accessibilityLabel="Rating feedback" placeholder="Tell us about your experience (optional)" value={feedback}
-          onChangeText={setFeedback} editable={!pending && !needsCheck} maxLength={1000} multiline style={{ color: colors.textPrimary }} />
+        <Text style={[styles.label, { color: colors.textPrimary }]}>Feedback (optional)</Text>
+        <TextInput accessibilityLabel="Rating feedback" placeholder="Tell us about your experience" value={feedback}
+          placeholderTextColor={colors.textSecondary} textAlignVertical="top"
+          onChangeText={setFeedback} editable={!pending && !needsCheck} maxLength={1000} multiline
+          style={[styles.input, { color: colors.textPrimary, backgroundColor: colors.inputBackground, borderColor: colors.inputBorder }]} />
         <Pressable accessibilityRole="button" accessibilityLabel="Submit rating" onPress={submit}
+          style={[styles.button, { backgroundColor: colors.primary }, (pending || needsCheck || !rating) && styles.disabled]}
           disabled={pending || needsCheck || !rating} accessibilityState={{ disabled: pending || needsCheck || !rating }}>
-          <Text style={{ color: colors.interactive }}>{pending ? 'Saving...' : 'Submit Rating'}</Text>
+          <Text style={[styles.buttonText, { color: colors.onPrimary }]}>{pending ? 'Saving...' : 'Submit Rating'}</Text>
         </Pressable>
-        <Pressable accessibilityRole="button" accessibilityLabel="Back to confirmation" disabled={pending || needsCheck} onPress={() => setConfirmed(false)}>
-          <Text style={{ color: colors.interactive }}>Back</Text>
+        <Pressable accessibilityRole="button" accessibilityLabel="Back to confirmation" disabled={pending || needsCheck}
+          accessibilityState={{ disabled: pending || needsCheck }}
+          style={[styles.button, styles.secondary, { borderColor: colors.interactive }, (pending || needsCheck) && styles.disabled]} onPress={() => setConfirmed(false)}>
+          <Text style={[styles.buttonText, { color: colors.interactive }]}>Back</Text>
         </Pressable>
       </> : null}
       {error ? <Text accessibilityRole="alert" style={{ color: colors.textPrimary }}>{error}</Text> : null}
-      {needsCheck && !pending ? <Pressable accessibilityRole="button" accessibilityLabel="Check rating status" onPress={check}>
+      {needsCheck && !pending ? <Pressable accessibilityRole="button" accessibilityLabel="Check rating status" style={[styles.button, styles.secondary, { borderColor: colors.interactive }]} onPress={check}>
         <Text style={{ color: colors.interactive }}>Check rating status</Text>
       </Pressable> : null}
     </View>
   );
 }
-const styles = StyleSheet.create({ card: { gap: 8, paddingVertical: 8 }, row: { flexDirection: 'row', gap: 14 } });
+const styles = StyleSheet.create({
+  card: { gap: 12, padding: 16, borderWidth: 1, borderRadius: 12, width: '100%' },
+  heading: { fontSize: 17, fontWeight: '700', flexShrink: 1 },
+  description: { fontSize: 14, lineHeight: 21 },
+  label: { fontSize: 14, fontWeight: '600' },
+  note: { padding: 12, borderRadius: 8, gap: 6 },
+  button: { minHeight: 48, paddingVertical: 12, paddingHorizontal: 12, borderRadius: 8, alignItems: 'center', justifyContent: 'center' },
+  buttonText: { fontSize: 15, fontWeight: '600', textAlign: 'center' },
+  secondary: { borderWidth: 1 },
+  disabled: { opacity: 0.5 },
+  row: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', gap: 4 },
+  star: { minWidth: 44, minHeight: 48, alignItems: 'center', justifyContent: 'center' },
+  input: { minHeight: 96, maxHeight: 180, borderWidth: 1, borderRadius: 8, padding: 12, fontSize: 15, lineHeight: 22 },
+});

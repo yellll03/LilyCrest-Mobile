@@ -8,8 +8,10 @@ describe('chat tenant/auth reconciliation', () => {
   const screenSource = fs.readFileSync(path.resolve(__dirname, '../screens/LilyAssistantScreen.jsx'), 'utf8');
 
   it('exposes saved ratings and offers rating for resolved details', () => {
-    expect(screenSource).toContain('Your rating: ${selectedInquiry.conversation.satisfactionRating}/5');
-    expect(screenSource).toContain("selectedInquiry.conversation?.status === 'resolved' ? renderResolutionConfirmation");
+    const form = fs.readFileSync(path.resolve(__dirname, '../components/assistant/SupportConcernRating.jsx'), 'utf8');
+    expect(form).toContain("'Your rating: '");
+    expect(form).toContain('current.satisfaction?.rating ?? current.satisfactionRating');
+    expect(screenSource).toContain('renderResolutionConfirmation(selectedInquiry.id, selectedInquiry.conversation)');
     expect(screenSource).toContain('<SupportConcernRating');
     expect(screenSource).toContain('userId={user?.user_id}');
   });

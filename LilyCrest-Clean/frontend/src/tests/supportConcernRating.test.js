@@ -189,7 +189,7 @@ test('list refresh cannot erase an immutable saved rating at equal revision',()=
 
 test('admin resolution prompts Yes or No before exposing rating and repeats after remount', () => {
   let view = render(<SupportConcernRating conversation={concern()} userId="tenant-a" />);
-  expect(view.getByText('Is your inquiry resolved?')).toBeTruthy();
+  expect(view.getByText('Is your concern resolved?')).toBeTruthy();
   expect(view.queryByLabelText('5 stars')).toBeNull();
   expect(view.queryByLabelText('Submit rating')).toBeNull();
   fireEvent.press(view.getByLabelText("Yes, it's resolved"));
@@ -201,7 +201,7 @@ test('admin resolution prompts Yes or No before exposing rating and repeats afte
   expect(view.getByLabelText('5 stars').props.accessibilityState.selected).toBe(true);
   view.unmount();
   view = render(<SupportConcernRating conversation={concern()} userId="tenant-a" />);
-  expect(view.getByText('Is your inquiry resolved?')).toBeTruthy();
+  expect(view.getByText('Is your concern resolved?')).toBeTruthy();
   expect(view.queryByLabelText('Submit rating')).toBeNull();
 });
 
@@ -216,12 +216,12 @@ test('No reopens the same inquiry once without a rating and ignores stale resolv
   expect(apiService.reopenSupportChat).toHaveBeenCalledTimes(1);
   expect(apiService.reopenSupportChat).toHaveBeenCalledWith('thread-a', '', { requestId: 'request-a', revision: 2 });
   await act(async () => finish({ data: { conversation: concern({ status: 'open', resolvedAt: null, resolvedBy: null, revision: 3 }) } }));
-  expect(view.queryByText('Is your inquiry resolved?')).toBeNull();
+  expect(view.queryByText('Is your concern resolved?')).toBeNull();
   expect(view.queryByLabelText('Submit rating')).toBeNull();
   expect(apiService.rateSupportInquiry).not.toHaveBeenCalled();
   expect(changed.mock.calls[0][0].status).toBe('open');
   view.rerender(<SupportConcernRating conversation={concern()} userId="tenant-a" />);
-  expect(view.queryByText('Is your inquiry resolved?')).toBeNull();
+  expect(view.queryByText('Is your concern resolved?')).toBeNull();
 });
 
 test('a later admin resolution requires confirmation again', () => {
@@ -229,7 +229,7 @@ test('a later admin resolution requires confirmation again', () => {
   fireEvent.press(view.getByLabelText("Yes, it's resolved"));
   view.rerender(<SupportConcernRating conversation={concern({ status: 'open', resolvedAt: null, revision: 3 })} userId="tenant-a" />);
   view.rerender(<SupportConcernRating conversation={concern({ resolvedAt: '2026-09-28T01:00:00Z', revision: 4 })} userId="tenant-a" />);
-  expect(view.getByText('Is your inquiry resolved?')).toBeTruthy();
+  expect(view.getByText('Is your concern resolved?')).toBeTruthy();
   expect(view.queryByLabelText('Submit rating')).toBeNull();
 });
 
@@ -241,4 +241,29 @@ test('reopen timeout reconciles saved open state without another mutation', asyn
   expect(view.queryByLabelText('No, I still need help')).toBeNull();
   expect(apiService.reopenSupportChat).toHaveBeenCalledTimes(1);
   expect(apiService.rateSupportInquiry).not.toHaveBeenCalled();
+});
+
+
+test('confirmation and rating cards are exclusive; Back is local and preserves the same concern', () => {
+  const view = render(<SupportConcernRating conversation={concern({ closingNote: 'Repaired the fixture' })} userId="tenant-a" />);
+  expect(view.getByTestId('support-confirmation-card')).toBeTruthy();
+  expect(view.getByText('Your concern has been marked as resolved.')).toBeTruthy();
+  expect(view.getByText('Repaired the fixture')).toBeTruthy();
+  expect(view.queryByTestId('support-rating-card')).toBeNull();
+  fireEvent.press(view.getByLabelText("Yes, it's resolved"));
+  expect(view.queryByTestId('support-confirmation-card')).toBeNull();
+  expect(view.queryByText('Is your concern resolved?')).toBeNull();
+  expect(view.queryByText('Repaired the fixture')).toBeNull();
+  expect(view.getByTestId('support-rating-card')).toBeTruthy();
+  expect(view.getByLabelText('Submit rating')).toBeDisabled();
+  fireEvent.press(view.getByLabelText('3 stars'));
+  fireEvent.changeText(view.getByLabelText('Rating feedback'), 'Draft feedback');
+  fireEvent.press(view.getByLabelText('Back to confirmation'));
+  expect(view.getByTestId('support-confirmation-card')).toBeTruthy();
+  expect(view.queryByTestId('support-rating-card')).toBeNull();
+  expect(apiService.rateSupportInquiry).not.toHaveBeenCalled();
+  expect(apiService.reopenSupportChat).not.toHaveBeenCalled();
+  fireEvent.press(view.getByLabelText("Yes, it's resolved"));
+  expect(view.getByLabelText('Rating feedback').props.value).toBe('Draft feedback');
+  expect(view.getByLabelText('3 stars').props.accessibilityState.selected).toBe(true);
 });
