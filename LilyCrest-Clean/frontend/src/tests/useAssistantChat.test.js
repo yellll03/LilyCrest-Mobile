@@ -10,8 +10,39 @@ jest.mock('../services/api', () => ({
 }));
 
 describe('useAssistantChat', () => {
+  it('blocks overlapping sends even after the cooldown expires', async () => {
+    let resolve;
+    apiService.sendChatMessage.mockImplementationOnce(() => new Promise((done) => { resolve = done; }));
+    const { result } = renderHook(() => useAssistantChat('slow-session'));
+    let pending;
+    act(() => { pending = result.current.sendMessage('hello'); });
+    const now = jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 2000);
+    let blocked;
+    await act(async () => { blocked = await result.current.sendMessage('again'); });
+    expect(blocked.error.code).toBe('rate_limited');
+    expect(apiService.sendChatMessage).toHaveBeenCalledTimes(1);
+    await act(async () => { resolve({ data: { response: 'done' } }); await pending; });
+    now.mockRestore();
+    expect(result.current.isTyping).toBe(false);
+  });
   beforeEach(() => {
     apiService.sendChatMessage.mockReset();
+  });
+
+  it('releases the send guard after failure so the tenant can retry', async () => {
+    apiService.sendChatMessage.mockRejectedValueOnce({ response: { status: 400 } });
+    const { result } = renderHook(() => useAssistantChat('retry-session'));
+    let failed;
+    await act(async () => { failed = await result.current.sendMessage('first'); });
+    expect(failed.error).toBeDefined();
+    const now = jest.spyOn(Date, 'now').mockReturnValue(Date.now() + 2000);
+    try {
+      apiService.sendChatMessage.mockResolvedValueOnce({ data: { response: 'recovered' } });
+      let retried;
+      await act(async () => { retried = await result.current.sendMessage('first'); });
+      expect(retried.response).toBe('recovered');
+      expect(result.current.isTyping).toBe(false);
+    } finally { now.mockRestore(); }
   });
 
   it('retries with backoff then succeeds', async () => {

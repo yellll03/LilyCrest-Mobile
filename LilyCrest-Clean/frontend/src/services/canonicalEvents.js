@@ -1,6 +1,13 @@
 const notificationListeners = new Set();
 const recentNotificationKeys = new Map();
 const DEDUPE_WINDOW_MS = 30_000;
+let notificationAccount = null;
+
+export function setCanonicalNotificationAccount(accountId) {
+  if (notificationAccount === accountId) return;
+  notificationAccount = accountId;
+  recentNotificationKeys.clear();
+}
 
 function text(value) {
   return value == null ? '' : String(value).trim();
@@ -12,6 +19,9 @@ export function canonicalNotificationKey(event = {}) {
     data.event_key
     || data.dedup_key
     || data.dedupeKey
+    || event.event_key
+    || event.dedup_key
+    || event.dedupeKey
     || data.notification_id
     || event.notification_id,
   );
@@ -36,7 +46,7 @@ export function normalizeCanonicalNotification(event = {}) {
   const type = text(sourceData.type || event.type).toLowerCase();
   const entityType = text(event.entityType).toLowerCase();
   const entityId = text(event.entityId);
-  const dedupeKey = text(event.dedupeKey || sourceData.event_key || sourceData.dedup_key);
+  const dedupeKey = text(event.dedupeKey || event.dedup_key || event.event_key || sourceData.event_key || sourceData.dedup_key);
   const dedupeParts = dedupeKey.startsWith('chat_reply:') ? dedupeKey.split(':') : [];
   const conversationId = text(
     sourceData.conversation_id
@@ -57,18 +67,22 @@ export function normalizeCanonicalNotification(event = {}) {
 
   const data = {
     ...sourceData,
+    ...(event.url && !sourceData.url ? { url: event.url } : {}),
+    ...Object.fromEntries(['billing_id', 'request_id', 'reservation_id', 'announcement_id', 'extension_request_id']
+      .filter(key => event[key] && !sourceData[key]).map(key => [key, String(event[key])])),
     ...(type ? { type } : {}),
     ...(conversationId ? { conversation_id: conversationId } : {}),
     ...(messageId ? { message_id: messageId } : {}),
     ...(contractId ? { contract_id: contractId } : {}),
     ...(dedupeKey ? { event_key: dedupeKey } : {}),
+    ...(event.notification_id && !sourceData.notification_id ? { notification_id: String(event.notification_id) } : {}),
   };
 
   return {
     ...event,
     type,
     title: text(event.title) || 'New update',
-    body: text(event.body || event.message) || 'You have a new LilyCrest update.',
+    body: text(event.body || event.message || event.content) || 'You have a new LilyCrest update.',
     data,
   };
 }

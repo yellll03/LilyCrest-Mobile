@@ -1140,6 +1140,9 @@ export default function LilyAssistantScreen() {
       const { response, intent, metadata, needsAdmin, suggestions, error } = await chat.sendMessage(assistantText, uploadedAttachments);
 
       if (error) {
+        setMessages((prev) => prev.filter((item) => item.id !== optimisticMessageId));
+        setInputValue(text);
+        setAttachments(attachments);
         setNetworkError(error.detail || 'Unable to reach Lily Assistant right now.');
         setMessages((prev) => [
           ...prev,
@@ -1156,6 +1159,9 @@ export default function LilyAssistantScreen() {
       }
 
       if (!response) {
+        setMessages((prev) => prev.filter((item) => item.id !== optimisticMessageId));
+        setInputValue(text);
+        setAttachments(attachments);
         setNetworkError('Lily Assistant did not return a response. Please try again.');
         return;
       }

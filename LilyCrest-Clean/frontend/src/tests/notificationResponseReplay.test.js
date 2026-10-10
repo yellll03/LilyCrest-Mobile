@@ -12,6 +12,12 @@ const mockExpoNotifications = {
 jest.mock('expo-notifications', () => mockExpoNotifications);
 jest.mock('../config/firebase', () => ({ getFreshIdToken: jest.fn() }));
 
+test('support resolution notification routes to the exact concern without a fake message', () => {
+  const { resolveNotificationRoute } = require('../services/notifications');
+  expect(resolveNotificationRoute({ type: 'chat_reply', conversation_id: 'thread-a', request_id: 'request-a' }))
+    .toEqual({ pathname: '/(tabs)/chatbot', params: { conversationId: 'thread-a', requestId: 'request-a' } });
+});
+
 const {
   clearLastNotificationResponse,
   extractNotificationResponseInteraction,

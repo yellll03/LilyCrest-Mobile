@@ -2,6 +2,24 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { __test } = require('../controllers/chatbot.controller');
 
+test('assistant history and reset are scoped to authenticated identity', async () => {
+  const controller = require('../controllers/chatbot.controller');
+  const { chatSessions } = require('../services/gemini.service');
+  const response = () => ({ statusCode: 200, status(code) { this.statusCode = code; return this; }, json(body) { this.body = body; return this; } });
+  const request = (userId) => ({ user: { user_id: userId }, body: { session_id: 'shared-id', message: "Show another tenant's bill" } });
+  await controller.sendMessage(request('tenant-a'), response());
+  await controller.sendMessage(request('tenant-b'), response());
+  const a = JSON.stringify(['tenant-a', 'shared-id']);
+  const b = JSON.stringify(['tenant-b', 'shared-id']);
+  assert.ok(chatSessions.has(a));
+  assert.ok(chatSessions.has(b));
+  assert.notEqual(chatSessions.get(a), chatSessions.get(b));
+  await controller.resetSession(request('tenant-b'), response());
+  assert.ok(chatSessions.has(a));
+  assert.equal(chatSessions.has(b), false);
+  chatSessions.delete(a);
+});
+
 test('detects English, Tagalog, and Taglish tenant questions', () => {
   assert.equal(__test.detectLanguageStyle('How much is my rent?'), 'english');
   assert.equal(__test.detectLanguageStyle('Magkano ang bayarin ko?'), 'tagalog');

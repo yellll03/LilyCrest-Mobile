@@ -32,6 +32,7 @@ export function useAssistantChat(initialSessionId) {
   const [isTyping, setIsTyping] = useState(false);
   const [typingIntent, setTypingIntent] = useState('general');
   const cooldownRef = useRef(0);
+  const sendingRef = useRef(false);
 
   useEffect(() => {
     setSessionId(initialSessionId);
@@ -48,10 +49,11 @@ export function useAssistantChat(initialSessionId) {
   const sendMessage = useCallback(
     async (text, attachments = []) => {
       const now = Date.now();
-      if (now - cooldownRef.current < RATE_LIMIT_MS) {
+      if (sendingRef.current || now - cooldownRef.current < RATE_LIMIT_MS) {
         return { error: { code: 'rate_limited', detail: 'Please wait a moment before sending again.' } };
       }
       cooldownRef.current = now;
+      sendingRef.current = true;
 
       setIsTyping(true);
       setTypingIntent(detectTypingIntent(text));
@@ -69,6 +71,7 @@ export function useAssistantChat(initialSessionId) {
         );
 
         if (!error) {
+          sendingRef.current = false;
           setIsTyping(false);
           const payload = unwrapAssistantPayload(data);
           const response = payload?.message || payload?.response || '';
@@ -85,6 +88,7 @@ export function useAssistantChat(initialSessionId) {
       }
 
       setIsTyping(false);
+      sendingRef.current = false;
       setTypingIntent('general');
       return { error: lastError || { code: 'network_error', detail: 'No response received.' } };
     },

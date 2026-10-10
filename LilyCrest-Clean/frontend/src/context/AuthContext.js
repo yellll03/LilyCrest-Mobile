@@ -37,6 +37,7 @@ import { subscribeSessionExpired, subscribeSessionRecovered } from '../services/
 import {
   canonicalNotificationKey,
   publishCanonicalNotification,
+  setCanonicalNotificationAccount,
   subscribeCanonicalNotifications,
 } from '../services/canonicalEvents';
 import { useToast } from './ToastContext';
@@ -235,14 +236,16 @@ export function AuthProvider({ children }) {
   // Notifications screen, which now sources its unified feed from this same
   // context instead of polling independently) can react to a failed refresh
   // without this function's own silent-retry polling behavior having to change.
-  const tenancyNotificationFeed = useRef({ userId: null, keys: null });
+  const notificationFeed = useRef({ userId: null, keys: null });
   const notificationRequestSequence = useRef(0);
   const notificationAccount = useRef(null);
   const currentNotificationAccount = authStatus === 'authenticated' ? user?.user_id : null;
   if (notificationAccount.current !== currentNotificationAccount) {
     notificationAccount.current = currentNotificationAccount;
+    setCanonicalNotificationAccount(currentNotificationAccount);
+    latestNotificationKeyRef.current = '';
     notificationRequestSequence.current += 1;
-    tenancyNotificationFeed.current = { userId: null, keys: null };
+    notificationFeed.current = { userId: null, keys: null };
   }
   const refreshNotifications = useCallback(async () => {
     if (authStatusRef.current !== 'authenticated' || !userRef.current?.user_id) return false;
@@ -252,26 +255,25 @@ export function AuthProvider({ children }) {
     try {
       const response = await api.get('/notifications');
       if (!isCurrent()) return false;
-      const items = Array.isArray(response?.data) ? response.data : [];
-      const tenancyRows = items.filter(item => /room transfer|stay extension|stay_extension|renewal_effective|contract_document_ready|contract_finalized|contract_replaced/i.test(`${item?.title || ''} ${item?.type || ''} ${item?.data?.type || ''}`));
-      const previousFeed = tenancyNotificationFeed.current;
-      const nextKeys = new Set(tenancyRows.map(canonicalNotificationKey));
-      // Record first, then publish. Subscribers may request another refresh.
-      tenancyNotificationFeed.current = { userId, keys: nextKeys };
+      if (!Array.isArray(response?.data)) return false;
+      const items = response.data;
+      const previousFeed = notificationFeed.current;
+      // Record the complete feed before publishing to avoid recursive refreshes.
+      notificationFeed.current = { userId, keys: new Set(items.map(canonicalNotificationKey)) };
       const nextUnreadCount = items.filter((item) => !item?.read).length;
       // Skip the state update entirely when nothing actually changed (e.g. an
       // empty list refetched as still-empty) — avoids replacing an array with
       // an equal-but-new reference and triggering a pointless re-render on
       // every 60s poll tick / foreground refresh for a tenant with no notifications.
       setNotifications((prev) => (
-        prev.length === items.length && prev.every((item, i) => item?.notification_id === items[i]?.notification_id && item?.read === items[i]?.read)
+        JSON.stringify(prev) === JSON.stringify(items)
           ? prev
           : items
       ));
       setNotificationUnreadCount((prev) => (prev === nextUnreadCount ? prev : nextUnreadCount));
       if (previousFeed.userId === userId && previousFeed.keys) {
-        for (const item of tenancyRows) {
-          if (!previousFeed.keys.has(canonicalNotificationKey(item))) publishCanonicalNotification(item);
+        for (const item of items) {
+          if (!previousFeed.keys.has(canonicalNotificationKey(item))) publishCanonicalNotification({ ...item, origin: 'poll' });
         }
       }
       return true;
@@ -559,7 +561,7 @@ export function AuthProvider({ children }) {
     const nextKey = canonicalNotificationKey(notification);
     if (!nextKey || latestNotificationKeyRef.current === nextKey) return;
     latestNotificationKeyRef.current = nextKey;
-    refreshNotifications();
+    if (notification.origin !== 'poll') refreshNotifications();
     setNotificationBanner({
       key: nextKey,
       title: notification.title,

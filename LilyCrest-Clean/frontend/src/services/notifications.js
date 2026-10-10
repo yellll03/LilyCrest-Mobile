@@ -517,6 +517,7 @@ export function resolveNotificationRoute(data = {}, options = {}) {
           pathname: '/(tabs)/chatbot',
           params: {
             conversationId: String(conversationId),
+            ...(requestId ? { requestId: String(requestId) } : {}),
             ...(messageId ? { messageId: String(messageId) } : {}),
           },
         }
@@ -532,6 +533,7 @@ export function resolveNotificationRoute(data = {}, options = {}) {
       pathname: '/(tabs)/chatbot',
       params: {
         conversationId: String(conversationId),
+        ...(requestId ? { requestId: String(requestId) } : {}),
         ...(messageId ? { messageId: String(messageId) } : {}),
       },
     };
@@ -592,6 +594,7 @@ export function resolveNotificationRoute(data = {}, options = {}) {
             pathname: '/(tabs)/chatbot',
             params: {
               conversationId: String(conversationId),
+              ...(requestId ? { requestId: String(requestId) } : {}),
               ...(messageId ? { messageId: String(messageId) } : {}),
             },
           }
