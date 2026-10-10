@@ -12,6 +12,7 @@ import { act, render, waitFor } from '@testing-library/react-native';
 import { Text } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { AuthProvider, useAuth } from '../context/AuthContext';
+import { subscribeCanonicalNotifications, resetCanonicalEventDedupeForTests } from '../services/canonicalEvents';
 
 const mockRouter = { replace: jest.fn(), push: jest.fn() };
 const mockSegments = ['(tabs)', 'home'];
@@ -103,6 +104,7 @@ describe('notification sync — single source of truth (regression)', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    resetCanonicalEventDedupeForTests();
     latest = null;
     mockGet.mockImplementation((url) => {
       if (url === '/users/me') return Promise.resolve({ data: { user_id: 'tenant-a', name: 'Tenant A', email: 'a@example.com', role: 'tenant' } });
@@ -116,6 +118,51 @@ describe('notification sync — single source of truth (regression)', () => {
     await renderAuth(capture);
     await waitFor(() => expect(latest.notificationUnreadCount).toBe(1));
     expect(latest.notifications).toHaveLength(2);
+  });
+
+  it('publishes every newly polled category once without recursive fetches or history replay', async () => {
+    await renderAuth(capture);
+    await waitFor(() => expect(latest.notificationUnreadCount).toBe(1));
+    const received = jest.fn();
+    const unsubscribe = subscribeCanonicalNotifications(received);
+    const events = [
+      { notification_id: 'extension-approved', type: 'general', title: 'Stay Extension Approved', data: { screen: 'extend-stay' }, read: false },
+      { notification_id: 'transfer-complete', type: 'general', title: 'Room Transfer Completed', read: false },
+      { notification_id: 'bill-new', type: 'bill_generated', title: 'New bill', read: false },
+      { notification_id: 'maintenance-new', type: 'maintenance_update', title: 'Scheduled', read: false },
+      { notification_id: 'news-new', type: 'announcement', title: 'News', read: false },
+    ];
+    mockGet.mockImplementation((url) => Promise.resolve({ data: url === '/notifications' ? [...NOTIFICATIONS_FIXTURE, ...events] : {} }));
+    try {
+      const callsBefore = mockGet.mock.calls.length;
+      await act(async () => { await latest.refreshNotifications(); });
+      expect(received.mock.calls.map(([event]) => event.notification_id)).toEqual(events.map(event => event.notification_id));
+      expect(mockGet.mock.calls.length).toBe(callsBefore + 1);
+      await act(async () => { await latest.refreshNotifications(); });
+      expect(received).toHaveBeenCalledTimes(events.length);
+    } finally { unsubscribe(); }
+  });
+
+  it('preserves the last good feed when a malformed response arrives', async () => {
+    await renderAuth(capture);
+    await waitFor(() => expect(latest.notificationUnreadCount).toBe(1));
+    mockGet.mockResolvedValueOnce({ data: { error: 'not a feed' } });
+    await act(async () => { expect(await latest.refreshNotifications()).toBe(false); });
+    expect(latest.notifications).toEqual(NOTIFICATIONS_FIXTURE);
+  });
+
+  it('updates notification content without replaying an existing event', async () => {
+    await renderAuth(capture);
+    await waitFor(() => expect(latest.notificationUnreadCount).toBe(1));
+    const received = jest.fn();
+    const unsubscribe = subscribeCanonicalNotifications(received);
+    const updated = NOTIFICATIONS_FIXTURE.map(item => ({ ...item, body: 'Updated details' }));
+    mockGet.mockResolvedValueOnce({ data: updated });
+    try {
+      await act(async () => { await latest.refreshNotifications(); });
+      expect(latest.notifications).toEqual(updated);
+      expect(received).not.toHaveBeenCalled();
+    } finally { unsubscribe(); }
   });
 
   it('counts canonical Phase 2 module events from the shared backend feed in the Home badge', async () => {

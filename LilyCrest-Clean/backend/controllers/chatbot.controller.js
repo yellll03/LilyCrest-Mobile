@@ -222,7 +222,7 @@ function shouldRefuseAsOutOfScope(message, session) {
   return true;
 }
 
-function replyWithScopeGuard(res, sessionId, session, userMessage) {
+function replyWithScopeGuard(res, sessionId, session, userMessage, sessionKey) {
   const cleanResponse = OUT_OF_SCOPE_RESPONSE;
   session.history = Array.isArray(session.history) ? session.history : [];
   session.history.push({ role: 'user', content: userMessage });
@@ -231,7 +231,7 @@ function replyWithScopeGuard(res, sessionId, session, userMessage) {
     session.history = session.history.slice(-30);
   }
   session.last_intent = SUPPORTED_INTENTS.GENERAL;
-  chatSessions.set(sessionId, session);
+  chatSessions.set(sessionKey, session);
 
   return res.json({
     message: cleanResponse,
@@ -1109,6 +1109,7 @@ async function sendMessage(req, res) {
       return res.status(400).json({ detail: normalizedSession.error });
     }
     const sessionId = normalizedSession.value;
+    const sessionKey = JSON.stringify([userId, sessionId]);
     const userMessage = normalizedMessage.value;
     let attachmentParts = [];
     try {
@@ -1123,7 +1124,7 @@ async function sendMessage(req, res) {
       return res.status(status).json({ detail });
     }
     const lowerUserMessage = userMessage.toLowerCase();
-    const existingSession = chatSessions.get(sessionId) || { history: [] };
+    const existingSession = chatSessions.get(sessionKey) || { history: [] };
     const currentIdentityFingerprint = buildSessionIdentityFingerprint(req.user);
     if (
       existingSession.identity_fingerprint
@@ -1133,7 +1134,7 @@ async function sendMessage(req, res) {
       existingSession.last_intent = null;
     }
     existingSession.identity_fingerprint = currentIdentityFingerprint;
-    chatSessions.set(sessionId, existingSession);
+    chatSessions.set(sessionKey, existingSession);
     if (requestsOtherTenantInformation(userMessage)) {
       const language = detectLanguageStyle(userMessage);
       const privacyMessage = language === 'english'
@@ -1156,7 +1157,7 @@ async function sendMessage(req, res) {
       || ESCALATION_KEYWORDS.some((keyword) => lowerUserMessage.includes(keyword));
 
     if (!forceEscalation && !greetingMessage && !courtesyMessage && shouldRefuseAsOutOfScope(userMessage, existingSession)) {
-      return replyWithScopeGuard(res, sessionId, existingSession, userMessage);
+      return replyWithScopeGuard(res, sessionId, existingSession, userMessage, sessionKey);
     }
 
     // Pull tenant context for grounded responses
@@ -1299,11 +1300,11 @@ async function sendMessage(req, res) {
 
     if (!forceEscalation && (scopedMessage || scopedFollowUp) && routedIntent === SUPPORTED_INTENTS.BILLING) {
       const billingResult = await buildBillingResponse(db, req.user, userMessage);
-      const billingSess = chatSessions.get(sessionId) || { history: [] };
+      const billingSess = chatSessions.get(sessionKey) || { history: [] };
       billingSess.history.push({ role: 'user', content: userMessage });
       billingSess.history.push({ role: 'assistant', content: billingResult.message });
       billingSess.last_intent = billingResult.intent;
-      chatSessions.set(sessionId, billingSess);
+      chatSessions.set(sessionKey, billingSess);
       return res.json({
         message: billingResult.message,
         response: billingResult.message,
@@ -1319,11 +1320,11 @@ async function sendMessage(req, res) {
 
     if (!forceEscalation && (scopedMessage || scopedFollowUp) && routedIntent === SUPPORTED_INTENTS.MAINTENANCE) {
       const maintenanceResult = await buildMaintenanceResponse(db, req.user, userMessage);
-      const maintenanceSess = chatSessions.get(sessionId) || { history: [] };
+      const maintenanceSess = chatSessions.get(sessionKey) || { history: [] };
       maintenanceSess.history.push({ role: 'user', content: userMessage });
       maintenanceSess.history.push({ role: 'assistant', content: maintenanceResult.message });
       maintenanceSess.last_intent = maintenanceResult.intent;
-      chatSessions.set(sessionId, maintenanceSess);
+      chatSessions.set(sessionKey, maintenanceSess);
       return res.json({
         message: maintenanceResult.message,
         response: maintenanceResult.message,
@@ -1339,11 +1340,11 @@ async function sendMessage(req, res) {
 
     if (!forceEscalation && (scopedMessage || scopedFollowUp) && routedIntent === SUPPORTED_INTENTS.PROFILE) {
       const profileResult = buildProfileResponse(req.user, tenantAccount);
-      const profileSess = chatSessions.get(sessionId) || { history: [] };
+      const profileSess = chatSessions.get(sessionKey) || { history: [] };
       profileSess.history.push({ role: 'user', content: userMessage });
       profileSess.history.push({ role: 'assistant', content: profileResult.message });
       profileSess.last_intent = profileResult.intent;
-      chatSessions.set(sessionId, profileSess);
+      chatSessions.set(sessionKey, profileSess);
       return res.json({
         message: profileResult.message,
         response: profileResult.message,
@@ -1359,11 +1360,11 @@ async function sendMessage(req, res) {
 
     if (!forceEscalation && (scopedMessage || scopedFollowUp) && routedIntent === SUPPORTED_INTENTS.BRANCH) {
       const branchResult = buildBranchResponse(tenantAccount, userMessage);
-      const branchSession = chatSessions.get(sessionId) || { history: [] };
+      const branchSession = chatSessions.get(sessionKey) || { history: [] };
       branchSession.history.push({ role: 'user', content: userMessage });
       branchSession.history.push({ role: 'assistant', content: branchResult.message });
       branchSession.last_intent = branchResult.intent;
-      chatSessions.set(sessionId, branchSession);
+      chatSessions.set(sessionKey, branchSession);
       return res.json({
         message: branchResult.message,
         response: branchResult.message,
@@ -1381,7 +1382,7 @@ async function sendMessage(req, res) {
       const contractResult = buildContractResponse(tenantAccount, userMessage);
       existingSession.history.push({ role: 'user', content: userMessage }, { role: 'assistant', content: contractResult.message });
       existingSession.last_intent = contractResult.intent;
-      chatSessions.set(sessionId, existingSession);
+      chatSessions.set(sessionKey, existingSession);
       return res.json({
         message: contractResult.message, response: contractResult.message, intent: contractResult.intent,
         session_id: sessionId, needs_admin: false, live_chat_active: false, fallback: false,
@@ -1394,7 +1395,7 @@ async function sendMessage(req, res) {
       const documentsResult = buildDocumentsResponse(tenantAccount);
       existingSession.history.push({ role: 'user', content: userMessage }, { role: 'assistant', content: documentsResult.message });
       existingSession.last_intent = documentsResult.intent;
-      chatSessions.set(sessionId, existingSession);
+      chatSessions.set(sessionKey, existingSession);
       return res.json({
         message: documentsResult.message, response: documentsResult.message, intent: documentsResult.intent,
         session_id: sessionId, needs_admin: false, live_chat_active: false, fallback: false,
@@ -1440,7 +1441,7 @@ async function sendMessage(req, res) {
     const escalate = forceEscalation || shouldEscalate(knowledgeHints, userMessage);
 
     // Get conversation history for continuity
-    const session = chatSessions.get(sessionId) || { history: [] };
+    const session = chatSessions.get(sessionKey) || { history: [] };
     const conversationHistory = session.history || [];
     const operationalGroundingResponse = !escalate
       ? buildOperationalGroundingResponse(knowledgeHints, tenantAccount)
@@ -1452,7 +1453,7 @@ async function sendMessage(req, res) {
       session.history.push({ role: 'assistant', content: operationalGroundingResponse });
       if (session.history.length > 30) session.history = session.history.slice(-30);
       session.last_intent = normalizeAssistantIntent(meta.intent);
-      chatSessions.set(sessionId, session);
+      chatSessions.set(sessionKey, session);
       return res.json({
         message: operationalGroundingResponse,
         response: operationalGroundingResponse,
@@ -1482,21 +1483,21 @@ async function sendMessage(req, res) {
         const escalationPrompt = buildAIPrompt(
           userMessage, contextLines, knowledgeHints, conversationHistory
         ) + '\n\nIMPORTANT: This message has been flagged for admin attention. Acknowledge the tenant\'s concern empathetically, let them know an admin will follow up shortly, and reassure them. Keep it short and warm.';
-        const { text } = await sendGeminiMessage(sessionId, escalationPrompt, attachmentParts);
+        const { text } = await sendGeminiMessage(sessionKey, escalationPrompt, attachmentParts);
         aiResponse = text || "I understand your concern po. I've flagged it in Admin Support so your branch team can follow up. If anyone is in immediate danger, contact local emergency services now.";
       } else if (greetingMessage && userMessage.trim().split(/\s+/).length <= 4) {
         // Pure greeting (short message) — let AI generate a warm, personalized greeting
         const greetingPrompt = buildAIPrompt(
           userMessage, contextLines, [], conversationHistory
         ) + '\n\nThis is a greeting. Respond warmly, introduce yourself briefly as Lily, and ask how you can help. Mention the time of day naturally. Keep it to 1-2 sentences.';
-        const { text } = await sendGeminiMessage(sessionId, greetingPrompt);
+        const { text } = await sendGeminiMessage(sessionKey, greetingPrompt);
         aiResponse = text || `${getTimeOfDayGreeting()} I'm Lily, your dorm assistant. How can I help you today po?`;
         meta.intent = 'greeting';
         meta.confidence = 1;
       } else {
         // Normal message — AI-first, always
         const prompt = buildAIPrompt(userMessage, contextLines, knowledgeHints, conversationHistory);
-        const { text } = await sendGeminiMessage(sessionId, prompt, attachmentParts);
+        const { text } = await sendGeminiMessage(sessionKey, prompt, attachmentParts);
 
         if (text && !looksLikeCode(text)) {
           aiResponse = text;
@@ -1513,7 +1514,7 @@ async function sendMessage(req, res) {
         } else {
           // AI returned code or empty — retry with a simpler prompt
           const retryPrompt = `${CHATBOT_SYSTEM_PROMPT}\n\nThe tenant asked: "${userMessage}"\n\nRespond naturally and helpfully. Do NOT include any code, formatting, or technical syntax.`;
-          const retry = await sendGeminiMessage(sessionId, retryPrompt);
+          const retry = await sendGeminiMessage(sessionKey, retryPrompt);
           aiResponse = retry.text || "I'm here to help po. Could you rephrase your question? You can ask me about billing, maintenance, house rules, or anything about your stay at LilyCrest.";
         }
       }
@@ -1551,7 +1552,7 @@ async function sendMessage(req, res) {
       session.history = session.history.slice(-30);
     }
     session.last_intent = normalizeAssistantIntent(meta.intent);
-    chatSessions.set(sessionId, session);
+    chatSessions.set(sessionKey, session);
 
     res.json({
       message: cleanResponse,
@@ -1660,9 +1661,10 @@ async function getLiveChats(req, res) {
 async function resetSession(req, res) {
   try {
     const { session_id } = req.body;
-    const sessionId = session_id || `${req.user?.user_id || 'guest'}_${Date.now()}`;
-
-    chatSessions.delete(sessionId);
+    const normalizedSession = normalizeSessionId(session_id, req.user.user_id);
+    if (!normalizedSession.ok) return res.status(400).json({ detail: normalizedSession.error });
+    const sessionId = normalizedSession.value;
+    chatSessions.delete(JSON.stringify([req.user.user_id, sessionId]));
 
     return res.json({ reset: true, session_id: sessionId });
   } catch (error) {
