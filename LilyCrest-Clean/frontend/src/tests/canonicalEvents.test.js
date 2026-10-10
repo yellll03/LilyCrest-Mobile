@@ -51,12 +51,25 @@ describe('canonical push/realtime event reconciliation', () => {
         extension_request_id: 'request-1', data: { screen: 'extend-stay' }, origin: 'poll',
       })).toBe(true);
       expect(publishCanonicalNotification({ data: {
-        event_key: 'stay_extension:request-1:Approved', notification_id: 'row-1', screen: 'extend-stay',
+        event_key: 'stay_extension:request-1:Approved', notification_id: 'push-other-id', screen: 'extend-stay',
       } })).toBe(false);
       expect(listener).toHaveBeenCalledTimes(1);
       expect(listener.mock.calls[0][0]).toMatchObject({ body: 'Your extension was approved.', data: {
         url: '/extend-stay', extension_request_id: 'request-1', notification_id: 'row-1',
       } });
     } finally { unsubscribe(); }
+  });
+
+  test('does not suppress a shared event after changing authenticated accounts', () => {
+    const { setCanonicalNotificationAccount } = require('../services/canonicalEvents');
+    const event = { data: { event_key: 'announcement:shared' } };
+    setCanonicalNotificationAccount('tenant-a');
+    expect(publishCanonicalNotification(event)).toBe(true);
+    setCanonicalNotificationAccount('tenant-a');
+    expect(publishCanonicalNotification(event)).toBe(false);
+    setCanonicalNotificationAccount('tenant-b');
+    expect(publishCanonicalNotification(event)).toBe(true);
+    expect(publishCanonicalNotification(event)).toBe(false);
+    setCanonicalNotificationAccount(null);
   });
 });

@@ -37,6 +37,7 @@ import { subscribeSessionExpired, subscribeSessionRecovered } from '../services/
 import {
   canonicalNotificationKey,
   publishCanonicalNotification,
+  setCanonicalNotificationAccount,
   subscribeCanonicalNotifications,
 } from '../services/canonicalEvents';
 import { useToast } from './ToastContext';
@@ -241,6 +242,8 @@ export function AuthProvider({ children }) {
   const currentNotificationAccount = authStatus === 'authenticated' ? user?.user_id : null;
   if (notificationAccount.current !== currentNotificationAccount) {
     notificationAccount.current = currentNotificationAccount;
+    setCanonicalNotificationAccount(currentNotificationAccount);
+    latestNotificationKeyRef.current = '';
     notificationRequestSequence.current += 1;
     notificationFeed.current = { userId: null, keys: null };
   }

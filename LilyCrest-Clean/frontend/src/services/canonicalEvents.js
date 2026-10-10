@@ -1,6 +1,13 @@
 const notificationListeners = new Set();
 const recentNotificationKeys = new Map();
 const DEDUPE_WINDOW_MS = 30_000;
+let notificationAccount = null;
+
+export function setCanonicalNotificationAccount(accountId) {
+  if (notificationAccount === accountId) return;
+  notificationAccount = accountId;
+  recentNotificationKeys.clear();
+}
 
 function text(value) {
   return value == null ? '' : String(value).trim();
