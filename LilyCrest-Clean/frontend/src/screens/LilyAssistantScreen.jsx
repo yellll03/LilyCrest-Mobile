@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Crypto from 'expo-crypto';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import {
+  AppState,
   Keyboard,
   KeyboardAvoidingView,
   Platform,
@@ -15,6 +16,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useIsFocused } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import InquiryCard from '../components/assistant/InquiryCard';
 import SupportConcernRating from '../components/assistant/SupportConcernRating';
@@ -400,6 +402,8 @@ const isSupportMode = (mode) => [
 ].includes(mode);
 
 export default function LilyAssistantScreen() {
+  const isFocused = useIsFocused();
+  const [appState, setAppState] = useState(AppState.currentState);
   const router = useRouter();
   const {
     conversationId: notificationConversationIdParam,
@@ -482,10 +486,16 @@ export default function LilyAssistantScreen() {
   );
 
   useEffect(() => {
-    const showSubscription = Keyboard.addListener('keyboardDidShow', () => {
+    const subscription = AppState.addEventListener('change', setAppState);
+    return () => subscription.remove();
+  }, []);
+
+  useEffect(() => {
+    // Release the absolute tab bar's space during the iOS keyboard animation.
+    const showSubscription = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow', () => {
       setIsKeyboardVisible(true);
     });
-    const hideSubscription = Keyboard.addListener('keyboardDidHide', () => {
+    const hideSubscription = Keyboard.addListener(Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide', () => {
       setIsKeyboardVisible(false);
     });
 
@@ -971,6 +981,7 @@ export default function LilyAssistantScreen() {
 
   useEffect(() => {
     const conversationId = selectedInquiry?.id || supportConversationId;
+    if (!isFocused || appState !== 'active') return;
     if (!conversationId) return;
     if (!selectedInquiry?.id && !isSupportMode(chatMode) && chatMode !== CHAT_MODE.RESOLVED) return;
 
@@ -999,7 +1010,7 @@ export default function LilyAssistantScreen() {
     };
     // Polling uses the current conversation id and mode; helper identity is not a trigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [supportConversationId, chatMode, selectedInquiry?.id]);
+  }, [supportConversationId, chatMode, selectedInquiry?.id, isFocused, appState]);
 
   // A socket-fed refresh effect used to sit here, listening for
   // 'chat:message-new'/'chat:conversation-updated'. No Socket.IO server has
@@ -1889,7 +1900,7 @@ export default function LilyAssistantScreen() {
       <KeyboardAvoidingView
         style={styles.root}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? bottomTabInset : 0}
+        keyboardVerticalOffset={0}
       >
         {selectedInquiry ? (
           renderInquiryDetail()
